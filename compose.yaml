@@ -1,0 +1,19 @@
+services:
+  database:
+    image: postgis/postgis:16-3.5
+    environment:
+      POSTGRES_DB: dtpstat_buslines
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - buslines-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dtpstat_buslines"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  buslines-postgres:

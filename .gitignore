@@ -1,2 +1,11 @@
-/archive/
-/.idea/
+node_modules/
+.env
+*.log
+coverage/
+
+# Local certificates and editor state
+certificates/
+.idea/
+
+# Historical source snapshots are not part of the running application.
+archive/
