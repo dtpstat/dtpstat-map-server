@@ -133,25 +133,10 @@ export function buildGeoJsonPlan(collection) {
     }
 
     const cityName = rawCityName.trim();
-    const population = finiteNumber(feature.properties.population);
     const lanes = finiteNumber(feature.properties.lanes);
-    const lengthMeters = finiteNumber(feature.properties.length);
-    const laneLengthMeters = finiteNumber(feature.properties.lanes_length);
-    if (!Number.isSafeInteger(population) || population <= 0) {
+    if (!Number.isSafeInteger(lanes) || (lanes !== 1 && lanes !== 2)) {
       throw new GeoJsonValidationError(
-        `GeoJSON feature ${featureIndex} has an invalid population`,
-      );
-    }
-    if (
-      !Number.isSafeInteger(lanes) ||
-      lanes <= 0 ||
-      lengthMeters === null ||
-      lengthMeters < 0 ||
-      laneLengthMeters === null ||
-      laneLengthMeters < 0
-    ) {
-      throw new GeoJsonValidationError(
-        `GeoJSON feature ${featureIndex} has invalid lane data`,
+        `GeoJSON feature ${featureIndex} must have lanes equal to 1 or 2`,
       );
     }
 
@@ -166,8 +151,6 @@ export function buildGeoJsonPlan(collection) {
           feature.properties.name.trim()
             ? feature.properties.name.trim()
             : cityName,
-        population,
-        laneLengthMeters: 0,
         bounds: [...featureBounds],
         attributes: {
           adminLevel: feature.properties.admin_level,
@@ -180,23 +163,14 @@ export function buildGeoJsonPlan(collection) {
       }
       cityByName.set(cityName, city);
     } else {
-      if (city.population !== population) {
-        throw new GeoJsonValidationError(
-          `Population is inconsistent for city ${cityName}`,
-        );
-      }
       city.bounds[0] = Math.min(city.bounds[0], featureBounds[0]);
       city.bounds[1] = Math.min(city.bounds[1], featureBounds[1]);
       city.bounds[2] = Math.max(city.bounds[2], featureBounds[2]);
       city.bounds[3] = Math.max(city.bounds[3], featureBounds[3]);
     }
-    city.laneLengthMeters += laneLengthMeters;
-
     geometries.push({
       cityName,
       lanes,
-      lengthMeters,
-      laneLengthMeters,
       properties: feature.properties,
       geometry: feature.geometry,
     });

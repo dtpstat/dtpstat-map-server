@@ -10,10 +10,7 @@ const upload = {
       properties: {
         short_name: 'Тестоград',
         name: 'Тестоград',
-        population: 1000,
         lanes: 2,
-        length: 50,
-        lanes_length: 100,
       },
       geometry: {
         type: 'LineString',
@@ -36,10 +33,10 @@ function createFakePool({ failOn } = {}) {
       if (failOn && normalized.includes(failOn)) {
         throw new Error('database failure');
       }
-      if (normalized.startsWith('INSERT INTO city_geometries')) {
+      if (normalized.includes('INSERT INTO city_geometries')) {
         return { rows: [], rowCount: 1 };
       }
-      if (normalized.startsWith('WITH statistics AS')) {
+      if (normalized.startsWith('WITH geometry_statistics AS')) {
         return { rows: [{ id: 1 }], rowCount: 1 };
       }
       return { rows: [], rowCount: 0 };
@@ -69,7 +66,7 @@ test('data import replaces geometries and commits after updating statistics', as
   assert.equal(result.cities, 1);
   assert.equal(result.geometries, 1);
   assert.equal(pool.queries[0], 'BEGIN');
-  assert.match(pool.queries.at(-2), /^WITH statistics AS/);
+  assert.match(pool.queries.at(-2), /^WITH geometry_statistics AS/);
   assert.equal(pool.queries.at(-1), 'COMMIT');
   assert.equal(pool.released, true);
 });

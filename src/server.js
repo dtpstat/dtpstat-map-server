@@ -3,6 +3,7 @@ import {createApp}                 from './app.js';
 import {loadConfig}                from './config.js';
 import {createCitiesRepository}    from './db/cities-repository.js';
 import {createDataImportService}   from './db/data-import-service.js';
+import {createPopulationImportService} from './db/population-import-service.js';
 import {createPool}                from './db/pool.js';
 import {closeServer, startServers} from './http/start-servers.js';
 
@@ -11,10 +12,16 @@ async function main(){
 	const pool       = createPool(config.database);
 	const repository = createCitiesRepository(pool);
 	const importService = createDataImportService(pool);
+	const populationService = createPopulationImportService(pool);
 
 	await repository.health();
 
-	const app        = createApp({repository, importService, config});
+	const app        = createApp({
+		repository,
+		importService,
+		populationService,
+		config,
+	});
 	const servers    = await startServers({app, config});
 	let shuttingDown = false;
 

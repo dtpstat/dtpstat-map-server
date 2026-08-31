@@ -13,7 +13,7 @@ const projectRoot = path.resolve(
   '..',
 );
 
-test('full repository GeoJSON derives cities, bounds, and statistics', async () => {
+test('full repository GeoJSON derives cities, bounds, and direction multipliers', async () => {
   const source = JSON.parse(
     await fs.readFile(path.join(projectRoot, 'bus-lanes.geojson'), 'utf8'),
   );
@@ -23,19 +23,20 @@ test('full repository GeoJSON derives cities, bounds, and statistics', async () 
   assert.equal(plan.cities.length, 71);
   assert.equal(plan.geometries.length, 872);
   assert.equal(plan.ignoredFeatures.length, 10);
-  assert.equal(kazan.population, 1257341);
-  assert.ok(Math.abs(kazan.laneLengthMeters - 182706.9706255249) < 0.001);
+  assert.deepEqual(
+    [...new Set(plan.geometries.map((geometry) => geometry.lanes))].sort(),
+    [1, 2],
+  );
   assert.deepEqual(kazan.bounds, [
     48.892808, 55.7292851, 49.2362165, 55.8678227,
   ]);
 });
 
-test('GeoJSON plan rejects inconsistent population before database writes', () => {
+test('GeoJSON plan rejects direction multipliers other than one or two', () => {
   const collection = {
     type: 'FeatureCollection',
     features: [
-      feature('Тест', 1000, [1, 2], [3, 4]),
-      feature('Тест', 2000, [3, 4], [5, 6]),
+      feature('Тест', 3, [1, 2], [3, 4]),
     ],
   };
 
@@ -43,20 +44,17 @@ test('GeoJSON plan rejects inconsistent population before database writes', () =
     () => buildGeoJsonPlan(collection),
     (error) =>
       error instanceof GeoJsonValidationError &&
-      /Population is inconsistent/.test(error.message),
+      /lanes equal to 1 or 2/.test(error.message),
   );
 });
 
-function feature(cityName, population, start, end) {
+function feature(cityName, lanes, start, end) {
   return {
     type: 'Feature',
     properties: {
       short_name: cityName,
       name: cityName,
-      population,
-      lanes: 1,
-      length: 100,
-      lanes_length: 100,
+      lanes,
     },
     geometry: {
       type: 'LineString',

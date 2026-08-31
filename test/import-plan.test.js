@@ -22,6 +22,12 @@ test('repository data builds a complete and consistent import plan', async () =>
   assert.equal(plan.geometries.length, 872);
   assert.equal(plan.ignoredFeatures.length, 10);
   assert.equal(plan.cities[0].name, 'Казань');
+  assert.equal(plan.populationPayload.populations.length, 71);
+  assert.deepEqual(plan.populationPayload.populations[0], {
+    name: 'Казань',
+    population: 1257341,
+    attributes: {},
+  });
   assert.deepEqual(plan.cities[0].bounds, [
     48.892808, 55.7292851, 49.2362165, 55.8678227,
   ]);
@@ -31,10 +37,10 @@ test('repository data builds a complete and consistent import plan', async () =>
   );
 });
 
-test('import plan rejects geometry totals that diverge from city statistics', () => {
+test('import plan rejects population records for unknown cities', () => {
   const csv = [
     ',short_name,lanes_length,population,lanes_per_1K,minx,miny,maxx,maxy',
-    '1,Тест,20,1000,20,1,2,3,4',
+    '1,Другой город,20,1000,20,1,2,3,4',
   ].join('\n');
   const geojson = JSON.stringify({
     type: 'FeatureCollection',
@@ -44,10 +50,7 @@ test('import plan rejects geometry totals that diverge from city statistics', ()
         properties: {
           short_name: 'Тест',
           name: 'Тест',
-          population: 1000,
           lanes: 1,
-          length: 10,
-          lanes_length: 10,
         },
         geometry: {
           type: 'LineString',
@@ -60,5 +63,8 @@ test('import plan rejects geometry totals that diverge from city statistics', ()
     ],
   });
 
-  assert.throws(() => buildImportPlan(csv, geojson), /Lane length mismatch/);
+  assert.throws(
+    () => buildImportPlan(csv, geojson),
+    /No population found for city Тест/,
+  );
 });

@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildImportPlan } from '../src/data/import-plan.js';
+import { createDataImportService } from '../src/db/data-import-service.js';
+import { createPopulationImportService } from '../src/db/population-import-service.js';
 import { createDatabaseClient } from './database.js';
 
 const projectRoot = path.resolve(
@@ -16,73 +18,36 @@ async function main() {
     fs.readFile(path.join(projectRoot, 'bus-lanes.geojson'), 'utf8'),
   ]);
   const plan = buildImportPlan(csvText, geojsonText);
+  const geojson = JSON.parse(geojsonText);
   const client = createDatabaseClient();
 
   await client.connect();
+  const poolAdapter = {
+    async connect() {
+      return {
+        query: (...args) => client.query(...args),
+        release() {},
+      };
+    },
+  };
+
   try {
-    await client.query('BEGIN');
-    await client.query('TRUNCATE city_geometries, cities RESTART IDENTITY CASCADE');
+    const geometryResult = await createDataImportService(
+      poolAdapter,
+    ).replaceFromGeoJson(geojson);
+    const populationResult = await createPopulationImportService(
+      poolAdapter,
+    ).updateFromJson(plan.populationPayload);
 
-    const cityIds = new Map();
-    for (const city of plan.cities) {
-      const result = await client.query(
-        `
-          INSERT INTO cities (
-            source_index, slug, name, full_name, population, lane_length_m,
-            bounds, attributes
-          ) VALUES (
-            $1, $2, $3, $4, $5, $6,
-            ST_MakeBox2D(ST_Point($7, $8), ST_Point($9, $10)), $11
-          )
-          RETURNING id
-        `,
-        [
-          city.sourceIndex,
-          city.slug,
-          city.name,
-          city.fullName,
-          city.population,
-          city.laneLengthMeters,
-          ...city.bounds,
-          city.attributes,
-        ],
-      );
-      cityIds.set(city.name, result.rows[0].id);
-    }
-
-    for (const geometry of plan.geometries) {
-      await client.query(
-        `
-          INSERT INTO city_geometries (
-            city_id, lanes, length_m, lane_length_m, properties, geom
-          ) VALUES (
-            $1, $2, $3, $4, $5,
-            ST_SetSRID(ST_GeomFromGeoJSON($6), 4326)
-          )
-        `,
-        [
-          cityIds.get(geometry.cityName),
-          geometry.lanes,
-          geometry.lengthMeters,
-          geometry.laneLengthMeters,
-          geometry.properties,
-          JSON.stringify(geometry.geometry),
-        ],
-      );
-    }
-
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
+    console.log(
+      `Imported ${geometryResult.cities} cities, ` +
+        `${geometryResult.geometries} geometries and ` +
+        `${populationResult.cities} population records; ` +
+        `ignored ${geometryResult.ignoredFeatures} unnamed source artifacts.`,
+    );
   } finally {
     await client.end();
   }
-
-  console.log(
-    `Imported ${plan.cities.length} cities and ${plan.geometries.length} geometries; ` +
-      `ignored ${plan.ignoredFeatures.length} unnamed source artifacts.`,
-  );
 }
 
 main().catch((error) => {

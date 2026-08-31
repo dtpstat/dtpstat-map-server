@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadApplicationDatabaseConnection } from './db/database-environment.js';
 
 const DEFAULT_PROJECT_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -99,13 +100,7 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
       certPath,
     },
     database: {
-      connectionString: requiredValue(env, 'DATABASE_URL'),
-      ssl: booleanValue(env, 'DATABASE_SSL', false),
-      rejectUnauthorized: booleanValue(
-        env,
-        'DATABASE_SSL_REJECT_UNAUTHORIZED',
-        true,
-      ),
+      ...loadApplicationDatabaseConnection(env),
       maxConnections: integerValue(env, 'DATABASE_POOL_MAX', 10, {
         min: 1,
         max: 100,

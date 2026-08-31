@@ -1,5 +1,6 @@
 import express, {Router}        from 'express';
 import {GeoJsonValidationError} from '../data/geojson-plan.js';
+import {PopulationValidationError} from '../data/population-plan.js';
 import {createBasicAuth}        from '../http/basic-auth.js';
 
 /**
@@ -22,9 +23,21 @@ import {createBasicAuth}        from '../http/basic-auth.js';
  */
 
 /**
+ * @typedef {{
+ *   updateFromJson: (payload: unknown) => Promise<{
+ *     cities: number,
+ *     asOf: string | null,
+ *     source: string | null,
+ *     updatedAt: string
+ *   }>
+ * }} PopulationImportService
+ */
+
+/**
  * @param {{
  *   repository: CitiesRepository,
  *   importService: DataImportService,
+ *   populationService: PopulationImportService,
  *   publicMap: object,
  *   importApi: { username: string, password: string, maxBodyBytes: number }
  * }} dependencies
@@ -32,6 +45,7 @@ import {createBasicAuth}        from '../http/basic-auth.js';
 export function createApiRouter({
 	                                repository,
 	                                importService,
+	                                populationService,
 	                                publicMap,
 	                                importApi,
                                 }){
@@ -109,6 +123,36 @@ export function createApiRouter({
 				response.json({status: 'ok', ...result});
 			}catch(error){
 				if(error instanceof GeoJsonValidationError){
+					response.status(400).json({error: error.message});
+					return;
+				}
+				next(error);
+			}
+		},
+	);
+
+	router.post(
+		'/admin/populations',
+		requireImportAuth,
+		express.json({
+			limit:  importApi.maxBodyBytes,
+			strict: true,
+			type:   'application/json',
+		}),
+		async(request, response, next) => {
+			if(request.body === undefined){
+				response.status(415).json({
+					error: 'Content-Type must be application/json',
+				});
+				return;
+			}
+
+			try{
+				const result = await populationService.updateFromJson(request.body);
+				response.set('Cache-Control', 'no-store');
+				response.json({status: 'ok', ...result});
+			}catch(error){
+				if(error instanceof PopulationValidationError){
 					response.status(400).json({error: error.message});
 					return;
 				}

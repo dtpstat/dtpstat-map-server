@@ -30,6 +30,32 @@ export function createCityList(elements) {
   let selectedCityId = null;
   let sort = { field: 'rank', direction: 'asc' };
   let selectHandler = () => {};
+  const sortButtons = document.querySelectorAll('[data-sort]');
+
+  function updateSortIndicators() {
+    for (const button of sortButtons) {
+      const isActive = button.dataset.sort === sort.field;
+      const direction = isActive ? sort.direction : 'none';
+      const header = button.closest('th');
+      const label = button.textContent.trim();
+
+      button.classList.toggle('is-active', isActive);
+      button.dataset.sortDirection = direction;
+      if (isActive) {
+        const nextDirection = direction === 'asc' ? 'убыванию' : 'возрастанию';
+        const currentDirection =
+          direction === 'asc' ? 'по возрастанию' : 'по убыванию';
+        header?.setAttribute(
+          'aria-sort',
+          direction === 'asc' ? 'ascending' : 'descending',
+        );
+        button.title = `Отсортировано ${currentDirection}. Сортировать по ${nextDirection}`;
+      } else {
+        header?.removeAttribute('aria-sort');
+        button.title = `Сортировать по столбцу «${label}»`;
+      }
+    }
+  }
 
   function visibleCities() {
     const direction = sort.direction === 'asc' ? 1 : -1;
@@ -95,7 +121,7 @@ export function createCityList(elements) {
     });
   }
 
-  for (const button of document.querySelectorAll('[data-sort]')) {
+  for (const button of sortButtons) {
     button.addEventListener('click', () => {
       const field = button.dataset.sort;
       sort =
@@ -105,9 +131,12 @@ export function createCityList(elements) {
               field,
               direction: field === 'name' || field === 'rank' ? 'asc' : 'desc',
             };
+      updateSortIndicators();
       render();
     });
   }
+
+  updateSortIndicators();
 
   return {
     /** @param {any[]} nextCities */

@@ -3,7 +3,9 @@ import test from 'node:test';
 import { loadConfig } from '../src/config.js';
 
 const REQUIRED_ENV = {
-  DATABASE_URL: 'postgresql://localhost/example',
+  DATABASE_NAME: 'example',
+  DATABASE_ROLE: 'example_app',
+  DATABASE_ROLE_PASSWORD: 'database-secret',
   MAPBOX_ACCESS_TOKEN: 'pk.test',
   IMPORT_API_USERNAME: 'importer',
   IMPORT_API_PASSWORD: 'test-secret',
@@ -16,6 +18,9 @@ test('loadConfig enables HTTP with safe defaults', () => {
   assert.equal(config.https.enabled, false);
   assert.equal(config.host, '0.0.0.0');
   assert.equal(config.database.maxConnections, 10);
+  assert.equal(config.database.host, '127.0.0.1');
+  assert.equal(config.database.port, 5432);
+  assert.equal(config.database.user, 'example_app');
   assert.equal(config.importApi.maxBodyBytes, 25 * 1024 * 1024);
 });
 
@@ -81,13 +86,15 @@ test('loadConfig requires database, map, and import credentials', () => {
         },
         '/project',
       ),
-    /DATABASE_URL is required/,
+    /DATABASE_NAME is required/,
   );
   assert.throws(
     () =>
       loadConfig(
         {
-          DATABASE_URL: 'postgresql:\/\/db',
+          DATABASE_NAME: 'example',
+          DATABASE_ROLE: 'example_app',
+          DATABASE_ROLE_PASSWORD: 'database-secret',
           IMPORT_API_USERNAME: 'importer',
           IMPORT_API_PASSWORD: 'secret',
         },
@@ -99,7 +106,9 @@ test('loadConfig requires database, map, and import credentials', () => {
     () =>
       loadConfig(
         {
-          DATABASE_URL: 'postgresql:\/\/db',
+          DATABASE_NAME: 'example',
+          DATABASE_ROLE: 'example_app',
+          DATABASE_ROLE_PASSWORD: 'database-secret',
           MAPBOX_ACCESS_TOKEN: 'pk.test',
         },
         '/project',

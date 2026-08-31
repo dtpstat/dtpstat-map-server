@@ -21,10 +21,11 @@ const PUBLIC_ASSETS = new Map([
  * @param {{
  *   repository: import('./routes/api.js').CitiesRepository,
  *   importService: import('./routes/api.js').DataImportService,
+ *   populationService: import('./routes/api.js').PopulationImportService,
  *   config: any
  * }} dependencies
  */
-export function createApp({repository, importService, config}){
+export function createApp({repository, importService, populationService, config}){
 	const app             = express();
 	const isProduction    = config.environment === 'production';
 	const publicDirectory = path.join(config.projectRoot, 'public');
@@ -67,6 +68,7 @@ export function createApp({repository, importService, config}){
 		createApiRouter({
 			repository,
 			importService,
+			populationService,
 			publicMap: config.publicMap,
 			importApi: config.importApi,
 		}),
@@ -92,7 +94,7 @@ export function createApp({repository, importService, config}){
 
 	app.use((error, request, response, _next) => {
 		if(error?.type === 'entity.too.large'){
-			response.status(413).json({error: 'GeoJSON upload is too large'});
+			response.status(413).json({error: 'Request body is too large'});
 			return;
 		}
 		if(error?.type === 'entity.parse.failed'){

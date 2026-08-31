@@ -48,6 +48,13 @@ const importResult = {
   updatedAt: '2026-08-31T12:00:00.000Z',
 };
 
+const populationResult = {
+  cities: 1,
+  asOf: '2026-01-01',
+  source: 'test',
+  updatedAt: '2026-08-31T12:00:00.000Z',
+};
+
 function createTestRepository() {
   return {
     async health() {},
@@ -68,9 +75,17 @@ async function withServer(callback, options = {}) {
         return importResult;
       },
     });
+  const populationService =
+    options.populationService ??
+    ({
+      async updateFromJson() {
+        return populationResult;
+      },
+    });
   const app = createApp({
     repository: createTestRepository(),
     importService,
+    populationService,
     config: {
       environment: 'test',
       projectRoot,
@@ -232,4 +247,38 @@ test('import endpoint enforces the configured upload limit', async () => {
 
     assert.equal(response.status, 413);
   }, { maxBodyBytes: 64 });
+});
+
+test('authenticated population endpoint updates a separate data source', async () => {
+  let uploadedBody;
+  const populationService = {
+    async updateFromJson(body) {
+      uploadedBody = body;
+      return populationResult;
+    },
+  };
+  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const body = {
+    asOf: '2026-01-01',
+    source: 'test',
+    populations: [{ name: 'Казань', population: 1300000 }],
+  };
+
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/admin/populations`, {
+      method: 'POST',
+      headers: {
+        Authorization: authorization,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      status: 'ok',
+      ...populationResult,
+    });
+    assert.deepEqual(uploadedBody, body);
+  }, { populationService });
 });

@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
+    "db:init": "node scripts/init-database.js",
     "db:migrate": "node scripts/migrate.js",
     "db:import": "node scripts/import-data.js",
     "lint": "eslint .",

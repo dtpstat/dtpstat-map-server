@@ -194,12 +194,51 @@ th button:focus-visible {
 }
 
 .city-table th button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
   padding: 0;
   border: 0;
   color: inherit;
   background: none;
   cursor: pointer;
   text-align: inherit;
+}
+
+.city-table th button::after {
+  width: 1em;
+  color: #819092;
+  content: "⇅";
+  font-size: 1em;
+  font-weight: 800;
+  line-height: 1;
+  opacity: 0.55;
+}
+
+.city-table th button:hover::after {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.city-table th button.is-active {
+  padding: 3px 5px;
+  margin: -3px -5px;
+  border-radius: 4px;
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  font-weight: 850;
+}
+
+.city-table th button[data-sort-direction="asc"]::after {
+  color: var(--accent);
+  content: "▲";
+  opacity: 1;
+}
+
+.city-table th button[data-sort-direction="desc"]::after {
+  color: var(--accent);
+  content: "▼";
+  opacity: 1;
 }
 
 .city-table tbody tr {
