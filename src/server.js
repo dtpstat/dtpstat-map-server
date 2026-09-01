@@ -1,11 +1,16 @@
 import 'dotenv/config';
 import {createApp}                 from './app.js';
 import {loadConfig}                from './config.js';
+import {createAdminTaskManager}    from './data/admin-task-manager.js';
+import {createAdminTaskSuccessRepository} from './db/admin-task-success-repository.js';
 import {createCitiesRepository}    from './db/cities-repository.js';
 import {createDataImportService}   from './db/data-import-service.js';
+import {createKmlUpdateService}    from './db/kml-update-service.js';
+import {createOsmCityUpdateService} from './db/osm-city-update-service.js';
 import {createPopulationImportService} from './db/population-import-service.js';
 import {createPool}                from './db/pool.js';
 import {closeServer, startServers} from './http/start-servers.js';
+import {createAdminWebSocketGateway} from './http/admin-websocket.js';
 
 async function main(){
 	const config     = loadConfig();
@@ -13,16 +18,39 @@ async function main(){
 	const repository = createCitiesRepository(pool);
 	const importService = createDataImportService(pool);
 	const populationService = createPopulationImportService(pool);
+	const kmlUpdateService = createKmlUpdateService(pool, config.kmlUpdate);
+	const osmCityUpdateService = createOsmCityUpdateService(
+		pool,
+		config.osmCityUpdate,
+	);
+	const adminTaskSuccessRepository = createAdminTaskSuccessRepository(pool);
 
 	await repository.health();
+	const initialSuccessfulUpdates = await adminTaskSuccessRepository.list();
+	const adminTasks = createAdminTaskManager({
+		initialSuccessfulUpdates,
+		recordSuccessfulUpdate: (update) =>
+			adminTaskSuccessRepository.record(update),
+	});
+	const adminWebSocket = createAdminWebSocketGateway({
+		adminTasks,
+		importApi: config.importApi,
+	});
 
 	const app        = createApp({
 		repository,
 		importService,
 		populationService,
+		kmlUpdateService,
+		osmCityUpdateService,
+		adminTasks,
 		config,
 	});
-	const servers    = await startServers({app, config});
+	const servers    = await startServers({
+		app,
+		config,
+		webSocketGateway: adminWebSocket,
+	});
 	let shuttingDown = false;
 
 	async function shutdown(signal){
@@ -32,6 +60,7 @@ async function main(){
 		shuttingDown = true;
 		console.log(`Received ${signal}; shutting down`);
 
+		await adminWebSocket.close();
 		await Promise.allSettled(servers.map((server) => closeServer(server)));
 		await pool.end();
 	}

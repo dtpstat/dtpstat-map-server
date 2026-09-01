@@ -4,6 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createApp } from '../src/app.js';
+import { createAdminTaskManager } from '../src/data/admin-task-manager.js';
 
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -55,6 +56,21 @@ const populationResult = {
   updatedAt: '2026-08-31T12:00:00.000Z',
 };
 
+const kmlUpdateResult = {
+  dryRun: true,
+  importedGeometries: 918,
+  skippedWithoutCity: 23,
+  resolvedAmbiguous: 27,
+  completedAt: '2026-08-31T12:00:00.000Z',
+};
+
+const osmCityUpdateResult = {
+  dryRun: true,
+  sourceElements: 194,
+  importedPlaces: 194,
+  completedAt: '2026-08-31T12:00:00.000Z',
+};
+
 function createTestRepository() {
   return {
     async health() {},
@@ -82,10 +98,27 @@ async function withServer(callback, options = {}) {
         return populationResult;
       },
     });
+  const kmlUpdateService =
+    options.kmlUpdateService ??
+    ({
+      async update() {
+        return kmlUpdateResult;
+      },
+    });
+  const osmCityUpdateService =
+    options.osmCityUpdateService ??
+    ({
+      async update() {
+        return osmCityUpdateResult;
+      },
+    });
   const app = createApp({
+    adminTasks: options.adminTasks,
     repository: createTestRepository(),
     importService,
     populationService,
+    kmlUpdateService,
+    osmCityUpdateService,
     config: {
       environment: 'test',
       projectRoot,
@@ -93,6 +126,31 @@ async function withServer(callback, options = {}) {
         username: 'importer',
         password: 'test:secret',
         maxBodyBytes: options.maxBodyBytes ?? 1024 * 1024,
+      },
+      kmlUpdate: {
+        maxRequestBodyBytes: options.kmlMaxBodyBytes ?? 256 * 1024,
+        allowedHosts: new Set(['www.google.com']),
+        maxSources: 10,
+        sources: [],
+        timeoutMs: 30000,
+        maxFileBytes: 1000000,
+        maxTotalBytes: 5000000,
+        cityBufferMeters: 0,
+        cityBufferMaxMeters: 5000,
+        dryRun: false,
+        unmatchedPolicy: 'skip',
+        ambiguousPolicy: 'best-overlap',
+      },
+      osmCityUpdate: {
+        maxRequestBodyBytes: options.osmMaxBodyBytes ?? 16 * 1024,
+        url: 'https://overpass-api.de/api/interpreter',
+        allowedHosts: new Set(['overpass-api.de']),
+        dryRun: false,
+        timeoutMs: 180000,
+        queryTimeoutSeconds: 120,
+        maxBytes: 1000000,
+        batchSize: 50,
+        maxBatchSize: 200,
       },
       publicMap: {
         accessToken: 'pk.test',
@@ -113,6 +171,41 @@ async function withServer(callback, options = {}) {
       server.close((error) => (error ? reject(error) : resolve())),
     );
   }
+}
+
+async function waitForAdminTask(baseUrl, accepted, authorization) {
+  let statusBody;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const statusResponse = await fetch(
+      `${baseUrl}${accepted.task.statusURL}`,
+      { headers: { Authorization: authorization } },
+    );
+    assert.equal(statusResponse.status, 200);
+    statusBody = await statusResponse.json();
+    if (
+      statusBody.status === 'succeeded' ||
+      statusBody.status === 'failed' ||
+      statusBody.status === 'cancelled'
+    ) {
+      return statusBody;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.fail('Admin task did not finish in time');
+}
+
+async function acceptAndWaitForAdminTask(response, baseUrl, authorization) {
+  assert.equal(response.status, 202);
+  const accepted = await response.json();
+  assert.equal(accepted.status, 'accepted');
+  assert.equal(accepted.task.status, 'queued');
+  assert.equal(accepted.taskId, accepted.task.id);
+  assert.match(accepted.taskId, /^[0-9a-f-]{36}$/);
+  assert.equal(response.headers.get('location'), accepted.task.statusURL);
+  return {
+    accepted,
+    completed: await waitForAdminTask(baseUrl, accepted, authorization),
+  };
 }
 
 test('API exposes public config, health, and ordered cities', async () => {
@@ -158,6 +251,53 @@ test('root serves the optimized client without embedded GeoJSON', async () => {
   });
 });
 
+test('admin web panel is protected by the same Basic Auth', async () => {
+  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  await withServer(async (baseUrl) => {
+    const unauthorized = await fetch(`${baseUrl}/admin/`);
+    assert.equal(unauthorized.status, 401);
+    const unauthorizedScript = await fetch(`${baseUrl}/admin/admin.js`);
+    assert.equal(unauthorizedScript.status, 401);
+    const authorized = await fetch(`${baseUrl}/admin/`, {
+      headers: { Authorization: authorization },
+    });
+    assert.equal(authorized.status, 200);
+    const html = await authorized.text();
+    assert.match(html, /Администрирование данных/);
+    assert.match(html, /role="tablist"/);
+    assert.equal((html.match(/data-task-tab=/g) ?? []).length, 4);
+    assert.equal((html.match(/data-task-action=/g) ?? []).length, 4);
+    assert.match(html, /class="status-card"/);
+    assert.match(html, /id="task-log" role="log"/);
+    assert.doesNotMatch(html, /id="cancel-task"/);
+  });
+});
+
+test('admin status always exposes persistent successful update timestamps', async () => {
+  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const initial = {
+    taskType: 'kml-update',
+    taskId: null,
+    endpoint: '/api/admin/update',
+    completedAt: '2026-08-31T12:00:00.000Z',
+  };
+  const adminTasks = createAdminTaskManager({
+    initialSuccessfulUpdates: [initial],
+  });
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/admin/status`, {
+      headers: { Authorization: authorization },
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      status: 'idle',
+      taskId: null,
+      task: null,
+      lastSuccessfulUpdates: { 'kml-update': initial },
+    });
+  }, { adminTasks });
+});
+
 test('import endpoint requires Basic Auth before processing the body', async () => {
   let calls = 0;
   const importService = {
@@ -200,8 +340,15 @@ test('authenticated import accepts GeoJSON and returns update statistics', async
       body: JSON.stringify(geojson),
     });
 
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { status: 'ok', ...importResult });
+    const { completed } = await acceptAndWaitForAdminTask(
+      response,
+      baseUrl,
+      authorization,
+    );
+    assert.equal(completed.status, 'succeeded');
+    assert.deepEqual(completed.task.result, importResult);
+    assert.equal(completed.task.type, 'geojson-import');
+    assert.ok(completed.task.log.length >= 3);
     assert.deepEqual(uploadedBody, geojson);
   }, { importService });
 });
@@ -274,11 +421,265 @@ test('authenticated population endpoint updates a separate data source', async (
       body: JSON.stringify(body),
     });
 
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), {
-      status: 'ok',
-      ...populationResult,
-    });
+    const { completed } = await acceptAndWaitForAdminTask(
+      response,
+      baseUrl,
+      authorization,
+    );
+    assert.equal(completed.status, 'succeeded');
+    assert.deepEqual(completed.task.result, populationResult);
+    assert.equal(completed.task.type, 'population-update');
     assert.deepEqual(uploadedBody, body);
   }, { populationService });
+});
+
+test('KML update endpoint is protected and forwards explicit sources and overrides', async () => {
+  let receivedBody;
+  let receivedQuery;
+  let calls = 0;
+  const kmlUpdateService = {
+    async update(body, query) {
+      calls += 1;
+      receivedBody = body;
+      receivedQuery = query;
+      return kmlUpdateResult;
+    },
+  };
+  const body = [
+    {
+      URL: 'https://www.google.com/maps/d/viewer?mid=test-map',
+      layers: [
+        { name: 'Односторонние', multiple: 1 },
+        { name: 'Двусторонние', multiple: 2 },
+      ],
+    },
+  ];
+  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+
+  await withServer(async (baseUrl) => {
+    const unauthorized = await fetch(`${baseUrl}/api/admin/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    assert.equal(unauthorized.status, 401);
+    assert.equal(calls, 0);
+
+    const response = await fetch(
+      `${baseUrl}/api/admin/update?dryRun=true&unmatchedPolicy=skip`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: authorization,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      },
+    );
+
+    const { completed } = await acceptAndWaitForAdminTask(
+      response,
+      baseUrl,
+      authorization,
+    );
+    assert.equal(completed.status, 'succeeded');
+    assert.deepEqual(completed.task.result, kmlUpdateResult);
+    assert.equal(completed.task.type, 'kml-update');
+    assert.deepEqual(receivedBody, body);
+    assert.equal(receivedQuery.dryRun, 'true');
+    assert.equal(receivedQuery.unmatchedPolicy, 'skip');
+  }, { kmlUpdateService });
+});
+
+test('OSM city update endpoint is protected and forwards URL and safe overrides', async () => {
+  let receivedBody;
+  let receivedQuery;
+  let calls = 0;
+  const osmCityUpdateService = {
+    async update(body, query, operation) {
+      calls += 1;
+      receivedBody = body;
+      receivedQuery = query;
+      operation.onProgress({
+        phase: 'geometry',
+        batch: 1,
+        batchCount: 2,
+        stagedPlaces: 50,
+        indexedPlaces: 100,
+      });
+      return osmCityUpdateResult;
+    },
+  };
+  const body = { URL: 'https://overpass-api.de/api/interpreter' };
+  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const adminTasks = createAdminTaskManager();
+
+  await withServer(async (baseUrl) => {
+    const unauthorized = await fetch(`${baseUrl}/api/admin/update/cities`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    assert.equal(unauthorized.status, 401);
+    assert.equal(calls, 0);
+
+    const response = await fetch(
+      `${baseUrl}/api/admin/update/cities?dryRun=true&timeoutMs=5000&batchSize=25`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: authorization,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      },
+    );
+    assert.equal(response.status, 202);
+    const accepted = await response.clone().json();
+
+    const unauthorizedStatus = await fetch(
+      `${baseUrl}${accepted.task.statusURL}`,
+    );
+    assert.equal(unauthorizedStatus.status, 401);
+
+    const { completed } = await acceptAndWaitForAdminTask(
+      response,
+      baseUrl,
+      authorization,
+    );
+    assert.equal(completed.status, 'succeeded');
+    assert.deepEqual(completed.task.result, osmCityUpdateResult);
+    assert.equal(completed.task.type, 'osm-city-update');
+    assert.ok(completed.task.log.some((entry) =>
+      entry.message === 'OSM: обработан пакет 1/2'));
+    assert.deepEqual(receivedBody, body);
+    assert.equal(receivedQuery.dryRun, 'true');
+    assert.equal(receivedQuery.timeoutMs, '5000');
+    assert.equal(receivedQuery.batchSize, '25');
+    assert.deepEqual(adminTasks.successfulUpdates(), {});
+  }, { osmCityUpdateService, adminTasks });
+});
+
+test('one active admin task blocks every other mutating admin route', async () => {
+  let finishKml;
+  const kmlUpdateService = {
+    update() {
+      return new Promise((resolve) => {
+        finishKml = () => resolve(kmlUpdateResult);
+      });
+    },
+  };
+  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const kmlBody = [{
+    URL: 'https://www.google.com/maps/d/viewer?mid=single-lock',
+    layers: [{ name: 'Линии', multiple: 1 }],
+  }];
+  const populationBody = {
+    populations: [{ name: 'Казань', population: 1300000 }],
+  };
+
+  await withServer(async (baseUrl) => {
+    const firstResponse = await fetch(`${baseUrl}/api/admin/update?dryRun=true`, {
+      method: 'POST',
+      headers: {
+        Authorization: authorization,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(kmlBody),
+    });
+    assert.equal(firstResponse.status, 202);
+    const first = await firstResponse.json();
+
+    const blockedResponse = await fetch(`${baseUrl}/api/admin/populations`, {
+      method: 'POST',
+      headers: {
+        Authorization: authorization,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(populationBody),
+    });
+    assert.equal(blockedResponse.status, 409);
+    const blocked = await blockedResponse.json();
+    assert.equal(blocked.taskId, first.taskId);
+    assert.equal(blocked.task.type, 'kml-update');
+    assert.equal(blocked.statusURL, first.task.statusURL);
+
+    await new Promise((resolve) => setImmediate(resolve));
+    finishKml();
+    const completed = await waitForAdminTask(baseUrl, first, authorization);
+    assert.equal(completed.status, 'succeeded');
+
+    const secondResponse = await fetch(`${baseUrl}/api/admin/populations`, {
+      method: 'POST',
+      headers: {
+        Authorization: authorization,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(populationBody),
+    });
+    const second = await secondResponse.clone().json();
+    assert.equal(secondResponse.status, 202);
+    const oldStatus = await fetch(`${baseUrl}${first.task.statusURL}`, {
+      headers: { Authorization: authorization },
+    });
+    assert.equal(oldStatus.status, 404);
+    const secondCompleted = await acceptAndWaitForAdminTask(
+      secondResponse,
+      baseUrl,
+      authorization,
+    );
+    assert.equal(secondCompleted.completed.status, 'succeeded');
+    assert.notEqual(second.taskId, first.taskId);
+  }, { kmlUpdateService });
+});
+
+test('admin cancellation aborts the active task and keeps its log', async () => {
+  const osmCityUpdateService = {
+    update(_body, _query, operation) {
+      operation.onProgress({
+        phase: 'index',
+        indexPart: 1,
+        indexPartCount: 4,
+        indexedPlaces: 10,
+      });
+      return new Promise((_resolve, reject) => {
+        operation.signal.addEventListener(
+          'abort',
+          () => reject(operation.signal.reason),
+          { once: true },
+        );
+      });
+    },
+  };
+  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+
+  await withServer(async (baseUrl) => {
+    const startResponse = await fetch(
+      `${baseUrl}/api/admin/update/cities?dryRun=true&batchSize=50`,
+      { method: 'POST', headers: { Authorization: authorization } },
+    );
+    const started = await startResponse.json();
+    assert.equal(startResponse.status, 202);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const cancelResponse = await fetch(
+      `${baseUrl}/api/admin/cancel/${started.taskId}`,
+      { method: 'POST', headers: { Authorization: authorization } },
+    );
+    assert.equal(cancelResponse.status, 202);
+    assert.equal((await cancelResponse.json()).taskId, started.taskId);
+
+    const cancelled = await waitForAdminTask(baseUrl, started, authorization);
+    assert.equal(cancelled.status, 'cancelled');
+    assert.ok(cancelled.task.log.some((entry) =>
+      entry.message === 'Запрошена отмена задачи'));
+    assert.ok(cancelled.task.log.some((entry) =>
+      entry.message === 'Задача отменена'));
+
+    const repeated = await fetch(
+      `${baseUrl}/api/admin/cancel/${started.taskId}`,
+      { method: 'POST', headers: { Authorization: authorization } },
+    );
+    assert.equal(repeated.status, 409);
+  }, { osmCityUpdateService });
 });

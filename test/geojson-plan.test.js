@@ -13,13 +13,11 @@ const projectRoot = path.resolve(
   '..',
 );
 
-test('full repository GeoJSON derives cities, bounds, and direction multipliers', async () => {
+test('full repository GeoJSON derives cities and direction multipliers without city bounds', async () => {
   const source = JSON.parse(
     await fs.readFile(path.join(projectRoot, 'bus-lanes.geojson'), 'utf8'),
   );
   const plan = buildGeoJsonPlan(source);
-  const kazan = plan.cities.find((city) => city.name === 'Казань');
-
   assert.equal(plan.cities.length, 71);
   assert.equal(plan.geometries.length, 872);
   assert.equal(plan.ignoredFeatures.length, 10);
@@ -27,9 +25,7 @@ test('full repository GeoJSON derives cities, bounds, and direction multipliers'
     [...new Set(plan.geometries.map((geometry) => geometry.lanes))].sort(),
     [1, 2],
   );
-  assert.deepEqual(kazan.bounds, [
-    48.892808, 55.7292851, 49.2362165, 55.8678227,
-  ]);
+  assert.equal(plan.cities.some((city) => 'bounds' in city), false);
 });
 
 test('GeoJSON plan rejects direction multipliers other than one or two', () => {

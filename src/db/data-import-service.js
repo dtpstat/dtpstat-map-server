@@ -1,4 +1,5 @@
 import { buildGeoJsonPlan } from '../data/geojson-plan.js';
+import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 const UPSERT_CITIES_SQL = `
@@ -7,7 +8,6 @@ const UPSERT_CITIES_SQL = `
     name,
     full_name,
     lane_length_m,
-    bounds,
     attributes
   )
   SELECT
@@ -15,28 +15,16 @@ const UPSERT_CITIES_SQL = `
     payload.name,
     payload."fullName",
     0,
-    ST_MakeBox2D(
-      ST_Point(
-        (payload.bounds ->> 0)::double precision,
-        (payload.bounds ->> 1)::double precision
-      ),
-      ST_Point(
-        (payload.bounds ->> 2)::double precision,
-        (payload.bounds ->> 3)::double precision
-      )
-    ),
     payload.attributes
   FROM jsonb_to_recordset($1::jsonb) AS payload(
     slug text,
     name text,
     "fullName" text,
-    bounds jsonb,
     attributes jsonb
   )
   ON CONFLICT (name) DO UPDATE SET
     slug = EXCLUDED.slug,
     full_name = EXCLUDED.full_name,
-    bounds = EXCLUDED.bounds,
     attributes = EXCLUDED.attributes,
     updated_at = now()
 `;
@@ -93,9 +81,20 @@ const INSERT_GEOMETRIES_SQL = `
  */
 export function createDataImportService(pool) {
   return {
-    /** @param {unknown} collection */
-    async replaceFromGeoJson(collection) {
+    /**
+     * @param {unknown} collection
+     * @param {{ signal?: AbortSignal, onProgress?: (progress: object) => void, onCommit?: () => void }} operation
+     */
+    async replaceFromGeoJson(collection, operation = {}) {
+      throwIfAdminTaskCancelled(operation.signal);
       const plan = buildGeoJsonPlan(collection);
+      operation.onProgress?.({
+        phase: 'validated',
+        cities: plan.cities.length,
+        geometries: plan.geometries.length,
+        ignoredFeatures: plan.ignoredFeatures.length,
+      });
+      throwIfAdminTaskCancelled(operation.signal);
       const client = await pool.connect();
 
       try {
@@ -103,11 +102,9 @@ export function createDataImportService(pool) {
         await client.query(
           `SELECT pg_advisory_xact_lock(hashtext('dtpstat-buslines:data-import'))`,
         );
+        throwIfAdminTaskCancelled(operation.signal);
 
         await client.query('DELETE FROM city_geometries');
-        await client.query('DELETE FROM cities WHERE NOT (name = ANY($1::text[]))', [
-          plan.cities.map((city) => city.name),
-        ]);
         await client.query(UPSERT_CITIES_SQL, [JSON.stringify(plan.cities)]);
         const geometryResult = await client.query(INSERT_GEOMETRIES_SQL, [
           JSON.stringify(plan.geometries),
@@ -119,10 +116,17 @@ export function createDataImportService(pool) {
         if (geometryResult.rowCount !== plan.geometries.length) {
           throw new Error('Not every GeoJSON geometry was inserted');
         }
-        if (statisticsResult.rowCount !== plan.cities.length) {
+        if (statisticsResult.rowCount < plan.cities.length) {
           throw new Error('Not every city statistic was updated');
         }
+        operation.onProgress?.({
+          phase: 'database',
+          cities: plan.cities.length,
+          geometries: plan.geometries.length,
+        });
+        throwIfAdminTaskCancelled(operation.signal);
 
+        operation.onCommit?.();
         await client.query('COMMIT');
         return {
           cities: plan.cities.length,

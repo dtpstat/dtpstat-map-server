@@ -2,6 +2,7 @@ import {
   buildPopulationPlan,
   PopulationValidationError,
 } from '../data/population-plan.js';
+import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 const FIND_UNKNOWN_CITIES_SQL = `
@@ -47,9 +48,20 @@ const UPSERT_POPULATIONS_SQL = `
  */
 export function createPopulationImportService(pool) {
   return {
-    /** @param {unknown} payload */
-    async updateFromJson(payload) {
+    /**
+     * @param {unknown} payload
+     * @param {{ signal?: AbortSignal, onProgress?: (progress: object) => void, onCommit?: () => void }} operation
+     */
+    async updateFromJson(payload, operation = {}) {
+      throwIfAdminTaskCancelled(operation.signal);
       const plan = buildPopulationPlan(payload);
+      operation.onProgress?.({
+        phase: 'validated',
+        cities: plan.populations.length,
+        asOf: plan.asOf,
+        source: plan.source,
+      });
+      throwIfAdminTaskCancelled(operation.signal);
       const client = await pool.connect();
 
       try {
@@ -57,6 +69,7 @@ export function createPopulationImportService(pool) {
         await client.query(
           `SELECT pg_advisory_xact_lock(hashtext('dtpstat-buslines:data-import'))`,
         );
+        throwIfAdminTaskCancelled(operation.signal);
 
         const serialized = JSON.stringify(plan.populations);
         const unknownResult = await client.query(FIND_UNKNOWN_CITIES_SQL, [
@@ -77,6 +90,12 @@ export function createPopulationImportService(pool) {
         }
 
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
+        operation.onProgress?.({
+          phase: 'database',
+          cities: plan.populations.length,
+        });
+        throwIfAdminTaskCancelled(operation.signal);
+        operation.onCommit?.();
         await client.query('COMMIT');
         return {
           cities: plan.populations.length,

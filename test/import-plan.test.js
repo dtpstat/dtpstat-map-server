@@ -28,9 +28,7 @@ test('repository data builds a complete and consistent import plan', async () =>
     population: 1257341,
     attributes: {},
   });
-  assert.deepEqual(plan.cities[0].bounds, [
-    48.892808, 55.7292851, 49.2362165, 55.8678227,
-  ]);
+  assert.equal('bounds' in plan.cities[0], false);
   assert.equal(
     plan.geometries.filter((geometry) => geometry.cityName === 'Казань').length,
     46,

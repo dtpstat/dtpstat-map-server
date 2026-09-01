@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Администрирование — выделенные полосы</title>
+  <link rel="stylesheet" href="/admin/admin.css">
+  <script type="module" src="/admin/admin.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">DTPSTAT BUSLINES</p>
+      <h1>Администрирование данных</h1>
+    </div>
+    <div class="connection connection-pending" id="connection-state">WebSocket: подключение…</div>
+  </header>
+
+  <main class="admin-layout">
+    <section class="control-card" aria-labelledby="operations-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">ЕДИНСТВЕННАЯ ADMIN-ЗАДАЧА</p>
+          <h2 id="operations-title">Операции обновления</h2>
+        </div>
+      </div>
+
+      <nav class="task-tabs" role="tablist" aria-label="Тип операции">
+        <button class="task-tab" id="tab-osm" type="button" role="tab"
+                aria-selected="true" aria-controls="panel-osm" data-task-tab="osm">
+          Города OSM
+        </button>
+        <button class="task-tab" id="tab-kml" type="button" role="tab"
+                aria-selected="false" aria-controls="panel-kml" data-task-tab="kml">
+          Линии KML
+        </button>
+        <button class="task-tab" id="tab-geojson" type="button" role="tab"
+                aria-selected="false" aria-controls="panel-geojson" data-task-tab="geojson">
+          GeoJSON
+        </button>
+        <button class="task-tab" id="tab-population" type="button" role="tab"
+                aria-selected="false" aria-controls="panel-population" data-task-tab="population">
+          Население
+        </button>
+      </nav>
+
+      <article class="task-panel" id="panel-osm" role="tabpanel"
+               aria-labelledby="tab-osm" data-task-panel="osm">
+        <h3>Города из OSM</h3>
+        <p>Индекс RU city/town, последовательные пакеты геометрий и атомарная замена.</p>
+        <p class="last-success" data-last-success="osm">
+          <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
+        </p>
+        <form id="osm-form" data-task-form="osm">
+          <div class="form-fields">
+            <label>Overpass URL <input name="URL" type="url" placeholder="из ENV"></label>
+            <label>Размер пакета <input name="batchSize" type="number" min="1" value="50"></label>
+            <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
+          </div>
+          <button class="task-action" type="submit" data-task-action="osm"
+                  data-start-label="Запустить OSM">Запустить OSM</button>
+        </form>
+        <p class="notice" data-task-notice="osm" role="status"></p>
+      </article>
+
+      <article class="task-panel" id="panel-kml" role="tabpanel"
+               aria-labelledby="tab-kml" data-task-panel="kml" hidden>
+        <h3>Линии из KML</h3>
+        <p>Пустое поле использует источники из ENV. JSON полностью заменяет список.</p>
+        <p class="last-success" data-last-success="kml">
+          <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
+        </p>
+        <form id="kml-form" data-task-form="kml">
+          <div class="form-fields">
+            <label>Источники JSON<textarea name="sources" rows="8" placeholder='[{"URL":"https://…","layers":[{"name":"…","multiple":1}]}]'></textarea></label>
+            <label>Буфер города, м <input name="cityBufferMeters" type="number" min="0" value="0"></label>
+            <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
+          </div>
+          <button class="task-action" type="submit" data-task-action="kml"
+                  data-start-label="Запустить KML">Запустить KML</button>
+        </form>
+        <p class="notice" data-task-notice="kml" role="status"></p>
+      </article>
+
+      <article class="task-panel" id="panel-geojson" role="tabpanel"
+               aria-labelledby="tab-geojson" data-task-panel="geojson" hidden>
+        <h3>Импорт GeoJSON</h3>
+        <p>Полная замена геометрий из локального GeoJSON-файла.</p>
+        <p class="last-success" data-last-success="geojson">
+          <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
+        </p>
+        <form id="geojson-form" data-task-form="geojson">
+          <div class="form-fields">
+            <label>GeoJSON <input name="file" type="file" accept=".json,.geojson,application/json,application/geo+json" required></label>
+          </div>
+          <button class="task-action" type="submit" data-task-action="geojson"
+                  data-start-label="Импортировать GeoJSON">Импортировать GeoJSON</button>
+        </form>
+        <p class="notice" data-task-notice="geojson" role="status"></p>
+      </article>
+
+      <article class="task-panel" id="panel-population" role="tabpanel"
+               aria-labelledby="tab-population" data-task-panel="population" hidden>
+        <h3>Население</h3>
+        <p>Отдельный снимок населения с последующим пересчётом рейтинга.</p>
+        <p class="last-success" data-last-success="population">
+          <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
+        </p>
+        <form id="population-form" data-task-form="population">
+          <div class="form-fields">
+            <label>Данные JSON<textarea name="payload" rows="10" required placeholder='{"asOf":"2026-01-01","source":"…","populations":[…]}'></textarea></label>
+          </div>
+          <button class="task-action" type="submit" data-task-action="population"
+                  data-start-label="Обновить население">Обновить население</button>
+        </form>
+        <p class="notice" data-task-notice="population" role="status"></p>
+      </article>
+    </section>
+
+    <aside class="status-card" aria-labelledby="status-title">
+      <div class="section-heading status-heading">
+        <div>
+          <p class="eyebrow">СОСТОЯНИЕ И ЖУРНАЛ</p>
+          <h2 id="status-title">Текущая операция</h2>
+        </div>
+        <span class="status status-idle" id="task-status">нет задачи</span>
+      </div>
+
+      <dl class="task-meta" id="task-meta"></dl>
+      <button class="secondary refresh-button" id="refresh-task" type="button">Обновить статус</button>
+
+      <div class="log-heading">
+        <h3>Ход выполнения</h3>
+        <span id="log-count">0 записей</span>
+      </div>
+      <div class="task-log" id="task-log" role="log" aria-live="polite">
+        <p class="empty-state">Задача ещё не запускалась.</p>
+      </div>
+
+      <details class="result-panel" id="result-panel">
+        <summary>Результат / ошибка</summary>
+        <pre id="task-result">—</pre>
+      </details>
+    </aside>
+  </main>
+</body>
+</html>

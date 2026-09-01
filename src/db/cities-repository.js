@@ -4,7 +4,7 @@
 
 const LIST_CITIES_SQL = `
   SELECT
-    id::integer AS id,
+    city.id::integer AS id,
     slug,
     name,
     full_name AS "fullName",
@@ -17,13 +17,14 @@ const LIST_CITIES_SQL = `
       ORDER BY city.lane_m_per_1000 DESC, city.name ASC
     )::integer AS rank,
     json_build_array(
-      ST_XMin(bounds),
-      ST_YMin(bounds),
-      ST_XMax(bounds),
-      ST_YMax(bounds)
+      ST_XMin(boundary.bounds),
+      ST_YMin(boundary.bounds),
+      ST_XMax(boundary.bounds),
+      ST_YMax(boundary.bounds)
     ) AS bounds
   FROM cities AS city
   JOIN city_populations AS population ON population.city_id = city.id
+  JOIN city_boundaries AS boundary ON boundary.city_id = city.id
   ORDER BY city.is_large DESC, city.lane_m_per_1000 DESC, city.name ASC
 `;
 

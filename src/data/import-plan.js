@@ -4,8 +4,9 @@ import { buildPopulationPlan } from './population-plan.js';
 
 /**
  * Validate the repository's two independent source snapshots. Geometry owns
- * city names and shapes; the CSV supplies population only. Length and rating
- * are deliberately not trusted here because PostGIS calculates both.
+ * city names and bus-lane lines; the CSV supplies population only. City
+ * boundaries come exclusively from OSM. Length and rating are deliberately
+ * not trusted here because PostGIS calculates both.
  *
  * @param {string} csvText
  * @param {string} geojsonText

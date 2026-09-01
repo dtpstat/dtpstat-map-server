@@ -23,7 +23,6 @@ function finiteNumber(value) {
 /**
  * @param {unknown} geometry
  * @param {number} featureIndex
- * @returns {[number, number, number, number]}
  */
 function validateGeometry(geometry, featureIndex) {
   if (!geometry || typeof geometry !== 'object') {
@@ -46,7 +45,6 @@ function validateGeometry(geometry, featureIndex) {
     );
   }
 
-  const bounds = [Infinity, Infinity, -Infinity, -Infinity];
   for (const line of lines) {
     if (!Array.isArray(line) || line.length < 2) {
       throw new GeoJsonValidationError(
@@ -74,15 +72,8 @@ function validateGeometry(geometry, featureIndex) {
           `GeoJSON feature ${featureIndex} contains coordinates outside WGS84`,
         );
       }
-
-      bounds[0] = Math.min(bounds[0], longitude);
-      bounds[1] = Math.min(bounds[1], latitude);
-      bounds[2] = Math.max(bounds[2], longitude);
-      bounds[3] = Math.max(bounds[3], latitude);
     }
   }
-
-  return bounds;
 }
 
 /**
@@ -140,7 +131,7 @@ export function buildGeoJsonPlan(collection) {
       );
     }
 
-    const featureBounds = validateGeometry(feature.geometry, featureIndex);
+    validateGeometry(feature.geometry, featureIndex);
     let city = cityByName.get(cityName);
     if (!city) {
       city = {
@@ -151,7 +142,6 @@ export function buildGeoJsonPlan(collection) {
           feature.properties.name.trim()
             ? feature.properties.name.trim()
             : cityName,
-        bounds: [...featureBounds],
         attributes: {
           adminLevel: feature.properties.admin_level,
           place: feature.properties.place,
@@ -162,11 +152,6 @@ export function buildGeoJsonPlan(collection) {
         throw new GeoJsonValidationError(`Cannot create a slug for ${cityName}`);
       }
       cityByName.set(cityName, city);
-    } else {
-      city.bounds[0] = Math.min(city.bounds[0], featureBounds[0]);
-      city.bounds[1] = Math.min(city.bounds[1], featureBounds[1]);
-      city.bounds[2] = Math.max(city.bounds[2], featureBounds[2]);
-      city.bounds[3] = Math.max(city.bounds[3], featureBounds[3]);
     }
     geometries.push({
       cityName,

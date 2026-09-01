@@ -22,10 +22,10 @@ function listen(server, endpoint) {
 /**
  * Start every protocol enabled in configuration.
  *
- * @param {{ app: import('express').Express, config: any }} dependencies
+ * @param {{ app: import('express').Express, config: any, webSocketGateway?: { attach: Function } }} dependencies
  * @returns {Promise<import('node:http').Server[]>}
  */
-export async function startServers({ app, config }) {
+export async function startServers({ app, config, webSocketGateway }) {
   /** @type {Array<{ server: import('node:http').Server, host: string, port: number, protocol: string }>} */
   const endpoints = [];
 
@@ -49,6 +49,10 @@ export async function startServers({ app, config }) {
       port: config.https.port,
       protocol: 'HTTPS',
     });
+  }
+
+  for (const endpoint of endpoints) {
+    webSocketGateway?.attach(endpoint.server);
   }
 
   const servers = [];

@@ -22,6 +22,70 @@ test('loadConfig enables HTTP with safe defaults', () => {
   assert.equal(config.database.port, 5432);
   assert.equal(config.database.user, 'example_app');
   assert.equal(config.importApi.maxBodyBytes, 25 * 1024 * 1024);
+  assert.equal(config.kmlUpdate.sources.length, 0);
+  assert.equal(config.kmlUpdate.timeoutMs, 30000);
+  assert.equal(config.kmlUpdate.unmatchedPolicy, 'skip');
+  assert.equal(config.kmlUpdate.ambiguousPolicy, 'best-overlap');
+  assert.equal(config.kmlUpdate.cityBufferMeters, 0);
+  assert.equal(config.kmlUpdate.cityBufferMaxMeters, 5000);
+  assert.deepEqual([...config.kmlUpdate.allowedHosts], ['www.google.com']);
+  assert.equal(
+    config.osmCityUpdate.url,
+    'https://overpass-api.de/api/interpreter',
+  );
+  assert.equal(config.osmCityUpdate.queryTimeoutSeconds, 300);
+  assert.equal(config.osmCityUpdate.timeoutMs, 600000);
+  assert.equal(config.osmCityUpdate.batchSize, 50);
+  assert.equal(config.osmCityUpdate.maxBatchSize, 200);
+  assert.deepEqual(
+    [...config.osmCityUpdate.allowedHosts],
+    ['overpass-api.de', 'overpass.kumi.systems', 'maps.mail.ru'],
+  );
+});
+
+test('loadConfig keeps the OSM geometry batch within its configured maximum', () => {
+  const config = loadConfig({
+    ...REQUIRED_ENV,
+    OSM_CITY_UPDATE_BATCH_SIZE: '75',
+    OSM_CITY_UPDATE_MAX_BATCH_SIZE: '100',
+  }, '/project');
+
+  assert.equal(config.osmCityUpdate.batchSize, 75);
+  assert.equal(config.osmCityUpdate.maxBatchSize, 100);
+  assert.throws(
+    () => loadConfig({
+      ...REQUIRED_ENV,
+      OSM_CITY_UPDATE_BATCH_SIZE: '101',
+      OSM_CITY_UPDATE_MAX_BATCH_SIZE: '100',
+    }, '/project'),
+    /OSM_CITY_UPDATE_BATCH_SIZE must be an integer between 1 and 100/,
+  );
+});
+
+test('loadConfig validates default KML sources with explicit multipliers', () => {
+  const config = loadConfig({
+    ...REQUIRED_ENV,
+    KML_UPDATE_SOURCES_JSON: JSON.stringify([
+      {
+        URL: 'https://www.google.com/maps/d/viewer?mid=test_map',
+        layers: [
+          { name: 'Односторонние', multiple: 1 },
+          { name: 'Двусторонние', multiple: 2 },
+        ],
+      },
+    ]),
+  }, '/project');
+
+  assert.equal(config.kmlUpdate.sources[0].mapId, 'test_map');
+  assert.equal(config.kmlUpdate.sources[0].layers[1].multiple, 2);
+
+  assert.throws(
+    () => loadConfig({
+      ...REQUIRED_ENV,
+      KML_UPDATE_SOURCES_JSON: '[',
+    }, '/project'),
+    /must contain valid JSON/,
+  );
 });
 
 test('loadConfig supports HTTPS-only mode and resolves certificate paths', () => {

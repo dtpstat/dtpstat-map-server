@@ -2,6 +2,8 @@ import compression       from 'compression';
 import express           from 'express';
 import helmet            from 'helmet';
 import path              from 'node:path';
+import {createAdminTaskManager} from './data/admin-task-manager.js';
+import {createBasicAuth} from './http/basic-auth.js';
 import {createApiRouter} from './routes/api.js';
 
 const PUBLIC_ASSETS = new Map([
@@ -22,13 +24,30 @@ const PUBLIC_ASSETS = new Map([
  *   repository: import('./routes/api.js').CitiesRepository,
  *   importService: import('./routes/api.js').DataImportService,
  *   populationService: import('./routes/api.js').PopulationImportService,
+ *   kmlUpdateService: import('./routes/api.js').KmlUpdateService,
+ *   osmCityUpdateService: import('./routes/api.js').OsmCityUpdateService,
+ *   adminTasks?: ReturnType<typeof createAdminTaskManager>,
  *   config: any
  * }} dependencies
  */
-export function createApp({repository, importService, populationService, config}){
+export function createApp({
+	repository,
+	importService,
+	populationService,
+	kmlUpdateService,
+	osmCityUpdateService,
+	adminTasks = createAdminTaskManager(),
+	config,
+}){
 	const app             = express();
 	const isProduction    = config.environment === 'production';
 	const publicDirectory = path.join(config.projectRoot, 'public');
+	const adminDirectory  = path.join(config.projectRoot, 'admin');
+	const requireAdminAuth = createBasicAuth({
+		username: config.importApi.username,
+		password: config.importApi.password,
+		realm: 'data-import',
+	});
 
 	app.disable('x-powered-by');
 	app.use(
@@ -40,7 +59,7 @@ export function createApp({repository, importService, populationService, config}
 					scriptSrc:  ["'self'", "'wasm-unsafe-eval'"],
 					styleSrc:   ["'self'", "'unsafe-inline'"],
 					imgSrc:     ["'self'", 'data:', 'blob:', 'https://*.mapbox.com'],
-					connectSrc: ["'self'", 'https://*.mapbox.com'],
+					connectSrc: ["'self'", 'ws:', 'wss:', 'https://*.mapbox.com'],
 					workerSrc:  ["'self'", 'blob:'],
 					childSrc:   ["'self'", 'blob:'],
 				},
@@ -48,6 +67,14 @@ export function createApp({repository, importService, populationService, config}
 		}),
 	);
 	app.use(compression());
+	app.use(
+		'/admin',
+		requireAdminAuth,
+		express.static(adminDirectory, {
+			index: 'index.html',
+			maxAge: isProduction ? '5m' : 0,
+		}),
+	);
 
 	app.use(
 		'/vendor/mapbox-gl',
@@ -69,8 +96,13 @@ export function createApp({repository, importService, populationService, config}
 			repository,
 			importService,
 			populationService,
+			kmlUpdateService,
+			osmCityUpdateService,
+			adminTasks,
 			publicMap: config.publicMap,
 			importApi: config.importApi,
+			kmlUpdate: config.kmlUpdate,
+			osmCityUpdate: config.osmCityUpdate,
 		}),
 	);
 

@@ -66,6 +66,14 @@ test('data import replaces geometries and commits after updating statistics', as
   assert.equal(result.cities, 1);
   assert.equal(result.geometries, 1);
   assert.equal(pool.queries[0], 'BEGIN');
+  assert.equal(
+    pool.queries.some((query) => query.startsWith('DELETE FROM cities')),
+    false,
+  );
+  assert.equal(
+    pool.queries.some((query) => /\bbounds\b/i.test(query)),
+    false,
+  );
   assert.match(pool.queries.at(-2), /^WITH geometry_statistics AS/);
   assert.equal(pool.queries.at(-1), 'COMMIT');
   assert.equal(pool.released, true);
