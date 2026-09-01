@@ -112,6 +112,11 @@ export function createApiRouter({
 			message = `OSM: загружена часть индекса ${progress.indexPart}/${progress.indexPartCount}`;
 		}else if(progress.phase === 'geometry'){
 			message = `OSM: обработан пакет ${progress.batch}/${progress.batchCount}`;
+		}else if(progress.phase === 'retry'){
+			const target = progress.requestPhase === 'geometry'
+				? `пакет ${progress.batch}/${progress.batchCount}`
+				: `часть индекса ${progress.indexPart}/${progress.indexPartCount}`;
+			message = `OSM: HTTP ${progress.statusCode}, ${target}; повтор ${progress.attempt}/${progress.maxRetries} через ${Math.ceil(progress.waitMs / 1000)} сек.`;
 		}else if(progress.phase === 'kml-source'){
 			message = `KML: обработан источник ${progress.source}/${progress.sourceCount}`;
 		}else if(progress.phase === 'validated'){
@@ -356,6 +361,10 @@ export function createApiRouter({
 					parameters: {
 						dryRun: options.dryRun,
 						batchSize: options.batchSize,
+						minDelayMs: options.minDelayMs,
+						maxRetries: options.maxRetries,
+						retryBaseDelayMs: options.retryBaseDelayMs,
+						retryMaxDelayMs: options.retryMaxDelayMs,
 						sourceURL: options.url,
 					},
 				}, async(context) => osmCityUpdateService.update(
@@ -374,6 +383,51 @@ export function createApiRouter({
 				}
 				next(error);
 			}
+		},
+	);
+
+	router.get(
+		'/admin/config',
+		requireImportAuth,
+		(request, response) => {
+			response.set('Cache-Control', 'no-store');
+			response.json({
+				osmCityUpdate: {
+					allowedURLs: [...osmCityUpdate.allowedURLs],
+					defaults: {
+						URL: osmCityUpdate.url,
+						batchSize: osmCityUpdate.batchSize,
+						minDelayMs: osmCityUpdate.minDelayMs,
+						maxRetries: osmCityUpdate.maxRetries,
+						retryBaseDelayMs: osmCityUpdate.retryBaseDelayMs,
+						retryMaxDelayMs: osmCityUpdate.retryMaxDelayMs,
+					},
+					limits: {
+						batchSize: {min: 1, max: osmCityUpdate.maxBatchSize},
+						minDelayMs: {min: osmCityUpdate.minDelayMs, max: 300000},
+						maxRetries: {min: 0, max: osmCityUpdate.maxRetries},
+						retryBaseDelayMs: {
+							min: osmCityUpdate.retryBaseDelayMs,
+							max: 3600000,
+						},
+						retryMaxDelayMs: {
+							min: osmCityUpdate.retryMaxDelayMs,
+							max: 3600000,
+						},
+					},
+				},
+				kmlUpdate: {
+					defaults: {
+						cityBufferMeters: kmlUpdate.cityBufferMeters,
+					},
+					limits: {
+						cityBufferMeters: {
+							min: 0,
+							max: kmlUpdate.cityBufferMaxMeters,
+						},
+					},
+				},
+			});
 		},
 	);
 

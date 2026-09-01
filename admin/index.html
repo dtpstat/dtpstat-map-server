@@ -53,10 +53,36 @@
         </p>
         <form id="osm-form" data-task-form="osm">
           <div class="form-fields">
-            <label>Overpass URL <input name="URL" type="url" placeholder="из ENV"></label>
-            <label>Размер пакета <input name="batchSize" type="number" min="1" value="50"></label>
+            <label>Overpass URL
+              <select name="URL" id="osm-url">
+                <option value="">Загрузка настроек…</option>
+              </select>
+            </label>
+            <label>Размер пакета
+              <input name="batchSize" type="number" inputmode="numeric"
+                     min="1" step="1" placeholder="из ENV">
+            </label>
+            <label>Пауза между запросами, мс
+              <input name="minDelayMs" type="number" inputmode="numeric"
+                     min="0" step="1" placeholder="из ENV">
+            </label>
+            <label>Максимум повторов временной ошибки
+              <input name="maxRetries" type="number" inputmode="numeric"
+                     min="0" step="1" placeholder="из ENV">
+            </label>
+            <label>Начальная пауза повтора, мс
+              <input name="retryBaseDelayMs" type="number" inputmode="numeric"
+                     min="1000" step="1" placeholder="из ENV">
+            </label>
+            <label>Предел backoff, мс
+              <input name="retryMaxDelayMs" type="number" inputmode="numeric"
+                     min="1000" step="1" placeholder="из ENV">
+            </label>
             <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
           </div>
+          <button class="secondary defaults-button" id="osm-defaults" type="button">
+            Загрузить значения по умолчанию
+          </button>
           <button class="task-action" type="submit" data-task-action="osm"
                   data-start-label="Запустить OSM">Запустить OSM</button>
         </form>
@@ -73,7 +99,10 @@
         <form id="kml-form" data-task-form="kml">
           <div class="form-fields">
             <label>Источники JSON<textarea name="sources" rows="8" placeholder='[{"URL":"https://…","layers":[{"name":"…","multiple":1}]}]'></textarea></label>
-            <label>Буфер города, м <input name="cityBufferMeters" type="number" min="0" value="0"></label>
+            <label>Буфер города, м
+              <input name="cityBufferMeters" type="number" inputmode="numeric"
+                     min="0" step="1" placeholder="из ENV">
+            </label>
             <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
           </div>
           <button class="task-action" type="submit" data-task-action="kml"

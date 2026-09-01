@@ -120,11 +120,17 @@ HTTP и HTTPS могут работать одновременно. Для ре�
 | `IMPORT_API_PASSWORD` | Общий пароль Basic Auth для обновления данных | обязательна |
 | `IMPORT_API_MAX_BODY_BYTES` | Максимальный размер тела запроса обновления | `26214400` |
 | `OSM_CITY_UPDATE_URL` | HTTPS endpoint Overpass API | `https://overpass-api.de/api/interpreter` |
-| `OSM_CITY_UPDATE_ALLOWED_HOSTS` | Разрешённые хосты OSM-загрузки | `overpass-api.de,overpass.kumi.systems,maps.mail.ru` |
+| `OSM_CITY_UPDATE_ALLOWED_HOSTS` | Разрешённые хосты OSM-загрузки и redirect | `overpass-api.de,overpass.kumi.systems,overpass.private.coffee,maps.mail.ru` |
+| `OSM_CITY_UPDATE_ALLOWED_URLS` | Точный список endpoint API и админ-панели | четыре URL из `.env.example` |
 | `OSM_CITY_UPDATE_TIMEOUT_MS` | Сетевой таймаут каждого OSM-запроса | `600000` |
 | `OSM_CITY_UPDATE_QUERY_TIMEOUT_SECONDS` | Таймаут внутри Overpass-запроса | `300` |
 | `OSM_CITY_UPDATE_BATCH_SIZE` | Число OSM-объектов в последовательном пакете | `50` |
 | `OSM_CITY_UPDATE_MAX_BATCH_SIZE` | Верхний предел `batchSize` из API | `200` |
+| `OSM_CITY_UPDATE_MIN_DELAY_MS` | Минимальная пауза между запросами Overpass | `5000` |
+| `OSM_CITY_UPDATE_MAX_RETRIES` | Максимум повторов одного запроса после HTTP 429/502/503/504 | `6` |
+| `OSM_CITY_UPDATE_RETRY_BASE_DELAY_MS` | Начальная пауза временной ошибки Overpass | `30000` |
+| `OSM_CITY_UPDATE_RETRY_MAX_DELAY_MS` | Предел экспоненциальной паузы временной ошибки | `240000` |
+| `OSM_CITY_UPDATE_USER_AGENT` | Идентификатор приложения для Overpass | `dtpstat-buslines/2.0 OSM city updater` |
 | `OSM_CITY_UPDATE_MAX_BYTES` | Общий лимит ID-ответа и всех пакетов | `314572800` |
 | `OSM_CITY_UPDATE_DRY_RUN` | Проверить OSM-снимок с rollback | `false` |
 | `KML_UPDATE_SOURCES_JSON` | KML URL и явные множители выбранных слоёв | пустой массив |
@@ -230,6 +236,8 @@ npm run dev
   рейтинга.
 - `POST /api/admin/update/cities` — запускает фоновое обновление полного снимка
   российских OSM `place=city/town`; сразу возвращает `202` и ID задачи.
+- `GET /api/admin/config` — безопасные значения ENV, допустимые URL и границы
+  числовых полей; логины, пароли и другие секреты не возвращаются.
 - `POST /api/admin/update` — фоновая загрузка указанных KML-слоёв и полная
   замена линий.
 - `GET /api/admin/status` — текущая либо последняя завершённая admin-задача и
@@ -397,16 +405,18 @@ UPSERT сервер в той же транзакции заново рассч�
 OSM-объекты и не объединяются по строке имени.
 
 Тело необязательно; без него используются настройки `.env`. Разрешённое
-переопределение URL имеет строгую структуру:
+переопределение URL имеет строгую структуру и должно точно присутствовать в
+`OSM_CITY_UPDATE_ALLOWED_URLS`:
 
 ```json
 {"URL":"https://overpass-api.de/api/interpreter"}
 ```
 
-Параметры `dryRun`, `timeoutMs`, `queryTimeoutSeconds`, `maxBytes` и `batchSize`
-можно передать query-параметрами. Лимиты времени и общего объёма можно только
-уменьшить относительно ENV, а `batchSize` не может превысить
-`OSM_CITY_UPDATE_MAX_BATCH_SIZE`. Например:
+Параметры `dryRun`, `timeoutMs`, `queryTimeoutSeconds`, `maxBytes`, `batchSize`,
+`minDelayMs`, `maxRetries`, `retryBaseDelayMs` и `retryMaxDelayMs` можно передать
+query-параметрами. Лимиты времени, общего объёма и числа повторов можно только
+уменьшить относительно ENV; защитные паузы можно только увеличить, а `batchSize`
+не может превысить `OSM_CITY_UPDATE_MAX_BATCH_SIZE`. Например:
 
 ```bash
 curl --fail-with-body \
@@ -419,6 +429,21 @@ POST не ждёт Overpass и сразу отвечает общим `HTTP 202`
 Прогресс индексных частей и пакетов добавляется в `task.log`; при завершении
 появляется `task.result` или `task.error`. Глобальная блокировка не позволяет
 параллельно запустить ни OSM, ни KML, ни GeoJSON, ни обновление населения.
+
+При открытии `/admin/` защищённый `GET /api/admin/config` заполняет числовые
+поля фактическими значениями ENV и строит выпадающий список точных Overpass URL.
+Кнопка «Загрузить значения по умолчанию» повторно читает настройки с сервера.
+Очищенное числовое поле не передаётся как override: подсказка показывает его
+ENV-значение, а задача использует серверный default. Непустые значения
+проверяются по серверным границам до запуска.
+
+После каждого ответа загрузчик выдерживает `minDelayMs`. Временные HTTP
+429/502/503/504 не завершают задачу: повторяется тот же индексный запрос или тот
+же пакет. Пауза берётся из `Retry-After`, если она больше локального backoff;
+иначе применяются 30, 60, 120, 240 секунд и далее 240 секунд до исчерпания
+`maxRetries`. Каждое ожидание с кодом ответа, номером запроса, попыткой и временем
+следующего запуска записывается в журнал. Ожидание можно немедленно прервать
+кнопкой отмены.
 
 Сначала сервер четырьмя небольшими последовательными запросами получает ID для
 `city/way`, `city/relation`, `town/way` и `town/relation`, проверяя общую

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { OsmCityDownloadError } from '../src/data/osm-city-downloader.js';
 import { createOsmCityUpdateService } from '../src/db/osm-city-update-service.js';
 
 const config = {
@@ -11,6 +12,11 @@ const config = {
   maxBytes: 1000000,
   batchSize: 2,
   maxBatchSize: 10,
+  minDelayMs: 0,
+  maxRetries: 6,
+  retryBaseDelayMs: 30000,
+  retryMaxDelayMs: 240000,
+  userAgent: 'dtpstat-buslines/2.0 test',
 };
 
 const index = {
@@ -300,5 +306,198 @@ test('OSM index download failure happens before a database connection is opened'
   });
 
   await assert.rejects(service.update(undefined, {}), /network failed/);
+  assert.equal(pool.connections, 0);
+});
+
+test('HTTP 429 waits and retries the same OSM request without advancing the batch', async () => {
+  const pool = createPool();
+  const base = createDependencies();
+  const queries = [];
+  const delays = [];
+  const progress = [];
+  let now = 0;
+  let attempts = 0;
+  let successfulDownloads = 0;
+  const retryConfig = {
+    ...config,
+    minDelayMs: 5,
+    maxRetries: 3,
+    retryBaseDelayMs: 30,
+    retryMaxDelayMs: 240,
+  };
+  const service = createOsmCityUpdateService(pool, retryConfig, {
+    ...base,
+    now: () => now,
+    async sleep(milliseconds) {
+      delays.push(milliseconds);
+      now += milliseconds;
+    },
+    async download(_url, query, options) {
+      attempts += 1;
+      queries.push(query);
+      assert.equal(options.userAgent, retryConfig.userAgent);
+      if (attempts === 5) {
+        throw new OsmCityDownloadError('OSM download returned HTTP 429', {
+          statusCode: 429,
+          retryAfterMs: 60,
+          finalURL: retryConfig.url,
+        });
+      }
+      successfulDownloads += 1;
+      return {
+        jsonText: successfulDownloads <= 4
+          ? `index-${successfulDownloads}`
+          : `batch-${successfulDownloads - 4}`,
+        bytes: 10,
+        finalURL: retryConfig.url,
+      };
+    },
+    reportProgress(value) {
+      progress.push(value);
+    },
+  });
+
+  const result = await service.update(undefined, {});
+
+  assert.equal(attempts, 7);
+  assert.equal(queries[4], queries[5]);
+  assert.deepEqual(delays, [5, 5, 5, 5, 60, 5]);
+  assert.equal(result.requestAttemptCount, 7);
+  assert.equal(result.retryCount, 1);
+  assert.equal(result.retryWaitMs, 60);
+  assert.equal(result.throttleWaitMs, 25);
+  assert.deepEqual(
+    progress.filter((item) => item.phase === 'retry'),
+    [{
+      phase: 'retry',
+      requestPhase: 'geometry',
+      batch: 1,
+      batchCount: 2,
+      statusCode: 429,
+      attempt: 1,
+      maxRetries: 3,
+      waitMs: 60,
+      retryAt: '1970-01-01T00:00:00.080Z',
+      retryAfterMs: 60,
+      fallbackDelayMs: 30,
+    }],
+  );
+});
+
+test('HTTP 504 retries the same OSM index part after backoff', async () => {
+  const pool = createPool();
+  const base = createDependencies();
+  const delays = [];
+  const progress = [];
+  const queries = [];
+  let attempts = 0;
+  const service = createOsmCityUpdateService(pool, {
+    ...config,
+    maxRetries: 1,
+    retryBaseDelayMs: 30,
+    retryMaxDelayMs: 30,
+  }, {
+    ...base,
+    async download(url, query, options) {
+      attempts += 1;
+      queries.push(query);
+      if (attempts === 1) {
+        throw new OsmCityDownloadError('OSM download returned HTTP 504', {
+          statusCode: 504,
+          finalURL: url,
+        });
+      }
+      return base.download(url, query, options);
+    },
+    async sleep(milliseconds) {
+      delays.push(milliseconds);
+    },
+    reportProgress(value) {
+      progress.push(value);
+    },
+  });
+
+  const result = await service.update(undefined, {});
+
+  assert.equal(result.importedPlaces, 3);
+  assert.equal(attempts, 7);
+  assert.equal(queries[0], queries[1]);
+  assert.deepEqual(delays, [30]);
+  assert.equal(result.retryCount, 1);
+  assert.deepEqual(
+    progress.filter((item) => item.phase === 'retry')
+      .map((item) => ({
+        statusCode: item.statusCode,
+        requestPhase: item.requestPhase,
+        indexPart: item.indexPart,
+        waitMs: item.waitMs,
+      })),
+    [{
+      statusCode: 504,
+      requestPhase: 'index',
+      indexPart: 1,
+      waitMs: 30,
+    }],
+  );
+});
+
+test('HTTP 429 stops only after the configured retry limit', async () => {
+  const pool = createPool();
+  const delays = [];
+  let attempts = 0;
+  const service = createOsmCityUpdateService(pool, {
+    ...config,
+    maxRetries: 2,
+    retryBaseDelayMs: 10,
+    retryMaxDelayMs: 20,
+  }, {
+    async download() {
+      attempts += 1;
+      throw new OsmCityDownloadError('OSM download returned HTTP 429', {
+        statusCode: 429,
+      });
+    },
+    async sleep(milliseconds) {
+      delays.push(milliseconds);
+    },
+    reportProgress() {},
+  });
+
+  await assert.rejects(
+    service.update(undefined, {}),
+    /HTTP 429 after 2 retries/,
+  );
+  assert.equal(attempts, 3);
+  assert.deepEqual(delays, [10, 20]);
+  assert.equal(pool.connections, 0);
+});
+
+test('admin cancellation interrupts an HTTP 429 backoff immediately', async () => {
+  const pool = createPool();
+  const controller = new AbortController();
+  const service = createOsmCityUpdateService(pool, {
+    ...config,
+    retryBaseDelayMs: 1000,
+    retryMaxDelayMs: 1000,
+  }, {
+    async download() {
+      throw new OsmCityDownloadError('OSM download returned HTTP 429', {
+        statusCode: 429,
+      });
+    },
+    reportProgress() {},
+  });
+
+  await assert.rejects(
+    service.update(undefined, {}, {
+      signal: controller.signal,
+      onProgress(progressValue) {
+        if (progressValue.phase === 'retry') {
+          controller.abort(new Error('cancelled during retry wait'));
+        }
+      },
+    }),
+    /cancelled during retry wait/,
+  );
   assert.equal(pool.connections, 0);
 });

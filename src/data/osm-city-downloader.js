@@ -1,8 +1,32 @@
 export class OsmCityDownloadError extends Error {
-  constructor(message) {
+  /**
+   * @param {string} message
+   * @param {{ statusCode?: number, retryAfterMs?: number | null, finalURL?: string }} [details]
+   */
+  constructor(message, details = {}) {
     super(message);
     this.name = 'OsmCityDownloadError';
+    this.statusCode = details.statusCode ?? null;
+    this.retryAfterMs = details.retryAfterMs ?? null;
+    this.finalURL = details.finalURL ?? null;
   }
+}
+
+/**
+ * Parse both HTTP Retry-After forms: delay-seconds and HTTP-date.
+ * @param {string | null} value
+ * @param {number} [now]
+ */
+export function parseRetryAfterMs(value, now = Date.now()) {
+  const raw = value?.trim();
+  if (!raw) return null;
+  if (/^\d+$/.test(raw)) {
+    const seconds = Number(raw);
+    const milliseconds = seconds * 1000;
+    return Number.isSafeInteger(milliseconds) ? milliseconds : null;
+  }
+  const timestamp = Date.parse(raw);
+  return Number.isFinite(timestamp) ? Math.max(0, timestamp - now) : null;
 }
 
 /** @param {string} rawUrl @param {Set<string>} allowedHosts */
@@ -30,7 +54,7 @@ function validateDownloadUrl(rawUrl, allowedHosts) {
 /**
  * @param {string} sourceUrl
  * @param {string} overpassQuery
- * @param {{ timeoutMs: number, maxBytes: number, allowedHosts: Set<string>, signal?: AbortSignal }} options
+ * @param {{ timeoutMs: number, maxBytes: number, allowedHosts: Set<string>, userAgent?: string, signal?: AbortSignal }} options
  * @param {typeof fetch} [fetchImplementation]
  */
 export async function downloadOsmCities(
@@ -58,7 +82,8 @@ export async function downloadOsmCities(
           headers: {
             Accept: 'application/json',
             'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-            'User-Agent': 'dtpstat-buslines/2.0 OSM city updater',
+            'User-Agent': options.userAgent ??
+              'dtpstat-buslines/2.0 OSM city updater',
           },
           body,
         });
@@ -92,6 +117,13 @@ export async function downloadOsmCities(
       if (!response.ok) {
         throw new OsmCityDownloadError(
           `OSM download returned HTTP ${response.status}`,
+          {
+            statusCode: response.status,
+            retryAfterMs: parseRetryAfterMs(
+              response.headers.get('retry-after'),
+            ),
+            finalURL: url.toString(),
+          },
         );
       }
 

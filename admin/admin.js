@@ -35,6 +35,7 @@ const statusOrder = Object.freeze({
 });
 const state = {
   task: null,
+  adminConfig: null,
   lastSuccessfulUpdates: {},
   selected: 'osm',
   socket: null,
@@ -55,6 +56,10 @@ const elements = {
   forms: [...document.querySelectorAll('[data-task-form]')],
   actions: [...document.querySelectorAll('[data-task-action]')],
   successfulUpdates: [...document.querySelectorAll('[data-last-success]')],
+  osmForm: document.querySelector('#osm-form'),
+  osmURL: document.querySelector('#osm-url'),
+  osmDefaults: document.querySelector('#osm-defaults'),
+  kmlForm: document.querySelector('#kml-form'),
 };
 const taskNotices = createTaskNotices(elements.notices, taskNames);
 
@@ -273,6 +278,85 @@ async function api(path, options = {}) {
   return payload;
 }
 
+function applyNumericDefault(form, name, value, limits) {
+  const input = form.elements.namedItem(name);
+  if (!(input instanceof HTMLInputElement)) return;
+  input.value = String(value);
+  input.placeholder = `из ENV: ${value}`;
+  input.min = String(limits.min);
+  input.max = String(limits.max);
+}
+
+function applyOsmDefaults() {
+  const config = state.adminConfig?.osmCityUpdate;
+  if (!config) return;
+  elements.osmURL.value = config.defaults.URL;
+  for (const name of [
+    'batchSize',
+    'minDelayMs',
+    'maxRetries',
+    'retryBaseDelayMs',
+    'retryMaxDelayMs',
+  ]) {
+    applyNumericDefault(
+      elements.osmForm,
+      name,
+      config.defaults[name],
+      config.limits[name],
+    );
+  }
+}
+
+function populateOsmURLs(config) {
+  const envOption = document.createElement('option');
+  envOption.value = '';
+  envOption.textContent = `Из ENV: ${config.defaults.URL}`;
+  const options = config.allowedURLs.map((URL) => {
+    const option = document.createElement('option');
+    option.value = URL;
+    option.textContent = URL;
+    return option;
+  });
+  elements.osmURL.replaceChildren(envOption, ...options);
+}
+
+async function loadAdminConfig({ announce = false } = {}) {
+  try {
+    state.adminConfig = await api('/api/admin/config');
+    populateOsmURLs(state.adminConfig.osmCityUpdate);
+    applyOsmDefaults();
+    const kml = state.adminConfig.kmlUpdate;
+    applyNumericDefault(
+      elements.kmlForm,
+      'cityBufferMeters',
+      kml.defaults.cityBufferMeters,
+      kml.limits.cityBufferMeters,
+    );
+    if (announce) setTaskNotice('osm', 'значения ENV восстановлены.', 'success');
+  } catch (error) {
+    setTaskNotice('osm', `не удалось загрузить настройки: ${error.message}`, 'error');
+  }
+}
+
+function validateOsmForm(form) {
+  if (!form.reportValidity()) return false;
+  const defaults = state.adminConfig?.osmCityUpdate?.defaults;
+  if (!defaults) return true;
+  const value = (name) => {
+    const raw = String(new FormData(form).get(name)).trim();
+    return raw === '' ? defaults[name] : Number(raw);
+  };
+  if (value('retryBaseDelayMs') > value('retryMaxDelayMs')) {
+    setTaskNotice(
+      'osm',
+      'начальная пауза повтора не может превышать предел backoff.',
+      'error',
+    );
+    return false;
+  }
+  return true;
+}
+
 async function refresh({ quiet = false } = {}) {
   try {
     const payload = await api('/api/admin/status');
@@ -335,15 +419,25 @@ for (const tab of elements.tabs) {
   });
 }
 
-document.querySelector('#osm-form').addEventListener('submit', async (event) => {
+elements.osmForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   if (await cancelActiveTask()) return;
+  if (!validateOsmForm(form)) return;
   const data = new FormData(form);
   const query = new URLSearchParams({
     dryRun: String(data.get('dryRun') === 'on'),
-    batchSize: String(data.get('batchSize')),
   });
+  for (const name of [
+    'batchSize',
+    'minDelayMs',
+    'maxRetries',
+    'retryBaseDelayMs',
+    'retryMaxDelayMs',
+  ]) {
+    const value = String(data.get(name)).trim();
+    if (value) query.set(name, value);
+  }
   const URL = String(data.get('URL')).trim();
   const options = URL
     ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ URL }) }
@@ -351,15 +445,21 @@ document.querySelector('#osm-form').addEventListener('submit', async (event) => 
   await start(`/api/admin/update/cities?${query}`, options, 'osm');
 });
 
-document.querySelector('#kml-form').addEventListener('submit', async (event) => {
+elements.osmDefaults.addEventListener('click', () => {
+  void loadAdminConfig({ announce: true });
+});
+
+elements.kmlForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   if (await cancelActiveTask()) return;
   const data = new FormData(form);
+  if (!form.reportValidity()) return;
   const query = new URLSearchParams({
     dryRun: String(data.get('dryRun') === 'on'),
-    cityBufferMeters: String(data.get('cityBufferMeters')),
   });
+  const cityBufferMeters = String(data.get('cityBufferMeters')).trim();
+  if (cityBufferMeters) query.set('cityBufferMeters', cityBufferMeters);
   const sources = String(data.get('sources')).trim();
   let body;
   if (sources) {
@@ -446,5 +546,6 @@ function connectWebSocket() {
 }
 
 selectTab(state.selected);
+await loadAdminConfig();
 await refresh({ quiet: true });
 connectWebSocket();

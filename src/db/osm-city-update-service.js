@@ -15,6 +15,30 @@ import {
   resolveOsmCityUpdateRequest,
 } from '../data/osm-city-update-options.js';
 
+const RETRYABLE_HTTP_STATUS_CODES = new Set([429, 502, 503, 504]);
+
+/** @param {number} milliseconds @param {AbortSignal | undefined} signal */
+function abortableDelay(milliseconds, signal) {
+  throwIfAdminTaskCancelled(signal);
+  if (milliseconds <= 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, milliseconds);
+    const onAbort = () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', onAbort);
+      try {
+        throwIfAdminTaskCancelled(signal);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 const CREATE_STAGE_SQL = `
   CREATE TEMP TABLE osm_city_boundary_stage (
     name text NOT NULL,
@@ -270,18 +294,29 @@ function combineIndexParts(parts) {
  *   download?: typeof downloadOsmCities,
  *   parseIndex?: typeof parseOsmPlaceIdsResponse,
  *   parseBatch?: typeof parseOsmCityResponse,
- *   reportProgress?: (progress: object) => void
+ *   reportProgress?: (progress: object) => void,
+ *   sleep?: (milliseconds: number, signal?: AbortSignal) => Promise<void>,
+ *   now?: () => number
  * }} [dependencies]
  */
 export function createOsmCityUpdateService(pool, config, dependencies = {}) {
   const download = dependencies.download ?? downloadOsmCities;
   const parseIndex = dependencies.parseIndex ?? parseOsmPlaceIdsResponse;
   const parseBatch = dependencies.parseBatch ?? parseOsmCityResponse;
+  const sleep = dependencies.sleep ?? abortableDelay;
+  const now = dependencies.now ?? Date.now;
   const reportProgress = dependencies.reportProgress ?? ((progress) => {
     if (progress.phase === 'index') {
       console.info(
         `OSM city update index ${progress.indexPart}/${progress.indexPartCount}: ` +
         `${progress.indexedPlaces} place IDs loaded`,
+      );
+      return;
+    }
+    if (progress.phase === 'retry') {
+      console.warn(
+        `OSM city update HTTP ${progress.statusCode}: retry ` +
+        `${progress.attempt}/${progress.maxRetries} in ${progress.waitMs} ms`,
       );
       return;
     }
@@ -302,28 +337,100 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
       const options = resolveOsmCityUpdateRequest(body, query, config);
       const checksumHash = crypto.createHash('sha256');
       let downloadedBytes = 0;
+      let lastRequestCompletedAt = null;
+      let requestAttemptCount = 0;
+      let retryCount = 0;
+      let retryWaitMs = 0;
+      let throttleWaitMs = 0;
 
-      const downloadQuery = async (overpassQuery) => {
-        throwIfAdminTaskCancelled(operation.signal);
-        const remainingBytes = options.maxBytes - downloadedBytes;
-        if (remainingBytes < 1) {
-          throw new OsmCityDownloadError(
-            'OSM responses exceed the configured total size limit',
-          );
+      const downloadQuery = async (overpassQuery, requestProgress) => {
+        for (let attempt = 0; ; attempt += 1) {
+          throwIfAdminTaskCancelled(operation.signal);
+          if (lastRequestCompletedAt !== null) {
+            const waitMs = Math.max(
+              0,
+              lastRequestCompletedAt + options.minDelayMs - now(),
+            );
+            if (waitMs > 0) {
+              throttleWaitMs += waitMs;
+              await sleep(waitMs, operation.signal);
+            }
+          }
+
+          const remainingBytes = options.maxBytes - downloadedBytes;
+          if (remainingBytes < 1) {
+            throw new OsmCityDownloadError(
+              'OSM responses exceed the configured total size limit',
+            );
+          }
+
+          requestAttemptCount += 1;
+          try {
+            const downloaded = await download(options.url, overpassQuery, {
+              allowedHosts: config.allowedHosts,
+              timeoutMs: options.timeoutMs,
+              maxBytes: remainingBytes,
+              userAgent: config.userAgent,
+              signal: operation.signal,
+            });
+            lastRequestCompletedAt = now();
+            throwIfAdminTaskCancelled(operation.signal);
+            downloadedBytes += downloaded.bytes;
+            checksumHash
+              .update(String(downloaded.bytes))
+              .update(':')
+              .update(downloaded.jsonText);
+            return downloaded;
+          } catch (error) {
+            lastRequestCompletedAt = now();
+            if (!(error instanceof OsmCityDownloadError) ||
+                !RETRYABLE_HTTP_STATUS_CODES.has(error.statusCode)) {
+              throw error;
+            }
+
+            const retryAttempt = attempt + 1;
+            if (retryAttempt > options.maxRetries) {
+              const exhausted = new OsmCityDownloadError(
+                `OSM download returned HTTP ${error.statusCode} after ` +
+                `${options.maxRetries} retries`,
+                {
+                  statusCode: error.statusCode,
+                  retryAfterMs: error.retryAfterMs,
+                  finalURL: error.finalURL,
+                },
+              );
+              exhausted.cause = error;
+              throw exhausted;
+            }
+
+            const fallbackDelayMs = Math.min(
+              options.retryBaseDelayMs * (2 ** (retryAttempt - 1)),
+              options.retryMaxDelayMs,
+            );
+            const waitMs = Math.max(
+              options.minDelayMs,
+              fallbackDelayMs,
+              error.retryAfterMs ?? 0,
+            );
+            retryCount += 1;
+            retryWaitMs += waitMs;
+            const progress = {
+              phase: 'retry',
+              ...requestProgress,
+              statusCode: error.statusCode,
+              attempt: retryAttempt,
+              maxRetries: options.maxRetries,
+              waitMs,
+              retryAt: new Date(now() + waitMs).toISOString(),
+              retryAfterMs: error.retryAfterMs,
+              fallbackDelayMs,
+            };
+            reportProgress(progress);
+            operation.onProgress?.(progress);
+            await sleep(waitMs, operation.signal);
+            lastRequestCompletedAt = null;
+          }
         }
-        const downloaded = await download(options.url, overpassQuery, {
-          allowedHosts: config.allowedHosts,
-          timeoutMs: options.timeoutMs,
-          maxBytes: remainingBytes,
-          signal: operation.signal,
-        });
-        throwIfAdminTaskCancelled(operation.signal);
-        downloadedBytes += downloaded.bytes;
-        checksumHash
-          .update(String(downloaded.bytes))
-          .update(':')
-          .update(downloaded.jsonText);
-        return downloaded;
       };
 
       const indexQueries = buildRussianPlaceIdOverpassQueries(
@@ -333,7 +440,11 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
       const indexFinalURLs = new Set();
       let indexedPlaces = 0;
       for (const [partOffset, indexQuery] of indexQueries.entries()) {
-        const indexDownload = await downloadQuery(indexQuery.query);
+        const indexDownload = await downloadQuery(indexQuery.query, {
+          requestPhase: 'index',
+          indexPart: partOffset + 1,
+          indexPartCount: indexQueries.length,
+        });
         const parsedPart = parseIndex(indexDownload.jsonText);
         const wrongType = parsedPart.objects.find((object) =>
           object.osmType !== indexQuery.osmType);
@@ -373,6 +484,11 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           const batchNumber = Math.floor(offset / options.batchSize) + 1;
           const batchDownload = await downloadQuery(
             buildOsmPlacesBatchQuery(objects, options.queryTimeoutSeconds),
+            {
+              requestPhase: 'geometry',
+              batch: batchNumber,
+              batchCount,
+            },
           );
           const parsed = parseBatch(batchDownload.jsonText);
           assertCompleteBatch(objects, parsed.places, batchNumber);
@@ -444,6 +560,12 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           ignoredElements,
           batchSize: options.batchSize,
           batchCount,
+          minDelayMs: options.minDelayMs,
+          maxRetries: options.maxRetries,
+          requestAttemptCount,
+          retryCount,
+          retryWaitMs,
+          throttleWaitMs,
           restoredGeometryLinks: restoredLinksResult.rowCount,
           osmTimestamp: index.osmTimestamp,
           checksum,

@@ -152,12 +152,20 @@ async function withServer(callback, options = {}) {
         maxRequestBodyBytes: options.osmMaxBodyBytes ?? 16 * 1024,
         url: 'https://overpass-api.de/api/interpreter',
         allowedHosts: new Set(['overpass-api.de']),
+        allowedURLs: new Set([
+          'https://overpass-api.de/api/interpreter',
+        ]),
         dryRun: false,
         timeoutMs: 180000,
         queryTimeoutSeconds: 120,
         maxBytes: 1000000,
         batchSize: 50,
         maxBatchSize: 200,
+        minDelayMs: 5000,
+        maxRetries: 6,
+        retryBaseDelayMs: 30000,
+        retryMaxDelayMs: 240000,
+        userAgent: 'dtpstat-buslines/2.0 test',
       },
       publicMap: {
         accessToken: 'pk.test',
@@ -340,6 +348,36 @@ test('admin web panel is protected by the same Basic Auth', async () => {
     assert.match(html, /class="status-card"/);
     assert.match(html, /id="task-log" role="log"/);
     assert.doesNotMatch(html, /id="cancel-task"/);
+  });
+});
+
+test('admin config exposes safe ENV defaults and exact OSM URLs', async () => {
+  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  await withServer(async (baseUrl) => {
+    const unauthorized = await fetch(`${baseUrl}/api/admin/config`);
+    assert.equal(unauthorized.status, 401);
+
+    const response = await fetch(`${baseUrl}/api/admin/config`, {
+      headers: { Authorization: authorization },
+    });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('cache-control'), /no-store/);
+    const config = await response.json();
+    assert.deepEqual(config.osmCityUpdate.allowedURLs, [
+      'https://overpass-api.de/api/interpreter',
+    ]);
+    assert.deepEqual(config.osmCityUpdate.defaults, {
+      URL: 'https://overpass-api.de/api/interpreter',
+      batchSize: 50,
+      minDelayMs: 5000,
+      maxRetries: 6,
+      retryBaseDelayMs: 30000,
+      retryMaxDelayMs: 240000,
+    });
+    assert.deepEqual(config.kmlUpdate.defaults, {
+      cityBufferMeters: 0,
+    });
+    assert.doesNotMatch(JSON.stringify(config), /password/i);
   });
 });
 
@@ -571,6 +609,16 @@ test('OSM city update endpoint is protected and forwards URL and safe overrides'
       receivedBody = body;
       receivedQuery = query;
       operation.onProgress({
+        phase: 'retry',
+        requestPhase: 'geometry',
+        batch: 1,
+        batchCount: 2,
+        statusCode: 429,
+        attempt: 1,
+        maxRetries: 6,
+        waitMs: 30000,
+      });
+      operation.onProgress({
         phase: 'geometry',
         batch: 1,
         batchCount: 2,
@@ -622,6 +670,9 @@ test('OSM city update endpoint is protected and forwards URL and safe overrides'
     assert.equal(completed.task.type, 'osm-city-update');
     assert.ok(completed.task.log.some((entry) =>
       entry.message === 'OSM: обработан пакет 1/2'));
+    assert.ok(completed.task.log.some((entry) =>
+      entry.message ===
+        'OSM: HTTP 429, пакет 1/2; повтор 1/6 через 30 сек.'));
     assert.deepEqual(receivedBody, body);
     assert.equal(receivedQuery.dryRun, 'true');
     assert.equal(receivedQuery.timeoutMs, '5000');

@@ -34,8 +34,13 @@ export function normalizeOsmUpdateUrl(rawUrl, allowedHosts) {
   return url.toString();
 }
 
-/** @param {unknown} body @param {Set<string>} allowedHosts @param {string} fallback */
-function resolveUrl(body, allowedHosts, fallback) {
+/**
+ * @param {unknown} body
+ * @param {Set<string>} allowedHosts
+ * @param {Set<string> | undefined} allowedURLs
+ * @param {string} fallback
+ */
+function resolveUrl(body, allowedHosts, allowedURLs, fallback) {
   if (body === undefined) return fallback;
   if (!plainObject(body)) {
     throw new OsmCityUpdateValidationError('OSM request body must be an object');
@@ -49,7 +54,13 @@ function resolveUrl(body, allowedHosts, fallback) {
   if (typeof body.URL !== 'string' || !body.URL.trim()) {
     throw new OsmCityUpdateValidationError('OSM request body.URL must be a string');
   }
-  return normalizeOsmUpdateUrl(body.URL.trim(), allowedHosts);
+  const normalized = normalizeOsmUpdateUrl(body.URL.trim(), allowedHosts);
+  if (allowedURLs && !allowedURLs.has(normalized)) {
+    throw new OsmCityUpdateValidationError(
+      `OSM URL is not in the allowed URL list: ${normalized}`,
+    );
+  }
+  return normalized;
 }
 
 /** @param {unknown} value @param {string} name */
@@ -89,14 +100,52 @@ function boundedQueryInteger(value, name, maximum, fallback = maximum) {
 }
 
 /**
+ * @param {unknown} value
+ * @param {string} name
+ * @param {number} minimum
+ * @param {number} maximum
+ * @param {number} fallback
+ */
+function rangedQueryInteger(value, name, minimum, maximum, fallback) {
+  const raw = queryValue(value, name);
+  if (raw === undefined) return fallback;
+  const number = Number(raw);
+  if (!Number.isInteger(number) || number < minimum || number > maximum) {
+    throw new OsmCityUpdateValidationError(
+      `${name} must be an integer between ${minimum} and ${maximum}`,
+    );
+  }
+  return number;
+}
+
+/**
  * Resolve request overrides without allowing a request to raise ENV limits.
  * @param {unknown} body
  * @param {Record<string, unknown>} query
  * @param {any} config
  */
 export function resolveOsmCityUpdateRequest(body, query, config) {
+  const retryMaxDelayMs = rangedQueryInteger(
+    query.retryMaxDelayMs,
+    'retryMaxDelayMs',
+    config.retryMaxDelayMs,
+    3600000,
+    config.retryMaxDelayMs,
+  );
+  const retryBaseDelayMs = rangedQueryInteger(
+    query.retryBaseDelayMs,
+    'retryBaseDelayMs',
+    config.retryBaseDelayMs,
+    retryMaxDelayMs,
+    config.retryBaseDelayMs,
+  );
   return {
-    url: resolveUrl(body, config.allowedHosts, config.url),
+    url: resolveUrl(
+      body,
+      config.allowedHosts,
+      config.allowedURLs,
+      config.url,
+    ),
     dryRun: queryBoolean(query.dryRun, 'dryRun', config.dryRun),
     timeoutMs: boundedQueryInteger(
       query.timeoutMs,
@@ -115,5 +164,21 @@ export function resolveOsmCityUpdateRequest(body, query, config) {
       config.maxBatchSize,
       config.batchSize,
     ),
+    minDelayMs: rangedQueryInteger(
+      query.minDelayMs,
+      'minDelayMs',
+      config.minDelayMs,
+      300000,
+      config.minDelayMs,
+    ),
+    maxRetries: rangedQueryInteger(
+      query.maxRetries,
+      'maxRetries',
+      0,
+      config.maxRetries,
+      config.maxRetries,
+    ),
+    retryBaseDelayMs,
+    retryMaxDelayMs,
   };
 }

@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   downloadOsmCities,
   OsmCityDownloadError,
+  parseRetryAfterMs,
 } from '../src/data/osm-city-downloader.js';
 
 const options = {
@@ -53,4 +54,35 @@ test('OSM downloader rejects foreign redirects and oversized responses', async (
     ),
     /size limit/,
   );
+});
+
+test('OSM downloader preserves HTTP 429 and Retry-After metadata', async () => {
+  await assert.rejects(
+    downloadOsmCities(
+      'https://overpass-api.de/api/interpreter',
+      'out;',
+      options,
+      async () => new Response(null, {
+        status: 429,
+        headers: { 'Retry-After': '45' },
+      }),
+    ),
+    (error) => {
+      assert.ok(error instanceof OsmCityDownloadError);
+      assert.equal(error.statusCode, 429);
+      assert.equal(error.retryAfterMs, 45000);
+      assert.equal(error.finalURL, 'https://overpass-api.de/api/interpreter');
+      return true;
+    },
+  );
+});
+
+test('Retry-After supports seconds and HTTP dates', () => {
+  const now = Date.parse('2026-09-01T12:00:00.000Z');
+  assert.equal(parseRetryAfterMs('30', now), 30000);
+  assert.equal(
+    parseRetryAfterMs('Tue, 01 Sep 2026 12:02:00 GMT', now),
+    120000,
+  );
+  assert.equal(parseRetryAfterMs('invalid', now), null);
 });

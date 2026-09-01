@@ -37,9 +37,42 @@ test('loadConfig enables HTTP with safe defaults', () => {
   assert.equal(config.osmCityUpdate.timeoutMs, 600000);
   assert.equal(config.osmCityUpdate.batchSize, 50);
   assert.equal(config.osmCityUpdate.maxBatchSize, 200);
+  assert.equal(config.osmCityUpdate.minDelayMs, 5000);
+  assert.equal(config.osmCityUpdate.maxRetries, 6);
+  assert.equal(config.osmCityUpdate.retryBaseDelayMs, 30000);
+  assert.equal(config.osmCityUpdate.retryMaxDelayMs, 240000);
+  assert.equal(
+    config.osmCityUpdate.userAgent,
+    'dtpstat-buslines/2.0 OSM city updater',
+  );
   assert.deepEqual(
     [...config.osmCityUpdate.allowedHosts],
-    ['overpass-api.de', 'overpass.kumi.systems', 'maps.mail.ru'],
+    [
+      'overpass-api.de',
+      'overpass.kumi.systems',
+      'overpass.private.coffee',
+      'maps.mail.ru',
+    ],
+  );
+  assert.deepEqual(
+    [...config.osmCityUpdate.allowedURLs],
+    [
+      'https://overpass-api.de/api/interpreter',
+      'https://overpass.private.coffee/api/interpreter',
+      'https://overpass.kumi.systems/api/interpreter',
+      'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+    ],
+  );
+});
+
+test('loadConfig requires the default OSM endpoint in the exact URL allowlist', () => {
+  assert.throws(
+    () => loadConfig({
+      ...REQUIRED_ENV,
+      OSM_CITY_UPDATE_ALLOWED_URLS:
+        'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+    }, '/project'),
+    /OSM_CITY_UPDATE_URL must be included/,
   );
 });
 

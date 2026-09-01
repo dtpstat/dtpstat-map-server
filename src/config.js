@@ -54,6 +54,19 @@ function requiredValue(env, name) {
 /**
  * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} env
  * @param {string} name
+ * @param {string} fallback
+ */
+function headerValue(env, name, fallback) {
+  const value = env[name]?.trim() || fallback;
+  if (value.length > 256 || /[\r\n]/.test(value)) {
+    throw new Error(`${name} must be a single HTTP header value up to 256 characters`);
+  }
+  return value;
+}
+
+/**
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} env
+ * @param {string} name
  * @param {string[]} allowed
  * @param {string} fallback
  */
@@ -73,6 +86,21 @@ function enumValue(env, name, allowed, fallback) {
 function listValue(env, name, fallback) {
   const values = (env[name] === undefined ? fallback : env[name].split(','))
     .map((value) => value.trim().toLocaleLowerCase('en-US'))
+    .filter(Boolean);
+  if (values.length === 0) {
+    throw new Error(`${name} must contain at least one value`);
+  }
+  return [...new Set(values)];
+}
+
+/**
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} env
+ * @param {string} name
+ * @param {string[]} fallback
+ */
+function stringListValue(env, name, fallback) {
+  const values = (env[name] === undefined ? fallback : env[name].split(','))
+    .map((value) => value.trim())
     .filter(Boolean);
   if (values.length === 0) {
     throw new Error(`${name} must contain at least one value`);
@@ -143,6 +171,7 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     listValue(env, 'OSM_CITY_UPDATE_ALLOWED_HOSTS', [
       'overpass-api.de',
       'overpass.kumi.systems',
+      'overpass.private.coffee',
       'maps.mail.ru',
     ]),
   );
@@ -158,6 +187,44 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     50,
     { min: 1, max: osmCityMaxBatchSize },
   );
+  const osmCityRetryBaseDelayMs = integerValue(
+    env,
+    'OSM_CITY_UPDATE_RETRY_BASE_DELAY_MS',
+    30000,
+    { min: 1000, max: 900000 },
+  );
+  const osmCityRetryMaxDelayMs = integerValue(
+    env,
+    'OSM_CITY_UPDATE_RETRY_MAX_DELAY_MS',
+    240000,
+    { min: osmCityRetryBaseDelayMs, max: 3600000 },
+  );
+  const osmCityUrl = normalizeOsmUpdateUrl(
+    env.OSM_CITY_UPDATE_URL?.trim() ||
+      'https://overpass-api.de/api/interpreter',
+    osmAllowedHosts,
+  );
+  const knownOsmCityUrls = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  ].filter((value) => osmAllowedHosts.has(new URL(value).hostname));
+  if (!knownOsmCityUrls.includes(osmCityUrl)) {
+    knownOsmCityUrls.unshift(osmCityUrl);
+  }
+  const osmAllowedUrls = new Set(
+    stringListValue(
+      env,
+      'OSM_CITY_UPDATE_ALLOWED_URLS',
+      knownOsmCityUrls,
+    ).map((value) => normalizeOsmUpdateUrl(value, osmAllowedHosts)),
+  );
+  if (!osmAllowedUrls.has(osmCityUrl)) {
+    throw new Error(
+      'OSM_CITY_UPDATE_URL must be included in OSM_CITY_UPDATE_ALLOWED_URLS',
+    );
+  }
 
   return {
     environment: env.NODE_ENV?.trim() || 'development',
@@ -233,11 +300,8 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     },
     osmCityUpdate: {
       allowedHosts: osmAllowedHosts,
-      url: normalizeOsmUpdateUrl(
-        env.OSM_CITY_UPDATE_URL?.trim() ||
-          'https://overpass-api.de/api/interpreter',
-        osmAllowedHosts,
-      ),
+      allowedURLs: osmAllowedUrls,
+      url: osmCityUrl,
       timeoutMs: integerValue(env, 'OSM_CITY_UPDATE_TIMEOUT_MS', 600000, {
         min: 1000,
         max: 900000,
@@ -250,6 +314,25 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
       ),
       batchSize: osmCityBatchSize,
       maxBatchSize: osmCityMaxBatchSize,
+      minDelayMs: integerValue(
+        env,
+        'OSM_CITY_UPDATE_MIN_DELAY_MS',
+        5000,
+        { min: 0, max: 300000 },
+      ),
+      maxRetries: integerValue(
+        env,
+        'OSM_CITY_UPDATE_MAX_RETRIES',
+        6,
+        { min: 0, max: 20 },
+      ),
+      retryBaseDelayMs: osmCityRetryBaseDelayMs,
+      retryMaxDelayMs: osmCityRetryMaxDelayMs,
+      userAgent: headerValue(
+        env,
+        'OSM_CITY_UPDATE_USER_AGENT',
+        'dtpstat-buslines/2.0 OSM city updater',
+      ),
       maxBytes: integerValue(
         env,
         'OSM_CITY_UPDATE_MAX_BYTES',
