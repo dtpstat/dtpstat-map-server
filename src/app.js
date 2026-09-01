@@ -2,6 +2,7 @@ import compression       from 'compression';
 import express           from 'express';
 import helmet            from 'helmet';
 import path              from 'node:path';
+import {CITY_MARKER_ICON} from '../public/js/city-marker-icon.js';
 import {createAdminTaskManager} from './data/admin-task-manager.js';
 import {createBasicAuth} from './http/basic-auth.js';
 import {createApiRouter} from './routes/api.js';
@@ -18,6 +19,7 @@ const PUBLIC_ASSETS = new Map([
 	['/bus-lanes.csv', 'bus-lanes.csv'],
 	['/bus-lanes.geojson', 'bus-lanes.geojson'],
 ]);
+const CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'base64');
 
 /**
  * @param {{
@@ -67,6 +69,12 @@ export function createApp({
 		}),
 	);
 	app.use(compression());
+	app.get('/images/city-marker.png', (_request, response) => {
+		response
+			.set('Cache-Control', isProduction ? 'public, max-age=86400' : 'no-cache')
+			.type('image/png')
+			.send(CITY_MARKER_PNG);
+	});
 	app.use(
 		'/admin',
 		requireAdminAuth,

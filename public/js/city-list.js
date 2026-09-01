@@ -148,8 +148,8 @@ export function createCityList(elements) {
     onSelect(handler) {
       selectHandler = handler;
     },
-    /** @param {number} cityId */
-    select(cityId) {
+    /** @param {number | null} cityId @param {{ scrollIntoView?: boolean }} [options] */
+    select(cityId, options = {}) {
       selectedCityId = cityId;
       const city = cities.find((item) => item.id === cityId);
       if (city && city.category !== category) {
@@ -161,6 +161,12 @@ export function createCityList(elements) {
         }
       }
       render();
+      if (options.scrollIntoView && cityId !== null) {
+        const row = [...elements.list.children].find(
+          (element) => element.dataset.cityId === String(cityId),
+        );
+        row?.scrollIntoView({ block: 'nearest' });
+      }
     },
     setStatus(message, isError = false) {
       elements.status.textContent = message;

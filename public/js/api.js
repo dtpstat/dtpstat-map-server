@@ -31,3 +31,15 @@ export async function loadCities() {
 export function loadCityGeometries(cityId, signal) {
   return getJson(`/api/cities/${cityId}/geometries`, { signal });
 }
+
+/**
+ * @param {{ bbox: [number, number, number, number], center: [number, number] }} viewport
+ * @param {AbortSignal} signal
+ */
+export function loadViewportGeometries(viewport, signal) {
+  const query = new URLSearchParams({
+    bbox: viewport.bbox.join(','),
+    center: viewport.center.join(','),
+  });
+  return getJson(`/api/geometries?${query}`, { signal });
+}

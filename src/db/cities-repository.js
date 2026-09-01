@@ -21,7 +21,11 @@ const LIST_CITIES_SQL = `
       ST_YMin(boundary.bounds),
       ST_XMax(boundary.bounds),
       ST_YMax(boundary.bounds)
-    ) AS bounds
+    ) AS bounds,
+    json_build_array(
+      ST_X(ST_PointOnSurface(boundary.geom)),
+      ST_Y(ST_PointOnSurface(boundary.geom))
+    ) AS center
   FROM cities AS city
   JOIN city_populations AS population ON population.city_id = city.id
   JOIN city_boundaries AS boundary ON boundary.city_id = city.id
@@ -53,6 +57,66 @@ const CITY_GEOMETRIES_SQL = `
   GROUP BY cities.id
 `;
 
+const VIEWPORT_GEOMETRIES_SQL = `
+  WITH viewport AS (
+    SELECT
+      ST_MakeEnvelope($1, $2, $3, $4, 4326) AS geom,
+      ST_SetSRID(ST_MakePoint($5, $6), 4326) AS center
+  ),
+  visible_geometries AS (
+    SELECT
+      geometry.id,
+      geometry.city_id,
+      geometry.lanes,
+      geometry.length_m,
+      geometry.lane_length_m,
+      geometry.properties,
+      ST_CollectionExtract(
+        ST_Intersection(geometry.geom, viewport.geom),
+        2
+      ) AS geom
+    FROM viewport
+    JOIN city_geometries AS geometry
+      ON geometry.geom && viewport.geom
+     AND ST_Intersects(geometry.geom, viewport.geom)
+  ),
+  center_city AS (
+    SELECT boundary.city_id::integer AS id
+    FROM viewport
+    JOIN city_boundaries AS boundary
+      ON boundary.city_id IS NOT NULL
+     AND boundary.geom && viewport.center
+     AND ST_Covers(boundary.geom, viewport.center)
+    ORDER BY ST_Area(boundary.geom::geography), boundary.city_id
+    LIMIT 1
+  )
+  SELECT json_build_object(
+    'type', 'FeatureCollection',
+    'bbox', json_build_array($1, $2, $3, $4),
+    'centerCityId', (SELECT id FROM center_city),
+    'features', COALESCE(
+      json_agg(
+        json_build_object(
+          'type', 'Feature',
+          'id', visible_geometries.id,
+          'geometry', ST_AsGeoJSON(visible_geometries.geom)::json,
+          'properties', visible_geometries.properties || jsonb_build_object(
+            'cityId', visible_geometries.city_id,
+            'lanes', visible_geometries.lanes,
+            'length', visible_geometries.length_m,
+            'lanes_length', visible_geometries.lane_length_m
+          )
+        ) ORDER BY visible_geometries.id
+      ) FILTER (
+        WHERE visible_geometries.id IS NOT NULL
+          AND NOT ST_IsEmpty(visible_geometries.geom)
+      ),
+      '[]'::json
+    )
+  ) AS geojson
+  FROM visible_geometries
+`;
+
 /**
  * PostgreSQL-backed data access used by the HTTP API.
  *
@@ -73,6 +137,21 @@ export function createCitiesRepository(database) {
     async getCityGeometries(cityId) {
       const result = await database.query(CITY_GEOMETRIES_SQL, [cityId]);
       return result.rows[0]?.geojson ?? null;
+    },
+
+    /**
+     * @param {{ west: number, south: number, east: number, north: number, centerLng: number, centerLat: number }} viewport
+     */
+    async getViewportGeometries(viewport) {
+      const result = await database.query(VIEWPORT_GEOMETRIES_SQL, [
+        viewport.west,
+        viewport.south,
+        viewport.east,
+        viewport.north,
+        viewport.centerLng,
+        viewport.centerLat,
+      ]);
+      return result.rows[0].geojson;
     },
   };
 }

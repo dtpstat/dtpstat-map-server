@@ -80,6 +80,13 @@ function createTestRepository() {
     async getCityGeometries(cityId) {
       return cityId === 1 ? geojson : null;
     },
+    async getViewportGeometries(viewport) {
+      return {
+        ...geojson,
+        bbox: [viewport.west, viewport.south, viewport.east, viewport.north],
+        centerCityId: 1,
+      };
+    },
   };
 }
 
@@ -114,7 +121,7 @@ async function withServer(callback, options = {}) {
     });
   const app = createApp({
     adminTasks: options.adminTasks,
-    repository: createTestRepository(),
+    repository: options.repository ?? createTestRepository(),
     importService,
     populationService,
     kmlUpdateService,
@@ -240,14 +247,77 @@ test('geometry endpoint validates IDs and returns a FeatureCollection', async ()
   });
 });
 
+test('viewport geometry endpoint validates bounds and forwards the map center', async () => {
+  let receivedViewport;
+  const repository = {
+    ...createTestRepository(),
+    async getViewportGeometries(viewport) {
+      receivedViewport = viewport;
+      return {
+        type: 'FeatureCollection',
+        bbox: [37.4, 55.6, 37.9, 55.9],
+        centerCityId: 1,
+        features: [],
+      };
+    },
+  };
+
+  await withServer(async (baseUrl) => {
+    const success = await fetch(
+      `${baseUrl}/api/geometries?bbox=37.4,55.6,37.9,55.9&center=37.62,55.75`,
+    );
+    assert.equal(success.status, 200);
+    assert.equal(success.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(await success.json(), {
+      type: 'FeatureCollection',
+      bbox: [37.4, 55.6, 37.9, 55.9],
+      centerCityId: 1,
+      features: [],
+    });
+    assert.deepEqual(receivedViewport, {
+      west: 37.4,
+      south: 55.6,
+      east: 37.9,
+      north: 55.9,
+      centerLng: 37.62,
+      centerLat: 55.75,
+    });
+
+    const defaultCenter = await fetch(
+      `${baseUrl}/api/geometries?bbox=37.4,55.6,37.9,55.9`,
+    );
+    assert.equal(defaultCenter.status, 200);
+    assert.equal(receivedViewport.centerLng, 37.65);
+    assert.equal(receivedViewport.centerLat, 55.75);
+
+    for (const query of [
+      '',
+      '?bbox=37.4,55.6,37.4,55.9',
+      '?bbox=37.4,55.6,37.9,55.9&center=40,55.75',
+      '?bbox=west,55.6,37.9,55.9',
+      '?bbox=-180,-90,180,90',
+    ]) {
+      const invalid = await fetch(`${baseUrl}/api/geometries${query}`);
+      assert.equal(invalid.status, 400);
+    }
+  }, { repository });
+});
+
 test('root serves the optimized client without embedded GeoJSON', async () => {
   await withServer(async (baseUrl) => {
-    const response = await fetch(baseUrl);
+    const [response, markerResponse] = await Promise.all([
+      fetch(baseUrl),
+      fetch(`${baseUrl}/images/city-marker.png`),
+    ]);
     const html = await response.text();
 
     assert.equal(response.status, 200);
     assert.match(html, /id="city-list"/);
     assert.doesNotMatch(html, /FeatureCollection/);
+    assert.equal(markerResponse.status, 200);
+    assert.equal(markerResponse.headers.get('content-type'), 'image/png');
+    const marker = Buffer.from(await markerResponse.arrayBuffer());
+    assert.deepEqual([...marker.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   });
 });
 

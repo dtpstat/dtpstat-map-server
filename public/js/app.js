@@ -1,6 +1,9 @@
-import { loadCities, loadCityGeometries, loadMapConfig } from './api.js';
+import { loadCities, loadMapConfig, loadViewportGeometries } from './api.js';
 import { createCityList } from './city-list.js';
-import { createMapController } from './map-controller.js';
+import {
+  createMapController,
+  ROAD_DATA_MIN_ZOOM,
+} from './map-controller.js';
 
 const mapMessage = document.querySelector('#map-message');
 const cityList = createCityList({
@@ -11,6 +14,8 @@ const cityList = createCityList({
 
 let activeRequest = null;
 let mapController = null;
+let citiesById = new Map();
+let focusedCityId = null;
 
 function setMapMessage(message, isError = false) {
   mapMessage.hidden = !message;
@@ -18,24 +23,56 @@ function setMapMessage(message, isError = false) {
   mapMessage.classList.toggle('is-error', isError);
 }
 
-async function selectCity(city) {
+function selectCity(city) {
   activeRequest?.abort();
-  activeRequest = new AbortController();
-  cityList.select(city.id);
-  cityList.setStatus(`Загружаем геометрии: ${city.name}…`);
+  activeRequest = null;
+  focusedCityId = city.id;
+  cityList.select(city.id, { scrollIntoView: true });
+  cityList.setStatus(`Позиционируем карту: ${city.name}…`);
+  mapController.focusCity(city.bounds);
+}
+
+async function updateViewport(viewport) {
+  activeRequest?.abort();
+  activeRequest = null;
+
+  if (viewport.zoom < ROAD_DATA_MIN_ZOOM) {
+    focusedCityId = null;
+    mapController.clearViewportData();
+    cityList.setStatus('Выберите город или увеличьте карту для показа полос');
+    setMapMessage('');
+    return;
+  }
+
+  const request = new AbortController();
+  activeRequest = request;
+  cityList.setStatus('Загружаем данные видимого окна…');
+  setMapMessage('Загружаем данные видимого окна…');
 
   try {
-    const geojson = await loadCityGeometries(city.id, activeRequest.signal);
-    mapController.showCity(geojson, city.bounds);
+    const geojson = await loadViewportGeometries(viewport, request.signal);
+    if (activeRequest !== request) return;
+    mapController.setViewportData(geojson);
+
+    const centerCity = citiesById.get(focusedCityId)
+      ?? citiesById.get(geojson.centerCityId);
+    focusedCityId = null;
+    cityList.select(centerCity?.id ?? null, {
+      scrollIntoView: Boolean(centerCity),
+    });
+    const cityMessage = centerCity ? `; город — ${centerCity.name}` : '';
     cityList.setStatus(
-      `${city.name}: ${geojson.features.length} участков выделенных полос`,
+      `В видимом окне: ${geojson.features.length} участков${cityMessage}`,
     );
     setMapMessage('');
   } catch (error) {
     if (error.name === 'AbortError') return;
-    cityList.setStatus(`Не удалось загрузить ${city.name}`, true);
-    setMapMessage('Не удалось загрузить геометрии города', true);
+    focusedCityId = null;
+    cityList.setStatus('Не удалось загрузить данные видимого окна', true);
+    setMapMessage('Не удалось загрузить данные видимого окна', true);
     console.error(error);
+  } finally {
+    if (activeRequest === request) activeRequest = null;
   }
 }
 
@@ -46,15 +83,24 @@ async function start() {
     const mapConfig = await loadMapConfig();
     mapController = await createMapController(mapConfig);
 
-    // The city request completes before the first city's geometry request.
+    // Markers are ready before the first fitBounds triggers a viewport request.
     const cities = await loadCities();
     if (!cities.length) throw new Error('Список городов пуст');
 
     cityList.setCities(cities);
+    citiesById = new Map(cities.map((city) => [city.id, city]));
+    mapController.setCities(cities);
+    mapController.onCitySelect((cityId) => {
+      const city = citiesById.get(cityId);
+      if (city) selectCity(city);
+    });
+    mapController.onViewportChange((viewport) => {
+      void updateViewport(viewport);
+    });
     cityList.setStatus(`Доступно городов: ${cities.length}`);
 
     const firstCity = cities.find((city) => city.category === 'large') ?? cities[0];
-    await selectCity(firstCity);
+    selectCity(firstCity);
   } catch (error) {
     cityList.setStatus('Приложение не удалось загрузить', true);
     setMapMessage(error.message || 'Ошибка запуска приложения', true);
