@@ -76,10 +76,56 @@ function validateGeometry(geometry, featureIndex) {
   }
 }
 
+/** @param {unknown} value @param {number} featureIndex */
+function portableMetadata(value, featureIndex) {
+  if (value === undefined || value === null) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new GeoJsonValidationError(
+      `GeoJSON feature ${featureIndex} has invalid _dtpstat metadata`,
+    );
+  }
+
+  const citySlug = value.citySlug === undefined || value.citySlug === null
+    ? null
+    : String(value.citySlug).trim();
+  if (value.citySlug !== undefined && !citySlug) {
+    throw new GeoJsonValidationError(
+      `GeoJSON feature ${featureIndex} has invalid _dtpstat.citySlug`,
+    );
+  }
+
+  const boundaryOsmType = value.boundaryOsmType ?? null;
+  const boundaryOsmIdRaw = value.boundaryOsmId ?? null;
+  const hasBoundary = boundaryOsmType !== null || boundaryOsmIdRaw !== null;
+  if (hasBoundary && !['way', 'relation'].includes(boundaryOsmType)) {
+    throw new GeoJsonValidationError(
+      `GeoJSON feature ${featureIndex} has invalid _dtpstat.boundaryOsmType`,
+    );
+  }
+  const boundaryOsmId = boundaryOsmIdRaw === null
+    ? null
+    : Number(boundaryOsmIdRaw);
+  if (
+    hasBoundary &&
+    (!Number.isSafeInteger(boundaryOsmId) || boundaryOsmId <= 0)
+  ) {
+    throw new GeoJsonValidationError(
+      `GeoJSON feature ${featureIndex} has invalid _dtpstat.boundaryOsmId`,
+    );
+  }
+
+  return {
+    citySlug: citySlug || null,
+    boundaryOsmType: hasBoundary ? boundaryOsmType : null,
+    boundaryOsmId: hasBoundary ? boundaryOsmId : null,
+  };
+}
+
 /**
- * Validate a complete GeoJSON upload and derive city records and statistics.
- * Unnamed features are ignored because the legacy dataset contains duplicate
- * or unclassified spatial-join artifacts without `short_name`.
+ * Validate a complete line GeoJSON upload. Legacy exports are accepted through
+ * short_name/lanes. Versioned exports may additionally carry portable linkage
+ * metadata in properties._dtpstat so city and OSM-boundary associations can be
+ * restored on another server without relying on local surrogate IDs.
  *
  * @param {unknown} collection
  */
@@ -112,18 +158,23 @@ export function buildGeoJsonPlan(collection) {
       );
     }
 
+    const metadata = portableMetadata(feature.properties._dtpstat, featureIndex);
     const rawCityName = feature.properties.short_name;
-    if (rawCityName === null || rawCityName === undefined || rawCityName === '') {
+    let cityName = null;
+    if (rawCityName !== null && rawCityName !== undefined && rawCityName !== '') {
+      if (typeof rawCityName !== 'string' || !rawCityName.trim()) {
+        throw new GeoJsonValidationError(
+          `GeoJSON feature ${featureIndex} has an invalid short_name`,
+        );
+      }
+      cityName = rawCityName.trim();
+    }
+
+    if (!cityName && metadata.boundaryOsmId === null) {
       ignoredFeatures.push(featureIndex);
       continue;
     }
-    if (typeof rawCityName !== 'string' || !rawCityName.trim()) {
-      throw new GeoJsonValidationError(
-        `GeoJSON feature ${featureIndex} has an invalid short_name`,
-      );
-    }
 
-    const cityName = rawCityName.trim();
     const lanes = finiteNumber(feature.properties.lanes);
     if (!Number.isSafeInteger(lanes) || (lanes !== 1 && lanes !== 2)) {
       throw new GeoJsonValidationError(
@@ -132,29 +183,41 @@ export function buildGeoJsonPlan(collection) {
     }
 
     validateGeometry(feature.geometry, featureIndex);
-    let city = cityByName.get(cityName);
-    if (!city) {
-      city = {
-        slug: slugify(cityName),
-        name: cityName,
-        fullName:
-          typeof feature.properties.name === 'string' &&
-          feature.properties.name.trim()
-            ? feature.properties.name.trim()
-            : cityName,
-        attributes: {
-          adminLevel: feature.properties.admin_level,
-          place: feature.properties.place,
-          type: feature.properties.type,
-        },
-      };
-      if (!city.slug) {
-        throw new GeoJsonValidationError(`Cannot create a slug for ${cityName}`);
+    let citySlug = metadata.citySlug;
+    if (cityName) {
+      citySlug ||= slugify(cityName);
+      let city = cityByName.get(cityName);
+      if (!city) {
+        city = {
+          slug: citySlug,
+          name: cityName,
+          fullName:
+            typeof feature.properties.name === 'string' &&
+            feature.properties.name.trim()
+              ? feature.properties.name.trim()
+              : cityName,
+          attributes: {
+            adminLevel: feature.properties.admin_level,
+            place: feature.properties.place,
+            type: feature.properties.type,
+          },
+        };
+        if (!city.slug) {
+          throw new GeoJsonValidationError(`Cannot create a slug for ${cityName}`);
+        }
+        cityByName.set(cityName, city);
+      } else if (city.slug !== citySlug) {
+        throw new GeoJsonValidationError(
+          `GeoJSON has conflicting city slugs for ${cityName}`,
+        );
       }
-      cityByName.set(cityName, city);
     }
+
     geometries.push({
       cityName,
+      citySlug,
+      boundaryOsmType: metadata.boundaryOsmType,
+      boundaryOsmId: metadata.boundaryOsmId,
       lanes,
       properties: feature.properties,
       geometry: feature.geometry,
@@ -162,9 +225,9 @@ export function buildGeoJsonPlan(collection) {
   }
 
   const cities = [...cityByName.values()];
-  if (cities.length === 0 || geometries.length === 0) {
+  if (geometries.length === 0) {
     throw new GeoJsonValidationError(
-      'FeatureCollection contains no named city geometries',
+      'FeatureCollection contains no transferable line geometries',
     );
   }
 
