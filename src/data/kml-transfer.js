@@ -3,9 +3,11 @@ import {
   buildLineTypesPlan,
   LineTypeValidationError,
   normalizeLineTypeCode,
+  normalizeLineTypeName,
+  normalizeLineTypeTitle,
 } from './line-types.js';
 
-export const KML_TRANSFER_SCHEMA_VERSION = 1;
+export const KML_TRANSFER_SCHEMA_VERSION = 2;
 export const KML_BUSINESS_TYPES_PROPERTY = 'dtpstat.businessLineTypes';
 
 const parser = new XMLParser({
@@ -24,13 +26,11 @@ export class KmlTransferValidationError extends Error {
   }
 }
 
-/** @param {unknown} value */
 function asArray(value) {
   if (value === undefined || value === null) return [];
   return Array.isArray(value) ? value : [value];
 }
 
-/** @param {unknown} value */
 function textValue(value) {
   if (typeof value === 'string' || typeof value === 'number') {
     return String(value).trim().normalize('NFC');
@@ -42,7 +42,6 @@ function textValue(value) {
   return '';
 }
 
-/** @param {unknown} extendedData */
 function extendedDataMap(extendedData) {
   const values = new Map();
   for (const entry of asArray(extendedData?.Data)) {
@@ -54,7 +53,6 @@ function extendedDataMap(extendedData) {
   return values;
 }
 
-/** @param {string} text */
 function escapeXml(text) {
   return String(text)
     .replaceAll('&', '&amp;')
@@ -64,25 +62,21 @@ function escapeXml(text) {
     .replaceAll("'", '&apos;');
 }
 
-/** @param {unknown} value */
 function cdata(value) {
   return `<![CDATA[${String(value).replaceAll(']]>', ']]]]><![CDATA[>')}]]>`;
 }
 
-/** @param {string} name @param {unknown} value */
 function dataElement(name, value) {
   if (value === undefined || value === null || value === '') return '';
   return `<Data name="${escapeXml(name)}"><value>${cdata(value)}</value></Data>`;
 }
 
-/** @param {string} color */
 function kmlColor(color) {
   const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
   if (!match) return 'ff695b04';
   return `ff${match[3]}${match[2]}${match[1]}`.toLowerCase();
 }
 
-/** @param {unknown} position */
 function coordinateText(position) {
   if (!Array.isArray(position) || position.length < 2) {
     throw new KmlTransferValidationError('KML export contains an invalid coordinate');
@@ -98,7 +92,6 @@ function coordinateText(position) {
   return `${longitude},${latitude},${altitude}`;
 }
 
-/** @param {number[][]} line */
 function lineStringXml(line) {
   if (!Array.isArray(line) || line.length < 2) {
     throw new KmlTransferValidationError('KML export line must contain at least two points');
@@ -106,11 +99,8 @@ function lineStringXml(line) {
   return `<LineString><tessellate>1</tessellate><coordinates>${line.map(coordinateText).join(' ')}</coordinates></LineString>`;
 }
 
-/** @param {{ type: string, coordinates: any }} geometry */
 function geometryXml(geometry) {
-  if (geometry?.type === 'LineString') {
-    return lineStringXml(geometry.coordinates);
-  }
+  if (geometry?.type === 'LineString') return lineStringXml(geometry.coordinates);
   if (geometry?.type === 'MultiLineString') {
     if (!Array.isArray(geometry.coordinates) || geometry.coordinates.length === 0) {
       throw new KmlTransferValidationError('KML export MultiLineString is empty');
@@ -122,39 +112,21 @@ function geometryXml(geometry) {
   );
 }
 
-/** @param {Record<string, unknown>} properties */
 function exportedSourceProperties(properties) {
   const output = { ...properties };
   for (const key of [
-    'short_name',
-    'name',
-    'lanes',
-    'length',
-    'lanes_length',
-    '_dtpstat',
-    'lineType',
-  ]) {
-    delete output[key];
-  }
+    'short_name', 'name', 'lanes', 'length', 'lanes_length', '_dtpstat',
+    'lineType', 'businessTypeCode',
+  ]) delete output[key];
   return output;
 }
 
-/**
- * Serialize the canonical line GeoJSON snapshot as portable KML.
- * Geometry type and business line type are deliberately separate concepts:
- * geometry is encoded with KML LineString/MultiGeometry, while the business
- * category is stored only as dtpstat.businessTypeCode.
- *
- * @param {any} collection
- */
 export function serializeLinesKml(collection) {
   if (
-    !collection ||
-    collection.type !== 'FeatureCollection' ||
-    !Array.isArray(collection.lineTypes) ||
-    !Array.isArray(collection.features)
+    !collection || collection.type !== 'FeatureCollection' ||
+    !Array.isArray(collection.lineTypes) || !Array.isArray(collection.features)
   ) {
-    throw new KmlTransferValidationError('Line KML export requires canonical GeoJSON v2');
+    throw new KmlTransferValidationError('Line KML export requires canonical GeoJSON v3');
   }
 
   let lineTypes;
@@ -169,18 +141,15 @@ export function serializeLinesKml(collection) {
 
   const dictionary = {
     schemaVersion: KML_TRANSFER_SCHEMA_VERSION,
-    lineTypes: lineTypes.map(({ type, ...lineType }) => ({
-      code: type,
-      ...lineType,
-    })),
+    lineTypes,
   };
-  const knownCodes = new Set(lineTypes.map((lineType) => lineType.type));
+  const knownCodes = new Set(lineTypes.map((lineType) => lineType.code));
   const styleIds = new Map(
-    lineTypes.map((lineType, index) => [lineType.type, `dtpstat-business-type-${index + 1}`]),
+    lineTypes.map((lineType) => [lineType.code, `dtpstat-business-type-${lineType.code}`]),
   );
 
   const stylesXml = lineTypes.map((lineType) => `
-    <Style id="${styleIds.get(lineType.type)}">
+    <Style id="${styleIds.get(lineType.code)}">
       <LineStyle>
         <color>${kmlColor(lineType.color)}</color>
         <width>${lineType.width}</width>
@@ -194,7 +163,7 @@ export function serializeLinesKml(collection) {
     let businessTypeCode;
     try {
       businessTypeCode = normalizeLineTypeCode(
-        feature.properties._dtpstat?.lineType,
+        feature.properties._dtpstat?.businessTypeCode,
         `feature ${index} businessTypeCode`,
       );
     } catch (error) {
@@ -254,7 +223,6 @@ export function serializeLinesKml(collection) {
 </kml>\n`;
 }
 
-/** @param {unknown} value @param {string} label */
 function parseJsonObject(value, label) {
   let parsed;
   try {
@@ -268,7 +236,6 @@ function parseJsonObject(value, label) {
   return parsed;
 }
 
-/** @param {unknown} value @param {string} label */
 function parseCoordinates(value, label) {
   const raw = textValue(value);
   if (!raw) throw new KmlTransferValidationError(`${label} has empty coordinates`);
@@ -277,11 +244,8 @@ function parseCoordinates(value, label) {
     const longitude = Number(parts[0]);
     const latitude = Number(parts[1]);
     if (
-      parts.length < 2 ||
-      !Number.isFinite(longitude) ||
-      !Number.isFinite(latitude) ||
-      longitude < -180 || longitude > 180 ||
-      latitude < -90 || latitude > 90
+      parts.length < 2 || !Number.isFinite(longitude) || !Number.isFinite(latitude) ||
+      longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90
     ) {
       throw new KmlTransferValidationError(`${label} contains coordinates outside WGS84`);
     }
@@ -293,29 +257,71 @@ function parseCoordinates(value, label) {
   return coordinates;
 }
 
-/** @param {unknown} node @param {unknown[]} output */
 function collectLineStrings(node, output) {
   if (!node || typeof node !== 'object') return;
   for (const lineString of asArray(node.LineString)) output.push(lineString);
-  for (const multiGeometry of asArray(node.MultiGeometry)) {
-    collectLineStrings(multiGeometry, output);
-  }
+  for (const multiGeometry of asArray(node.MultiGeometry)) collectLineStrings(multiGeometry, output);
 }
 
-/** @param {unknown} node @param {unknown[]} output */
 function collectPlacemarks(node, output) {
   if (!node || typeof node !== 'object') return;
   output.push(...asArray(node.Placemark));
   for (const folder of asArray(node.Folder)) collectPlacemarks(folder, output);
 }
 
-/**
- * Parse a portable KML snapshot into the canonical GeoJSON v2 transfer shape.
- * The document-level business type/style dictionary is validated completely
- * before any Placemark geometry is processed.
- *
- * @param {string} xml
- */
+function parseDictionary(dictionary) {
+  const version = Number(dictionary.schemaVersion);
+  if (version === KML_TRANSFER_SCHEMA_VERSION) {
+    try {
+      return {
+        lineTypes: buildLineTypesPlan({ lineTypes: dictionary.lineTypes }).lineTypes,
+        legacyCodes: null,
+      };
+    } catch (error) {
+      if (error instanceof LineTypeValidationError) {
+        throw new KmlTransferValidationError(error.message);
+      }
+      throw error;
+    }
+  }
+
+  // Compatibility with the short-lived schemaVersion=1 string-code format.
+  if (version === 1 && Array.isArray(dictionary.lineTypes)) {
+    const legacyCodes = new Map();
+    const translated = dictionary.lineTypes.map((lineType, index) => {
+      if (!lineType || typeof lineType !== 'object' || Array.isArray(lineType)) {
+        throw new KmlTransferValidationError(`lineTypes[${index}] must be an object`);
+      }
+      const legacyCode = normalizeLineTypeName(lineType.code, `lineTypes[${index}].code`);
+      const code = index;
+      legacyCodes.set(legacyCode, code);
+      return {
+        code,
+        name: legacyCode,
+        title: normalizeLineTypeTitle(lineType.name ?? legacyCode, `lineTypes[${index}].name`),
+        color: lineType.color,
+        style: lineType.style,
+        width: lineType.width,
+      };
+    });
+    try {
+      return {
+        lineTypes: buildLineTypesPlan({ lineTypes: translated }).lineTypes,
+        legacyCodes,
+      };
+    } catch (error) {
+      if (error instanceof LineTypeValidationError) {
+        throw new KmlTransferValidationError(error.message);
+      }
+      throw error;
+    }
+  }
+
+  throw new KmlTransferValidationError(
+    `Unsupported KML transfer schemaVersion: ${dictionary.schemaVersion}`,
+  );
+}
+
 export function parseLinesKml(xml) {
   if (typeof xml !== 'string' || !xml.trim()) {
     throw new KmlTransferValidationError('KML upload is empty');
@@ -340,8 +346,7 @@ export function parseLinesKml(xml) {
     throw new KmlTransferValidationError('KML does not contain kml/Document');
   }
 
-  // Business metadata is deliberately parsed first. No geometry is inspected
-  // until the complete type/style dictionary has passed validation.
+  // The complete business dictionary is parsed and validated before geometry.
   const documentData = extendedDataMap(document.ExtendedData);
   const rawDictionary = documentData.get(KML_BUSINESS_TYPES_PROPERTY);
   if (!rawDictionary) {
@@ -350,33 +355,12 @@ export function parseLinesKml(xml) {
     );
   }
   const dictionary = parseJsonObject(rawDictionary, KML_BUSINESS_TYPES_PROPERTY);
-  if (Number(dictionary.schemaVersion) !== KML_TRANSFER_SCHEMA_VERSION) {
-    throw new KmlTransferValidationError(
-      `Unsupported KML transfer schemaVersion: ${dictionary.schemaVersion}`,
-    );
-  }
   if (!Array.isArray(dictionary.lineTypes) || dictionary.lineTypes.length === 0) {
     throw new KmlTransferValidationError('KML business line type dictionary is empty');
   }
-
-  let lineTypes;
-  try {
-    lineTypes = buildLineTypesPlan({
-      lineTypes: dictionary.lineTypes.map((lineType, index) => {
-        if (!lineType || typeof lineType !== 'object' || Array.isArray(lineType)) {
-          throw new LineTypeValidationError(`lineTypes[${index}] must be an object`);
-        }
-        const { code, ...style } = lineType;
-        return { type: code, ...style };
-      }),
-    }).lineTypes;
-  } catch (error) {
-    if (error instanceof LineTypeValidationError) {
-      throw new KmlTransferValidationError(error.message);
-    }
-    throw error;
-  }
-  const knownCodes = new Set(lineTypes.map((lineType) => lineType.type));
+  const parsedDictionary = parseDictionary(dictionary);
+  const lineTypes = parsedDictionary.lineTypes;
+  const knownCodes = new Set(lineTypes.map((lineType) => lineType.code));
 
   const placemarks = [];
   collectPlacemarks(document, placemarks);
@@ -387,28 +371,39 @@ export function parseLinesKml(xml) {
   const features = placemarks.map((placemark, index) => {
     const data = extendedDataMap(placemark?.ExtendedData);
     const rawBusinessTypeCode = data.get('dtpstat.businessTypeCode');
-    if (!rawBusinessTypeCode) {
+    if (rawBusinessTypeCode === undefined) {
       throw new KmlTransferValidationError(
         `Placemark ${index} is missing dtpstat.businessTypeCode`,
       );
     }
+
     let businessTypeCode;
-    try {
-      businessTypeCode = normalizeLineTypeCode(
-        rawBusinessTypeCode,
-        `Placemark ${index} businessTypeCode`,
-      );
-    } catch (error) {
-      if (error instanceof LineTypeValidationError) {
-        throw new KmlTransferValidationError(error.message);
+    if (parsedDictionary.legacyCodes) {
+      businessTypeCode = parsedDictionary.legacyCodes.get(rawBusinessTypeCode);
+      if (businessTypeCode === undefined) {
+        throw new KmlTransferValidationError(
+          `Placemark ${index} references unknown business type code: ${rawBusinessTypeCode}`,
+        );
       }
-      throw error;
+    } else {
+      try {
+        businessTypeCode = normalizeLineTypeCode(
+          rawBusinessTypeCode,
+          `Placemark ${index} businessTypeCode`,
+        );
+      } catch (error) {
+        if (error instanceof LineTypeValidationError) {
+          throw new KmlTransferValidationError(error.message);
+        }
+        throw error;
+      }
     }
     if (!knownCodes.has(businessTypeCode)) {
       throw new KmlTransferValidationError(
         `Placemark ${index} references unknown business type code: ${businessTypeCode}`,
       );
     }
+
     const multiple = Number(data.get('dtpstat.multiple'));
     if (multiple !== 1 && multiple !== 2) {
       throw new KmlTransferValidationError(
@@ -422,10 +417,7 @@ export function parseLinesKml(xml) {
       throw new KmlTransferValidationError(`Placemark ${index} contains no line geometry`);
     }
     const lines = lineNodes.map((lineNode, lineIndex) =>
-      parseCoordinates(
-        lineNode?.coordinates,
-        `Placemark ${index} LineString ${lineIndex}`,
-      ));
+      parseCoordinates(lineNode?.coordinates, `Placemark ${index} LineString ${lineIndex}`));
     const geometry = lines.length === 1
       ? { type: 'LineString', coordinates: lines[0] }
       : { type: 'MultiLineString', coordinates: lines };
@@ -435,6 +427,7 @@ export function parseLinesKml(xml) {
     if (rawProperties) {
       sourceProperties = parseJsonObject(rawProperties, `Placemark ${index} dtpstat.properties`);
       delete sourceProperties.lineType;
+      delete sourceProperties.businessTypeCode;
       delete sourceProperties._dtpstat;
     }
 
@@ -457,9 +450,7 @@ export function parseLinesKml(xml) {
           ...(citySlug ? { citySlug } : {}),
           ...(boundaryOsmType ? { boundaryOsmType } : {}),
           ...(boundaryOsmId !== null ? { boundaryOsmId } : {}),
-          // Adapter field for the existing canonical GeoJSON import plan only.
-          // It is converted to LINE_TYPE_ID and is not stored in properties.
-          lineType: businessTypeCode,
+          businessTypeCode,
         },
       },
     };
@@ -467,7 +458,7 @@ export function parseLinesKml(xml) {
 
   return {
     type: 'FeatureCollection',
-    schemaVersion: 2,
+    schemaVersion: 3,
     lineTypes,
     features,
   };
