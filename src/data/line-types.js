@@ -41,7 +41,7 @@ function normalizedName(value, label) {
 
 /** @param {string} value */
 function comparableName(value) {
-  return value.toLocaleLowerCase('ru-RU');
+  return value.toLowerCase();
 }
 
 /** @param {unknown} value @param {string} label */
