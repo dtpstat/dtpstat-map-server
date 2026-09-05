@@ -25,7 +25,7 @@ const UPSERT_CITIES_SQL = `
   ON CONFLICT (name) DO UPDATE SET
     slug = EXCLUDED.slug,
     full_name = EXCLUDED.full_name,
-    attributes = EXCLUDED.attributes,
+    attributes = cities.attributes || EXCLUDED.attributes,
     updated_at = now()
 `;
 
