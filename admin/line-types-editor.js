@@ -22,6 +22,7 @@ if (typeof document !== 'undefined') {
     const form = host.querySelector('#line-types-form');
     const message = host.querySelector('#line-types-message');
     const addButton = host.querySelector('#add-line-type');
+    const tab = document.querySelector('[data-operation-tab="kml-types"]');
 
     function setMessage(text, tone = '') {
       message.textContent = text;
@@ -116,7 +117,7 @@ if (typeof document !== 'undefined') {
     }
 
     async function load({ changed = false } = {}) {
-      setMessage(changed ? 'Обновляем типы после импорта…' : 'Загружаем типы…');
+      setMessage(changed ? 'Обновляем типы…' : 'Загружаем типы…');
       try {
         const response = await fetch('/api/line-types', {
           credentials: 'same-origin',
@@ -128,7 +129,7 @@ if (typeof document !== 'undefined') {
         for (const lineType of payload.lineTypes) addRow(lineType);
         setMessage(
           changed
-            ? `Справочник обновлён после импорта. Типов: ${payload.lineTypes.length}`
+            ? `Справочник обновлён. Типов: ${payload.lineTypes.length}`
             : `Типов: ${payload.lineTypes.length}`,
           changed ? 'success' : '',
         );
@@ -162,6 +163,9 @@ if (typeof document !== 'undefined') {
       }
     });
 
+    tab?.addEventListener('click', () => {
+      void load({ changed: true });
+    });
     window.addEventListener('dtpstat:line-types-changed', () => {
       void load({ changed: true });
     });
