@@ -74,7 +74,7 @@ if (typeof document !== 'undefined') {
               <div class="project-metrics-grid">
                 <label>Yandex Metrica ID
                   <input name="yandexMetrikaId" type="text" inputmode="numeric"
-                         maxlength="20" pattern="[1-9][0-9]{0,19}"
+                         maxlength="15" pattern="[1-9][0-9]{0,14}"
                          placeholder="Например: 12345678">
                   <small>Числовой ID счётчика Яндекс Метрики.</small>
                 </label>
