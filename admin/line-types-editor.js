@@ -1,22 +1,10 @@
 if (typeof document !== 'undefined') {
-  const stylesheet = document.createElement('link');
-  stylesheet.rel = 'stylesheet';
-  stylesheet.href = '/admin/line-types.css';
-  document.head.append(stylesheet);
-
-  const panel = document.querySelector('#panel-kml');
-  if (panel) {
-    const sourcesInput = panel.querySelector('#kml-form textarea[name="sources"]');
-    if (sourcesInput) {
-      sourcesInput.placeholder = '[{"URL":"https://…","layers":[{"name":"…","multiple":1,"type":"default"}]}]';
-    }
-
-    const editor = document.createElement('section');
-    editor.className = 'transfer-mode line-types-editor';
-    editor.innerHTML = `
+  const host = document.querySelector('#line-types-editor-host');
+  if (host) {
+    host.innerHTML = `
       <div class="mode-heading">
         <div>
-          <h4>Типы линий и стили</h4>
+          <h4>Типы линий</h4>
           <p>Тип из KML/GeoJSON связывается со стилем карты и подписью легенды.</p>
         </div>
       </div>
@@ -30,13 +18,10 @@ if (typeof document !== 'undefined') {
       <p class="line-types-message" id="line-types-message" role="status"></p>
     `;
 
-    const lastSuccess = panel.querySelector('.last-success');
-    lastSuccess?.after(editor);
-
-    const table = editor.querySelector('#line-types-table');
-    const form = editor.querySelector('#line-types-form');
-    const message = editor.querySelector('#line-types-message');
-    const addButton = editor.querySelector('#add-line-type');
+    const table = host.querySelector('#line-types-table');
+    const form = host.querySelector('#line-types-form');
+    const message = host.querySelector('#line-types-message');
+    const addButton = host.querySelector('#add-line-type');
 
     function setMessage(text, tone = '') {
       message.textContent = text;
