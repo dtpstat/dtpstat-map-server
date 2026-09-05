@@ -2,8 +2,8 @@ export const KML_SOURCES_EXAMPLE = [
   {
     URL: 'https://www.google.com/maps/d/viewer?mid=YOUR_MAP_ID',
     layers: [
-      { name: 'Двусторонние', multiple: 2, type: 'default' },
-      { name: 'Односторонние', multiple: 1, type: 'tram' },
+      { name: 'Двусторонние', multiple: 2, type: 'Двусторонние' },
+      { name: 'Односторонние', multiple: 1, type: 'Односторонние' },
     ],
   },
 ];
@@ -35,7 +35,13 @@ export function jsonExample(value) {
 
 if (typeof document !== 'undefined') {
   const kmlSources = document.querySelector('#kml-form textarea[name="sources"]');
-  if (kmlSources) kmlSources.placeholder = jsonExample(KML_SOURCES_EXAMPLE);
+  if (kmlSources) {
+    kmlSources.placeholder = jsonExample(KML_SOURCES_EXAMPLE);
+    const hint = kmlSources.closest('label')?.querySelector('small');
+    if (hint) {
+      hint.textContent = 'Каждый слой: name + multiple (1 или 2) + необязательный type. type — стабильный code справочника; без type используется default. Отсутствующий code создаётся автоматически с начальным name=code и стандартным стилем.';
+    }
+  }
 
   const population = document.querySelector('#population-form textarea[name="payload"]');
   if (population) population.placeholder = jsonExample(POPULATION_JSON_EXAMPLE);
