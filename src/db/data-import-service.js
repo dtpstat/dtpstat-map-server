@@ -3,19 +3,8 @@ import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 const UPSERT_CITIES_SQL = `
-  INSERT INTO cities (
-    slug,
-    name,
-    full_name,
-    lane_length_m,
-    attributes
-  )
-  SELECT
-    payload.slug,
-    payload.name,
-    payload."fullName",
-    0,
-    payload.attributes
+  INSERT INTO cities (slug, name, full_name, lane_length_m, attributes)
+  SELECT payload.slug, payload.name, payload."fullName", 0, payload.attributes
   FROM jsonb_to_recordset($1::jsonb) AS payload(
     slug text,
     name text,
@@ -29,33 +18,63 @@ const UPSERT_CITIES_SQL = `
     updated_at = now()
 `;
 
-const UPSERT_LINE_TYPES_SQL = `
-  INSERT INTO line_types (code, name, color, line_style, width)
-  SELECT
-    payload.type,
-    payload.name,
-    payload.color,
-    payload.style,
-    payload.width
-  FROM jsonb_to_recordset($1::jsonb) AS payload(
-    type text,
-    name text,
-    color text,
-    style text,
-    width double precision
+const UPDATE_LINE_TYPES_SQL = `
+  WITH payload AS (
+    SELECT *
+    FROM jsonb_to_recordset($1::jsonb) AS item(
+      code integer,
+      name text,
+      title text,
+      color text,
+      style text,
+      width double precision
+    )
   )
-  ON CONFLICT (code) DO UPDATE SET
-    name = EXCLUDED.name,
-    color = EXCLUDED.color,
-    line_style = EXCLUDED.line_style,
-    width = EXCLUDED.width,
-    updated_at = now()
+  UPDATE line_types AS line_type
+  SET title = payload.title,
+      color = payload.color,
+      line_style = payload.style,
+      width = payload.width,
+      updated_at = now()
+  FROM payload
+  WHERE LOWER(BTRIM(line_type.name)) = LOWER(BTRIM(payload.name))
+`;
+
+const INSERT_MISSING_LINE_TYPES_SQL = `
+  WITH payload AS (
+    SELECT *
+    FROM jsonb_to_recordset($1::jsonb) AS item(
+      code integer,
+      name text,
+      title text,
+      color text,
+      style text,
+      width double precision
+    )
+  )
+  INSERT INTO line_types (name, title, color, line_style, width)
+  SELECT payload.name, payload.title, payload.color, payload.style, payload.width
+  FROM payload
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM line_types AS existing
+    WHERE LOWER(BTRIM(existing.name)) = LOWER(BTRIM(payload.name))
+  )
+  ON CONFLICT DO NOTHING
 `;
 
 const DELETE_OMITTED_LINE_TYPES_SQL = `
+  WITH payload AS (
+    SELECT name
+    FROM jsonb_to_recordset($1::jsonb) AS item(name text)
+  )
   DELETE FROM line_types AS line_type
-  WHERE line_type.code <> 'default'
-    AND NOT (line_type.code = ANY($1::text[]))
+  WHERE line_type.code <> 0
+    AND NOT EXISTS (
+      SELECT 1
+      FROM payload
+      WHERE LOWER(BTRIM(payload.name)) = LOWER(BTRIM(line_type.name))
+    )
 `;
 
 const FIND_UNKNOWN_BOUNDARIES_SQL = `
@@ -75,11 +94,12 @@ const FIND_UNKNOWN_BOUNDARIES_SQL = `
 `;
 
 const FIND_UNKNOWN_LINE_TYPES_SQL = `
-  SELECT DISTINCT payload."lineType" AS line_type
-  FROM jsonb_to_recordset($1::jsonb) AS payload("lineType" text)
-  LEFT JOIN line_types AS line_type ON line_type.code = payload."lineType"
+  SELECT DISTINCT payload."lineTypeName" AS line_type_name
+  FROM jsonb_to_recordset($1::jsonb) AS payload("lineTypeName" text)
+  LEFT JOIN line_types AS line_type
+    ON LOWER(BTRIM(line_type.name)) = LOWER(BTRIM(payload."lineTypeName"))
   WHERE line_type.id IS NULL
-  ORDER BY payload."lineType"
+  ORDER BY payload."lineTypeName"
 `;
 
 const FIND_BOUNDARY_CITY_CONFLICTS_SQL = `
@@ -138,7 +158,7 @@ const INSERT_GEOMETRIES_SQL = `
       "citySlug" text,
       "boundaryOsmType" text,
       "boundaryOsmId" bigint,
-      "lineType" text,
+      "lineTypeName" text,
       lanes smallint,
       properties jsonb,
       geometry jsonb
@@ -147,10 +167,7 @@ const INSERT_GEOMETRIES_SQL = `
   prepared AS (
     SELECT
       payload_rows.*,
-      ST_SetSRID(
-        ST_GeomFromGeoJSON(payload_rows.geometry::text),
-        4326
-      ) AS geom
+      ST_SetSRID(ST_GeomFromGeoJSON(payload_rows.geometry::text), 4326) AS geom
     FROM payload_rows
   )
   INSERT INTO city_geometries (
@@ -173,34 +190,17 @@ const INSERT_GEOMETRIES_SQL = `
     prepared.properties,
     prepared.geom
   FROM prepared
-  JOIN line_types AS line_type ON line_type.code = prepared."lineType"
+  JOIN line_types AS line_type
+    ON LOWER(BTRIM(line_type.name)) = LOWER(BTRIM(prepared."lineTypeName"))
   LEFT JOIN cities AS city ON city.slug = prepared."citySlug"
   LEFT JOIN city_boundaries AS boundary
     ON boundary.osm_type = prepared."boundaryOsmType"
    AND boundary.osm_id = prepared."boundaryOsmId"
 `;
 
-/**
- * @typedef {{
- *   query: (text: string, values?: unknown[]) => Promise<{ rows: any[], rowCount?: number }>,
- *   release: () => void
- * }} DatabaseClient
- */
-
-/**
- * Atomically replace all line geometry data from one complete GeoJSON upload.
- * Versioned exports restore city, OSM-boundary and line-type links using
- * portable natural keys; legacy GeoJSON remains supported through `default`.
- * A versioned file with lineTypes synchronizes the complete type dictionary.
- *
- * @param {{ connect: () => Promise<DatabaseClient> }} pool
- */
+/** @param {{ connect: () => Promise<any> }} pool */
 export function createDataImportService(pool) {
   return {
-    /**
-     * @param {unknown} collection
-     * @param {{ signal?: AbortSignal, onProgress?: (progress: object) => void, onCommit?: () => void }} operation
-     */
     async replaceFromGeoJson(collection, operation = {}) {
       throwIfAdminTaskCancelled(operation.signal);
       const plan = buildGeoJsonPlan(collection);
@@ -222,8 +222,8 @@ export function createDataImportService(pool) {
         throwIfAdminTaskCancelled(operation.signal);
 
         await client.query(UPSERT_CITIES_SQL, [JSON.stringify(plan.cities)]);
-
         const serializedGeometries = JSON.stringify(plan.geometries);
+
         const unknownBoundaries = await client.query(
           FIND_UNKNOWN_BOUNDARIES_SQL,
           [serializedGeometries],
@@ -254,9 +254,10 @@ export function createDataImportService(pool) {
 
         await client.query('DELETE FROM city_geometries');
         if (plan.lineTypes.length > 0) {
-          const lineTypeCodes = plan.lineTypes.map((lineType) => lineType.type);
-          await client.query(DELETE_OMITTED_LINE_TYPES_SQL, [lineTypeCodes]);
-          await client.query(UPSERT_LINE_TYPES_SQL, [JSON.stringify(plan.lineTypes)]);
+          const dictionary = JSON.stringify(plan.lineTypes);
+          await client.query(DELETE_OMITTED_LINE_TYPES_SQL, [dictionary]);
+          await client.query(UPDATE_LINE_TYPES_SQL, [dictionary]);
+          await client.query(INSERT_MISSING_LINE_TYPES_SQL, [dictionary]);
         }
 
         const unknownLineTypes = await client.query(
@@ -265,16 +266,12 @@ export function createDataImportService(pool) {
         );
         if (unknownLineTypes.rows.length > 0) {
           throw new GeoJsonValidationError(
-            `Line GeoJSON references unknown line types: ${unknownLineTypes.rows.map((row) => row.line_type).join(', ')}`,
+            `Line GeoJSON references unknown line type names: ${unknownLineTypes.rows.map((row) => row.line_type_name).join(', ')}`,
           );
         }
 
-        const geometryResult = await client.query(INSERT_GEOMETRIES_SQL, [
-          serializedGeometries,
-        ]);
-        const statisticsResult = await client.query(
-          RECALCULATE_CITY_STATISTICS_SQL,
-        );
+        const geometryResult = await client.query(INSERT_GEOMETRIES_SQL, [serializedGeometries]);
+        const statisticsResult = await client.query(RECALCULATE_CITY_STATISTICS_SQL);
 
         if (geometryResult.rowCount !== plan.geometries.length) {
           throw new Error('Not every GeoJSON geometry was inserted');
@@ -282,8 +279,9 @@ export function createDataImportService(pool) {
         if (statisticsResult.rowCount < plan.cities.length) {
           throw new Error('Not every city statistic was updated');
         }
+
         const referencedLineTypes = [
-          ...new Set(plan.geometries.map((geometry) => geometry.lineType)),
+          ...new Set(plan.geometries.map((geometry) => geometry.lineTypeName)),
         ];
         operation.onProgress?.({
           phase: 'database',
