@@ -29,6 +29,7 @@ let citiesById = new Map();
 let focusedCityId = null;
 let lineTypesSignature = '';
 let lineTypesRefresh = null;
+let openMapRefresh = null;
 
 function setMapMessage(message, isError = false) {
   mapMessage.hidden = !message;
@@ -116,6 +117,20 @@ async function refreshLineTypes() {
     }
   })();
   return lineTypesRefresh;
+}
+
+async function refreshOpenMap() {
+  if (!mapController) return;
+  if (openMapRefresh) return openMapRefresh;
+  openMapRefresh = (async () => {
+    try {
+      await refreshLineTypes();
+      mapController.refreshViewport();
+    } finally {
+      openMapRefresh = null;
+    }
+  })();
+  return openMapRefresh;
 }
 
 function selectCity(city) {
@@ -208,10 +223,10 @@ async function start() {
 }
 
 window.addEventListener('focus', () => {
-  void refreshLineTypes();
+  void refreshOpenMap();
 });
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) void refreshLineTypes();
+  if (!document.hidden) void refreshOpenMap();
 });
 
 start();
