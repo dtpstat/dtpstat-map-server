@@ -8,6 +8,7 @@ import {createCityBoundaryTransferService} from './db/city-boundary-transfer-ser
 import {createDataExportRepository} from './db/data-export-repository.js';
 import {createDataImportService}   from './db/data-import-service.js';
 import {createKmlUpdateService}    from './db/kml-update-service.js';
+import {createLineTypesRepository} from './db/line-types-repository.js';
 import {createOsmCityUpdateService} from './db/osm-city-update-service.js';
 import {createPopulationImportService} from './db/population-import-service.js';
 import {createPool}                from './db/pool.js';
@@ -18,6 +19,7 @@ async function main(){
 	const config     = loadConfig();
 	const pool       = createPool(config.database);
 	const repository = createCitiesRepository(pool);
+	const lineTypesRepository = createLineTypesRepository(pool);
 	const exportRepository = createDataExportRepository(pool);
 	const importService = createDataImportService(pool);
 	const cityBoundaryTransferService = createCityBoundaryTransferService(pool);
@@ -43,6 +45,7 @@ async function main(){
 
 	const app        = createApp({
 		repository,
+		lineTypesRepository,
 		exportRepository,
 		importService,
 		cityBoundaryTransferService,
