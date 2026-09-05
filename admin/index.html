@@ -25,18 +25,14 @@
         </div>
       </div>
 
-      <nav class="task-tabs" role="tablist" aria-label="Тип операции">
+      <nav class="task-tabs" role="tablist" aria-label="Тип данных">
         <button class="task-tab" id="tab-osm" type="button" role="tab"
                 aria-selected="true" aria-controls="panel-osm" data-task-tab="osm">
           Города OSM
         </button>
         <button class="task-tab" id="tab-kml" type="button" role="tab"
                 aria-selected="false" aria-controls="panel-kml" data-task-tab="kml">
-          Линии KML
-        </button>
-        <button class="task-tab" id="tab-geojson" type="button" role="tab"
-                aria-selected="false" aria-controls="panel-geojson" data-task-tab="geojson">
-          GeoJSON
+          Линии KML / GeoJSON
         </button>
         <button class="task-tab" id="tab-population" type="button" role="tab"
                 aria-selected="false" aria-controls="panel-population" data-task-tab="population">
@@ -46,102 +42,151 @@
 
       <article class="task-panel" id="panel-osm" role="tabpanel"
                aria-labelledby="tab-osm" data-task-panel="osm">
-        <h3>Города из OSM</h3>
-        <p>Индекс RU city/town, последовательные пакеты геометрий и атомарная замена.</p>
+        <h3>Города и границы OSM</h3>
+        <p>Один набор данных можно получить из Overpass либо перенести готовым GeoJSON-снимком между серверами.</p>
         <p class="last-success" data-last-success="osm">
           <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
         </p>
-        <form id="osm-form" data-task-form="osm">
-          <div class="form-fields">
-            <label>Overpass URL
-              <select name="URL" id="osm-url">
-                <option value="">Загрузка настроек…</option>
-              </select>
-            </label>
-            <label>Размер пакета
-              <input name="batchSize" type="number" inputmode="numeric"
-                     min="1" step="1" placeholder="из ENV">
-            </label>
-            <label>Пауза между запросами, мс
-              <input name="minDelayMs" type="number" inputmode="numeric"
-                     min="0" step="1" placeholder="из ENV">
-            </label>
-            <label>Максимум повторов временной ошибки
-              <input name="maxRetries" type="number" inputmode="numeric"
-                     min="0" step="1" placeholder="из ENV">
-            </label>
-            <label>Начальная пауза повтора, мс
-              <input name="retryBaseDelayMs" type="number" inputmode="numeric"
-                     min="1000" step="1" placeholder="из ENV">
-            </label>
-            <label>Предел backoff, мс
-              <input name="retryMaxDelayMs" type="number" inputmode="numeric"
-                     min="1000" step="1" placeholder="из ENV">
-            </label>
-            <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
+
+        <section class="transfer-mode">
+          <div class="mode-heading">
+            <div>
+              <h4>Режим Overpass</h4>
+              <p>Индекс RU city/town, последовательные пакеты геометрий и атомарная замена.</p>
+            </div>
           </div>
-          <button class="secondary defaults-button" id="osm-defaults" type="button">
-            Загрузить значения по умолчанию
-          </button>
-          <button class="task-action" type="submit" data-task-action="osm"
-                  data-start-label="Запустить OSM">Запустить OSM</button>
-        </form>
+          <form id="osm-form" data-task-form="osm" data-task-type="osm-city-update">
+            <div class="form-fields">
+              <label>Overpass URL
+                <select name="URL" id="osm-url">
+                  <option value="">Загрузка настроек…</option>
+                </select>
+              </label>
+              <label>Размер пакета
+                <input name="batchSize" type="number" inputmode="numeric"
+                       min="1" step="1" placeholder="из ENV">
+              </label>
+              <label>Пауза между запросами, мс
+                <input name="minDelayMs" type="number" inputmode="numeric"
+                       min="0" step="1" placeholder="из ENV">
+              </label>
+              <label>Максимум повторов временной ошибки
+                <input name="maxRetries" type="number" inputmode="numeric"
+                       min="0" step="1" placeholder="из ENV">
+              </label>
+              <label>Начальная пауза повтора, мс
+                <input name="retryBaseDelayMs" type="number" inputmode="numeric"
+                       min="1000" step="1" placeholder="из ENV">
+              </label>
+              <label>Предел backoff, мс
+                <input name="retryMaxDelayMs" type="number" inputmode="numeric"
+                       min="1000" step="1" placeholder="из ENV">
+              </label>
+              <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
+            </div>
+            <button class="secondary defaults-button" id="osm-defaults" type="button">
+              Загрузить значения по умолчанию
+            </button>
+            <button class="task-action" type="submit" data-task-action="osm"
+                    data-task-type="osm-city-update" data-start-label="Запустить OSM">Запустить OSM</button>
+          </form>
+        </section>
+
+        <section class="transfer-mode">
+          <div class="mode-heading">
+            <div>
+              <h4>Режим GeoJSON</h4>
+              <p>Полный перенос place=city/town с OSM type/id, тегами, временем OSM и геометрией.</p>
+            </div>
+            <a class="secondary-link" href="/api/admin/export/cities" download>Выгрузить GeoJSON</a>
+          </div>
+          <form id="city-geojson-form" data-task-form="osm" data-task-type="city-geojson-import">
+            <div class="form-fields">
+              <label>GeoJSON городов
+                <input name="file" type="file" accept=".json,.geojson,application/json,application/geo+json" required>
+              </label>
+              <label class="check"><input name="dryRun" type="checkbox"> Только проверка (dryRun)</label>
+            </div>
+            <button class="task-action" type="submit" data-task-action="osm"
+                    data-task-type="city-geojson-import" data-start-label="Импортировать города">Импортировать города</button>
+          </form>
+        </section>
         <p class="notice" data-task-notice="osm" role="status"></p>
       </article>
 
       <article class="task-panel" id="panel-kml" role="tabpanel"
                aria-labelledby="tab-kml" data-task-panel="kml" hidden>
-        <h3>Линии из KML</h3>
-        <p>Пустое поле использует источники из ENV. JSON полностью заменяет список.</p>
+        <h3>Линии выделенных полос</h3>
+        <p>KML и GeoJSON — два режима полной замены одного и того же набора линий.</p>
         <p class="last-success" data-last-success="kml">
           <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
         </p>
-        <form id="kml-form" data-task-form="kml">
-          <div class="form-fields">
-            <label>Источники JSON<textarea name="sources" rows="8" placeholder='[{"URL":"https://…","layers":[{"name":"…","multiple":1}]}]'></textarea></label>
-            <label>Буфер города, м
-              <input name="cityBufferMeters" type="number" inputmode="numeric"
-                     min="0" step="1" placeholder="из ENV">
-            </label>
-            <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
-          </div>
-          <button class="task-action" type="submit" data-task-action="kml"
-                  data-start-label="Запустить KML">Запустить KML</button>
-        </form>
-        <p class="notice" data-task-notice="kml" role="status"></p>
-      </article>
 
-      <article class="task-panel" id="panel-geojson" role="tabpanel"
-               aria-labelledby="tab-geojson" data-task-panel="geojson" hidden>
-        <h3>Импорт GeoJSON</h3>
-        <p>Полная замена геометрий из локального GeoJSON-файла.</p>
-        <p class="last-success" data-last-success="geojson">
-          <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
-        </p>
-        <form id="geojson-form" data-task-form="geojson">
-          <div class="form-fields">
-            <label>GeoJSON <input name="file" type="file" accept=".json,.geojson,application/json,application/geo+json" required></label>
+        <section class="transfer-mode">
+          <div class="mode-heading">
+            <div>
+              <h4>Режим KML</h4>
+              <p>Пустое поле использует источники из ENV. JSON полностью заменяет список.</p>
+            </div>
           </div>
-          <button class="task-action" type="submit" data-task-action="geojson"
-                  data-start-label="Импортировать GeoJSON">Импортировать GeoJSON</button>
-        </form>
-        <p class="notice" data-task-notice="geojson" role="status"></p>
+          <form id="kml-form" data-task-form="kml" data-task-type="kml-update">
+            <div class="form-fields">
+              <label>Источники JSON<textarea name="sources" rows="8" placeholder='[{"URL":"https://…","layers":[{"name":"…","multiple":1}]}]'></textarea></label>
+              <label>Буфер города, м
+                <input name="cityBufferMeters" type="number" inputmode="numeric"
+                       min="0" step="1" placeholder="из ENV">
+              </label>
+              <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
+            </div>
+            <button class="task-action" type="submit" data-task-action="kml"
+                    data-task-type="kml-update" data-start-label="Запустить KML">Запустить KML</button>
+          </form>
+        </section>
+
+        <section class="transfer-mode">
+          <div class="mode-heading">
+            <div>
+              <h4>Режим GeoJSON</h4>
+              <p>Переносит все свойства линий и переносимые связи с городом/OSM-полигоном.</p>
+            </div>
+            <a class="secondary-link" href="/api/admin/export/lines" download>Выгрузить GeoJSON</a>
+          </div>
+          <form id="line-geojson-form" data-task-form="kml" data-task-type="geojson-import">
+            <div class="form-fields">
+              <label>GeoJSON линий
+                <input name="file" type="file" accept=".json,.geojson,application/json,application/geo+json" required>
+              </label>
+            </div>
+            <button class="task-action" type="submit" data-task-action="kml"
+                    data-task-type="geojson-import" data-start-label="Импортировать GeoJSON">Импортировать GeoJSON</button>
+          </form>
+        </section>
+        <p class="notice" data-task-notice="kml" role="status"></p>
       </article>
 
       <article class="task-panel" id="panel-population" role="tabpanel"
                aria-labelledby="tab-population" data-task-panel="population" hidden>
         <h3>Население</h3>
-        <p>Отдельный снимок населения с последующим пересчётом рейтинга.</p>
+        <p>Отдельный JSON-снимок населения с source/asOf/attributes и последующим пересчётом рейтинга.</p>
         <p class="last-success" data-last-success="population">
           <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
         </p>
-        <form id="population-form" data-task-form="population">
-          <div class="form-fields">
-            <label>Данные JSON<textarea name="payload" rows="10" required placeholder='{"asOf":"2026-01-01","source":"…","populations":[…]}'></textarea></label>
+        <section class="transfer-mode">
+          <div class="mode-heading">
+            <div>
+              <h4>JSON import / export</h4>
+              <p>Экспорт можно без преобразования загрузить на другой сервер.</p>
+            </div>
+            <a class="secondary-link" href="/api/admin/export/populations" download>Выгрузить JSON</a>
           </div>
-          <button class="task-action" type="submit" data-task-action="population"
-                  data-start-label="Обновить население">Обновить население</button>
-        </form>
+          <form id="population-form" data-task-form="population" data-task-type="population-update">
+            <div class="form-fields">
+              <label>Данные JSON<textarea name="payload" rows="10" required placeholder='{"asOf":"2026-01-01","source":"…","populations":[…]}'></textarea></label>
+            </div>
+            <button class="task-action" type="submit" data-task-action="population"
+                    data-task-type="population-update" data-start-label="Обновить население">Обновить население</button>
+          </form>
+        </section>
         <p class="notice" data-task-notice="population" role="status"></p>
       </article>
     </section>
