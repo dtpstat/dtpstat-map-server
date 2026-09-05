@@ -3,6 +3,7 @@ import {
   PopulationValidationError,
 } from '../data/population-plan.js';
 import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
+import { acquireDataImportLock } from './database-locks.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 const FIND_UNKNOWN_CITIES_SQL = `
@@ -48,7 +49,7 @@ const UPSERT_POPULATIONS_SQL = `
  * Top-level asOf/source remain supported as defaults; portable exports may
  * preserve different values per city.
  *
- * @param {{ connect: () => Promise<import('./data-import-service.js').DatabaseClient> }} pool
+ * @param {{ connect: () => Promise<import('./data-import-service.js').DatabaseClient>, databaseSchema?: string }} pool
  */
 export function createPopulationImportService(pool) {
   return {
@@ -70,9 +71,7 @@ export function createPopulationImportService(pool) {
 
       try {
         await client.query('BEGIN');
-        await client.query(
-          `SELECT pg_advisory_xact_lock(hashtext('dtpstat-buslines:data-import'))`,
-        );
+        await acquireDataImportLock(client, pool);
         throwIfAdminTaskCancelled(operation.signal);
 
         const serialized = JSON.stringify(plan.populations);
