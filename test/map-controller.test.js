@@ -45,27 +45,19 @@ test('ranked cities become low-zoom marker points', () => {
         type: 'Feature',
         id: 7,
         geometry: { type: 'Point', coordinates: [37.62, 55.75] },
-        properties: {
-          cityId: 7,
-          name: 'Москва',
-          priority: 3,
-        },
+        properties: { cityId: 7, name: 'Москва', priority: 3 },
       },
       {
         type: 'Feature',
         id: 8,
         geometry: { type: 'Point', coordinates: [31, 51] },
-        properties: {
-          cityId: 8,
-          name: 'Тест',
-          priority: 1002,
-        },
+        properties: { cityId: 8, name: 'Тест', priority: 1002 },
       },
     ],
   });
 });
 
-test('typed bus-lane layers stay below labels and can be toggled', async () => {
+test('typed bus-lane layers stay below labels and can be toggled by numeric code', async () => {
   const calls = [];
   let map;
 
@@ -95,29 +87,15 @@ test('typed bus-lane layers stay below labels and can be toggled', async () => {
       map = this;
     }
 
-    loaded() {
-      return true;
-    }
-
+    loaded() { return true; }
     addControl() {}
-
-    hasImage(id) {
-      return this.images.has(id);
-    }
-
-    loadImage(_url, callback) {
-      callback(null, 'city-marker-image');
-    }
-
+    hasImage(id) { return this.images.has(id); }
+    loadImage(_url, callback) { callback(null, 'city-marker-image'); }
     addImage(id, image) {
       this.images.set(id, image);
       calls.push(['addImage', id]);
     }
-
-    getSource(id) {
-      return this.sources.get(id);
-    }
-
+    getSource(id) { return this.sources.get(id); }
     addSource(id, definition) {
       const source = {
         data: definition.data,
@@ -128,60 +106,32 @@ test('typed bus-lane layers stay below labels and can be toggled', async () => {
       };
       this.sources.set(id, source);
     }
-
-    getLayer(id) {
-      return this.layers.get(id);
-    }
-
-    getStyle() {
-      return { layers: this.styleLayers };
-    }
-
+    getLayer(id) { return this.layers.get(id); }
+    getStyle() { return { layers: this.styleLayers }; }
     addLayer(layer, beforeId) {
       this.layers.set(layer.id, structuredClone(layer));
       calls.push(['addLayer', layer.id, beforeId]);
     }
-
     removeLayer(id) {
       this.layers.delete(id);
       calls.push(['removeLayer', id]);
     }
-
-    moveLayer(id, beforeId) {
-      calls.push(['moveLayer', id, beforeId]);
-    }
-
+    moveLayer(id, beforeId) { calls.push(['moveLayer', id, beforeId]); }
     setLayoutProperty(id, property, value) {
       const layer = this.layers.get(id);
       layer.layout[property] = value;
       calls.push(['setLayoutProperty', id, property, value]);
     }
-
     on(event, layerOrHandler, delegatedHandler) {
       const delegated = typeof layerOrHandler === 'string';
       const key = delegated ? `${event}:${layerOrHandler}` : event;
       this.handlers.set(key, delegated ? delegatedHandler : layerOrHandler);
     }
-
-    getCanvas() {
-      return this.canvas;
-    }
-
-    getBounds() {
-      return this.bounds;
-    }
-
-    getCenter() {
-      return this.center;
-    }
-
-    getZoom() {
-      return this.zoom;
-    }
-
-    fitBounds(bounds) {
-      calls.push(['fitBounds', bounds]);
-    }
+    getCanvas() { return this.canvas; }
+    getBounds() { return this.bounds; }
+    getCenter() { return this.center; }
+    getZoom() { return this.zoom; }
+    fitBounds(bounds) { calls.push(['fitBounds', bounds]); }
   }
 
   const previousWindow = globalThis.window;
@@ -191,9 +141,7 @@ test('typed bus-lane layers stay below labels and can be toggled', async () => {
       NavigationControl: class {},
       accessToken: '',
     },
-    matchMedia() {
-      return { matches: false };
-    },
+    matchMedia() { return { matches: false }; },
   };
 
   try {
@@ -205,18 +153,13 @@ test('typed bus-lane layers stay below labels and can be toggled', async () => {
     });
 
     assert.deepEqual(calls.find((call) => call[0] === 'addImage'), [
-      'addImage',
-      'ranked-city-bus',
+      'addImage', 'ranked-city-bus',
     ]);
     assert.deepEqual(calls.find((call) => call[1] === 'ranked-cities-markers'), [
-      'addLayer',
-      'ranked-cities-markers',
-      undefined,
+      'addLayer', 'ranked-cities-markers', undefined,
     ]);
     assert.deepEqual(calls.find((call) => call[1] === 'bus-lanes-lines-0'), [
-      'addLayer',
-      'bus-lanes-lines-0',
-      'road-label',
+      'addLayer', 'bus-lanes-lines-0', 'road-label',
     ]);
     assert.equal(map.getLayer('ranked-cities-markers').maxzoom, ROAD_DATA_MIN_ZOOM);
     assert.equal(map.getLayer('bus-lanes-lines-0').minzoom, ROAD_DATA_MIN_ZOOM);
@@ -224,8 +167,9 @@ test('typed bus-lane layers stay below labels and can be toggled', async () => {
     controller.setLineTypes([
       {
         id: 1,
-        type: 'default',
-        name: 'Автобусные полосы',
+        code: 0,
+        name: 'default',
+        title: 'Автобусные полосы',
         color: '#112233',
         style: 'solid',
         width: 4,
@@ -233,8 +177,9 @@ test('typed bus-lane layers stay below labels and can be toggled', async () => {
       },
       {
         id: 2,
-        type: 'tram',
+        code: 7,
         name: 'Трамвай',
+        title: 'Трамвай',
         color: '#aabbcc',
         style: 'dashed',
         width: 6,
@@ -242,16 +187,16 @@ test('typed bus-lane layers stay below labels and can be toggled', async () => {
       },
     ]);
     assert.equal(map.getLayer('bus-lanes-lines-0').paint['line-color'], '#112233');
-    assert.equal(map.getLayer('bus-lanes-lines-1').paint['line-color'], '#aabbcc');
-    assert.deepEqual(map.getLayer('bus-lanes-lines-1').paint['line-dasharray'], [2.5, 1.5]);
-    assert.deepEqual(map.getLayer('bus-lanes-lines-1').filter, [
-      '==', ['get', 'lineType'], 'tram',
+    assert.equal(map.getLayer('bus-lanes-lines-7').paint['line-color'], '#aabbcc');
+    assert.deepEqual(map.getLayer('bus-lanes-lines-7').paint['line-dasharray'], [2.5, 1.5]);
+    assert.deepEqual(map.getLayer('bus-lanes-lines-7').filter, [
+      '==', ['get', 'businessTypeCode'], 7,
     ]);
 
-    controller.setLineTypeVisibility('tram', false);
-    assert.equal(map.getLayer('bus-lanes-lines-1').layout.visibility, 'none');
-    controller.setLineTypeVisibility('tram', true);
-    assert.equal(map.getLayer('bus-lanes-lines-1').layout.visibility, 'visible');
+    controller.setLineTypeVisibility(7, false);
+    assert.equal(map.getLayer('bus-lanes-lines-7').layout.visibility, 'none');
+    controller.setLineTypeVisibility(7, true);
+    assert.equal(map.getLayer('bus-lanes-lines-7').layout.visibility, 'visible');
 
     const cities = [{
       id: 1,
@@ -264,9 +209,7 @@ test('typed bus-lane layers stay below labels and can be toggled', async () => {
     assert.equal(map.getSource('ranked-cities').data.features[0].id, 1);
 
     let selectedCityId = null;
-    controller.onCitySelect((cityId) => {
-      selectedCityId = cityId;
-    });
+    controller.onCitySelect((cityId) => { selectedCityId = cityId; });
     map.handlers.get('click:ranked-cities-markers')({
       features: [{ properties: { cityId: 1 } }],
     });
@@ -276,18 +219,13 @@ test('typed bus-lane layers stay below labels and can be toggled', async () => {
     map.handlers.get('mouseleave:ranked-cities-markers')();
     assert.equal(map.canvas.style.cursor, '');
 
-    const geojson = {
-      type: 'FeatureCollection',
-      features: [],
-    };
+    const geojson = { type: 'FeatureCollection', features: [] };
     controller.setViewportData(geojson);
     assert.equal(map.getSource('bus-lanes').data, geojson);
     assert.deepEqual(calls.at(-1), ['setData', 'bus-lanes']);
 
     let viewport;
-    controller.onViewportChange((nextViewport) => {
-      viewport = nextViewport;
-    });
+    controller.onViewportChange((nextViewport) => { viewport = nextViewport; });
     assert.deepEqual(viewport, {
       zoom: 6,
       bbox: [30, 50, 40, 60],
@@ -308,8 +246,7 @@ test('typed bus-lane layers stay below labels and can be toggled', async () => {
 
     controller.focusCity([48.9, 55.7, 49.3, 55.9]);
     assert.deepEqual(calls.at(-1), [
-      'fitBounds',
-      [[48.9, 55.7], [49.3, 55.9]],
+      'fitBounds', [[48.9, 55.7], [49.3, 55.9]],
     ]);
 
     map.sources.clear();
@@ -319,13 +256,10 @@ test('typed bus-lane layers stay below labels and can be toggled', async () => {
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(map.getSource('ranked-cities').data.features[0].id, 1);
     assert.equal(map.getSource('bus-lanes').data, geojson);
-    assert.equal(map.getLayer('bus-lanes-lines-1').paint['line-color'], '#aabbcc');
+    assert.equal(map.getLayer('bus-lanes-lines-7').paint['line-color'], '#aabbcc');
     assert.deepEqual(calls.at(-1), ['setData', 'bus-lanes']);
   } finally {
-    if (previousWindow === undefined) {
-      delete globalThis.window;
-    } else {
-      globalThis.window = previousWindow;
-    }
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
   }
 });
