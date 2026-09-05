@@ -7,8 +7,9 @@ const CITY_LAYER_ID = 'ranked-cities-markers';
 const CITY_IMAGE_ID = 'ranked-city-bus';
 const EMPTY_COLLECTION = { type: 'FeatureCollection', features: [] };
 const DEFAULT_LINE_TYPE = {
-  type: 'default',
-  name: 'Выделенные полосы',
+  code: 0,
+  name: 'default',
+  title: 'Выделенные полосы',
   color: '#045b69',
   style: 'solid',
   width: 4,
@@ -17,13 +18,7 @@ const DEFAULT_LINE_TYPE = {
 
 export const ROAD_DATA_MIN_ZOOM = 8;
 
-/**
- * Map styles may contain an early symbol layer followed by road layers. The
- * correct anchor is therefore the first symbol in the final label block, not
- * simply the first symbol in the style.
- *
- * @param {Array<{ id: string, type: string }>} layers
- */
+/** @param {Array<{ id: string, type: string }>} layers */
 export function findTopLabelLayerId(layers = []) {
   let lastNonSymbolIndex = -1;
   for (const [index, layer] of layers.entries()) {
@@ -31,11 +26,9 @@ export function findTopLabelLayerId(layers = []) {
       lastNonSymbolIndex = index;
     }
   }
-
   return layers
     .slice(lastNonSymbolIndex + 1)
-    .find((layer) =>
-      !layer.id.startsWith(LAYER_PREFIX) && layer.type === 'symbol')?.id;
+    .find((layer) => !layer.id.startsWith(LAYER_PREFIX) && layer.type === 'symbol')?.id;
 }
 
 /** @param {string} style */
@@ -47,22 +40,11 @@ function dashArray(style) {
 
 /** @param {any} city */
 function markerCoordinates(city) {
-  if (
-    Array.isArray(city.center) &&
-    city.center.length === 2 &&
-    city.center.every(Number.isFinite)
-  ) {
+  if (Array.isArray(city.center) && city.center.length === 2 && city.center.every(Number.isFinite)) {
     return city.center;
   }
-  if (
-    Array.isArray(city.bounds) &&
-    city.bounds.length === 4 &&
-    city.bounds.every(Number.isFinite)
-  ) {
-    return [
-      (city.bounds[0] + city.bounds[2]) / 2,
-      (city.bounds[1] + city.bounds[3]) / 2,
-    ];
+  if (Array.isArray(city.bounds) && city.bounds.length === 4 && city.bounds.every(Number.isFinite)) {
+    return [(city.bounds[0] + city.bounds[2]) / 2, (city.bounds[1] + city.bounds[3]) / 2];
   }
   return null;
 }
@@ -125,7 +107,6 @@ function readViewport(map) {
   const worldOffset = Math.abs(rawWorldOffset) < 1e-9 ? 0 : rawWorldOffset;
   const west = clamp(bounds.getWest() - worldOffset, -180, 180);
   const east = clamp(bounds.getEast() - worldOffset, -180, 180);
-
   return {
     zoom: map.getZoom(),
     bbox: [
@@ -140,10 +121,7 @@ function readViewport(map) {
 
 /** @param {{ accessToken: string, styleUrl: string, initialCenter: [number, number], initialZoom: number }} config */
 export async function createMapController(config) {
-  if (!window.mapboxgl) {
-    throw new Error('Mapbox GL не загрузился');
-  }
-
+  if (!window.mapboxgl) throw new Error('Mapbox GL не загрузился');
   window.mapboxgl.accessToken = config.accessToken;
   const map = new window.mapboxgl.Map({
     container: 'map',
@@ -166,15 +144,10 @@ export async function createMapController(config) {
   async function ensureCityMarkerLayer() {
     if (!map.hasImage(CITY_IMAGE_ID)) {
       const image = await loadMapImage(map, CITY_MARKER_ICON_URL);
-      if (!map.hasImage(CITY_IMAGE_ID)) {
-        map.addImage(CITY_IMAGE_ID, image, { pixelRatio: 1 });
-      }
+      if (!map.hasImage(CITY_IMAGE_ID)) map.addImage(CITY_IMAGE_ID, image, { pixelRatio: 1 });
     }
     if (!map.getSource(CITY_SOURCE_ID)) {
-      map.addSource(CITY_SOURCE_ID, {
-        type: 'geojson',
-        data: currentCities,
-      });
+      map.addSource(CITY_SOURCE_ID, { type: 'geojson', data: currentCities });
     }
     if (!map.getLayer(CITY_LAYER_ID)) {
       map.addLayer({
@@ -211,16 +184,11 @@ export async function createMapController(config) {
 
   function ensureBusLaneLayers() {
     const labelLayerId = findTopLabelLayerId(map.getStyle().layers);
-    if (!map.getSource(SOURCE_ID)) {
-      map.addSource(SOURCE_ID, {
-        type: 'geojson',
-        data: currentGeoJson,
-      });
-    }
+    if (!map.getSource(SOURCE_ID)) map.addSource(SOURCE_ID, { type: 'geojson', data: currentGeoJson });
 
-    for (const [index, lineType] of currentLineTypes.entries()) {
-      const layerId = `${LAYER_PREFIX}${index}`;
-      lineLayerIds.set(lineType.type, layerId);
+    for (const lineType of currentLineTypes) {
+      const layerId = `${LAYER_PREFIX}${lineType.code}`;
+      lineLayerIds.set(lineType.code, layerId);
       if (!map.getLayer(layerId)) {
         const paint = {
           'line-color': lineType.color,
@@ -228,22 +196,19 @@ export async function createMapController(config) {
         };
         const dash = dashArray(lineType.style);
         if (dash) paint['line-dasharray'] = dash;
-        map.addLayer(
-          {
-            id: layerId,
-            type: 'line',
-            source: SOURCE_ID,
-            minzoom: ROAD_DATA_MIN_ZOOM,
-            filter: ['==', ['get', 'lineType'], lineType.type],
-            layout: {
-              'line-cap': 'round',
-              'line-join': 'round',
-              visibility: disabledLineTypes.has(lineType.type) ? 'none' : 'visible',
-            },
-            paint,
+        map.addLayer({
+          id: layerId,
+          type: 'line',
+          source: SOURCE_ID,
+          minzoom: ROAD_DATA_MIN_ZOOM,
+          filter: ['==', ['get', 'businessTypeCode'], lineType.code],
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round',
+            visibility: disabledLineTypes.has(lineType.code) ? 'none' : 'visible',
           },
-          labelLayerId,
-        );
+          paint,
+        }, labelLayerId);
       }
       map.moveLayer(layerId, labelLayerId);
     }
@@ -269,82 +234,56 @@ export async function createMapController(config) {
   });
   map.on('click', CITY_LAYER_ID, (event) => {
     const cityId = Number(event.features?.[0]?.properties?.cityId);
-    if (Number.isSafeInteger(cityId) && citySelectHandler) {
-      citySelectHandler(cityId);
-    }
+    if (Number.isSafeInteger(cityId) && citySelectHandler) citySelectHandler(cityId);
   });
-  map.on('mouseenter', CITY_LAYER_ID, () => {
-    map.getCanvas().style.cursor = 'pointer';
-  });
-  map.on('mouseleave', CITY_LAYER_ID, () => {
-    map.getCanvas().style.cursor = '';
-  });
+  map.on('mouseenter', CITY_LAYER_ID, () => { map.getCanvas().style.cursor = 'pointer'; });
+  map.on('mouseleave', CITY_LAYER_ID, () => { map.getCanvas().style.cursor = ''; });
 
   return {
-    /** @param {any[]} cities */
     setCities(cities) {
       currentCities = citiesToMarkerGeoJson(cities);
       map.getSource(CITY_SOURCE_ID).setData(currentCities);
     },
-
-    /** @param {any[]} lineTypes */
     setLineTypes(lineTypes) {
       const normalized = lineTypes.length > 0 ? lineTypes : [DEFAULT_LINE_TYPE];
       removeBusLaneLayers();
       currentLineTypes = normalized;
       ensureBusLaneLayers();
     },
-
-    /** @param {string} type @param {boolean} enabled */
-    setLineTypeVisibility(type, enabled) {
-      if (enabled) disabledLineTypes.delete(type);
-      else disabledLineTypes.add(type);
-      const layerId = lineLayerIds.get(type);
+    setLineTypeVisibility(code, enabled) {
+      if (enabled) disabledLineTypes.delete(code);
+      else disabledLineTypes.add(code);
+      const layerId = lineLayerIds.get(code);
       if (layerId && map.getLayer(layerId)) {
         map.setLayoutProperty(layerId, 'visibility', enabled ? 'visible' : 'none');
       }
     },
-
-    /** @param {(viewport: { zoom: number, bbox: [number, number, number, number], center: [number, number] }) => void} handler */
     onViewportChange(handler) {
       viewportHandler = handler;
       handler(readViewport(map));
     },
-
     refreshViewport() {
       if (viewportHandler) viewportHandler(readViewport(map));
     },
-
-    /** @param {(cityId: number) => void} handler */
     onCitySelect(handler) {
       citySelectHandler = handler;
     },
-
-    /** @param {GeoJSON.FeatureCollection} geojson */
     setViewportData(geojson) {
       currentGeoJson = geojson;
       ensureBusLaneLayers();
       map.getSource(SOURCE_ID).setData(geojson);
     },
-
     clearViewportData() {
       currentGeoJson = EMPTY_COLLECTION;
       map.getSource(SOURCE_ID).setData(EMPTY_COLLECTION);
     },
-
-    /** @param {[number, number, number, number]} bounds */
     focusCity(bounds) {
       const compact = window.matchMedia('(max-width: 760px)').matches;
       map.fitBounds(
-        [
-          [bounds[0], bounds[1]],
-          [bounds[2], bounds[3]],
-        ],
+        [[bounds[0], bounds[1]], [bounds[2], bounds[3]]],
         {
           padding: compact ? 24 : 42,
-          duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches
-            ? 0
-            : 500,
+          duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 500,
         },
       );
     },
