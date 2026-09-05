@@ -124,8 +124,8 @@ export function createLineTypesRepository(database) {
           );
         }
 
-        await client.query(UPSERT_SQL);
         await client.query(DELETE_UNUSED_OMITTED_SQL);
+        await client.query(UPSERT_SQL);
         const result = await list(client);
         await client.query('COMMIT');
         return result;
