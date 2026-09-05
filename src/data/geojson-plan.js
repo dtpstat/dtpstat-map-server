@@ -26,6 +26,25 @@ function finiteNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+/** @param {Record<string, unknown>} properties */
+function storedGeometryProperties(properties) {
+  const stored = { ...properties };
+  delete stored.lineType;
+
+  if (
+    stored._dtpstat &&
+    typeof stored._dtpstat === 'object' &&
+    !Array.isArray(stored._dtpstat)
+  ) {
+    const metadata = { ...stored._dtpstat };
+    delete metadata.lineType;
+    if (Object.keys(metadata).length > 0) stored._dtpstat = metadata;
+    else delete stored._dtpstat;
+  }
+
+  return stored;
+}
+
 /**
  * @param {unknown} geometry
  * @param {number} featureIndex
@@ -254,7 +273,7 @@ export function buildGeoJsonPlan(collection) {
       boundaryOsmId: metadata.boundaryOsmId,
       lineType: metadata.lineType,
       lanes,
-      properties: feature.properties,
+      properties: storedGeometryProperties(feature.properties),
       geometry: feature.geometry,
     });
   }
