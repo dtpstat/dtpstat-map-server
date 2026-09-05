@@ -43,8 +43,24 @@ const EXPORT_LINES_SQL = `
   SELECT json_build_object(
     'type', 'FeatureCollection',
     'name', 'dtpstat-buslines-lines',
-    'schemaVersion', 1,
+    'schemaVersion', 2,
     'exportedAt', now(),
+    'lineTypes', COALESCE(
+      (
+        SELECT json_agg(
+          json_build_object(
+            'type', line_type.code,
+            'name', line_type.name,
+            'color', line_type.color,
+            'style', line_type.line_style,
+            'width', line_type.width
+          )
+          ORDER BY (line_type.code = 'default') DESC, line_type.name, line_type.code
+        )
+        FROM line_types AS line_type
+      ),
+      '[]'::json
+    ),
     'features', COALESCE(
       json_agg(
         json_build_object(
@@ -61,7 +77,8 @@ const EXPORT_LINES_SQL = `
                 jsonb_build_object(
                   'citySlug', city.slug,
                   'boundaryOsmType', boundary.osm_type,
-                  'boundaryOsmId', boundary.osm_id
+                  'boundaryOsmId', boundary.osm_id,
+                  'lineType', line_type.code
                 )
               )
             )
@@ -73,6 +90,7 @@ const EXPORT_LINES_SQL = `
     )
   ) AS payload
   FROM city_geometries AS geometry
+  JOIN line_types AS line_type ON line_type.id = geometry.line_type_id
   LEFT JOIN cities AS city ON city.id = geometry.city_id
   LEFT JOIN city_boundaries AS boundary ON boundary.id = geometry.boundary_id
 `;
