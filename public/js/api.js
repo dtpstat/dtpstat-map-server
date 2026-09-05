@@ -28,6 +28,11 @@ export async function loadCities() {
   return payload.cities;
 }
 
+export async function loadLineTypes() {
+  const payload = await getJson('/api/line-types');
+  return payload.lineTypes;
+}
+
 export function loadCityGeometries(cityId, signal) {
   return getJson(`/api/cities/${cityId}/geometries`, { signal });
 }
