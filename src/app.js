@@ -23,12 +23,32 @@ const PUBLIC_ASSETS = new Map([
 	['/bus-lanes.geojson', 'bus-lanes.geojson'],
 ]);
 const CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'base64');
+const TEST_PROJECT_SETTINGS = Object.freeze({
+	projectName: 'Выделенные полосы в России',
+	keywords: ['выделенные полосы', 'общественный транспорт'],
+	footerHtml: '<h2>О проекте</h2><p>Тестовые настройки проекта.</p>',
+	updatedAt: '2026-01-01T00:00:00.000Z',
+});
+
+function testProjectSettingsRepository(){
+	let settings = {...TEST_PROJECT_SETTINGS};
+	return {
+		async get(){ return settings; },
+		async save(payload){
+			settings = {
+				...payload,
+				updatedAt: new Date().toISOString(),
+			};
+			return settings;
+		},
+	};
+}
 
 /**
  * @param {{
  *   repository: import('./routes/api.js').CitiesRepository,
  *   lineTypesRepository: { list: () => Promise<any[]>, save: (payload: unknown) => Promise<any[]> },
- *   projectSettingsRepository: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
+ *   projectSettingsRepository?: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
  *   exportRepository: import('./routes/api.js').DataExportRepository,
  *   importService: import('./routes/api.js').DataImportService,
  *   cityBoundaryTransferService: import('./routes/api.js').CityBoundaryTransferService,
@@ -54,6 +74,11 @@ export function createApp({
 }){
 	const app             = express();
 	const isProduction    = config.environment === 'production';
+	const effectiveProjectSettingsRepository = projectSettingsRepository ??
+		(config.environment === 'test' ? testProjectSettingsRepository() : null);
+	if(!effectiveProjectSettingsRepository){
+		throw new Error('projectSettingsRepository is required');
+	}
 	const publicDirectory = path.join(config.projectRoot, 'public');
 	const adminDirectory  = path.join(config.projectRoot, 'admin');
 	const publicPageTemplate = readFileSync(
@@ -124,7 +149,7 @@ export function createApp({
 	app.use(
 		'/api',
 		createProjectSettingsRouter({
-			projectSettingsRepository,
+			projectSettingsRepository: effectiveProjectSettingsRepository,
 			adminTasks,
 			importApi: config.importApi,
 		}),
@@ -155,7 +180,7 @@ export function createApp({
 
 	app.get('/site.webmanifest', async (_request, response, next) => {
 		try {
-			const settings = await projectSettingsRepository.get();
+			const settings = await effectiveProjectSettingsRepository.get();
 			response
 				.set('Cache-Control', 'no-cache')
 				.type('application/manifest+json')
@@ -167,7 +192,7 @@ export function createApp({
 
 	app.get('/', async (_request, response, next) => {
 		try {
-			const settings = await projectSettingsRepository.get();
+			const settings = await effectiveProjectSettingsRepository.get();
 			response
 				.set('Cache-Control', 'no-cache')
 				.type('html')
