@@ -44,15 +44,25 @@ h4 { margin-bottom: .35rem; font-size: .92rem; }
 
 .task-panel { min-height: 0; flex: 1 1 auto; padding: 1rem; display: flex; flex-direction: column; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
 .task-panel[hidden] { display: none; }
-.task-panel > p { min-height: 2.7rem; color: var(--muted); font-size: .88rem; line-height: 1.5; }
-.task-panel > .last-success { min-height: 0; margin: -.15rem 0 .85rem; padding: .55rem .65rem; display: flex; justify-content: space-between; gap: .75rem; border: 1px solid var(--line); border-radius: 8px; background: #0f191c; font-size: .72rem; line-height: 1.35; }
+.panel-description { min-height: 2.7rem; margin-bottom: .85rem; color: var(--muted); font-size: .88rem; line-height: 1.5; }
+
+.operation-tabs { margin: 0 0 .85rem; display: flex; gap: .4rem; padding: .3rem; border: 1px solid #233840; border-radius: 10px; background: #0e171a; }
+.operation-tab { min-width: 0; flex: 1 1 0; padding: .55rem .55rem; border: 1px solid transparent; border-radius: 7px; color: var(--muted); background: transparent; font-size: .72rem; font-weight: 750; line-height: 1.25; cursor: pointer; }
+.operation-tab:hover:not(:disabled) { color: var(--text); background: #172328; }
+.operation-tab[aria-selected="true"] { border-color: #315d59; color: var(--text); background: #152d2c; }
+.operation-tab:disabled { cursor: not-allowed; opacity: .42; }
+.operation-tab[aria-selected="true"]:disabled { opacity: 1; }
+.operation-tabs-single .operation-tab { flex: 0 1 20rem; }
+.operation-panel[hidden] { display: none; }
+.operation-panel { min-height: 0; margin-top: 0 !important; }
+
+.transfer-mode { padding: .85rem; border: 1px solid var(--line); border-radius: 10px; background: #111c20; }
+.mode-heading { margin-bottom: .75rem; display: flex; align-items: start; justify-content: space-between; gap: .75rem; }
+.mode-heading p { margin: 0; color: var(--muted); font-size: .76rem; line-height: 1.45; }
+.last-success { min-height: 0; margin: 0 0 .85rem; padding: .55rem .65rem; display: flex; justify-content: space-between; gap: .75rem; border: 1px solid var(--line); border-radius: 8px; background: #0b1518; font-size: .72rem; line-height: 1.35; }
 .last-success span { color: var(--muted); }
 .last-success time { color: var(--warning); text-align: right; }
 .last-success.has-success time { color: var(--success); }
-.transfer-mode { padding: .85rem; border: 1px solid var(--line); border-radius: 10px; background: #111c20; }
-.transfer-mode + .transfer-mode { margin-top: .85rem; }
-.mode-heading { margin-bottom: .75rem; display: flex; align-items: start; justify-content: space-between; gap: .75rem; }
-.mode-heading p { margin: 0; color: var(--muted); font-size: .76rem; line-height: 1.45; }
 .transfer-mode form { min-height: auto; flex: none; overflow: visible; }
 .transfer-mode .form-fields { min-height: auto; flex: none; overflow: visible; }
 form { min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; }
@@ -72,9 +82,9 @@ button.danger { color: #210608; background: var(--danger); }
 .secondary-link:hover { filter: brightness(1.08); }
 .task-action { width: 100%; margin-top: .9rem; flex: 0 0 auto; }
 .defaults-button { width: 100%; margin-top: .9rem; flex: 0 0 auto; }
-.notice { min-height: 1.3rem; margin: .7rem 0 0; flex: 0 0 auto; color: var(--warning); }
-.notice-success { color: var(--success); }
-.notice-error { color: var(--danger); }
+.task-panel > .notice { min-height: 1.3rem; margin: .7rem 0 0; flex: 0 0 auto; color: var(--warning); }
+.task-panel > .notice.notice-success { color: var(--success); }
+.task-panel > .notice.notice-error { color: var(--danger); }
 
 .status { flex: 0 0 auto; padding: .35rem .65rem; border: 1px solid currentColor; border-radius: 999px; font-size: .72rem; font-weight: 800; text-transform: uppercase; }
 .status-running, .status-queued { color: var(--accent); }
@@ -126,8 +136,12 @@ button.danger { color: #210608; background: var(--danger); }
 @media (max-width: 700px) {
   .topbar { align-items: start; flex-direction: column; }
   .task-tabs { grid-template-columns: 1fr; }
+  .operation-tabs { flex-direction: column; }
+  .operation-tabs-single .operation-tab { flex-basis: auto; }
   .mode-heading { flex-direction: column; }
   .secondary-link { width: 100%; text-align: center; }
+  .last-success { align-items: start; flex-direction: column; }
+  .last-success time { text-align: left; }
   .task-panel { min-height: 0; }
   .task-meta { grid-template-columns: 1fr; }
   .task-meta .meta-wide { grid-column: auto; }
