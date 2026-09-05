@@ -11,6 +11,7 @@ import {createKmlUpdateService}    from './db/kml-update-service.js';
 import {createLineTypesRepository} from './db/line-types-repository.js';
 import {createOsmCityUpdateService} from './db/osm-city-update-service.js';
 import {createPopulationImportService} from './db/population-import-service.js';
+import {createProjectSettingsRepository} from './db/project-settings-repository.js';
 import {createPool}                from './db/pool.js';
 import {closeServer, startServers} from './http/start-servers.js';
 import {createAdminWebSocketGateway} from './http/admin-websocket.js';
@@ -20,6 +21,7 @@ async function main(){
 	const pool       = createPool(config.database);
 	const repository = createCitiesRepository(pool);
 	const lineTypesRepository = createLineTypesRepository(pool);
+	const projectSettingsRepository = createProjectSettingsRepository(pool);
 	const exportRepository = createDataExportRepository(pool);
 	const importService = createDataImportService(pool);
 	const cityBoundaryTransferService = createCityBoundaryTransferService(pool);
@@ -32,6 +34,7 @@ async function main(){
 	const adminTaskSuccessRepository = createAdminTaskSuccessRepository(pool);
 
 	await repository.health();
+	await projectSettingsRepository.get();
 	const initialSuccessfulUpdates = await adminTaskSuccessRepository.list();
 	const adminTasks = createAdminTaskManager({
 		initialSuccessfulUpdates,
@@ -46,6 +49,7 @@ async function main(){
 	const app        = createApp({
 		repository,
 		lineTypesRepository,
+		projectSettingsRepository,
 		exportRepository,
 		importService,
 		cityBoundaryTransferService,
