@@ -32,7 +32,6 @@ const features = [
       sourceURL: source.URL,
       layer: 'Слой',
       placemarkName: 'Первая',
-      lineType: 'default',
     },
     geometry: {
       type: 'LineString',
@@ -47,7 +46,6 @@ const features = [
       sourceURL: source.URL,
       layer: 'Слой',
       placemarkName: 'Вторая',
-      lineType: 'default',
     },
     geometry: {
       type: 'LineString',
@@ -62,7 +60,6 @@ const features = [
       sourceURL: source.URL,
       layer: 'Слой',
       placemarkName: 'Без города',
-      lineType: 'default',
     },
     geometry: {
       type: 'LineString',
@@ -71,7 +68,7 @@ const features = [
   },
 ];
 
-function createPool({ unknownLineTypes = [] } = {}) {
+function createPool({ nameConflicts = [], createdLineTypes = [] } = {}) {
   const queries = [];
   let released = false;
   let connections = 0;
@@ -79,11 +76,17 @@ function createPool({ unknownLineTypes = [] } = {}) {
     async query(text) {
       const normalized = text.trim();
       queries.push(normalized);
-      if (normalized.startsWith('SELECT requested.type')) {
-        return {
-          rows: unknownLineTypes.map((type) => ({ type })),
-          rowCount: unknownLineTypes.length,
-        };
+      if (
+        normalized.startsWith('WITH requested AS') &&
+        normalized.includes('existing.name AS "existingName"')
+      ) {
+        return { rows: nameConflicts, rowCount: nameConflicts.length };
+      }
+      if (
+        normalized.startsWith('WITH requested AS') &&
+        normalized.includes('INSERT INTO line_types')
+      ) {
+        return { rows: createdLineTypes, rowCount: createdLineTypes.length };
       }
       if (normalized.startsWith('SELECT EXISTS')) {
         return { rows: [{ ready: true }], rowCount: 1 };
@@ -159,6 +162,7 @@ test('KML update atomically replaces geometries with line type links', async () 
   assert.equal(result.placesUpdated, 2);
   assert.equal(result.citiesUpdated, 1);
   assert.deepEqual(result.lineTypes, ['default']);
+  assert.deepEqual(result.createdLineTypes, []);
   assert.equal(result.updateRunId, 7);
   assert.equal(pool.queries[0], 'BEGIN');
   assert.equal(
@@ -177,13 +181,74 @@ test('KML update atomically replaces geometries with line type links', async () 
   assert.equal(pool.released, true);
 });
 
-test('KML rejects unknown line types before replacing geometries', async () => {
-  const pool = createPool({ unknownLineTypes: ['default'] });
-  const service = createKmlUpdateService(pool, config, dependencies);
+test('KML automatically creates missing type codes with database default styles', async () => {
+  const typedFeatures = features.map((feature, index) => ({
+    ...feature,
+    lineType: index === 1 ? 'Односторонние' : 'Двусторонние',
+  }));
+  const createdLineTypes = [
+    {
+      type: 'Двусторонние',
+      name: 'Двусторонние',
+      color: '#045b69',
+      style: 'solid',
+      width: 4,
+    },
+    {
+      type: 'Односторонние',
+      name: 'Односторонние',
+      color: '#045b69',
+      style: 'solid',
+      width: 4,
+    },
+  ];
+  const pool = createPool({ createdLineTypes });
+  const service = createKmlUpdateService(pool, config, {
+    ...dependencies,
+    parse() {
+      return {
+        documentName: 'Тест',
+        features: typedFeatures,
+        selectedPlacemarks: 3,
+        ignoredNonLines: 0,
+      };
+    },
+  });
+
+  const result = await service.update(undefined, {});
+
+  assert.deepEqual(result.createdLineTypes, createdLineTypes);
+  assert.deepEqual(result.lineTypes, ['Двусторонние', 'Односторонние']);
+  assert.equal(
+    pool.queries.some((query) => query.includes('INSERT INTO line_types (code, name)')),
+    true,
+  );
+  assert.equal(pool.queries.at(-1), 'COMMIT');
+});
+
+test('KML refuses implicit type creation when its name belongs to another code', async () => {
+  const pool = createPool({
+    nameConflicts: [{
+      requestedCode: 'Двусторонние',
+      existingCode: 'two-way',
+      existingName: 'двусторонние',
+    }],
+  });
+  const service = createKmlUpdateService(pool, config, {
+    ...dependencies,
+    parse() {
+      return {
+        documentName: 'Тест',
+        features: features.map((feature) => ({ ...feature, lineType: 'Двусторонние' })),
+        selectedPlacemarks: 3,
+        ignoredNonLines: 0,
+      };
+    },
+  });
 
   await assert.rejects(
     service.update(undefined, {}),
-    /Unknown line types: default/,
+    /Use the existing line type code.*two-way|code "two-way"/,
   );
   assert.equal(
     pool.queries.some((query) => query === 'DELETE FROM city_geometries'),
@@ -192,8 +257,16 @@ test('KML rejects unknown line types before replacing geometries', async () => {
   assert.equal(pool.queries.at(-1), 'ROLLBACK');
 });
 
-test('KML dry run performs matching without deleting database rows', async () => {
-  const pool = createPool();
+test('KML dry run performs matching and type creation only inside rolled-back transaction', async () => {
+  const pool = createPool({
+    createdLineTypes: [{
+      type: 'default',
+      name: 'default',
+      color: '#045b69',
+      style: 'solid',
+      width: 4,
+    }],
+  });
   const service = createKmlUpdateService(pool, config, dependencies);
 
   const result = await service.update(undefined, { dryRun: 'true' });
