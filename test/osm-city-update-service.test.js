@@ -221,7 +221,8 @@ test('OSM update stages sequential ID batches before one atomic replacement', as
   assert.deepEqual(progress.filter((item) => item.phase === 'geometry')
     .map((item) => item.stagedPlaces), [2, 3]);
   assert.deepEqual(operationProgress, progress);
-  assert.match(pool.queries[0], /^CREATE TEMP TABLE osm_city_boundary_stage/);
+  assert.equal(pool.queries[0], 'DROP TABLE IF EXISTS osm_city_boundary_stage');
+  assert.match(pool.queries[1], /^CREATE TEMP TABLE osm_city_boundary_stage/);
   assert.equal(pool.queries.filter((query) =>
     query.startsWith('WITH payload_rows AS')).length, 2);
   assert.ok(pool.queries.indexOf('BEGIN') > 0);
@@ -235,7 +236,8 @@ test('OSM update stages sequential ID batches before one atomic replacement', as
   );
   assert.equal(pool.queries.some((query) =>
     /DELETE FROM city_geometries/.test(query)), false);
-  assert.equal(pool.queries.at(-1), 'COMMIT');
+  assert.equal(pool.queries.at(-2), 'COMMIT');
+  assert.equal(pool.queries.at(-1), 'DROP TABLE IF EXISTS osm_city_boundary_stage');
   assert.equal(pool.released, true);
 });
 
@@ -246,7 +248,8 @@ test('OSM dry run validates the complete staged replacement and rolls it back', 
   const result = await service.update(undefined, { dryRun: 'true' });
 
   assert.equal(result.dryRun, true);
-  assert.equal(pool.queries.at(-1), 'ROLLBACK');
+  assert.equal(pool.queries.at(-2), 'ROLLBACK');
+  assert.equal(pool.queries.at(-1), 'DROP TABLE IF EXISTS osm_city_boundary_stage');
   assert.equal(
     pool.queries.some((query) => query.startsWith('INSERT INTO osm_city_update_runs')),
     false,
@@ -274,6 +277,7 @@ test('a later OSM batch failure leaves production boundaries untouched', async (
   assert.equal(pool.queries.includes('DELETE FROM city_boundaries'), false);
   assert.equal(pool.queries.filter((query) =>
     query.startsWith('WITH payload_rows AS')).length, 1);
+  assert.equal(pool.queries.at(-1), 'DROP TABLE IF EXISTS osm_city_boundary_stage');
   assert.equal(pool.released, true);
 });
 
@@ -294,6 +298,7 @@ test('an incomplete batch is rejected before the production transaction', async 
   await assert.rejects(service.update(undefined, {}), /missing: way\/8/);
   assert.equal(pool.queries.includes('BEGIN'), false);
   assert.equal(pool.queries.includes('DELETE FROM city_boundaries'), false);
+  assert.equal(pool.queries.at(-1), 'DROP TABLE IF EXISTS osm_city_boundary_stage');
   assert.equal(pool.released, true);
 });
 
