@@ -18,7 +18,7 @@ test('city list qualifies ID after joining OSM boundaries', async () => {
   assert.doesNotMatch(sql, /\n\s+id::integer AS id/);
 });
 
-test('viewport query selects intersecting lines without clipping and resolves center city', async () => {
+test('viewport query selects intersecting lines without clipping and exposes numeric business type code', async () => {
   let sql;
   let values;
   const expected = {
@@ -50,7 +50,7 @@ test('viewport query selects intersecting lines without clipping and resolves ce
   assert.match(sql, /ST_Intersects\(geometry\.geom, viewport\.geom\)/);
   assert.match(sql, /geometry\.geom\s+FROM viewport/);
   assert.doesNotMatch(sql, /ST_Intersection\(geometry\.geom, viewport\.geom\)/);
-  assert.match(sql, /line_type\.code AS line_type/);
-  assert.match(sql, /'lineType', visible_geometries\.line_type/);
+  assert.match(sql, /line_type\.code AS business_type_code/);
+  assert.match(sql, /'businessTypeCode', visible_geometries\.business_type_code/);
   assert.match(sql, /ST_Covers\(boundary\.geom, viewport\.center\)/);
 });
