@@ -8,6 +8,7 @@ import {createAdminTaskManager} from './data/admin-task-manager.js';
 import {createBasicAuth} from './http/basic-auth.js';
 import {projectManifest, renderProjectPage} from './http/project-page.js';
 import {createApiRouter} from './routes/api.js';
+import {createKmlTransferRouter} from './routes/kml-transfer-api.js';
 import {createLineTypesRouter} from './routes/line-types-api.js';
 import {createProjectSettingsRouter} from './routes/project-settings-api.js';
 
@@ -183,6 +184,15 @@ export function createApp({
 	);
 	app.use(
 		'/api',
+		createKmlTransferRouter({
+			exportRepository,
+			importService,
+			adminTasks,
+			importApi: config.importApi,
+		}),
+	);
+	app.use(
+		'/api',
 		createApiRouter({
 			repository,
 			exportRepository,
@@ -211,7 +221,7 @@ export function createApp({
 			response
 				.set('Cache-Control', 'no-cache')
 				.type('application/manifest+json')
-				.send(JSON.stringify(projectManifest(settings)));
+				.send(JSON.stringify(projectManifest(settings));
 		} catch (error) {
 			next(error);
 		}
