@@ -13,10 +13,11 @@ async function source(relativePath) {
   return fs.readFile(path.join(projectRoot, relativePath), 'utf8');
 }
 
-test('project settings migrations create singleton branding and optional metric IDs', async () => {
-  const [baseSql, metricsSql] = await Promise.all([
+test('project settings migrations create singleton branding and version metric constraint changes', async () => {
+  const [baseSql, metricsSql, limitSql] = await Promise.all([
     source('db/migrations/V009__project_settings.sql'),
     source('db/migrations/V010__project_metrics.sql'),
+    source('db/migrations/V011__limit_yandex_metrika_id.sql'),
   ]);
 
   assert.match(baseSql, /CREATE TABLE IF NOT EXISTS BUSLANES\.PROJECT_SETTINGS/i);
@@ -25,10 +26,14 @@ test('project settings migrations create singleton branding and optional metric 
   assert.match(baseSql, /KEYWORDS\s+TEXT\[\]/i);
   assert.match(baseSql, /FOOTER_HTML\s+TEXT/i);
   assert.match(baseSql, /'Выделенные полосы в России'/);
+
   assert.match(metricsSql, /YANDEX_METRIKA_ID TEXT/i);
   assert.match(metricsSql, /GOOGLE_ANALYTICS_ID TEXT/i);
-  assert.match(metricsSql, /YANDEX_METRIKA_ID IS NULL/i);
+  assert.match(metricsSql, /YANDEX_METRIKA_ID ~ '\^\[1-9\]\[0-9\]\{0,19\}\$'/i);
   assert.match(metricsSql, /GOOGLE_ANALYTICS_ID IS NULL/i);
+
+  assert.match(limitSql, /DROP CONSTRAINT IF EXISTS PROJECT_SETTINGS_YANDEX_METRIKA_ID_CHECK/i);
+  assert.match(limitSql, /YANDEX_METRIKA_ID ~ '\^\[1-9\]\[0-9\]\{0,14\}\$'/i);
 });
 
 test('admin bootstraps a fourth Project tab with metadata metrics and restricted HTML editor', async () => {
