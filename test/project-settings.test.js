@@ -6,10 +6,12 @@ import {
   ProjectSettingsValidationError,
 } from '../src/data/project-settings.js';
 
-test('project settings normalize name keywords and restricted footer HTML', () => {
+test('project settings normalize name keywords metrics and restricted footer HTML', () => {
   const plan = buildProjectSettingsPlan({
     projectName: '  Выделенные   полосы в России  ',
     keywords: ['Транспорт', ' транспорт ', 'Россия'],
+    yandexMetrikaId: ' 12345678 ',
+    googleAnalyticsId: ' g-ab12cd34ef ',
     footerHtml: `
       <h2>О проекте</h2>
       <p class="project-lead">Описание</p>
@@ -19,10 +21,45 @@ test('project settings normalize name keywords and restricted footer HTML', () =
 
   assert.equal(plan.projectName, 'Выделенные полосы в России');
   assert.deepEqual(plan.keywords, ['Транспорт', 'Россия']);
+  assert.equal(plan.yandexMetrikaId, '12345678');
+  assert.equal(plan.googleAnalyticsId, 'G-AB12CD34EF');
   assert.match(plan.footerHtml, /class="project-lead"/);
   assert.match(plan.footerHtml, /href="https:\/\/example\.com\/\?a=1&amp;b=2"/);
   assert.match(plan.footerHtml, /rel="noopener noreferrer"/);
   assert.equal(normalizeProjectFooterHtml(plan.footerHtml), plan.footerHtml);
+});
+
+test('empty analytics IDs disable both collectors', () => {
+  const plan = buildProjectSettingsPlan({
+    projectName: 'Проект',
+    keywords: [],
+    yandexMetrikaId: '',
+    googleAnalyticsId: null,
+    footerHtml: '<p>text</p>',
+  });
+
+  assert.equal(plan.yandexMetrikaId, null);
+  assert.equal(plan.googleAnalyticsId, null);
+});
+
+test('project settings reject invalid analytics IDs', () => {
+  for (const [field, value] of [
+    ['yandexMetrikaId', '0'],
+    ['yandexMetrikaId', '1234567890123456'],
+    ['yandexMetrikaId', 'counter-123'],
+    ['googleAnalyticsId', 'UA-123456-1'],
+    ['googleAnalyticsId', 'G-!INVALID!'],
+  ]) {
+    assert.throws(
+      () => buildProjectSettingsPlan({
+        projectName: 'Проект',
+        keywords: [],
+        footerHtml: '<p>text</p>',
+        [field]: value,
+      }),
+      ProjectSettingsValidationError,
+    );
+  }
 });
 
 test('project footer rejects executable or unsupported markup', () => {
