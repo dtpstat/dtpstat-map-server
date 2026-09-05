@@ -69,9 +69,55 @@ function validatePositions(coordinates, featureIndex) {
   }
 }
 
+/** @param {Record<string, any>} properties @param {number} featureIndex */
+function linkedCity(properties, featureIndex) {
+  const nested = properties.city;
+  if (
+    nested !== undefined &&
+    nested !== null &&
+    (!nested || typeof nested !== 'object' || Array.isArray(nested))
+  ) {
+    throw new CityBoundaryGeoJsonValidationError(
+      `City GeoJSON feature ${featureIndex} has invalid city properties`,
+    );
+  }
+
+  const city = nested ?? {};
+  const slug = optionalString(
+    city.slug ?? properties.citySlug ?? properties.city_slug,
+    'city.slug',
+    featureIndex,
+  );
+  const name = optionalString(
+    city.name ?? properties.cityName ?? properties.city_name,
+    'city.name',
+    featureIndex,
+  );
+  if (!slug && !name) return null;
+  if (!slug || !name) {
+    throw new CityBoundaryGeoJsonValidationError(
+      `City GeoJSON feature ${featureIndex} must contain both city slug and name`,
+    );
+  }
+
+  const fullName = optionalString(
+    city.fullName ?? city.full_name,
+    'city.fullName',
+    featureIndex,
+  );
+  const attributes = city.attributes ?? {};
+  if (!attributes || typeof attributes !== 'object' || Array.isArray(attributes)) {
+    throw new CityBoundaryGeoJsonValidationError(
+      `City GeoJSON feature ${featureIndex} has invalid city.attributes`,
+    );
+  }
+  return { slug, name, fullName, attributes };
+}
+
 /**
- * Validate a portable full snapshot of OSM place boundaries. Local database
- * identity values are intentionally not part of the transfer contract.
+ * Validate a portable full snapshot of OSM place boundaries and the optional
+ * ranked-city records linked to those boundaries. Local database identity
+ * values and derived ranking fields are intentionally not transferred.
  *
  * @param {unknown} collection
  */
@@ -89,6 +135,7 @@ export function buildCityBoundaryGeoJsonPlan(collection) {
   }
 
   const objectKeys = new Set();
+  const citiesBySlug = new Map();
   const boundaries = collection.features.map((feature, featureIndex) => {
     if (
       !feature ||
@@ -154,6 +201,14 @@ export function buildCityBoundaryGeoJsonPlan(collection) {
         `City GeoJSON feature ${featureIndex} has invalid osmTimestamp`,
       );
     }
+    const updatedAt = validTimestamp(
+      properties.updatedAt ?? properties.updated_at,
+    );
+    if (updatedAt === undefined) {
+      throw new CityBoundaryGeoJsonValidationError(
+        `City GeoJSON feature ${featureIndex} has invalid updatedAt`,
+      );
+    }
 
     const key = `${osmType}/${osmId}`;
     if (objectKeys.has(key)) {
@@ -163,6 +218,17 @@ export function buildCityBoundaryGeoJsonPlan(collection) {
     }
     objectKeys.add(key);
 
+    const city = linkedCity(properties, featureIndex);
+    if (city) {
+      const previous = citiesBySlug.get(city.slug);
+      if (previous && JSON.stringify(previous) !== JSON.stringify(city)) {
+        throw new CityBoundaryGeoJsonValidationError(
+          `City GeoJSON contains conflicting properties for city ${city.slug}`,
+        );
+      }
+      citiesBySlug.set(city.slug, city);
+    }
+
     return {
       placeType,
       osmType,
@@ -170,19 +236,12 @@ export function buildCityBoundaryGeoJsonPlan(collection) {
       osmName,
       tags,
       osmTimestamp,
-      citySlug: optionalString(
-        properties.citySlug ?? properties.city_slug,
-        'citySlug',
-        featureIndex,
-      ),
-      cityName: optionalString(
-        properties.cityName ?? properties.city_name,
-        'cityName',
-        featureIndex,
-      ),
+      updatedAt,
+      citySlug: city?.slug ?? null,
+      cityName: city?.name ?? null,
       geometry: feature.geometry,
     };
   });
 
-  return { boundaries };
+  return { boundaries, cities: [...citiesBySlug.values()] };
 }
