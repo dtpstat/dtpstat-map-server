@@ -14,6 +14,7 @@ import {
   OsmCityUpdateValidationError,
   resolveOsmCityUpdateRequest,
 } from '../data/osm-city-update-options.js';
+import { acquireDataImportLock } from './database-locks.js';
 
 const RETRYABLE_HTTP_STATUS_CODES = new Set([429, 502, 503, 504]);
 
@@ -290,7 +291,7 @@ function combineIndexParts(parts) {
  * table; production boundaries are changed only after every indexed object has
  * been downloaded and validated.
  *
- * @param {{ connect: () => Promise<any> }} pool
+ * @param {{ connect: () => Promise<any>, databaseSchema?: string }} pool
  * @param {any} config
  * @param {{
  *   download?: typeof downloadOsmCities,
@@ -530,9 +531,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
 
         await client.query('BEGIN');
         inTransaction = true;
-        await client.query(
-          `SELECT pg_advisory_xact_lock(hashtext('dtpstat-buslines:data-import'))`,
-        );
+        await acquireDataImportLock(client, pool);
         await client.query(PRESERVE_LINKS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
         await client.query('DELETE FROM city_boundaries');
