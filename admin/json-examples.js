@@ -32,3 +32,11 @@ export const POPULATION_JSON_EXAMPLE = {
 export function jsonExample(value) {
   return JSON.stringify(value, null, 2);
 }
+
+if (typeof document !== 'undefined') {
+  const kmlSources = document.querySelector('#kml-form textarea[name="sources"]');
+  if (kmlSources) kmlSources.placeholder = jsonExample(KML_SOURCES_EXAMPLE);
+
+  const population = document.querySelector('#population-form textarea[name="payload"]');
+  if (population) population.placeholder = jsonExample(POPULATION_JSON_EXAMPLE);
+}
