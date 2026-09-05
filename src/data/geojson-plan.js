@@ -1,3 +1,9 @@
+import {
+  buildLineTypesPlan,
+  LineTypeValidationError,
+  normalizeLineTypeCode,
+} from './line-types.js';
+
 export class GeoJsonValidationError extends Error {
   constructor(message) {
     super(message);
@@ -78,7 +84,9 @@ function validateGeometry(geometry, featureIndex) {
 
 /** @param {unknown} value @param {number} featureIndex */
 function portableMetadata(value, featureIndex) {
-  if (value === undefined || value === null) return {};
+  if (value === undefined || value === null) {
+    return { lineType: 'default' };
+  }
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new GeoJsonValidationError(
       `GeoJSON feature ${featureIndex} has invalid _dtpstat metadata`,
@@ -114,18 +122,32 @@ function portableMetadata(value, featureIndex) {
     );
   }
 
+  let lineType;
+  try {
+    lineType = normalizeLineTypeCode(
+      value.lineType,
+      `GeoJSON feature ${featureIndex} _dtpstat.lineType`,
+    );
+  } catch (error) {
+    if (error instanceof LineTypeValidationError) {
+      throw new GeoJsonValidationError(error.message);
+    }
+    throw error;
+  }
+
   return {
     citySlug: citySlug || null,
     boundaryOsmType: hasBoundary ? boundaryOsmType : null,
     boundaryOsmId: hasBoundary ? boundaryOsmId : null,
+    lineType,
   };
 }
 
 /**
  * Validate a complete line GeoJSON upload. Legacy exports are accepted through
- * short_name/lanes. Versioned exports may additionally carry portable linkage
- * metadata in properties._dtpstat so city and OSM-boundary associations can be
- * restored on another server without relying on local surrogate IDs.
+ * short_name/lanes and are assigned to the default line type. Versioned exports
+ * may carry portable city/boundary linkage in properties._dtpstat and a
+ * top-level lineTypes style dictionary.
  *
  * @param {unknown} collection
  */
@@ -139,6 +161,18 @@ export function buildGeoJsonPlan(collection) {
     throw new GeoJsonValidationError(
       'Request body must be a GeoJSON FeatureCollection',
     );
+  }
+
+  let lineTypes = [];
+  if (collection.lineTypes !== undefined) {
+    try {
+      lineTypes = buildLineTypesPlan({ lineTypes: collection.lineTypes }).lineTypes;
+    } catch (error) {
+      if (error instanceof LineTypeValidationError) {
+        throw new GeoJsonValidationError(error.message);
+      }
+      throw error;
+    }
   }
 
   const cityByName = new Map();
@@ -218,6 +252,7 @@ export function buildGeoJsonPlan(collection) {
       citySlug,
       boundaryOsmType: metadata.boundaryOsmType,
       boundaryOsmId: metadata.boundaryOsmId,
+      lineType: metadata.lineType,
       lanes,
       properties: feature.properties,
       geometry: feature.geometry,
@@ -236,5 +271,5 @@ export function buildGeoJsonPlan(collection) {
     throw new GeoJsonValidationError('GeoJSON produces duplicate city slugs');
   }
 
-  return { cities, geometries, ignoredFeatures };
+  return { cities, geometries, ignoredFeatures, lineTypes };
 }
