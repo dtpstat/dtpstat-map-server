@@ -47,6 +47,19 @@ function escapeAttribute(value) {
     .replaceAll('>', '&gt;');
 }
 
+function decodeAttribute(value) {
+  return String(value)
+    .replace(/&#x([0-9a-f]+);/gi, (_match, hex) =>
+      String.fromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_match, decimal) =>
+      String.fromCodePoint(Number.parseInt(decimal, 10)))
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;|&#39;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&');
+}
+
 function normalizeProjectName(value) {
   if (typeof value !== 'string') {
     throw new ProjectSettingsValidationError('projectName must be a string');
@@ -126,7 +139,7 @@ function parseAttributes(raw, tagName) {
       );
     }
     const name = match[1].toLocaleLowerCase('en-US');
-    const value = match[2] ?? match[3] ?? match[4] ?? '';
+    const value = decodeAttribute(match[2] ?? match[3] ?? match[4] ?? '');
     const allowed = GLOBAL_ATTRIBUTES.has(name) ||
       (tagName === 'a' && LINK_ATTRIBUTES.has(name));
     if (!allowed) {
