@@ -1,4 +1,4 @@
-import { buildGeoJsonPlan } from '../data/geojson-plan.js';
+import { buildGeoJsonPlan, GeoJsonValidationError } from '../data/geojson-plan.js';
 import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
@@ -29,11 +29,78 @@ const UPSERT_CITIES_SQL = `
     updated_at = now()
 `;
 
+const FIND_UNKNOWN_BOUNDARIES_SQL = `
+  SELECT DISTINCT
+    payload."boundaryOsmType" AS osm_type,
+    payload."boundaryOsmId" AS osm_id
+  FROM jsonb_to_recordset($1::jsonb) AS payload(
+    "boundaryOsmType" text,
+    "boundaryOsmId" bigint
+  )
+  LEFT JOIN city_boundaries AS boundary
+    ON boundary.osm_type = payload."boundaryOsmType"
+   AND boundary.osm_id = payload."boundaryOsmId"
+  WHERE payload."boundaryOsmId" IS NOT NULL
+    AND boundary.id IS NULL
+  ORDER BY osm_type, osm_id
+`;
+
+const FIND_BOUNDARY_CITY_CONFLICTS_SQL = `
+  WITH payload_rows AS (
+    SELECT *
+    FROM jsonb_to_recordset($1::jsonb) AS payload(
+      "citySlug" text,
+      "boundaryOsmType" text,
+      "boundaryOsmId" bigint
+    )
+  )
+  SELECT DISTINCT
+    boundary.osm_type,
+    boundary.osm_id,
+    boundary.city_id AS existing_city_id,
+    city.id AS imported_city_id
+  FROM payload_rows AS payload
+  JOIN city_boundaries AS boundary
+    ON boundary.osm_type = payload."boundaryOsmType"
+   AND boundary.osm_id = payload."boundaryOsmId"
+  JOIN cities AS city ON city.slug = payload."citySlug"
+  WHERE boundary.city_id IS NOT NULL
+    AND boundary.city_id <> city.id
+  ORDER BY boundary.osm_type, boundary.osm_id
+`;
+
+const LINK_BOUNDARIES_SQL = `
+  WITH payload_rows AS (
+    SELECT DISTINCT
+      payload."citySlug" AS city_slug,
+      payload."boundaryOsmType" AS osm_type,
+      payload."boundaryOsmId" AS osm_id
+    FROM jsonb_to_recordset($1::jsonb) AS payload(
+      "citySlug" text,
+      "boundaryOsmType" text,
+      "boundaryOsmId" bigint
+    )
+    WHERE payload."citySlug" IS NOT NULL
+      AND payload."boundaryOsmId" IS NOT NULL
+  )
+  UPDATE city_boundaries AS boundary
+  SET city_id = city.id,
+      updated_at = now()
+  FROM payload_rows AS payload
+  JOIN cities AS city ON city.slug = payload.city_slug
+  WHERE boundary.osm_type = payload.osm_type
+    AND boundary.osm_id = payload.osm_id
+    AND boundary.city_id IS NULL
+`;
+
 const INSERT_GEOMETRIES_SQL = `
   WITH payload_rows AS (
     SELECT *
     FROM jsonb_to_recordset($1::jsonb) AS payload(
       "cityName" text,
+      "citySlug" text,
+      "boundaryOsmType" text,
+      "boundaryOsmId" bigint,
       lanes smallint,
       properties jsonb,
       geometry jsonb
@@ -50,6 +117,7 @@ const INSERT_GEOMETRIES_SQL = `
   )
   INSERT INTO city_geometries (
     city_id,
+    boundary_id,
     lanes,
     length_m,
     lane_length_m,
@@ -57,14 +125,18 @@ const INSERT_GEOMETRIES_SQL = `
     geom
   )
   SELECT
-    cities.id,
+    city.id,
+    boundary.id,
     prepared.lanes,
     ST_Length(prepared.geom::geography),
     ST_Length(prepared.geom::geography) * prepared.lanes,
     prepared.properties,
     prepared.geom
   FROM prepared
-  JOIN cities ON cities.name = prepared."cityName"
+  LEFT JOIN cities AS city ON city.slug = prepared."citySlug"
+  LEFT JOIN city_boundaries AS boundary
+    ON boundary.osm_type = prepared."boundaryOsmType"
+   AND boundary.osm_id = prepared."boundaryOsmId"
 `;
 
 /**
@@ -75,7 +147,9 @@ const INSERT_GEOMETRIES_SQL = `
  */
 
 /**
- * Atomically replace all city geometry data from one complete GeoJSON upload.
+ * Atomically replace all line geometry data from one complete GeoJSON upload.
+ * Versioned exports restore city and OSM-boundary links using portable natural
+ * keys; legacy GeoJSON without transfer metadata remains supported.
  *
  * @param {{ connect: () => Promise<DatabaseClient> }} pool
  */
@@ -104,10 +178,39 @@ export function createDataImportService(pool) {
         );
         throwIfAdminTaskCancelled(operation.signal);
 
-        await client.query('DELETE FROM city_geometries');
         await client.query(UPSERT_CITIES_SQL, [JSON.stringify(plan.cities)]);
+        const serializedGeometries = JSON.stringify(plan.geometries);
+        const unknownBoundaries = await client.query(
+          FIND_UNKNOWN_BOUNDARIES_SQL,
+          [serializedGeometries],
+        );
+        if (unknownBoundaries.rows.length > 0) {
+          const objects = unknownBoundaries.rows
+            .slice(0, 30)
+            .map((row) => `${row.osm_type}/${row.osm_id}`)
+            .join(', ');
+          throw new GeoJsonValidationError(
+            `Line GeoJSON references unknown city boundaries: ${objects}. Import the city GeoJSON snapshot first.`,
+          );
+        }
+        const conflicts = await client.query(
+          FIND_BOUNDARY_CITY_CONFLICTS_SQL,
+          [serializedGeometries],
+        );
+        if (conflicts.rows.length > 0) {
+          const objects = conflicts.rows
+            .slice(0, 30)
+            .map((row) => `${row.osm_type}/${row.osm_id}`)
+            .join(', ');
+          throw new GeoJsonValidationError(
+            `Line GeoJSON conflicts with existing city-boundary links: ${objects}`,
+          );
+        }
+        await client.query(LINK_BOUNDARIES_SQL, [serializedGeometries]);
+
+        await client.query('DELETE FROM city_geometries');
         const geometryResult = await client.query(INSERT_GEOMETRIES_SQL, [
-          JSON.stringify(plan.geometries),
+          serializedGeometries,
         ]);
         const statisticsResult = await client.query(
           RECALCULATE_CITY_STATISTICS_SQL,
