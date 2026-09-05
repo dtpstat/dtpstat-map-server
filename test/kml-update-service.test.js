@@ -28,33 +28,21 @@ const features = [
     multiple: 2,
     businessTypeName: 'default',
     fingerprint: 'first',
-    properties: {
-      sourceURL: source.URL,
-      layer: 'Слой',
-      placemarkName: 'Первая',
-    },
+    properties: { sourceURL: source.URL, layer: 'Слой', placemarkName: 'Первая' },
     geometry: { type: 'LineString', coordinates: [[1, 1], [2, 2]] },
   },
   {
     multiple: 1,
     businessTypeName: 'default',
     fingerprint: 'second',
-    properties: {
-      sourceURL: source.URL,
-      layer: 'Слой',
-      placemarkName: 'Вторая',
-    },
+    properties: { sourceURL: source.URL, layer: 'Слой', placemarkName: 'Вторая' },
     geometry: { type: 'LineString', coordinates: [[3, 3], [4, 4]] },
   },
   {
     multiple: 1,
     businessTypeName: 'default',
     fingerprint: 'unmatched',
-    properties: {
-      sourceURL: source.URL,
-      layer: 'Слой',
-      placemarkName: 'Без города',
-    },
+    properties: { sourceURL: source.URL, layer: 'Слой', placemarkName: 'Без города' },
     geometry: { type: 'LineString', coordinates: [[5, 5], [6, 6]] },
   },
 ];
@@ -70,10 +58,17 @@ const defaultType = {
   width: 4,
 };
 
-function createPool({ createdLineTypes = [], typeRows = [defaultType] } = {}) {
+function createPool({
+  createdLineTypes = [],
+  initialTypeRows = [defaultType],
+  finalTypeRows = initialTypeRows,
+} = {}) {
   const queries = [];
   let released = false;
   let connections = 0;
+  let loadCount = 0;
+  let insertCount = 0;
+
   const client = {
     async query(text) {
       const normalized = text.trim();
@@ -82,13 +77,16 @@ function createPool({ createdLineTypes = [], typeRows = [defaultType] } = {}) {
         normalized.startsWith('WITH requested AS') &&
         normalized.includes('INSERT INTO line_types (name, title)')
       ) {
+        insertCount += 1;
         return { rows: createdLineTypes, rowCount: createdLineTypes.length };
       }
       if (
         normalized.startsWith('WITH requested AS') &&
         normalized.includes('requested.name AS "requestedName"')
       ) {
-        return { rows: typeRows, rowCount: typeRows.length };
+        loadCount += 1;
+        const rows = loadCount === 1 ? initialTypeRows : finalTypeRows;
+        return { rows, rowCount: rows.length };
       }
       if (normalized.startsWith('SELECT EXISTS')) {
         return { rows: [{ ready: true }], rowCount: 1 };
@@ -121,10 +119,12 @@ function createPool({ createdLineTypes = [], typeRows = [defaultType] } = {}) {
     },
     release() { released = true; },
   };
+
   return {
     queries,
     get released() { return released; },
     get connections() { return connections; },
+    get insertCount() { return insertCount; },
     async connect() {
       connections += 1;
       return client;
@@ -146,6 +146,20 @@ const dependencies = {
   },
 };
 
+function parserFor(nextFeatures) {
+  return {
+    ...dependencies,
+    parse() {
+      return {
+        documentName: 'Тест',
+        features: nextFeatures,
+        selectedPlacemarks: nextFeatures.length,
+        ignoredNonLines: 0,
+      };
+    },
+  };
+}
+
 test('KML update resolves imported NAME to local numeric type and atomically replaces geometries', async () => {
   const pool = createPool();
   const service = createKmlUpdateService(pool, config, dependencies);
@@ -160,10 +174,7 @@ test('KML update resolves imported NAME to local numeric type and atomically rep
   assert.deepEqual(result.createdLineTypes, []);
   assert.equal(result.updateRunId, 7);
   assert.equal(pool.queries.some((query) => query === 'DELETE FROM city_geometries'), true);
-  assert.equal(
-    pool.queries.some((query) => query.includes('"lineTypeId" bigint')),
-    true,
-  );
+  assert.equal(pool.queries.some((query) => query.includes('"lineTypeId" bigint')), true);
   assert.equal(pool.queries.at(-1), 'COMMIT');
   assert.equal(pool.released, true);
 });
@@ -193,31 +204,22 @@ test('KML automatically creates missing NAME and database supplies numeric CODE'
       width: 4,
     },
   ];
-  const typeRows = createdLineTypes.map((lineType) => ({
+  const finalTypeRows = createdLineTypes.map((lineType) => ({
     requestedName: lineType.name,
     ...lineType,
   }));
-  const pool = createPool({ createdLineTypes, typeRows });
-  const service = createKmlUpdateService(pool, config, {
-    ...dependencies,
-    parse() {
-      return {
-        documentName: 'Тест',
-        features: typedFeatures,
-        selectedPlacemarks: 3,
-        ignoredNonLines: 0,
-      };
-    },
+  const pool = createPool({
+    createdLineTypes,
+    initialTypeRows: [],
+    finalTypeRows,
   });
+  const service = createKmlUpdateService(pool, config, parserFor(typedFeatures));
 
   const result = await service.update(undefined, {});
 
   assert.deepEqual(result.createdLineTypes, createdLineTypes);
   assert.deepEqual(result.lineTypes.map((lineType) => lineType.code), [1, 2]);
-  assert.equal(
-    pool.queries.some((query) => query.includes('INSERT INTO line_types (name, title)')),
-    true,
-  );
+  assert.equal(pool.insertCount, 1);
   assert.equal(
     pool.queries.some((query) => query.includes('INSERT INTO line_types (code')),
     false,
@@ -240,33 +242,41 @@ test('KML matches imported NAME ignoring case and outer spaces without creating 
     style: 'solid',
     width: 4,
   };
-  const pool = createPool({ typeRows: [existing] });
-  const service = createKmlUpdateService(pool, config, {
-    ...dependencies,
-    parse() {
-      return {
-        documentName: 'Тест',
-        features: typedFeatures,
-        selectedPlacemarks: 3,
-        ignoredNonLines: 0,
-      };
-    },
-  });
+  const pool = createPool({ initialTypeRows: [existing] });
+  const service = createKmlUpdateService(pool, config, parserFor(typedFeatures));
 
   const result = await service.update(undefined, {});
   assert.deepEqual(result.createdLineTypes, []);
   assert.equal(result.lineTypes[0].code, 9);
   assert.equal(result.lineTypes[0].title, 'Две стороны');
+  assert.equal(pool.insertCount, 0);
 });
 
-test('KML dry run performs matching and rolls the transaction back', async () => {
-  const pool = createPool();
-  const service = createKmlUpdateService(pool, config, dependencies);
+test('KML dry run does not insert missing types or allocate numeric CODE values', async () => {
+  const typedFeatures = features.map((feature) => ({
+    ...feature,
+    businessTypeName: 'Новый тип',
+  }));
+  const pool = createPool({ initialTypeRows: [] });
+  const service = createKmlUpdateService(pool, config, parserFor(typedFeatures));
 
   const result = await service.update(undefined, { dryRun: 'true' });
 
   assert.equal(result.dryRun, true);
   assert.equal(result.importedGeometries, 2);
+  assert.deepEqual(result.createdLineTypes, []);
+  assert.deepEqual(result.wouldCreateLineTypes, [
+    {
+      id: null,
+      code: null,
+      name: 'Новый тип',
+      title: 'Новый тип',
+      color: '#045b69',
+      style: 'solid',
+      width: 4,
+    },
+  ]);
+  assert.equal(pool.insertCount, 0);
   assert.equal(pool.queries.some((query) => query === 'DELETE FROM city_geometries'), false);
   assert.equal(pool.queries.at(-1), 'ROLLBACK');
 });
