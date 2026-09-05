@@ -8,8 +8,9 @@ const authorization = `Basic ${Buffer.from('importer:test-secret').toString('bas
 const lineTypes = [
   {
     id: 1,
-    type: 'default',
-    name: 'Выделенные полосы',
+    code: 0,
+    name: 'default',
+    title: 'Выделенные полосы',
     color: '#045b69',
     style: 'solid',
     width: 4,
@@ -20,9 +21,7 @@ const lineTypes = [
 async function withServer(callback, options = {}) {
   let savedPayload;
   const repository = options.repository ?? {
-    async list() {
-      return lineTypes;
-    },
+    async list() { return lineTypes; },
     async save(payload) {
       savedPayload = payload;
       return lineTypes;
@@ -59,7 +58,7 @@ async function withServer(callback, options = {}) {
   }
 }
 
-test('public line type API exposes fresh styles and geometry counts', async () => {
+test('public line type API exposes code, import name, title and styles', async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/line-types`);
     assert.equal(response.status, 200);
@@ -68,12 +67,12 @@ test('public line type API exposes fresh styles and geometry counts', async () =
   });
 });
 
-test('admin line type update requires Basic Auth and saves a complete list', async () => {
+test('admin line type update requires Basic Auth and saves only editable settings', async () => {
   await withServer(async (baseUrl, savedPayload) => {
     const body = {
       lineTypes: [{
-        type: 'default',
-        name: 'Основные полосы',
+        code: 0,
+        title: 'Основные полосы',
         color: '#123456',
         style: 'dotted',
         width: 5,
