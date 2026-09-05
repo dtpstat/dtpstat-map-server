@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  databaseApplicationName,
+  databaseLockKey,
+  databaseSearchPath,
   loadAdminDatabaseConnection,
   loadApplicationDatabaseConnection,
+  loadDatabaseSchema,
 } from '../src/db/database-environment.js';
 
 test('application database connection uses the dedicated role from env', () => {
@@ -24,6 +28,29 @@ test('application database connection uses the dedicated role from env', () => {
     password: ' secret with spaces ',
     ssl: { rejectUnauthorized: false },
   });
+});
+
+test('database schema is a safe instance namespace with a backward-compatible default', () => {
+  assert.equal(loadDatabaseSchema({}), 'buslanes');
+  assert.equal(loadDatabaseSchema({ DATABASE_SCHEMA: 'tramlanes' }), 'tramlanes');
+  assert.equal(databaseSearchPath('tramlanes'), '-c search_path=tramlanes,public');
+  assert.equal(databaseApplicationName('tramlanes', 'server'), 'tramlanes:server');
+  assert.equal(databaseLockKey('tramlanes', 'data-import'), 'tramlanes:data-import');
+
+  for (const invalid of [
+    'Public',
+    'public',
+    'pg_temp',
+    'information_schema',
+    'two-projects',
+    '2project',
+    'with space',
+  ]) {
+    assert.throws(
+      () => loadDatabaseSchema({ DATABASE_SCHEMA: invalid }),
+      /DATABASE_SCHEMA/,
+    );
+  }
 });
 
 test('admin connection is restricted to postgres and has separate credentials', () => {
