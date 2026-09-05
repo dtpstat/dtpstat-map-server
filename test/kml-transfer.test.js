@@ -123,8 +123,8 @@ test('portable KML validates the complete business type/style dictionary before 
 test('portable KML rejects a Placemark that references a business code outside the dictionary', () => {
   const xml = serializeLinesKml(snapshot)
     .replace(
-      '<value>one-way</value>',
-      '<value>unknown-code</value>',
+      '<![CDATA[one-way]]>',
+      '<![CDATA[unknown-code]]>',
     );
 
   assert.throws(
