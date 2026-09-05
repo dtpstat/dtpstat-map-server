@@ -9,18 +9,20 @@ import {
 
 const snapshot = {
   type: 'FeatureCollection',
-  schemaVersion: 2,
+  schemaVersion: 3,
   lineTypes: [
     {
-      type: 'default',
-      name: 'Обычные',
+      code: 0,
+      name: 'default',
+      title: 'Обычные',
       color: '#045b69',
       style: 'solid',
       width: 4,
     },
     {
-      type: 'one-way',
+      code: 7,
       name: 'Односторонние',
+      title: 'Односторонние полосы',
       color: '#cc4400',
       style: 'dashed',
       width: 5.5,
@@ -42,7 +44,7 @@ const snapshot = {
           citySlug: 'testograd',
           boundaryOsmType: 'relation',
           boundaryOsmId: 123,
-          lineType: 'one-way',
+          businessTypeCode: 7,
         },
       },
     },
@@ -63,14 +65,14 @@ const snapshot = {
           citySlug: 'drugograd',
           boundaryOsmType: 'way',
           boundaryOsmId: 456,
-          lineType: 'default',
+          businessTypeCode: 0,
         },
       },
     },
   ],
 };
 
-test('portable KML keeps geometry type separate from business line type code', () => {
+test('portable KML keeps geometry type separate from numeric business type code', () => {
   const xml = serializeLinesKml(snapshot);
 
   assert.match(xml, new RegExp(KML_BUSINESS_TYPES_PROPERTY.replace('.', '\\.')));
@@ -81,31 +83,39 @@ test('portable KML keeps geometry type separate from business line type code', (
 
   const parsed = parseLinesKml(xml);
   assert.deepEqual(parsed.lineTypes, snapshot.lineTypes);
+  assert.equal(parsed.schemaVersion, 3);
   assert.equal(parsed.features[0].geometry.type, 'LineString');
-  assert.equal(parsed.features[0].properties._dtpstat.lineType, 'one-way');
+  assert.equal(parsed.features[0].properties._dtpstat.businessTypeCode, 7);
   assert.equal(parsed.features[0].properties.lanes, 1);
   assert.equal(parsed.features[1].geometry.type, 'MultiLineString');
-  assert.equal(parsed.features[1].properties._dtpstat.lineType, 'default');
+  assert.equal(parsed.features[1].properties._dtpstat.businessTypeCode, 0);
   assert.equal(parsed.features[1].properties.lanes, 2);
 });
 
 test('portable KML validates the complete business type/style dictionary before geometry', () => {
   const invalidDictionary = JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: 2,
     lineTypes: [
-      { code: 'default', name: 'Обычные', color: '#045b69', style: 'zigzag', width: 4 },
+      {
+        code: 0,
+        name: 'default',
+        title: 'Обычные',
+        color: '#045b69',
+        style: 'zigzag',
+        width: 4,
+      },
     ],
   });
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
     <ExtendedData>
-      <Data name="dtpstat.businessLineTypes"><value>${invalidDictionary}</value></Data>
+      <Data name="dtpstat.businessLineTypes"><value><![CDATA[${invalidDictionary}]]></value></Data>
     </ExtendedData>
     <Placemark>
       <ExtendedData>
-        <Data name="dtpstat.businessTypeCode"><value>missing</value></Data>
-        <Data name="dtpstat.multiple"><value>1</value></Data>
+        <Data name="dtpstat.businessTypeCode"><value><![CDATA[99]]></value></Data>
+        <Data name="dtpstat.multiple"><value><![CDATA[1]]></value></Data>
       </ExtendedData>
       <LineString><coordinates>not-a-coordinate</coordinates></LineString>
     </Placemark>
@@ -120,15 +130,34 @@ test('portable KML validates the complete business type/style dictionary before 
   );
 });
 
-test('portable KML rejects a Placemark that references a business code outside the dictionary', () => {
+test('portable KML rejects a Placemark that references a numeric code outside the dictionary', () => {
   const xml = serializeLinesKml(snapshot)
-    .replace(
-      '<![CDATA[one-way]]>',
-      '<![CDATA[unknown-code]]>',
-    );
+    .replace('<![CDATA[7]]>', '<![CDATA[99]]>');
 
   assert.throws(
     () => parseLinesKml(xml),
-    /unknown business type code: unknown-code/,
+    /unknown business type code: 99/,
   );
+});
+
+test('portable KML schema v1 string codes are translated through imported names', () => {
+  const legacyDictionary = JSON.stringify({
+    schemaVersion: 1,
+    lineTypes: [
+      { code: 'one-way', name: 'Односторонние', color: '#cc4400', style: 'dashed', width: 5 },
+    ],
+  });
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+<ExtendedData><Data name="dtpstat.businessLineTypes"><value><![CDATA[${legacyDictionary}]]></value></Data></ExtendedData>
+<Placemark><ExtendedData>
+<Data name="dtpstat.businessTypeCode"><value><![CDATA[one-way]]></value></Data>
+<Data name="dtpstat.multiple"><value><![CDATA[1]]></value></Data>
+</ExtendedData><LineString><coordinates>30,60 30.1,60.1</coordinates></LineString></Placemark>
+</Document></kml>`;
+
+  const parsed = parseLinesKml(xml);
+  assert.equal(parsed.lineTypes[0].name, 'one-way');
+  assert.equal(parsed.lineTypes[0].title, 'Односторонние');
+  assert.equal(parsed.features[0].properties._dtpstat.businessTypeCode, 0);
 });
