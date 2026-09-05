@@ -15,6 +15,7 @@ async function source(relativePath) {
 
 test('runtime database namespace is not tied to the repository name', async () => {
   const files = await Promise.all([
+    'src/config.js',
     'src/db/pool.js',
     'src/db/database-locks.js',
     'src/db/data-import-service.js',
@@ -24,6 +25,7 @@ test('runtime database namespace is not tied to the repository name', async () =
     'src/db/kml-update-service.js',
     'src/db/osm-city-update-service.js',
     'scripts/database.js',
+    'scripts/import-data.js',
     'scripts/migrate.js',
     'scripts/init-database.js',
   ].map(source));
@@ -31,6 +33,7 @@ test('runtime database namespace is not tied to the repository name', async () =
   const runtime = files.join('\n');
   assert.doesNotMatch(runtime, /dtpstat-buslines:data-import/);
   assert.doesNotMatch(runtime, /dtpstat-buslines:migrations/);
+  assert.doesNotMatch(runtime, /dtpstat-buslines\/2\.0 OSM city updater/);
   assert.doesNotMatch(runtime, /-c search_path=buslanes,public/);
   assert.doesNotMatch(runtime, /application_name:\s*['"]dtpstat-buslines/);
 });
