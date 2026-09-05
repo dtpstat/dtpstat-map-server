@@ -39,7 +39,7 @@ if (typeof document !== 'undefined') {
     kmlSources.placeholder = jsonExample(KML_SOURCES_EXAMPLE);
     const hint = kmlSources.closest('label')?.querySelector('small');
     if (hint) {
-      hint.textContent = 'Каждый слой: name + multiple (1 или 2) + необязательный type. type — стабильный code справочника; без type используется default. Отсутствующий code создаётся автоматически с начальным name=code и стандартным стилем.';
+      hint.textContent = 'Каждый слой: name + multiple (1 или 2) + необязательный type. type — NAME бизнес-типа из источника, а не CODE. NAME сопоставляется без учёта регистра и крайних пробелов; отсутствующий NAME создаётся автоматически, CODE назначает БД, TITLE сначала равен NAME.';
     }
   }
 
