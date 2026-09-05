@@ -24,7 +24,6 @@ function startYandexMetrika(counterId) {
     clickmap: true,
     trackLinks: true,
     accurateTrackBounce: true,
-    webvisor: true,
   });
 }
 
