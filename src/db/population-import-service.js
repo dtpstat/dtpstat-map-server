@@ -24,12 +24,14 @@ const UPSERT_POPULATIONS_SQL = `
   SELECT
     cities.id,
     payload.population,
-    $2::date,
-    $3::text,
+    payload."asOf"::date,
+    payload.source,
     payload.attributes
   FROM jsonb_to_recordset($1::jsonb) AS payload(
     name text,
     population integer,
+    "asOf" text,
+    source text,
     attributes jsonb
   )
   JOIN cities ON cities.name = payload.name
@@ -43,6 +45,8 @@ const UPSERT_POPULATIONS_SQL = `
 
 /**
  * Update one or more population records and then recalculate all city ratings.
+ * Top-level asOf/source remain supported as defaults; portable exports may
+ * preserve different values per city.
  *
  * @param {{ connect: () => Promise<import('./data-import-service.js').DatabaseClient> }} pool
  */
@@ -82,8 +86,6 @@ export function createPopulationImportService(pool) {
 
         const populationResult = await client.query(UPSERT_POPULATIONS_SQL, [
           serialized,
-          plan.asOf,
-          plan.source,
         ]);
         if (populationResult.rowCount !== plan.populations.length) {
           throw new Error('Not every population record was updated');
