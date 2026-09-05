@@ -29,6 +29,29 @@ const UPSERT_CITIES_SQL = `
     updated_at = now()
 `;
 
+const UPSERT_LINE_TYPES_SQL = `
+  INSERT INTO line_types (code, name, color, line_style, width)
+  SELECT
+    payload.type,
+    payload.name,
+    payload.color,
+    payload.style,
+    payload.width
+  FROM jsonb_to_recordset($1::jsonb) AS payload(
+    type text,
+    name text,
+    color text,
+    style text,
+    width double precision
+  )
+  ON CONFLICT (code) DO UPDATE SET
+    name = EXCLUDED.name,
+    color = EXCLUDED.color,
+    line_style = EXCLUDED.line_style,
+    width = EXCLUDED.width,
+    updated_at = now()
+`;
+
 const FIND_UNKNOWN_BOUNDARIES_SQL = `
   SELECT DISTINCT
     payload."boundaryOsmType" AS osm_type,
@@ -43,6 +66,14 @@ const FIND_UNKNOWN_BOUNDARIES_SQL = `
   WHERE payload."boundaryOsmId" IS NOT NULL
     AND boundary.id IS NULL
   ORDER BY osm_type, osm_id
+`;
+
+const FIND_UNKNOWN_LINE_TYPES_SQL = `
+  SELECT DISTINCT payload."lineType" AS line_type
+  FROM jsonb_to_recordset($1::jsonb) AS payload("lineType" text)
+  LEFT JOIN line_types AS line_type ON line_type.code = payload."lineType"
+  WHERE line_type.id IS NULL
+  ORDER BY payload."lineType"
 `;
 
 const FIND_BOUNDARY_CITY_CONFLICTS_SQL = `
@@ -101,6 +132,7 @@ const INSERT_GEOMETRIES_SQL = `
       "citySlug" text,
       "boundaryOsmType" text,
       "boundaryOsmId" bigint,
+      "lineType" text,
       lanes smallint,
       properties jsonb,
       geometry jsonb
@@ -118,6 +150,7 @@ const INSERT_GEOMETRIES_SQL = `
   INSERT INTO city_geometries (
     city_id,
     boundary_id,
+    line_type_id,
     lanes,
     length_m,
     lane_length_m,
@@ -127,12 +160,14 @@ const INSERT_GEOMETRIES_SQL = `
   SELECT
     city.id,
     boundary.id,
+    line_type.id,
     prepared.lanes,
     ST_Length(prepared.geom::geography),
     ST_Length(prepared.geom::geography) * prepared.lanes,
     prepared.properties,
     prepared.geom
   FROM prepared
+  JOIN line_types AS line_type ON line_type.code = prepared."lineType"
   LEFT JOIN cities AS city ON city.slug = prepared."citySlug"
   LEFT JOIN city_boundaries AS boundary
     ON boundary.osm_type = prepared."boundaryOsmType"
@@ -148,8 +183,8 @@ const INSERT_GEOMETRIES_SQL = `
 
 /**
  * Atomically replace all line geometry data from one complete GeoJSON upload.
- * Versioned exports restore city and OSM-boundary links using portable natural
- * keys; legacy GeoJSON without transfer metadata remains supported.
+ * Versioned exports restore city, OSM-boundary and line-type links using
+ * portable natural keys; legacy GeoJSON remains supported through `default`.
  *
  * @param {{ connect: () => Promise<DatabaseClient> }} pool
  */
@@ -166,6 +201,7 @@ export function createDataImportService(pool) {
         phase: 'validated',
         cities: plan.cities.length,
         geometries: plan.geometries.length,
+        lineTypes: plan.lineTypes.length,
         ignoredFeatures: plan.ignoredFeatures.length,
       });
       throwIfAdminTaskCancelled(operation.signal);
@@ -179,7 +215,21 @@ export function createDataImportService(pool) {
         throwIfAdminTaskCancelled(operation.signal);
 
         await client.query(UPSERT_CITIES_SQL, [JSON.stringify(plan.cities)]);
+        if (plan.lineTypes.length > 0) {
+          await client.query(UPSERT_LINE_TYPES_SQL, [JSON.stringify(plan.lineTypes)]);
+        }
+
         const serializedGeometries = JSON.stringify(plan.geometries);
+        const unknownLineTypes = await client.query(
+          FIND_UNKNOWN_LINE_TYPES_SQL,
+          [serializedGeometries],
+        );
+        if (unknownLineTypes.rows.length > 0) {
+          throw new GeoJsonValidationError(
+            `Line GeoJSON references unknown line types: ${unknownLineTypes.rows.map((row) => row.line_type).join(', ')}`,
+          );
+        }
+
         const unknownBoundaries = await client.query(
           FIND_UNKNOWN_BOUNDARIES_SQL,
           [serializedGeometries],
@@ -226,6 +276,7 @@ export function createDataImportService(pool) {
           phase: 'database',
           cities: plan.cities.length,
           geometries: plan.geometries.length,
+          lineTypes: [...new Set(plan.geometries.map((geometry) => geometry.lineType))],
         });
         throwIfAdminTaskCancelled(operation.signal);
 
@@ -234,6 +285,7 @@ export function createDataImportService(pool) {
         return {
           cities: plan.cities.length,
           geometries: plan.geometries.length,
+          lineTypes: [...new Set(plan.geometries.map((geometry) => geometry.lineType))],
           ignoredFeatures: plan.ignoredFeatures.length,
           updatedAt: new Date().toISOString(),
         };
