@@ -42,8 +42,13 @@ h4 { margin-bottom: .35rem; font-size: .92rem; }
 .task-tab:disabled { cursor: not-allowed; opacity: .42; }
 .task-tab[aria-selected="true"]:disabled { opacity: 1; }
 
-.task-panel { min-height: 0; flex: 1 1 auto; padding: 1rem; display: flex; flex-direction: column; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
+.task-panel { min-height: 0; flex: 1 1 auto; padding: 1rem; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; scrollbar-gutter: stable; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
 .task-panel[hidden] { display: none; }
+.task-panel > h3,
+.task-panel > .panel-description,
+.task-panel > .operation-tabs,
+.task-panel > .operation-panel,
+.task-panel > .notice { flex: 0 0 auto; }
 .panel-description { min-height: 2.7rem; margin-bottom: .85rem; color: var(--muted); font-size: .88rem; line-height: 1.5; }
 
 .operation-tabs { margin: 0 0 .85rem; display: flex; gap: .4rem; padding: .3rem; border: 1px solid #233840; border-radius: 10px; background: #0e171a; }
@@ -54,7 +59,7 @@ h4 { margin-bottom: .35rem; font-size: .92rem; }
 .operation-tab[aria-selected="true"]:disabled { opacity: 1; }
 .operation-tabs-single .operation-tab { flex: 0 1 20rem; }
 .operation-panel[hidden] { display: none; }
-.operation-panel { min-height: 0; margin-top: 0 !important; }
+.operation-panel { min-height: auto; margin-top: 0 !important; overflow: visible; }
 
 .transfer-mode { padding: .85rem; border: 1px solid var(--line); border-radius: 10px; background: #111c20; }
 .mode-heading { margin-bottom: .75rem; display: flex; align-items: start; justify-content: space-between; gap: .75rem; }
@@ -82,7 +87,7 @@ button.danger { color: #210608; background: var(--danger); }
 .secondary-link:hover { filter: brightness(1.08); }
 .task-action { width: 100%; margin-top: .9rem; flex: 0 0 auto; }
 .defaults-button { width: 100%; margin-top: .9rem; flex: 0 0 auto; }
-.task-panel > .notice { min-height: 1.3rem; margin: .7rem 0 0; flex: 0 0 auto; color: var(--warning); }
+.task-panel > .notice { min-height: 1.3rem; margin: .7rem 0 0; color: var(--warning); }
 .task-panel > .notice.notice-success { color: var(--success); }
 .task-panel > .notice.notice-error { color: var(--danger); }
 
@@ -125,7 +130,7 @@ button.danger { color: #210608; background: var(--danger); }
   .admin-layout { height: auto; grid-template-columns: 1fr; grid-template-rows: none; align-items: start; }
   .control-card, .status-card { height: auto; }
   .status-card { position: static; overflow: visible; }
-  .task-panel { min-height: 0; flex: none; overflow: visible; }
+  .task-panel { min-height: 0; flex: none; overflow: visible; scrollbar-gutter: auto; }
   form { overflow: visible; }
   .form-fields { overflow: visible; }
   .task-log { min-height: 12rem; max-height: 42vh; flex: none; }
