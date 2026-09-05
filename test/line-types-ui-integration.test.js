@@ -128,11 +128,16 @@ test('admin line type editor keeps CODE and NAME read-only and edits TITLE/style
   assert.match(editor, /fetch\('\/api\/admin\/line-types'/);
 });
 
-test('public client uses TITLE in legend and numeric businessTypeCode for layers', async () => {
+test('public client uses TITLE in legend, hides unused styles, and uses numeric businessTypeCode for layers', async () => {
   const app = await source('public/js/app.js');
   const controller = await source('public/js/map-controller.js');
 
-  assert.match(app, /if \(lineTypes\.length <= 1\) return/);
+  assert.match(
+    app,
+    /const legendLineTypes = lineTypes\.filter\(\(lineType\) => lineType\.geometryCount > 0\)/,
+  );
+  assert.match(app, /if \(legendLineTypes\.length <= 1\) return/);
+  assert.match(app, /for \(const lineType of legendLineTypes\)/);
   assert.match(app, /name\.textContent = lineType\.title \?\? lineType\.name/);
   assert.match(app, /setLineTypeVisibility\(lineType\.code, enabled\)/);
   assert.match(app, /window\.addEventListener\('focus'/);
