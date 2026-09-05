@@ -43,19 +43,20 @@ const EXPORT_LINES_SQL = `
   SELECT json_build_object(
     'type', 'FeatureCollection',
     'name', 'dtpstat-buslines-lines',
-    'schemaVersion', 2,
+    'schemaVersion', 3,
     'exportedAt', now(),
     'lineTypes', COALESCE(
       (
         SELECT json_agg(
           json_build_object(
-            'type', line_type.code,
+            'code', line_type.code,
             'name', line_type.name,
+            'title', line_type.title,
             'color', line_type.color,
             'style', line_type.line_style,
             'width', line_type.width
           )
-          ORDER BY (line_type.code = 'default') DESC, line_type.name, line_type.code
+          ORDER BY line_type.code
         )
         FROM line_types AS line_type
       ),
@@ -78,7 +79,7 @@ const EXPORT_LINES_SQL = `
                   'citySlug', city.slug,
                   'boundaryOsmType', boundary.osm_type,
                   'boundaryOsmId', boundary.osm_id,
-                  'lineType', line_type.code
+                  'businessTypeCode', line_type.code
                 )
               )
             )
