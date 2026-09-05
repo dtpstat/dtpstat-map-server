@@ -343,8 +343,11 @@ test('admin web panel is protected by the same Basic Auth', async () => {
     const html = await authorized.text();
     assert.match(html, /Администрирование данных/);
     assert.match(html, /role="tablist"/);
-    assert.equal((html.match(/data-task-tab=/g) ?? []).length, 4);
-    assert.equal((html.match(/data-task-action=/g) ?? []).length, 4);
+    assert.equal((html.match(/data-task-tab=/g) ?? []).length, 3);
+    assert.equal((html.match(/data-task-action=/g) ?? []).length, 5);
+    assert.match(html, /\/api\/admin\/export\/cities/);
+    assert.match(html, /\/api\/admin\/export\/lines/);
+    assert.match(html, /\/api\/admin\/export\/populations/);
     assert.match(html, /class="status-card"/);
     assert.match(html, /id="task-log" role="log"/);
     assert.doesNotMatch(html, /id="cancel-task"/);
