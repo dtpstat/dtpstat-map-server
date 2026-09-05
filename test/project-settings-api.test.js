@@ -12,6 +12,8 @@ function createRepository() {
     projectName: 'Выделенные полосы в России',
     keywords: ['транспорт'],
     footerHtml: '<h2>О проекте</h2><p>Текст</p>',
+    yandexMetrikaId: null,
+    googleAnalyticsId: null,
     updatedAt: '2026-09-05T12:00:00.000Z',
   };
   return {
@@ -53,7 +55,10 @@ test('public project settings are readable while admin editor remains protected'
   await withServer(async (baseUrl) => {
     const publicResponse = await fetch(`${baseUrl}/api/project`);
     assert.equal(publicResponse.status, 200);
-    assert.equal((await publicResponse.json()).projectName, 'Выделенные полосы в России');
+    const publicSettings = await publicResponse.json();
+    assert.equal(publicSettings.projectName, 'Выделенные полосы в России');
+    assert.equal(publicSettings.yandexMetrikaId, null);
+    assert.equal(publicSettings.googleAnalyticsId, null);
 
     const unauthorized = await fetch(`${baseUrl}/api/admin/project-settings`);
     assert.equal(unauthorized.status, 401);
@@ -69,7 +74,7 @@ test('public project settings are readable while admin editor remains protected'
   });
 });
 
-test('admin can update project settings and unsafe footer HTML is rejected', async () => {
+test('admin can update project settings including analytics IDs', async () => {
   await withServer(async (baseUrl) => {
     const valid = await fetch(`${baseUrl}/api/admin/project-settings`, {
       method: 'PUT',
@@ -80,13 +85,38 @@ test('admin can update project settings and unsafe footer HTML is rejected', asy
       body: JSON.stringify({
         projectName: 'Трамвайные пути России',
         keywords: ['трамвай', 'обособление'],
+        yandexMetrikaId: '12345678',
+        googleAnalyticsId: 'g-ab12cd34ef',
         footerHtml: '<h2>О проекте</h2><div class="project-callout"><p>Текст</p></div>',
       }),
     });
     assert.equal(valid.status, 200);
     const payload = await valid.json();
     assert.equal(payload.settings.projectName, 'Трамвайные пути России');
+    assert.equal(payload.settings.yandexMetrikaId, '12345678');
+    assert.equal(payload.settings.googleAnalyticsId, 'G-AB12CD34EF');
 
+    const invalid = await fetch(`${baseUrl}/api/admin/project-settings`, {
+      method: 'PUT',
+      headers: {
+        Authorization: authorization,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        projectName: 'Трамвайные пути России',
+        keywords: [],
+        yandexMetrikaId: 'not-a-counter',
+        googleAnalyticsId: 'UA-123-1',
+        footerHtml: '<p>Текст</p>',
+      }),
+    });
+    assert.equal(invalid.status, 400);
+    assert.match((await invalid.json()).error, /Metrika|Analytics|counter|G-/i);
+  });
+});
+
+test('admin still rejects unsafe footer HTML', async () => {
+  await withServer(async (baseUrl) => {
     const invalid = await fetch(`${baseUrl}/api/admin/project-settings`, {
       method: 'PUT',
       headers: {
