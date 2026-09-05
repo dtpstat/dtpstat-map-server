@@ -105,7 +105,7 @@
               <label>GeoJSON городов
                 <input name="file" type="file" accept=".json,.geojson,application/json,application/geo+json" required>
               </label>
-              <label class="check"><input name="dryRun" type="checkbox"> Только проверка (dryRun)</label>
+              <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
             </div>
             <button class="task-action" type="submit" data-task-action="osm"
                     data-task-type="city-geojson-import" data-start-label="Импортировать города">Импортировать города</button>
@@ -181,7 +181,12 @@
           </div>
           <form id="population-form" data-task-form="population" data-task-type="population-update">
             <div class="form-fields">
-              <label>Данные JSON<textarea name="payload" rows="10" required placeholder='{"asOf":"2026-01-01","source":"…","populations":[…]}'></textarea></label>
+              <label>JSON-файл
+                <input name="file" type="file" accept=".json,application/json">
+              </label>
+              <label>Или данные JSON
+                <textarea name="payload" rows="8" placeholder='{"asOf":"2026-01-01","source":"…","populations":[…]}'></textarea>
+              </label>
             </div>
             <button class="task-action" type="submit" data-task-action="population"
                     data-task-type="population-update" data-start-label="Обновить население">Обновить население</button>
