@@ -42,7 +42,7 @@ const CITY_GEOMETRIES_SQL = `
           'id', city_geometries.id,
           'geometry', ST_AsGeoJSON(city_geometries.geom)::json,
           'properties', city_geometries.properties || jsonb_build_object(
-            'lineType', line_type.code,
+            'businessTypeCode', line_type.code,
             'lanes', city_geometries.lanes,
             'length', city_geometries.length_m,
             'lanes_length', city_geometries.lane_length_m
@@ -69,7 +69,7 @@ const VIEWPORT_GEOMETRIES_SQL = `
     SELECT
       geometry.id,
       geometry.city_id,
-      line_type.code AS line_type,
+      line_type.code AS business_type_code,
       geometry.lanes,
       geometry.length_m,
       geometry.lane_length_m,
@@ -103,7 +103,7 @@ const VIEWPORT_GEOMETRIES_SQL = `
           'geometry', ST_AsGeoJSON(visible_geometries.geom)::json,
           'properties', visible_geometries.properties || jsonb_build_object(
             'cityId', visible_geometries.city_id,
-            'lineType', visible_geometries.line_type,
+            'businessTypeCode', visible_geometries.business_type_code,
             'lanes', visible_geometries.lanes,
             'length', visible_geometries.length_m,
             'lanes_length', visible_geometries.lane_length_m
