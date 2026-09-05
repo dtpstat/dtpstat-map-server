@@ -1,6 +1,7 @@
 import {
+  DEFAULT_LINE_TYPE_NAME,
   LineTypeValidationError,
-  normalizeLineTypeCode,
+  normalizeLineTypeName,
 } from './line-types.js';
 
 export class KmlUpdateValidationError extends Error {
@@ -30,9 +31,12 @@ function rejectUnknownKeys(value, allowed, label) {
 }
 
 /** @param {unknown} value @param {string} label */
-function normalizeKmlLineType(value, label) {
+function normalizeKmlLineTypeName(value, label) {
+  if (value === undefined || value === null || value === '') {
+    return DEFAULT_LINE_TYPE_NAME;
+  }
   try {
-    return normalizeLineTypeCode(value, label);
+    return normalizeLineTypeName(value, label);
   } catch (error) {
     if (error instanceof LineTypeValidationError) {
       throw new KmlUpdateValidationError(error.message);
@@ -152,7 +156,7 @@ export function validateKmlSources(value, constraints) {
       return {
         name,
         multiple: rawLayer.multiple,
-        type: normalizeKmlLineType(rawLayer.type, `${layerLabel}.type`),
+        type: normalizeKmlLineTypeName(rawLayer.type, `${layerLabel}.type`),
       };
     });
 
