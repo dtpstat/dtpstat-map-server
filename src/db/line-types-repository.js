@@ -1,13 +1,14 @@
 import {
-  buildLineTypesPlan,
+  buildLineTypeSettingsPlan,
   LineTypeValidationError,
 } from '../data/line-types.js';
 
 const LIST_LINE_TYPES_SQL = `
   SELECT
     line_type.id::integer AS id,
-    line_type.code AS type,
+    line_type.code::integer AS code,
     line_type.name,
+    line_type.title,
     line_type.color,
     line_type.line_style AS style,
     line_type.width::double precision AS width,
@@ -19,19 +20,17 @@ const LIST_LINE_TYPES_SQL = `
     line_type.id,
     line_type.code,
     line_type.name,
+    line_type.title,
     line_type.color,
     line_type.line_style,
     line_type.width
-  ORDER BY
-    (line_type.code = 'default') DESC,
-    line_type.name,
-    line_type.code
+  ORDER BY line_type.code
 `;
 
 const CREATE_STAGE_SQL = `
   CREATE TEMP TABLE line_type_settings_stage (
-    code text PRIMARY KEY,
-    name text NOT NULL,
+    code integer PRIMARY KEY,
+    title text NOT NULL,
     color text NOT NULL,
     line_style text NOT NULL,
     width double precision NOT NULL
@@ -39,57 +38,39 @@ const CREATE_STAGE_SQL = `
 `;
 
 const INSERT_STAGE_SQL = `
-  INSERT INTO line_type_settings_stage (code, name, color, line_style, width)
+  INSERT INTO line_type_settings_stage (code, title, color, line_style, width)
   SELECT
-    payload.type,
-    payload.name,
+    payload.code,
+    payload.title,
     payload.color,
     payload.style,
     payload.width
   FROM jsonb_to_recordset($1::jsonb) AS payload(
-    type text,
-    name text,
+    code integer,
+    title text,
     color text,
     style text,
     width double precision
   )
 `;
 
-const REFERENCED_OMITTED_SQL = `
-  SELECT line_type.code, count(geometry.id)::integer AS geometry_count
-  FROM line_types AS line_type
-  JOIN city_geometries AS geometry ON geometry.line_type_id = line_type.id
-  LEFT JOIN line_type_settings_stage AS stage ON stage.code = line_type.code
-  WHERE stage.code IS NULL
-  GROUP BY line_type.code
-  ORDER BY line_type.code
+const FIND_UNKNOWN_CODES_SQL = `
+  SELECT stage.code
+  FROM line_type_settings_stage AS stage
+  LEFT JOIN line_types AS line_type ON line_type.code = stage.code
+  WHERE line_type.id IS NULL
+  ORDER BY stage.code
 `;
 
-const UPSERT_SQL = `
-  INSERT INTO line_types (code, name, color, line_style, width)
-  SELECT code, name, color, line_style, width
-  FROM line_type_settings_stage
-  ON CONFLICT (code) DO UPDATE SET
-    name = EXCLUDED.name,
-    color = EXCLUDED.color,
-    line_style = EXCLUDED.line_style,
-    width = EXCLUDED.width,
-    updated_at = now()
-`;
-
-const DELETE_UNUSED_OMITTED_SQL = `
-  DELETE FROM line_types AS line_type
-  WHERE line_type.code <> 'default'
-    AND NOT EXISTS (
-      SELECT 1
-      FROM line_type_settings_stage AS stage
-      WHERE stage.code = line_type.code
-    )
-    AND NOT EXISTS (
-      SELECT 1
-      FROM city_geometries AS geometry
-      WHERE geometry.line_type_id = line_type.id
-    )
+const UPDATE_SETTINGS_SQL = `
+  UPDATE line_types AS line_type
+  SET title = stage.title,
+      color = stage.color,
+      line_style = stage.line_style,
+      width = stage.width,
+      updated_at = now()
+  FROM line_type_settings_stage AS stage
+  WHERE line_type.code = stage.code
 `;
 
 /** @param {{ query: Function, connect: Function }} database */
@@ -104,7 +85,7 @@ export function createLineTypesRepository(database) {
 
     /** @param {unknown} payload */
     async save(payload) {
-      const plan = buildLineTypesPlan(payload);
+      const plan = buildLineTypeSettingsPlan(payload);
       const client = await database.connect();
       try {
         await client.query('BEGIN');
@@ -114,18 +95,14 @@ export function createLineTypesRepository(database) {
         await client.query(CREATE_STAGE_SQL);
         await client.query(INSERT_STAGE_SQL, [JSON.stringify(plan.lineTypes)]);
 
-        const referenced = await client.query(REFERENCED_OMITTED_SQL);
-        if (referenced.rows.length > 0) {
-          const description = referenced.rows
-            .map((row) => `${row.code} (${row.geometry_count})`)
-            .join(', ');
+        const unknown = await client.query(FIND_UNKNOWN_CODES_SQL);
+        if (unknown.rows.length > 0) {
           throw new LineTypeValidationError(
-            `Cannot remove line types that are used by geometries: ${description}`,
+            `Unknown line type codes: ${unknown.rows.map((row) => row.code).join(', ')}`,
           );
         }
 
-        await client.query(DELETE_UNUSED_OMITTED_SQL);
-        await client.query(UPSERT_SQL);
+        await client.query(UPDATE_SETTINGS_SQL);
         const result = await list(client);
         await client.query('COMMIT');
         return result;
