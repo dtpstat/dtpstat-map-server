@@ -5,14 +5,13 @@ if (typeof document !== 'undefined') {
       <div class="mode-heading">
         <div>
           <h4>Типы линий</h4>
-          <p>type — стабильный код справочника. Имя используется только в легенде; KML автоматически создаёт отсутствующие коды с именем, равным коду.</p>
+          <p>CODE генерируется базой автоматически. NAME приходит из импорта и используется для сопоставления. TITLE — редактируемая подпись легенды.</p>
         </div>
       </div>
       <form id="line-types-form">
         <div class="line-types-table" id="line-types-table"></div>
         <div class="line-types-actions">
-          <button class="secondary" type="button" id="add-line-type">Добавить тип</button>
-          <button type="submit">Сохранить типы и стили</button>
+          <button type="submit">Сохранить подписи и стили</button>
         </div>
       </form>
       <p class="line-types-message" id="line-types-message" role="status"></p>
@@ -21,7 +20,6 @@ if (typeof document !== 'undefined') {
     const table = host.querySelector('#line-types-table');
     const form = host.querySelector('#line-types-form');
     const message = host.querySelector('#line-types-message');
-    const addButton = host.querySelector('#add-line-type');
     const tab = document.querySelector('[data-operation-tab="kml-types"]');
 
     function setMessage(text, tone = '') {
@@ -29,30 +27,33 @@ if (typeof document !== 'undefined') {
       message.className = `line-types-message${tone ? ` is-${tone}` : ''}`;
     }
 
-    function addRow(lineType = {}, focus = false) {
+    function readOnlyField(labelText, name, value) {
+      const label = document.createElement('label');
+      label.textContent = labelText;
+      const input = document.createElement('input');
+      input.name = name;
+      input.value = value;
+      input.readOnly = true;
+      label.append(input);
+      return label;
+    }
+
+    function addRow(lineType) {
       const row = document.createElement('div');
       row.className = 'line-type-row';
-      row.dataset.existing = lineType.id ? 'true' : 'false';
       row.dataset.geometryCount = String(lineType.geometryCount ?? 0);
 
-      const typeLabel = document.createElement('label');
-      typeLabel.textContent = 'code';
-      const typeInput = document.createElement('input');
-      typeInput.name = 'type';
-      typeInput.required = true;
-      typeInput.maxLength = 64;
-      typeInput.value = lineType.type ?? '';
-      if (lineType.id) typeInput.readOnly = true;
-      typeLabel.append(typeInput);
+      const codeLabel = readOnlyField('CODE', 'code', String(lineType.code));
+      const nameLabel = readOnlyField('NAME из импорта', 'name', lineType.name);
 
-      const nameLabel = document.createElement('label');
-      nameLabel.textContent = 'Имя в легенде';
-      const nameInput = document.createElement('input');
-      nameInput.name = 'name';
-      nameInput.required = true;
-      nameInput.maxLength = 120;
-      nameInput.value = lineType.name ?? '';
-      nameLabel.append(nameInput);
+      const titleLabel = document.createElement('label');
+      titleLabel.textContent = 'TITLE в легенде';
+      const titleInput = document.createElement('input');
+      titleInput.name = 'title';
+      titleInput.required = true;
+      titleInput.maxLength = 120;
+      titleInput.value = lineType.title ?? lineType.name;
+      titleLabel.append(titleInput);
 
       const colorLabel = document.createElement('label');
       colorLabel.textContent = 'Цвет';
@@ -91,25 +92,14 @@ if (typeof document !== 'undefined') {
       widthInput.value = String(lineType.width ?? 4);
       widthLabel.append(widthInput);
 
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.className = 'secondary remove-line-type';
-      remove.textContent = '×';
-      remove.title = lineType.geometryCount > 0
-        ? `Тип используется ${lineType.geometryCount} геометриями`
-        : 'Удалить тип';
-      remove.disabled = lineType.type === 'default' || (lineType.geometryCount ?? 0) > 0;
-      remove.addEventListener('click', () => row.remove());
-
-      row.append(typeLabel, nameLabel, colorLabel, styleLabel, widthLabel, remove);
+      row.append(codeLabel, nameLabel, titleLabel, colorLabel, styleLabel, widthLabel);
       table.append(row);
-      if (focus) typeInput.focus();
     }
 
     function readRows() {
       return [...table.querySelectorAll('.line-type-row')].map((row) => ({
-        type: row.querySelector('[name="type"]').value.trim(),
-        name: row.querySelector('[name="name"]').value.trim(),
+        code: Number(row.querySelector('[name="code"]').value),
+        title: row.querySelector('[name="title"]').value.trim(),
         color: row.querySelector('[name="color"]').value,
         style: row.querySelector('[name="style"]').value,
         width: Number(row.querySelector('[name="width"]').value),
@@ -138,7 +128,6 @@ if (typeof document !== 'undefined') {
       }
     }
 
-    addButton.addEventListener('click', () => addRow({}, true));
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!form.reportValidity()) return;
@@ -157,7 +146,8 @@ if (typeof document !== 'undefined') {
         if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
         table.replaceChildren();
         for (const lineType of payload.lineTypes) addRow(lineType);
-        setMessage('Типы и стили сохранены.', 'success');
+        setMessage('Подписи и стили сохранены.', 'success');
+        window.dispatchEvent(new CustomEvent('dtpstat:line-types-changed'));
       } catch (error) {
         setMessage(error.message, 'error');
       }
