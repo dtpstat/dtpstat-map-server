@@ -13,15 +13,23 @@ async function source(relativePath) {
   return fs.readFile(path.join(projectRoot, relativePath), 'utf8');
 }
 
-test('line type migration creates a default type and mandatory geometry link', async () => {
-  const sql = await source('db/migrations/V008__line_types.sql');
+test('line type migrations create FK storage, unique display names and remove redundant property copies', async () => {
+  const [baseSql, normalizationSql] = await Promise.all([
+    source('db/migrations/V008__line_types.sql'),
+    source('db/migrations/V012__line_type_codes_and_unique_names.sql'),
+  ]);
 
-  assert.match(sql, /CREATE TABLE IF NOT EXISTS BUSLANES\.LINE_TYPES/i);
-  assert.match(sql, /VALUES \('default', 'Выделенные полосы'/);
-  assert.match(sql, /ADD COLUMN IF NOT EXISTS LINE_TYPE_ID BIGINT/i);
-  assert.match(sql, /ALTER COLUMN LINE_TYPE_ID SET NOT NULL/i);
-  assert.match(sql, /REFERENCES BUSLANES\.LINE_TYPES \(ID\)/i);
-  assert.match(sql, /ON DELETE RESTRICT/i);
+  assert.match(baseSql, /CREATE TABLE IF NOT EXISTS BUSLANES\.LINE_TYPES/i);
+  assert.match(baseSql, /VALUES \('default', 'Выделенные полосы'/);
+  assert.match(baseSql, /ADD COLUMN IF NOT EXISTS LINE_TYPE_ID BIGINT/i);
+  assert.match(baseSql, /ALTER COLUMN LINE_TYPE_ID SET NOT NULL/i);
+  assert.match(baseSql, /REFERENCES BUSLANES\.LINE_TYPES \(ID\)/i);
+  assert.match(baseSql, /ON DELETE RESTRICT/i);
+
+  assert.match(normalizationSql, /LOWER\(BTRIM\(NAME\)\)/i);
+  assert.match(normalizationSql, /CREATE UNIQUE INDEX IF NOT EXISTS LINE_TYPES_NAME_CI_UIDX/i);
+  assert.match(normalizationSql, /PROPERTIES - 'lineType'/i);
+  assert.match(normalizationSql, /#- '\{_dtpstat,lineType\}'/i);
 });
 
 test('admin groups data by entity and exposes operation-level tabs', async () => {
@@ -91,7 +99,7 @@ test('successful-update timestamps stay inside their operation blocks', async ()
   assert.doesNotMatch(css, /\.task-panel\s*>\s*\.last-success/);
 });
 
-test('admin line type operation connects the style editor and KML example', async () => {
+test('admin line type operation uses codes, reloads on opening and exposes style editor', async () => {
   const [html, editor] = await Promise.all([
     source('admin/index.html'),
     source('admin/line-types-editor.js'),
@@ -102,6 +110,9 @@ test('admin line type operation connects the style editor and KML example', asyn
   assert.match(html, /id="line-types-editor-host"/);
   assert.match(html, /data-example="kml-sources"/);
   assert.match(editor, /querySelector\('#line-types-editor-host'\)/);
+  assert.match(editor, /typeLabel\.textContent = 'code'/);
+  assert.match(editor, /data-operation-tab="kml-types"/);
+  assert.match(editor, /void load\(\{ changed: true \}\)/);
   assert.match(editor, /input\.type = 'color'/);
   assert.match(editor, /\['solid', 'Сплошная'\]/);
   assert.match(editor, /\['dashed', 'Штриховая'\]/);
@@ -110,13 +121,17 @@ test('admin line type operation connects the style editor and KML example', asyn
   assert.match(editor, /fetch\('\/api\/admin\/line-types'/);
 });
 
-test('public client shows a multi-type legend and toggles map layers locally', async () => {
+test('public client shows a multi-type legend, toggles layers and refreshes types when returning to the map', async () => {
   const app = await source('public/js/app.js');
   const controller = await source('public/js/map-controller.js');
 
   assert.match(app, /if \(lineTypes\.length <= 1\) return/);
   assert.match(app, /name\.textContent = lineType\.name/);
   assert.match(app, /setLineTypeVisibility\(lineType\.type, enabled\)/);
+  assert.match(app, /window\.addEventListener\('focus'/);
+  assert.match(app, /document\.addEventListener\('visibilitychange'/);
+  assert.match(app, /await loadLineTypes\(\)/);
+  assert.match(app, /applyLineTypes\(lineTypes\)/);
   assert.match(controller, /filter: \['==', \['get', 'lineType'\], lineType\.type\]/);
   assert.match(controller, /map\.setLayoutProperty\(layerId, 'visibility'/);
 });
