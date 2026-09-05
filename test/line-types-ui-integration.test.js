@@ -53,6 +53,22 @@ test('admin groups data by entity and exposes operation-level tabs', async () =>
   assert.match(css, /\.operation-tabs \{/);
 });
 
+test('admin operation panels cannot shrink under their visible form content', async () => {
+  const css = await source('admin/admin.css');
+
+  assert.match(css, /\.task-panel \{[^}]*overflow-y:\s*auto/s);
+  assert.match(css, /scrollbar-gutter:\s*stable/);
+  assert.match(
+    css,
+    /\.task-panel > \.operation-panel,[\s\S]*\.task-panel > \.notice \{ flex:\s*0 0 auto; \}/,
+  );
+  assert.match(
+    css,
+    /\.operation-panel \{[^}]*min-height:\s*auto;[^}]*overflow:\s*visible;/s,
+  );
+  assert.doesNotMatch(css, /\.operation-panel \{[^}]*min-height:\s*0;/s);
+});
+
 test('successful-update timestamps stay inside their operation blocks', async () => {
   const [html, css] = await Promise.all([
     source('admin/index.html'),
@@ -75,7 +91,7 @@ test('successful-update timestamps stay inside their operation blocks', async ()
   assert.doesNotMatch(css, /\.task-panel\s*>\s*\.last-success/);
 });
 
-test('admin line type operation connects the style editor and documents KML type', async () => {
+test('admin line type operation connects the style editor and KML example', async () => {
   const [html, editor] = await Promise.all([
     source('admin/index.html'),
     source('admin/line-types-editor.js'),
@@ -84,7 +100,7 @@ test('admin line type operation connects the style editor and documents KML type
   assert.match(html, /src="\/admin\/line-types-editor\.js"/);
   assert.match(html, /href="\/admin\/line-types\.css"/);
   assert.match(html, /id="line-types-editor-host"/);
-  assert.match(html, /"multiple":1,"type":"default"/);
+  assert.match(html, /data-example="kml-sources"/);
   assert.match(editor, /querySelector\('#line-types-editor-host'\)/);
   assert.match(editor, /input\.type = 'color'/);
   assert.match(editor, /\['solid', 'Сплошная'\]/);
