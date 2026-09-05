@@ -9,6 +9,7 @@ export const KML_TRANSFER_SCHEMA_VERSION = 1;
 export const KML_BUSINESS_TYPES_PROPERTY = 'dtpstat.businessLineTypes';
 
 const parser = new XMLParser({
+  cdataPropName: '#cdata',
   ignoreAttributes: false,
   parseTagValue: false,
   processEntities: false,
@@ -34,8 +35,9 @@ function textValue(value) {
   if (typeof value === 'string' || typeof value === 'number') {
     return String(value).trim().normalize('NFC');
   }
-  if (value && typeof value === 'object' && '#text' in value) {
-    return textValue(value['#text']);
+  if (value && typeof value === 'object') {
+    if ('#cdata' in value) return textValue(value['#cdata']);
+    if ('#text' in value) return textValue(value['#text']);
   }
   return '';
 }
@@ -62,10 +64,15 @@ function escapeXml(text) {
     .replaceAll("'", '&apos;');
 }
 
+/** @param {unknown} value */
+function cdata(value) {
+  return `<![CDATA[${String(value).replaceAll(']]>', ']]]]><![CDATA[>')}]]>`;
+}
+
 /** @param {string} name @param {unknown} value */
 function dataElement(name, value) {
   if (value === undefined || value === null || value === '') return '';
-  return `<Data name="${escapeXml(name)}"><value>${escapeXml(value)}</value></Data>`;
+  return `<Data name="${escapeXml(name)}"><value>${cdata(value)}</value></Data>`;
 }
 
 /** @param {string} color */
@@ -184,10 +191,18 @@ export function serializeLinesKml(collection) {
     if (!feature || feature.type !== 'Feature' || !feature.properties) {
       throw new KmlTransferValidationError(`KML export feature ${index} is invalid`);
     }
-    const businessTypeCode = normalizeLineTypeCode(
-      feature.properties._dtpstat?.lineType,
-      `feature ${index} businessTypeCode`,
-    );
+    let businessTypeCode;
+    try {
+      businessTypeCode = normalizeLineTypeCode(
+        feature.properties._dtpstat?.lineType,
+        `feature ${index} businessTypeCode`,
+      );
+    } catch (error) {
+      if (error instanceof LineTypeValidationError) {
+        throw new KmlTransferValidationError(error.message);
+      }
+      throw error;
+    }
     if (!knownCodes.has(businessTypeCode)) {
       throw new KmlTransferValidationError(
         `KML export feature ${index} references unknown business type code: ${businessTypeCode}`,
@@ -371,10 +386,24 @@ export function parseLinesKml(xml) {
 
   const features = placemarks.map((placemark, index) => {
     const data = extendedDataMap(placemark?.ExtendedData);
-    const businessTypeCode = normalizeLineTypeCode(
-      data.get('dtpstat.businessTypeCode'),
-      `Placemark ${index} businessTypeCode`,
-    );
+    const rawBusinessTypeCode = data.get('dtpstat.businessTypeCode');
+    if (!rawBusinessTypeCode) {
+      throw new KmlTransferValidationError(
+        `Placemark ${index} is missing dtpstat.businessTypeCode`,
+      );
+    }
+    let businessTypeCode;
+    try {
+      businessTypeCode = normalizeLineTypeCode(
+        rawBusinessTypeCode,
+        `Placemark ${index} businessTypeCode`,
+      );
+    } catch (error) {
+      if (error instanceof LineTypeValidationError) {
+        throw new KmlTransferValidationError(error.message);
+      }
+      throw error;
+    }
     if (!knownCodes.has(businessTypeCode)) {
       throw new KmlTransferValidationError(
         `Placemark ${index} references unknown business type code: ${businessTypeCode}`,
