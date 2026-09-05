@@ -42,6 +42,7 @@ const CITY_GEOMETRIES_SQL = `
           'id', city_geometries.id,
           'geometry', ST_AsGeoJSON(city_geometries.geom)::json,
           'properties', city_geometries.properties || jsonb_build_object(
+            'lineType', line_type.code,
             'lanes', city_geometries.lanes,
             'length', city_geometries.length_m,
             'lanes_length', city_geometries.lane_length_m
@@ -53,6 +54,7 @@ const CITY_GEOMETRIES_SQL = `
   ) AS geojson
   FROM cities
   LEFT JOIN city_geometries ON city_geometries.city_id = cities.id
+  LEFT JOIN line_types AS line_type ON line_type.id = city_geometries.line_type_id
   WHERE cities.id = $1
   GROUP BY cities.id
 `;
@@ -67,18 +69,17 @@ const VIEWPORT_GEOMETRIES_SQL = `
     SELECT
       geometry.id,
       geometry.city_id,
+      line_type.code AS line_type,
       geometry.lanes,
       geometry.length_m,
       geometry.lane_length_m,
       geometry.properties,
-      ST_CollectionExtract(
-        ST_Intersection(geometry.geom, viewport.geom),
-        2
-      ) AS geom
+      geometry.geom
     FROM viewport
     JOIN city_geometries AS geometry
       ON geometry.geom && viewport.geom
      AND ST_Intersects(geometry.geom, viewport.geom)
+    JOIN line_types AS line_type ON line_type.id = geometry.line_type_id
   ),
   center_city AS (
     SELECT boundary.city_id::integer AS id
@@ -102,6 +103,7 @@ const VIEWPORT_GEOMETRIES_SQL = `
           'geometry', ST_AsGeoJSON(visible_geometries.geom)::json,
           'properties', visible_geometries.properties || jsonb_build_object(
             'cityId', visible_geometries.city_id,
+            'lineType', visible_geometries.line_type,
             'lanes', visible_geometries.lanes,
             'length', visible_geometries.length_m,
             'lanes_length', visible_geometries.lane_length_m
@@ -140,6 +142,9 @@ export function createCitiesRepository(database) {
     },
 
     /**
+     * Return complete line geometries that intersect the current viewport.
+     * The viewport is only a selector; geometries are never clipped to it.
+     *
      * @param {{ west: number, south: number, east: number, north: number, centerLng: number, centerLat: number }} viewport
      */
     async getViewportGeometries(viewport) {
