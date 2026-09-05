@@ -1,3 +1,8 @@
+import {
+  LineTypeValidationError,
+  normalizeLineTypeCode,
+} from './line-types.js';
+
 export class KmlUpdateValidationError extends Error {
   constructor(message) {
     super(message);
@@ -21,6 +26,18 @@ function rejectUnknownKeys(value, allowed, label) {
     throw new KmlUpdateValidationError(
       `${label} contains unsupported properties: ${unknown.join(', ')}`,
     );
+  }
+}
+
+/** @param {unknown} value @param {string} label */
+function normalizeKmlLineType(value, label) {
+  try {
+    return normalizeLineTypeCode(value, label);
+  } catch (error) {
+    if (error instanceof LineTypeValidationError) {
+      throw new KmlUpdateValidationError(error.message);
+    }
+    throw error;
   }
 }
 
@@ -118,7 +135,7 @@ export function validateKmlSources(value, constraints) {
       if (!plainObject(rawLayer)) {
         throw new KmlUpdateValidationError(`${layerLabel} must be an object`);
       }
-      rejectUnknownKeys(rawLayer, ['name', 'multiple'], layerLabel);
+      rejectUnknownKeys(rawLayer, ['name', 'multiple', 'type'], layerLabel);
       if (typeof rawLayer.name !== 'string' || !rawLayer.name.trim()) {
         throw new KmlUpdateValidationError(`${layerLabel}.name must be a string`);
       }
@@ -132,7 +149,11 @@ export function validateKmlSources(value, constraints) {
           `${layerLabel}.multiple must equal 1 or 2`,
         );
       }
-      return { name, multiple: rawLayer.multiple };
+      return {
+        name,
+        multiple: rawLayer.multiple,
+        type: normalizeKmlLineType(rawLayer.type, `${layerLabel}.type`),
+      };
     });
 
     return { ...normalizedUrl, layers };
