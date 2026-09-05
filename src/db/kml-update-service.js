@@ -97,6 +97,26 @@ const MATCH_GEOMETRIES_SQL = `
   ORDER BY prepared."inputIndex"
 `;
 
+const FIND_MISSING_LINE_TYPE_NAME_DUPLICATES_SQL = `
+  WITH requested AS (
+    SELECT DISTINCT code
+    FROM unnest($1::text[]) AS requested(code)
+  ),
+  missing AS (
+    SELECT requested.code
+    FROM requested
+    LEFT JOIN line_types AS exact_type ON exact_type.code = requested.code
+    WHERE exact_type.id IS NULL
+  )
+  SELECT
+    LOWER(BTRIM(code)) AS "normalizedName",
+    array_agg(code ORDER BY code) AS codes
+  FROM missing
+  GROUP BY LOWER(BTRIM(code))
+  HAVING COUNT(*) > 1
+  ORDER BY LOWER(BTRIM(code))
+`;
+
 const FIND_LINE_TYPE_NAME_CONFLICTS_SQL = `
   WITH requested AS (
     SELECT DISTINCT code
@@ -304,6 +324,19 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
         );
         throwIfAdminTaskCancelled(operation.signal);
 
+        const duplicateMissingNames = await client.query(
+          FIND_MISSING_LINE_TYPE_NAME_DUPLICATES_SQL,
+          [referencedLineTypes],
+        );
+        if (duplicateMissingNames.rows.length > 0) {
+          const conflicts = duplicateMissingNames.rows
+            .map((row) => row.codes.join(', '))
+            .join('; ');
+          throw new KmlUpdateValidationError(
+            `Cannot auto-create KML line types because their initial names would duplicate ignoring case: ${conflicts}`,
+          );
+        }
+
         const nameConflicts = await client.query(
           FIND_LINE_TYPE_NAME_CONFLICTS_SQL,
           [referencedLineTypes],
@@ -322,7 +355,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           INSERT_MISSING_LINE_TYPES_SQL,
           [referencedLineTypes],
         );
-        const createdLineTypes = createdLineTypesResult.rows;
+        const pendingLineTypes = createdLineTypesResult.rows;
 
         const boundaryResult = await client.query(
           'SELECT EXISTS (SELECT 1 FROM city_boundaries) AS ready',
@@ -384,7 +417,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           citiesUpdated,
           placesUpdated,
           lineTypes: referencedLineTypes,
-          createdLineTypes: createdLineTypes.map((lineType) => lineType.type),
+          newLineTypes: pendingLineTypes.map((lineType) => lineType.type),
         });
         throwIfAdminTaskCancelled(operation.signal);
         const completedAt = new Date().toISOString();
@@ -398,7 +431,8 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           ignoredNonLines,
           cityBufferMeters: options.cityBufferMeters,
           lineTypes: referencedLineTypes,
-          createdLineTypes,
+          createdLineTypes: options.dryRun ? [] : pendingLineTypes,
+          wouldCreateLineTypes: options.dryRun ? pendingLineTypes : [],
           importedGeometries: matched.length,
           skippedWithoutCity: unmatched.length,
           skippedWithoutPlace: unmatched.length,
