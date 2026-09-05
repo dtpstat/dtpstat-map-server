@@ -37,8 +37,7 @@ function setMapMessage(message, isError = false) {
 /** @param {any[]} lineTypes */
 function renderLineLegend(lineTypes) {
   document.querySelector('#line-legend')?.remove();
-  const usedTypes = lineTypes.filter((lineType) => lineType.geometryCount > 0);
-  if (usedTypes.length <= 1) return;
+  if (lineTypes.length <= 1) return;
 
   const legend = document.createElement('section');
   legend.id = 'line-legend';
@@ -50,12 +49,15 @@ function renderLineLegend(lineTypes) {
   title.textContent = 'Типы линий';
   legend.append(title);
 
-  for (const lineType of usedTypes) {
+  for (const lineType of lineTypes) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'line-legend-item';
     button.setAttribute('aria-pressed', 'true');
     button.dataset.lineType = lineType.type;
+    button.title = lineType.geometryCount === 0
+      ? 'Сейчас линий этого типа нет'
+      : `Линий этого типа: ${lineType.geometryCount}`;
 
     const sample = document.createElement('span');
     sample.className = 'line-legend-sample';
