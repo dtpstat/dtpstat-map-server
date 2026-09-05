@@ -16,13 +16,13 @@ const rawSources = [
   {
     URL: 'https://www.google.com/maps/d/viewer?mid=map_1',
     layers: [
-      { name: 'Односторонние', multiple: 1 },
+      { name: 'Односторонние', multiple: 1, type: 'bus' },
       { name: 'Двусторонние', multiple: 2 },
     ],
   },
 ];
 
-test('KML source contract keeps explicit layer multipliers and normalizes My Maps URLs', () => {
+test('KML source contract keeps multipliers/types and normalizes My Maps URLs', () => {
   const [source] = validateKmlSources(rawSources, constraints);
 
   assert.equal(source.mapId, 'map_1');
@@ -30,10 +30,13 @@ test('KML source contract keeps explicit layer multipliers and normalizes My Map
     source.fetchURL,
     'https://www.google.com/maps/d/kml?mid=map_1&forcekml=1',
   );
-  assert.deepEqual(source.layers, rawSources[0].layers);
+  assert.deepEqual(source.layers, [
+    { name: 'Односторонние', multiple: 1, type: 'bus' },
+    { name: 'Двусторонние', multiple: 2, type: 'default' },
+  ]);
 });
 
-test('KML source contract rejects misspelled or unsafe input', () => {
+test('KML source contract rejects misspelled, invalid type, or unsafe input', () => {
   assert.throws(
     () =>
       validateKmlSources([
@@ -43,6 +46,16 @@ test('KML source contract rejects misspelled or unsafe input', () => {
         },
       ], constraints),
     /unsupported properties: multilpe/,
+  );
+  assert.throws(
+    () =>
+      validateKmlSources([
+        {
+          URL: 'https://www.google.com/maps/d/viewer?mid=map_1',
+          layers: [{ name: 'Слой', multiple: 2, type: '   ' }],
+        },
+      ], constraints),
+    /type must be a non-empty string/,
   );
   assert.throws(
     () =>
@@ -95,6 +108,8 @@ test('request sources replace ENV sources and query overrides cannot raise limit
   assert.equal(resolved.cityBufferMeters, 250);
   assert.equal(resolved.ambiguousPolicy, 'fail');
   assert.equal(resolved.sources[0].mapId, 'map_1');
+  assert.equal(resolved.sources[0].layers[0].type, 'bus');
+  assert.equal(resolved.sources[0].layers[1].type, 'default');
 
   assert.throws(
     () => resolveKmlUpdateRequest(undefined, { timeoutMs: '30001' }, config),
