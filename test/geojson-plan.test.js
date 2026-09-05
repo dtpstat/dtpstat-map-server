@@ -33,7 +33,7 @@ test('legacy repository GeoJSON derives cities, multipliers, and default line ty
   assert.equal(plan.cities.some((city) => 'bounds' in city), false);
 });
 
-test('versioned line GeoJSON carries line type styles and feature type links', () => {
+test('versioned line GeoJSON carries line type styles and feature code links without storing duplicate code in properties', () => {
   const collection = {
     type: 'FeatureCollection',
     schemaVersion: 2,
@@ -58,6 +58,8 @@ test('versioned line GeoJSON carries line type styles and feature type links', (
 
   const plan = buildGeoJsonPlan(collection);
   assert.equal(plan.geometries[0].lineType, 'tram');
+  assert.equal(plan.geometries[0].properties._dtpstat, undefined);
+  assert.equal(plan.geometries[0].properties.lineType, undefined);
   assert.deepEqual(plan.lineTypes[1], {
     type: 'tram',
     name: 'Трамвай',
