@@ -6,8 +6,8 @@ const source = {
   URL: 'https://www.google.com/maps/d/viewer?mid=test',
   mapId: 'test',
   layers: [
-    { name: 'Двусторонние', multiple: 2, type: 'bus' },
-    { name: 'Односторонние', multiple: 1, type: 'priority' },
+    { name: 'Двусторонние', multiple: 2, type: 'Двусторонние' },
+    { name: 'Односторонние', multiple: 1, type: 'Односторонние' },
   ],
 };
 
@@ -43,7 +43,7 @@ const kml = `<?xml version="1.0" encoding="UTF-8"?>
   </Document>
 </kml>`;
 
-test('KML parser extracts configured folders with multipliers and line type codes', () => {
+test('KML parser keeps geometry type separate from imported business type name', () => {
   const result = parseKmlSource(kml, source);
 
   assert.equal(result.documentName, 'Тестовая карта');
@@ -51,12 +51,11 @@ test('KML parser extracts configured folders with multipliers and line type code
   assert.equal(result.ignoredNonLines, 1);
   assert.equal(result.features.length, 2);
   assert.equal(result.features[0].multiple, 2);
-  assert.equal(result.features[0].lineType, 'bus');
-  assert.equal('lineType' in result.features[0].properties, false);
+  assert.equal(result.features[0].businessTypeName, 'Двусторонние');
+  assert.equal('businessTypeName' in result.features[0].properties, false);
   assert.equal(result.features[0].geometry.type, 'LineString');
   assert.equal(result.features[1].multiple, 1);
-  assert.equal(result.features[1].lineType, 'priority');
-  assert.equal('lineType' in result.features[1].properties, false);
+  assert.equal(result.features[1].businessTypeName, 'Односторонние');
   assert.equal(result.features[1].geometry.type, 'MultiLineString');
   assert.equal(result.features[1].geometry.coordinates.length, 2);
   assert.equal(result.features[0].fingerprint.length, 64);
