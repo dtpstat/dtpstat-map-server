@@ -6,6 +6,7 @@
   <title>Администрирование — выделенные полосы</title>
   <link rel="stylesheet" href="/admin/admin.css">
   <script type="module" src="/admin/admin.js"></script>
+  <script type="module" src="/admin/line-types-editor.js"></script>
 </head>
 <body>
   <header class="topbar">
@@ -131,7 +132,7 @@
           </div>
           <form id="kml-form" data-task-form="kml" data-task-type="kml-update">
             <div class="form-fields">
-              <label>Источники JSON<textarea name="sources" rows="8" placeholder='[{"URL":"https://…","layers":[{"name":"…","multiple":1}]}]'></textarea></label>
+              <label>Источники JSON<textarea name="sources" rows="8" placeholder='[{"URL":"https://…","layers":[{"name":"…","multiple":1,"type":"default"}]}]'></textarea></label>
               <label>Буфер города, м
                 <input name="cityBufferMeters" type="number" inputmode="numeric"
                        min="0" step="1" placeholder="из ENV">
