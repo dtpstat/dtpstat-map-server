@@ -18,7 +18,16 @@ const EXPORT_CITY_BOUNDARIES_SQL = `
             'osmTimestamp', boundary.osm_timestamp,
             'updatedAt', boundary.updated_at,
             'citySlug', city.slug,
-            'cityName', city.name
+            'cityName', city.name,
+            'city', CASE
+              WHEN city.id IS NULL THEN NULL
+              ELSE jsonb_build_object(
+                'slug', city.slug,
+                'name', city.name,
+                'fullName', city.full_name,
+                'attributes', city.attributes
+              )
+            END
           )
         )
         ORDER BY boundary.place_type, boundary.osm_name, boundary.osm_type, boundary.osm_id
