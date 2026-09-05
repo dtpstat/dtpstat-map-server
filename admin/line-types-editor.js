@@ -5,7 +5,7 @@ if (typeof document !== 'undefined') {
       <div class="mode-heading">
         <div>
           <h4>Типы линий</h4>
-          <p>Тип из KML/GeoJSON связывается со стилем карты и подписью легенды.</p>
+          <p>type — стабильный код справочника. Имя используется только в легенде; KML автоматически создаёт отсутствующие коды с именем, равным коду.</p>
         </div>
       </div>
       <form id="line-types-form">
@@ -35,7 +35,7 @@ if (typeof document !== 'undefined') {
       row.dataset.geometryCount = String(lineType.geometryCount ?? 0);
 
       const typeLabel = document.createElement('label');
-      typeLabel.textContent = 'type';
+      typeLabel.textContent = 'code';
       const typeInput = document.createElement('input');
       typeInput.name = 'type';
       typeInput.required = true;
@@ -115,8 +115,8 @@ if (typeof document !== 'undefined') {
       }));
     }
 
-    async function load() {
-      setMessage('Загружаем типы…');
+    async function load({ changed = false } = {}) {
+      setMessage(changed ? 'Обновляем типы после импорта…' : 'Загружаем типы…');
       try {
         const response = await fetch('/api/line-types', {
           credentials: 'same-origin',
@@ -126,7 +126,12 @@ if (typeof document !== 'undefined') {
         if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
         table.replaceChildren();
         for (const lineType of payload.lineTypes) addRow(lineType);
-        setMessage(`Типов: ${payload.lineTypes.length}`);
+        setMessage(
+          changed
+            ? `Справочник обновлён после импорта. Типов: ${payload.lineTypes.length}`
+            : `Типов: ${payload.lineTypes.length}`,
+          changed ? 'success' : '',
+        );
       } catch (error) {
         setMessage(error.message, 'error');
       }
@@ -155,6 +160,10 @@ if (typeof document !== 'undefined') {
       } catch (error) {
         setMessage(error.message, 'error');
       }
+    });
+
+    window.addEventListener('dtpstat:line-types-changed', () => {
+      void load({ changed: true });
     });
 
     void load();
