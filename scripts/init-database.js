@@ -3,8 +3,11 @@ import pg from 'pg';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  databaseApplicationName,
+  databaseSearchPath,
   loadAdminDatabaseConnection,
   loadApplicationDatabaseConnection,
+  loadDatabaseSchema,
 } from '../src/db/database-environment.js';
 
 const { Client } = pg;
@@ -224,11 +227,15 @@ export async function transferObjectOwnership(client, role) {
   return result.rows.length;
 }
 
-async function normalizeDatabaseOwnership(adminConnection, applicationConnection) {
+async function normalizeDatabaseOwnership(
+  adminConnection,
+  applicationConnection,
+  schema,
+) {
   const client = new Client({
     ...adminConnection,
     database: applicationConnection.database,
-    application_name: 'dtpstat-buslines-ownership-initializer',
+    application_name: databaseApplicationName(schema, 'ownership-init'),
   });
   await client.connect();
   try {
@@ -247,11 +254,11 @@ async function normalizeDatabaseOwnership(adminConnection, applicationConnection
   }
 }
 
-async function installPostgis(adminConnection, applicationConnection) {
+async function installPostgis(adminConnection, applicationConnection, schema) {
   const client = new Client({
     ...adminConnection,
     database: applicationConnection.database,
-    application_name: 'dtpstat-buslines-initializer',
+    application_name: databaseApplicationName(schema, 'initializer'),
   });
   await client.connect();
   try {
@@ -266,10 +273,11 @@ async function installPostgis(adminConnection, applicationConnection) {
   }
 }
 
-async function verifyApplicationConnection(applicationConnection) {
+async function verifyApplicationConnection(applicationConnection, schema) {
   const client = new Client({
     ...applicationConnection,
-    application_name: 'dtpstat-buslines-initializer-check',
+    application_name: databaseApplicationName(schema, 'initializer-check'),
+    options: databaseSearchPath(schema),
   });
   await client.connect();
   try {
@@ -285,6 +293,7 @@ async function verifyApplicationConnection(applicationConnection) {
 async function main() {
   const adminConnection = loadAdminDatabaseConnection();
   const applicationConnection = loadApplicationDatabaseConnection();
+  const schema = loadDatabaseSchema();
   validateIdentifier(applicationConnection.user, 'DATABASE_ROLE');
   validateIdentifier(applicationConnection.database, 'DATABASE_NAME');
   if (applicationConnection.user === adminConnection.user) {
@@ -296,7 +305,7 @@ async function main() {
 
   const admin = new Client({
     ...adminConnection,
-    application_name: 'dtpstat-buslines-initializer',
+    application_name: databaseApplicationName(schema, 'initializer-admin'),
   });
   await admin.connect();
   let roleStatus;
@@ -316,15 +325,20 @@ async function main() {
     await admin.end();
   }
 
-  await installPostgis(adminConnection, applicationConnection);
+  await installPostgis(adminConnection, applicationConnection, schema);
   const transferredObjects = await normalizeDatabaseOwnership(
     adminConnection,
     applicationConnection,
+    schema,
   );
-  const verification = await verifyApplicationConnection(applicationConnection);
+  const verification = await verifyApplicationConnection(
+    applicationConnection,
+    schema,
+  );
   console.log(
     `Database initialization complete: role ${roleStatus}, ` +
-      `database ${databaseStatus}, PostGIS ${verification.postgis}; ` +
+      `database ${databaseStatus}, schema ${schema}, ` +
+      `PostGIS ${verification.postgis}; ` +
       `${transferredObjects} object owners normalized; ` +
       `verified as ${verification.role}.`,
   );
