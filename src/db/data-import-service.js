@@ -52,6 +52,12 @@ const UPSERT_LINE_TYPES_SQL = `
     updated_at = now()
 `;
 
+const DELETE_OMITTED_LINE_TYPES_SQL = `
+  DELETE FROM line_types AS line_type
+  WHERE line_type.code <> 'default'
+    AND NOT (line_type.code = ANY($1::text[]))
+`;
+
 const FIND_UNKNOWN_BOUNDARIES_SQL = `
   SELECT DISTINCT
     payload."boundaryOsmType" AS osm_type,
@@ -185,6 +191,7 @@ const INSERT_GEOMETRIES_SQL = `
  * Atomically replace all line geometry data from one complete GeoJSON upload.
  * Versioned exports restore city, OSM-boundary and line-type links using
  * portable natural keys; legacy GeoJSON remains supported through `default`.
+ * A versioned file with lineTypes synchronizes the complete type dictionary.
  *
  * @param {{ connect: () => Promise<DatabaseClient> }} pool
  */
@@ -259,6 +266,12 @@ export function createDataImportService(pool) {
         await client.query(LINK_BOUNDARIES_SQL, [serializedGeometries]);
 
         await client.query('DELETE FROM city_geometries');
+        if (plan.lineTypes.length > 0) {
+          await client.query(
+            DELETE_OMITTED_LINE_TYPES_SQL,
+            [plan.lineTypes.map((lineType) => lineType.type)],
+          );
+        }
         const geometryResult = await client.query(INSERT_GEOMETRIES_SQL, [
           serializedGeometries,
         ]);
@@ -272,11 +285,14 @@ export function createDataImportService(pool) {
         if (statisticsResult.rowCount < plan.cities.length) {
           throw new Error('Not every city statistic was updated');
         }
+        const referencedLineTypes = [
+          ...new Set(plan.geometries.map((geometry) => geometry.lineType)),
+        ];
         operation.onProgress?.({
           phase: 'database',
           cities: plan.cities.length,
           geometries: plan.geometries.length,
-          lineTypes: [...new Set(plan.geometries.map((geometry) => geometry.lineType))],
+          lineTypes: referencedLineTypes,
         });
         throwIfAdminTaskCancelled(operation.signal);
 
@@ -285,7 +301,7 @@ export function createDataImportService(pool) {
         return {
           cities: plan.cities.length,
           geometries: plan.geometries.length,
-          lineTypes: [...new Set(plan.geometries.map((geometry) => geometry.lineType))],
+          lineTypes: referencedLineTypes,
           ignoredFeatures: plan.ignoredFeatures.length,
           updatedAt: new Date().toISOString(),
         };
