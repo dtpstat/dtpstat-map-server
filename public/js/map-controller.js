@@ -311,6 +311,10 @@ export async function createMapController(config) {
       handler(readViewport(map));
     },
 
+    refreshViewport() {
+      if (viewportHandler) viewportHandler(readViewport(map));
+    },
+
     /** @param {(cityId: number) => void} handler */
     onCitySelect(handler) {
       citySelectHandler = handler;
