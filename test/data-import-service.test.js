@@ -14,10 +14,7 @@ const upload = {
       },
       geometry: {
         type: 'LineString',
-        coordinates: [
-          [30, 60],
-          [30.1, 60.1],
-        ],
+        coordinates: [[30, 60], [30.1, 60.1]],
       },
     },
   ],
@@ -25,18 +22,20 @@ const upload = {
 
 const versionedUpload = {
   type: 'FeatureCollection',
-  schemaVersion: 2,
+  schemaVersion: 3,
   lineTypes: [
     {
-      type: 'default',
-      name: 'Основные',
+      code: 0,
+      name: 'default',
+      title: 'Основные',
       color: '#045b69',
       style: 'solid',
       width: 4,
     },
     {
-      type: 'tram',
+      code: 17,
       name: 'Трамвай',
+      title: 'Трамвайные линии',
       color: '#cc4400',
       style: 'dashed',
       width: 6,
@@ -47,7 +46,7 @@ const versionedUpload = {
       ...upload.features[0],
       properties: {
         ...upload.features[0].properties,
-        _dtpstat: { lineType: 'tram' },
+        _dtpstat: { businessTypeCode: 17 },
       },
     },
   ],
@@ -78,12 +77,8 @@ function createFakePool({ failOn } = {}) {
 
   return {
     queries,
-    get released() {
-      return released;
-    },
-    async connect() {
-      return client;
-    },
+    get released() { return released; },
+    async connect() { return client; },
   };
 }
 
@@ -97,39 +92,35 @@ test('legacy data import replaces geometries without replacing line type diction
   assert.equal(result.geometries, 1);
   assert.deepEqual(result.lineTypes, ['default']);
   assert.equal(pool.queries[0], 'BEGIN');
-  assert.equal(
-    pool.queries.some((query) => query.startsWith('DELETE FROM cities')),
-    false,
-  );
+  assert.equal(pool.queries.some((query) => query.startsWith('DELETE FROM cities')), false);
   assert.equal(
     pool.queries.some((query) => query.startsWith('DELETE FROM line_types AS line_type')),
     false,
   );
-  assert.equal(
-    pool.queries.some((query) => /\bbounds\b/i.test(query)),
-    false,
-  );
+  assert.equal(pool.queries.some((query) => /\bbounds\b/i.test(query)), false);
   assert.match(pool.queries.at(-2), /^WITH geometry_statistics AS/);
   assert.equal(pool.queries.at(-1), 'COMMIT');
   assert.equal(pool.released, true);
 });
 
-test('versioned data import synchronizes styles before inserting typed geometries', async () => {
+test('versioned data import applies dictionary by imported NAME before inserting geometries', async () => {
   const pool = createFakePool();
   const service = createDataImportService(pool);
 
   const result = await service.replaceFromGeoJson(versionedUpload);
 
-  assert.deepEqual(result.lineTypes, ['tram']);
-  assert.ok(pool.queries.some((query) => query.startsWith('INSERT INTO line_types')));
+  assert.deepEqual(result.lineTypes, ['Трамвай']);
+  assert.ok(pool.queries.some((query) => query.startsWith('UPDATE line_types AS line_type')));
+  assert.ok(pool.queries.some((query) => query.includes('INSERT INTO line_types (name, title')));
   const geometryDelete = pool.queries.indexOf('DELETE FROM city_geometries');
   const typeDelete = pool.queries.findIndex((query) =>
-    query.startsWith('DELETE FROM line_types AS line_type'));
-  const geometryInsert = pool.queries.findIndex((query) =>
-    query.includes('INSERT INTO city_geometries'));
+    query.startsWith('WITH payload AS') && query.includes('DELETE FROM line_types AS line_type'));
+  const typeUpdate = pool.queries.findIndex((query) => query.includes('UPDATE line_types AS line_type'));
+  const geometryInsert = pool.queries.findIndex((query) => query.includes('INSERT INTO city_geometries'));
   assert.ok(geometryDelete >= 0);
   assert.ok(typeDelete > geometryDelete);
-  assert.ok(geometryInsert > typeDelete);
+  assert.ok(typeUpdate > typeDelete);
+  assert.ok(geometryInsert > typeUpdate);
   assert.equal(pool.queries.at(-1), 'COMMIT');
 });
 
