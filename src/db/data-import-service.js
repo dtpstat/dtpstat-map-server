@@ -1,5 +1,6 @@
 import { buildGeoJsonPlan, GeoJsonValidationError } from '../data/geojson-plan.js';
 import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
+import { acquireDataImportLock } from './database-locks.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 const UPSERT_CITIES_SQL = `
@@ -198,7 +199,7 @@ const INSERT_GEOMETRIES_SQL = `
    AND boundary.osm_id = prepared."boundaryOsmId"
 `;
 
-/** @param {{ connect: () => Promise<any> }} pool */
+/** @param {{ connect: () => Promise<any>, databaseSchema?: string }} pool */
 export function createDataImportService(pool) {
   return {
     async replaceFromGeoJson(collection, operation = {}) {
@@ -216,9 +217,7 @@ export function createDataImportService(pool) {
 
       try {
         await client.query('BEGIN');
-        await client.query(
-          `SELECT pg_advisory_xact_lock(hashtext('dtpstat-buslines:data-import'))`,
-        );
+        await acquireDataImportLock(client, pool);
         throwIfAdminTaskCancelled(operation.signal);
 
         await client.query(UPSERT_CITIES_SQL, [JSON.stringify(plan.cities)]);
