@@ -7,7 +7,7 @@ if (typeof document !== 'undefined') {
       ?.closest('label')
       ?.querySelector('small');
     if (externalHint) {
-      externalHint.textContent = 'Каждый слой: name + multiple (1 или 2) + необязательный type. type — это бизнес-код LINE_TYPES.CODE, а не геометрический LineString/MultiLineString. Без type используется default; отсутствующий code при реальном импорте создаётся с дефолтным стилем.';
+      externalHint.textContent = 'Каждый слой: name + multiple (1 или 2) + необязательный type. type — NAME бизнес-типа из источника, а не CODE и не геометрический LineString/MultiLineString. Отсутствующий NAME создаётся автоматически; CODE назначает БД, TITLE сначала равен NAME.';
     }
 
     const transfer = document.createElement('div');
@@ -16,7 +16,7 @@ if (typeof document !== 'undefined') {
       <div class="mode-heading">
         <div>
           <h4>Импорт / экспорт KML-снимка</h4>
-          <p>Переносимый KML хранит геометрию отдельно от бизнес-типа. Полный справочник code/name/color/style/width записывается один раз в metadata документа и проверяется до линий.</p>
+          <p>Переносимый KML хранит геометрию отдельно от бизнес-типа. Справочник code/name/title/color/style/width записывается один раз в metadata документа и проверяется до линий.</p>
         </div>
         <a class="secondary-link" href="/api/admin/export/lines.kml" download>Выгрузить KML</a>
       </div>
@@ -26,7 +26,7 @@ if (typeof document !== 'undefined') {
             <input name="file" type="file"
                    accept=".kml,application/vnd.google-earth.kml+xml,application/xml,text/xml"
                    required>
-            <small>Импортируется только переносимый KML этого проекта. Сначала обрабатывается Document metadata со справочником бизнес-типов и стилей, затем Placemark с businessTypeCode и геометрией LineString/MultiGeometry.</small>
+            <small>Сначала обрабатывается Document metadata: numeric code, импортный NAME, TITLE и стили. Затем Placemark с numeric businessTypeCode и геометрией LineString/MultiGeometry. На другом сервере типы сопоставляются по NAME, а локальный CODE для новых типов генерирует его БД.</small>
           </label>
         </div>
         <button type="submit">Импортировать KML-снимок</button>
