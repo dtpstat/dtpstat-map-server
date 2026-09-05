@@ -6,6 +6,7 @@ import {CITY_MARKER_ICON} from '../public/js/city-marker-icon.js';
 import {createAdminTaskManager} from './data/admin-task-manager.js';
 import {createBasicAuth} from './http/basic-auth.js';
 import {createApiRouter} from './routes/api.js';
+import {createLineTypesRouter} from './routes/line-types-api.js';
 
 const PUBLIC_ASSETS = new Map([
 	['/favicon.ico', 'favicon.ico'],
@@ -24,6 +25,7 @@ const CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'base64');
 /**
  * @param {{
  *   repository: import('./routes/api.js').CitiesRepository,
+ *   lineTypesRepository: { list: () => Promise<any[]>, save: (payload: unknown) => Promise<any[]> },
  *   exportRepository: import('./routes/api.js').DataExportRepository,
  *   importService: import('./routes/api.js').DataImportService,
  *   cityBoundaryTransferService: import('./routes/api.js').CityBoundaryTransferService,
@@ -36,6 +38,7 @@ const CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'base64');
  */
 export function createApp({
 	repository,
+	lineTypesRepository,
 	exportRepository,
 	importService,
 	cityBoundaryTransferService,
@@ -102,6 +105,14 @@ export function createApp({
 		}),
 	);
 
+	app.use(
+		'/api',
+		createLineTypesRouter({
+			lineTypesRepository,
+			adminTasks,
+			importApi: config.importApi,
+		}),
+	);
 	app.use(
 		'/api',
 		createApiRouter({
