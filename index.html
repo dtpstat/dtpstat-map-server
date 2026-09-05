@@ -5,12 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta
       name="description"
-      content="Рейтинг городов России по протяжённости выделенных полос для наземного общественного транспорта."
+      content="{{PROJECT_NAME}} — рейтинг городов и открытые картографические данные."
     >
+    <meta name="keywords" content="{{PROJECT_KEYWORDS}}">
+    <meta name="application-name" content="{{PROJECT_NAME}}">
+    <meta name="apple-mobile-web-app-title" content="{{PROJECT_NAME}}">
     <meta name="theme-color" content="#0b555f">
-    <meta property="og:title" content="Выделенные полосы в России. Рейтинг городов">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="{{PROJECT_NAME}}">
+    <meta property="og:site_name" content="{{PROJECT_NAME}}">
+    <meta
+      property="og:description"
+      content="{{PROJECT_NAME}} — рейтинг городов и открытые картографические данные."
+    >
     <meta property="og:image" content="/bus-lanes.jpeg">
-    <title>Рейтинг выделенных полос России</title>
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{PROJECT_NAME}}">
+    <meta
+      name="twitter:description"
+      content="{{PROJECT_NAME}} — рейтинг городов и открытые картографические данные."
+    >
+    <meta name="twitter:image" content="/bus-lanes.jpeg">
+    <title>{{PROJECT_NAME}}</title>
 
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -22,8 +38,11 @@
     <div class="app-shell">
       <aside class="ranking-panel" aria-labelledby="page-title">
         <header class="ranking-header">
-          <p class="eyebrow">Карта и открытые данные <a href="#about-title" style="float: right;">О проекте</a></p>
-          <h1 id="page-title">Выделенные полосы в России</h1>
+          <p class="eyebrow">
+            Карта и открытые данные
+            <a class="about-link" href="#project-footer">О проекте</a>
+          </p>
+          <h1 id="page-title">{{PROJECT_NAME}}</h1>
           <p class="subtitle">Рейтинг городов</p>
 
           <div class="category-switch" role="group" aria-label="Категория города">
@@ -77,53 +96,17 @@
             <tbody id="city-list"></tbody>
           </table>
 
-          <section class="about" aria-labelledby="about-title">
-            <h2 id="about-title">О проекте</h2>
-            <p>
-              Рейтинг — это суммарная длина действующих выделенных полос в городе.
-              Двусторонняя полоса учитывается дважды; результат делится на население
-              и приводится к тысяче жителей.
-            </p>
-            </p>
-            <p>
-            <h2><a name="donate"></a>Поддержите работу сайта <a href="https://dtp-stat.ru/donate/">тут</a>.</h2>
-            Поддержкой сайта занимается команда <a href="https://dtp-stat.ru/">Карты ДТП</a>.
-            </p>
-            <p>
-              <a href="https://t.me/transportlanes?direct">Добавить или исправить город</a>
-            Свяжитесь с нами в <a href="https://t.me/transportlanes?direct">Телеграме</a>.
-            </p>
-            </p>
-            <p>
-              Скачать исходные данные:
-              <a href="/bus-lanes.geojson">GeoJSON</a> ·
-              <a href="/bus-lanes.csv">CSV</a>
-            </p>
-            </p>
-            <h2>А как насчёт трамваев?</h2>
-            У нас есть такой же <a href="http://tramlanes.ru">рейтинг обособления трамвайных путей</a>.
-            </p>
-            <h2>Как вы это делаете?</h2>
-            Мы собираем от специалистов и активистов в городах информацию, где фактически действуют выделенные полосы, и отрисовываем их на своей карте. Сумму длин и расчёт статистики по городу делает набор скриптов, <a href="https://github.com/culebron/dedicated-lanes">проект опубликован</a> на
-            ГитХабе.
-            </p>
-            <h2>Авторы</h2>
-            <p>
-              С 2026 года поддержкой проекта занимается команда Карты ДТП (<a href="https://dtp-stat.ru/">dtp-stat.ru</a>), среди них:</br></br>
-              <a href="https://www.linkedin.com/in/gig-bite">Алексей Куликов</a> - разработка, анализ данные, администрирование сайта</br>
-              <a href="https://t.me/shehovsov">Михаил Шеховцов</a> - координация работы</br></br></br>
-
-            Создатели первичного сайта:</br></br>
-            <a href="https://monteklever.livejournal.com">Александр Егоров</a> — администрирование, взаимодействие с активистами.</br>
-            <a href="http://facebook.com/planiformica/">Дмитрий Лебедев</a> — программирование расчётов и сайт.</br>
-            <a href="https://t.me/alexradchenko2">Радченко Алексей</a> — руководство проектом, PR.</br>
-            <a href="https://github.com/Alexkeny">Алексей Антипов</a> — поддержка сайта.</br>
-            </p>
+          <section
+            class="about project-footer"
+            id="project-footer"
+            aria-label="Информация о проекте"
+          >
+{{PROJECT_FOOTER_HTML}}
           </section>
         </div>
       </aside>
 
-      <main class="map-panel" aria-label="Карта выделенных полос">
+      <main class="map-panel" aria-label="Карта проекта {{PROJECT_NAME}}">
         <div id="map"></div>
         <div id="map-message" class="map-message">Подготавливаем карту…</div>
       </main>
