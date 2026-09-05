@@ -43,7 +43,7 @@ const kml = `<?xml version="1.0" encoding="UTF-8"?>
   </Document>
 </kml>`;
 
-test('KML parser extracts configured folders with multipliers and line types', () => {
+test('KML parser extracts configured folders with multipliers and line type codes', () => {
   const result = parseKmlSource(kml, source);
 
   assert.equal(result.documentName, 'Тестовая карта');
@@ -52,10 +52,11 @@ test('KML parser extracts configured folders with multipliers and line types', (
   assert.equal(result.features.length, 2);
   assert.equal(result.features[0].multiple, 2);
   assert.equal(result.features[0].lineType, 'bus');
-  assert.equal(result.features[0].properties.lineType, 'bus');
+  assert.equal('lineType' in result.features[0].properties, false);
   assert.equal(result.features[0].geometry.type, 'LineString');
   assert.equal(result.features[1].multiple, 1);
   assert.equal(result.features[1].lineType, 'priority');
+  assert.equal('lineType' in result.features[1].properties, false);
   assert.equal(result.features[1].geometry.type, 'MultiLineString');
   assert.equal(result.features[1].geometry.coordinates.length, 2);
   assert.equal(result.features[0].fingerprint.length, 64);
