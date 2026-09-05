@@ -18,7 +18,7 @@ test('city list qualifies ID after joining OSM boundaries', async () => {
   assert.doesNotMatch(sql, /\n\s+id::integer AS id/);
 });
 
-test('viewport query clips lines and resolves the city under the map center', async () => {
+test('viewport query selects intersecting lines without clipping and resolves center city', async () => {
   let sql;
   let values;
   const expected = {
@@ -47,6 +47,10 @@ test('viewport query clips lines and resolves the city under the map center', as
   assert.equal(result, expected);
   assert.deepEqual(values, [37.4, 55.6, 37.9, 55.9, 37.62, 55.75]);
   assert.match(sql, /geometry\.geom && viewport\.geom/);
-  assert.match(sql, /ST_Intersection\(geometry\.geom, viewport\.geom\)/);
+  assert.match(sql, /ST_Intersects\(geometry\.geom, viewport\.geom\)/);
+  assert.match(sql, /geometry\.geom\s+FROM viewport/);
+  assert.doesNotMatch(sql, /ST_Intersection\(geometry\.geom, viewport\.geom\)/);
+  assert.match(sql, /line_type\.code AS line_type/);
+  assert.match(sql, /'lineType', visible_geometries\.line_type/);
   assert.match(sql, /ST_Covers\(boundary\.geom, viewport\.center\)/);
 });
