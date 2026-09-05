@@ -10,6 +10,11 @@ import {
   ROAD_DATA_MIN_ZOOM,
 } from './map-controller.js';
 
+const legendStylesheet = document.createElement('link');
+legendStylesheet.rel = 'stylesheet';
+legendStylesheet.href = '/css/line-types.css';
+document.head.append(legendStylesheet);
+
 const mapMessage = document.querySelector('#map-message');
 const mapPanel = document.querySelector('.map-panel');
 const cityList = createCityList({
