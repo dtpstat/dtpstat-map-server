@@ -6,7 +6,7 @@ const source = {
   URL: 'https://www.google.com/maps/d/viewer?mid=test',
   fetchURL: 'https://www.google.com/maps/d/kml?mid=test&forcekml=1',
   mapId: 'test',
-  layers: [{ name: 'Слой', multiple: 2 }],
+  layers: [{ name: 'Слой', multiple: 2, type: 'default' }],
 };
 
 const config = {
@@ -26,11 +26,13 @@ const config = {
 const features = [
   {
     multiple: 2,
+    lineType: 'default',
     fingerprint: 'first',
     properties: {
       sourceURL: source.URL,
       layer: 'Слой',
       placemarkName: 'Первая',
+      lineType: 'default',
     },
     geometry: {
       type: 'LineString',
@@ -39,11 +41,13 @@ const features = [
   },
   {
     multiple: 1,
+    lineType: 'default',
     fingerprint: 'second',
     properties: {
       sourceURL: source.URL,
       layer: 'Слой',
       placemarkName: 'Вторая',
+      lineType: 'default',
     },
     geometry: {
       type: 'LineString',
@@ -52,11 +56,13 @@ const features = [
   },
   {
     multiple: 1,
+    lineType: 'default',
     fingerprint: 'unmatched',
     properties: {
       sourceURL: source.URL,
       layer: 'Слой',
       placemarkName: 'Без города',
+      lineType: 'default',
     },
     geometry: {
       type: 'LineString',
@@ -65,7 +71,7 @@ const features = [
   },
 ];
 
-function createPool() {
+function createPool({ unknownLineTypes = [] } = {}) {
   const queries = [];
   let released = false;
   let connections = 0;
@@ -73,6 +79,12 @@ function createPool() {
     async query(text) {
       const normalized = text.trim();
       queries.push(normalized);
+      if (normalized.startsWith('SELECT requested.type')) {
+        return {
+          rows: unknownLineTypes.map((type) => ({ type })),
+          rowCount: unknownLineTypes.length,
+        };
+      }
       if (normalized.startsWith('SELECT EXISTS')) {
         return { rows: [{ ready: true }], rowCount: 1 };
       }
@@ -133,7 +145,7 @@ const dependencies = {
   },
 };
 
-test('KML update atomically replaces all geometries and records statistics', async () => {
+test('KML update atomically replaces geometries with line type links', async () => {
   const pool = createPool();
   const service = createKmlUpdateService(pool, config, dependencies);
 
@@ -146,8 +158,13 @@ test('KML update atomically replaces all geometries and records statistics', asy
   assert.equal(result.cityBufferMeters, 0);
   assert.equal(result.placesUpdated, 2);
   assert.equal(result.citiesUpdated, 1);
+  assert.deepEqual(result.lineTypes, ['default']);
   assert.equal(result.updateRunId, 7);
   assert.equal(pool.queries[0], 'BEGIN');
+  assert.equal(
+    pool.queries.some((query) => query.includes('JOIN line_types AS line_type')),
+    true,
+  );
   assert.equal(
     pool.queries.some((query) => query === 'DELETE FROM city_geometries'),
     true,
@@ -158,6 +175,21 @@ test('KML update atomically replaces all geometries and records statistics', asy
   );
   assert.equal(pool.queries.at(-1), 'COMMIT');
   assert.equal(pool.released, true);
+});
+
+test('KML rejects unknown line types before replacing geometries', async () => {
+  const pool = createPool({ unknownLineTypes: ['default'] });
+  const service = createKmlUpdateService(pool, config, dependencies);
+
+  await assert.rejects(
+    service.update(undefined, {}),
+    /Unknown line types: default/,
+  );
+  assert.equal(
+    pool.queries.some((query) => query === 'DELETE FROM city_geometries'),
+    false,
+  );
+  assert.equal(pool.queries.at(-1), 'ROLLBACK');
 });
 
 test('KML dry run performs matching without deleting database rows', async () => {
