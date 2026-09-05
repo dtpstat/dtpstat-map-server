@@ -97,12 +97,41 @@ const MATCH_GEOMETRIES_SQL = `
   ORDER BY prepared."inputIndex"
 `;
 
-const FIND_UNKNOWN_LINE_TYPES_SQL = `
-  SELECT requested.type
-  FROM unnest($1::text[]) AS requested(type)
-  LEFT JOIN line_types AS line_type ON line_type.code = requested.type
-  WHERE line_type.id IS NULL
-  ORDER BY requested.type
+const FIND_LINE_TYPE_NAME_CONFLICTS_SQL = `
+  WITH requested AS (
+    SELECT DISTINCT code
+    FROM unnest($1::text[]) AS requested(code)
+  )
+  SELECT
+    requested.code AS "requestedCode",
+    existing.code AS "existingCode",
+    existing.name AS "existingName"
+  FROM requested
+  LEFT JOIN line_types AS exact_type ON exact_type.code = requested.code
+  JOIN line_types AS existing
+    ON LOWER(BTRIM(existing.name)) = LOWER(BTRIM(requested.code))
+   AND existing.code <> requested.code
+  WHERE exact_type.id IS NULL
+  ORDER BY requested.code
+`;
+
+const INSERT_MISSING_LINE_TYPES_SQL = `
+  WITH requested AS (
+    SELECT DISTINCT code
+    FROM unnest($1::text[]) AS requested(code)
+  )
+  INSERT INTO line_types (code, name)
+  SELECT requested.code, requested.code
+  FROM requested
+  LEFT JOIN line_types AS existing ON existing.code = requested.code
+  WHERE existing.id IS NULL
+  ON CONFLICT (code) DO NOTHING
+  RETURNING
+    code AS type,
+    name,
+    color,
+    line_style AS style,
+    width::double precision AS width
 `;
 
 const INSERT_GEOMETRIES_SQL = `
@@ -275,15 +304,25 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
         );
         throwIfAdminTaskCancelled(operation.signal);
 
-        const unknownLineTypes = await client.query(
-          FIND_UNKNOWN_LINE_TYPES_SQL,
+        const nameConflicts = await client.query(
+          FIND_LINE_TYPE_NAME_CONFLICTS_SQL,
           [referencedLineTypes],
         );
-        if (unknownLineTypes.rows.length > 0) {
+        if (nameConflicts.rows.length > 0) {
+          const conflicts = nameConflicts.rows
+            .map((row) =>
+              `type "${row.requestedCode}" conflicts with name "${row.existingName}" of code "${row.existingCode}"`)
+            .join('; ');
           throw new KmlUpdateValidationError(
-            `Unknown line types: ${unknownLineTypes.rows.map((row) => row.type).join(', ')}. Configure them in the admin panel first.`,
+            `Cannot auto-create KML line types: ${conflicts}. Use the existing line type code in KML settings.`,
           );
         }
+
+        const createdLineTypesResult = await client.query(
+          INSERT_MISSING_LINE_TYPES_SQL,
+          [referencedLineTypes],
+        );
+        const createdLineTypes = createdLineTypesResult.rows;
 
         const boundaryResult = await client.query(
           'SELECT EXISTS (SELECT 1 FROM city_boundaries) AS ready',
@@ -345,6 +384,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           citiesUpdated,
           placesUpdated,
           lineTypes: referencedLineTypes,
+          createdLineTypes: createdLineTypes.map((lineType) => lineType.type),
         });
         throwIfAdminTaskCancelled(operation.signal);
         const completedAt = new Date().toISOString();
@@ -358,6 +398,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           ignoredNonLines,
           cityBufferMeters: options.cityBufferMeters,
           lineTypes: referencedLineTypes,
+          createdLineTypes,
           importedGeometries: matched.length,
           skippedWithoutCity: unmatched.length,
           skippedWithoutPlace: unmatched.length,
