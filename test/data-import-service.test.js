@@ -23,6 +23,36 @@ const upload = {
   ],
 };
 
+const versionedUpload = {
+  type: 'FeatureCollection',
+  schemaVersion: 2,
+  lineTypes: [
+    {
+      type: 'default',
+      name: 'Основные',
+      color: '#045b69',
+      style: 'solid',
+      width: 4,
+    },
+    {
+      type: 'tram',
+      name: 'Трамвай',
+      color: '#cc4400',
+      style: 'dashed',
+      width: 6,
+    },
+  ],
+  features: [
+    {
+      ...upload.features[0],
+      properties: {
+        ...upload.features[0].properties,
+        _dtpstat: { lineType: 'tram' },
+      },
+    },
+  ],
+};
+
 function createFakePool({ failOn } = {}) {
   const queries = [];
   let released = false;
@@ -57,7 +87,7 @@ function createFakePool({ failOn } = {}) {
   };
 }
 
-test('data import replaces geometries and commits after updating statistics', async () => {
+test('legacy data import replaces geometries without replacing line type dictionary', async () => {
   const pool = createFakePool();
   const service = createDataImportService(pool);
 
@@ -65,9 +95,14 @@ test('data import replaces geometries and commits after updating statistics', as
 
   assert.equal(result.cities, 1);
   assert.equal(result.geometries, 1);
+  assert.deepEqual(result.lineTypes, ['default']);
   assert.equal(pool.queries[0], 'BEGIN');
   assert.equal(
     pool.queries.some((query) => query.startsWith('DELETE FROM cities')),
+    false,
+  );
+  assert.equal(
+    pool.queries.some((query) => query.startsWith('DELETE FROM line_types AS line_type')),
     false,
   );
   assert.equal(
@@ -77,6 +112,25 @@ test('data import replaces geometries and commits after updating statistics', as
   assert.match(pool.queries.at(-2), /^WITH geometry_statistics AS/);
   assert.equal(pool.queries.at(-1), 'COMMIT');
   assert.equal(pool.released, true);
+});
+
+test('versioned data import synchronizes styles before inserting typed geometries', async () => {
+  const pool = createFakePool();
+  const service = createDataImportService(pool);
+
+  const result = await service.replaceFromGeoJson(versionedUpload);
+
+  assert.deepEqual(result.lineTypes, ['tram']);
+  assert.ok(pool.queries.some((query) => query.startsWith('INSERT INTO line_types')));
+  const geometryDelete = pool.queries.indexOf('DELETE FROM city_geometries');
+  const typeDelete = pool.queries.findIndex((query) =>
+    query.startsWith('DELETE FROM line_types AS line_type'));
+  const geometryInsert = pool.queries.findIndex((query) =>
+    query.includes('INSERT INTO city_geometries'));
+  assert.ok(geometryDelete >= 0);
+  assert.ok(typeDelete > geometryDelete);
+  assert.ok(geometryInsert > typeDelete);
+  assert.equal(pool.queries.at(-1), 'COMMIT');
 });
 
 test('data import rolls back and releases its connection after a database error', async () => {
