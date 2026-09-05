@@ -2,7 +2,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseKmlSourcesJson } from './data/kml-update-options.js';
 import { normalizeOsmUpdateUrl } from './data/osm-city-update-options.js';
-import { loadApplicationDatabaseConnection } from './db/database-environment.js';
+import {
+  loadApplicationDatabaseConnection,
+  loadDatabaseSchema,
+} from './db/database-environment.js';
 
 const DEFAULT_PROJECT_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -117,6 +120,7 @@ function stringListValue(env, name, fallback) {
 export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT) {
   const httpEnabled = booleanValue(env, 'HTTP_ENABLED', true);
   const httpsEnabled = booleanValue(env, 'HTTPS_ENABLED', false);
+  const databaseSchema = loadDatabaseSchema(env);
 
   if (!httpEnabled && !httpsEnabled) {
     throw new Error('At least one of HTTP_ENABLED or HTTPS_ENABLED must be true');
@@ -242,6 +246,7 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     },
     database: {
       ...loadApplicationDatabaseConnection(env),
+      schema: databaseSchema,
       maxConnections: integerValue(env, 'DATABASE_POOL_MAX', 10, {
         min: 1,
         max: 100,
@@ -331,7 +336,7 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
       userAgent: headerValue(
         env,
         'OSM_CITY_UPDATE_USER_AGENT',
-        'dtpstat-buslines/2.0 OSM city updater',
+        `${databaseSchema}/2.0 OSM city updater`,
       ),
       maxBytes: integerValue(
         env,
