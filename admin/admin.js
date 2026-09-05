@@ -2,19 +2,19 @@ import { createTaskNotices } from './task-notices.js';
 
 const taskTypeTabs = Object.freeze({
   'osm-city-update': 'osm',
+  'city-geojson-import': 'osm',
   'kml-update': 'kml',
-  'geojson-import': 'geojson',
+  'geojson-import': 'kml',
   'population-update': 'population',
 });
-const tabTaskTypes = Object.freeze(
-  Object.fromEntries(
-    Object.entries(taskTypeTabs).map(([taskType, tab]) => [tab, taskType]),
-  ),
-);
+const tabTaskTypes = Object.freeze({
+  osm: ['osm-city-update', 'city-geojson-import'],
+  kml: ['kml-update', 'geojson-import'],
+  population: ['population-update'],
+});
 const taskNames = Object.freeze({
   osm: 'Города OSM',
-  kml: 'Линии KML',
-  geojson: 'GeoJSON',
+  kml: 'Линии',
   population: 'Население',
 });
 const statusLabels = Object.freeze({
@@ -59,7 +59,10 @@ const elements = {
   osmForm: document.querySelector('#osm-form'),
   osmURL: document.querySelector('#osm-url'),
   osmDefaults: document.querySelector('#osm-defaults'),
+  cityGeoJsonForm: document.querySelector('#city-geojson-form'),
   kmlForm: document.querySelector('#kml-form'),
+  lineGeoJsonForm: document.querySelector('#line-geojson-form'),
+  populationForm: document.querySelector('#population-form'),
 };
 const taskNotices = createTaskNotices(elements.notices, taskNames);
 
@@ -76,6 +79,7 @@ function setNotice(message, tone = 'warning', taskKey = state.selected) {
 }
 
 function setTaskNotice(taskKey, message, tone = 'warning') {
+  if (!taskKey) return;
   taskNotices.setForTask(taskKey, message, tone);
 }
 
@@ -179,7 +183,7 @@ function renderControls(task) {
     }
   }
   for (const action of elements.actions) {
-    const ownsActiveTask = locked && action.dataset.taskAction === state.selected;
+    const ownsActiveTask = locked && action.dataset.taskType === task?.type;
     action.textContent = action.dataset.startLabel;
     action.classList.toggle('danger', ownsActiveTask);
     if (ownsActiveTask) {
@@ -193,10 +197,18 @@ function renderControls(task) {
   }
 }
 
+function latestSuccessfulUpdate(tabKey) {
+  const updates = (tabTaskTypes[tabKey] ?? [])
+    .map((taskType) => state.lastSuccessfulUpdates[taskType])
+    .filter(Boolean);
+  updates.sort((left, right) =>
+    Date.parse(right.completedAt) - Date.parse(left.completedAt));
+  return updates[0] ?? null;
+}
+
 function renderSuccessfulUpdates() {
   for (const element of elements.successfulUpdates) {
-    const taskType = tabTaskTypes[element.dataset.lastSuccess];
-    const update = state.lastSuccessfulUpdates[taskType];
+    const update = latestSuccessfulUpdate(element.dataset.lastSuccess);
     const time = element.querySelector('time');
     element.classList.toggle('has-success', Boolean(update));
     if (!update) {
@@ -276,6 +288,22 @@ async function api(path, options = {}) {
     throw error;
   }
   return payload;
+}
+
+async function encodedJsonBody(text, contentType) {
+  const headers = { 'Content-Type': contentType };
+  if (text.length < 1024 || typeof CompressionStream !== 'function') {
+    return { headers, body: text };
+  }
+  try {
+    const source = new Blob([text], { type: contentType });
+    const compressedStream = source.stream().pipeThrough(new CompressionStream('gzip'));
+    const body = await new Response(compressedStream).blob();
+    headers['Content-Encoding'] = 'gzip';
+    return { headers, body };
+  } catch {
+    return { headers, body: text };
+  }
 }
 
 function applyNumericDefault(form, name, value, limits) {
@@ -412,6 +440,15 @@ async function cancelActiveTask() {
   return true;
 }
 
+async function importGeoJsonFile(form, endpoint, taskKey, query = '') {
+  if (await cancelActiveTask()) return;
+  if (!form.reportValidity()) return;
+  const file = new FormData(form).get('file');
+  if (!(file instanceof File) || file.size === 0) return;
+  const options = await encodedJsonBody(await file.text(), 'application/geo+json');
+  await start(`${endpoint}${query}`, options, taskKey);
+}
+
 for (const tab of elements.tabs) {
   tab.addEventListener('click', () => {
     if (active(state.task)) return;
@@ -449,6 +486,16 @@ elements.osmDefaults.addEventListener('click', () => {
   void loadAdminConfig({ announce: true });
 });
 
+elements.cityGeoJsonForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const query = new URLSearchParams({
+    dryRun: String(data.get('dryRun') === 'on'),
+  });
+  await importGeoJsonFile(form, '/api/admin/import/cities', 'osm', `?${query}`);
+});
+
 elements.kmlForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -461,39 +508,33 @@ elements.kmlForm.addEventListener('submit', async (event) => {
   const cityBufferMeters = String(data.get('cityBufferMeters')).trim();
   if (cityBufferMeters) query.set('cityBufferMeters', cityBufferMeters);
   const sources = String(data.get('sources')).trim();
-  let body;
+  let options = {};
   if (sources) {
-    try { body = JSON.stringify(JSON.parse(sources)); }
+    let normalized;
+    try { normalized = JSON.stringify(JSON.parse(sources)); }
     catch { setTaskNotice('kml', 'некорректный JSON источников.', 'error'); return; }
+    options = await encodedJsonBody(normalized, 'application/json');
   }
-  await start(`/api/admin/update?${query}`, body
-    ? { headers: { 'Content-Type': 'application/json' }, body }
-    : {}, 'kml');
+  await start(`/api/admin/update?${query}`, options, 'kml');
 });
 
-document.querySelector('#geojson-form').addEventListener('submit', async (event) => {
+elements.lineGeoJsonForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const form = event.currentTarget;
-  if (await cancelActiveTask()) return;
-  const file = new FormData(form).get('file');
-  if (!(file instanceof File) || file.size === 0) return;
-  await start('/api/admin/import', {
-    headers: { 'Content-Type': 'application/geo+json' },
-    body: await file.text(),
-  }, 'geojson');
+  await importGeoJsonFile(event.currentTarget, '/api/admin/import/lines', 'kml');
 });
 
-document.querySelector('#population-form').addEventListener('submit', async (event) => {
+elements.populationForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   if (await cancelActiveTask()) return;
   const raw = String(new FormData(form).get('payload')).trim();
   try { JSON.parse(raw); }
   catch { setTaskNotice('population', 'некорректный JSON.', 'error'); return; }
-  await start('/api/admin/populations', {
-    headers: { 'Content-Type': 'application/json' },
-    body: raw,
-  }, 'population');
+  await start(
+    '/api/admin/populations',
+    await encodedJsonBody(raw, 'application/json'),
+    'population',
+  );
 });
 
 elements.refresh.addEventListener('click', () => refresh());
