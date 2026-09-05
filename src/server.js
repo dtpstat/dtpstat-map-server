@@ -4,6 +4,8 @@ import {loadConfig}                from './config.js';
 import {createAdminTaskManager}    from './data/admin-task-manager.js';
 import {createAdminTaskSuccessRepository} from './db/admin-task-success-repository.js';
 import {createCitiesRepository}    from './db/cities-repository.js';
+import {createCityBoundaryTransferService} from './db/city-boundary-transfer-service.js';
+import {createDataExportRepository} from './db/data-export-repository.js';
 import {createDataImportService}   from './db/data-import-service.js';
 import {createKmlUpdateService}    from './db/kml-update-service.js';
 import {createOsmCityUpdateService} from './db/osm-city-update-service.js';
@@ -16,7 +18,9 @@ async function main(){
 	const config     = loadConfig();
 	const pool       = createPool(config.database);
 	const repository = createCitiesRepository(pool);
+	const exportRepository = createDataExportRepository(pool);
 	const importService = createDataImportService(pool);
+	const cityBoundaryTransferService = createCityBoundaryTransferService(pool);
 	const populationService = createPopulationImportService(pool);
 	const kmlUpdateService = createKmlUpdateService(pool, config.kmlUpdate);
 	const osmCityUpdateService = createOsmCityUpdateService(
@@ -39,7 +43,9 @@ async function main(){
 
 	const app        = createApp({
 		repository,
+		exportRepository,
 		importService,
+		cityBoundaryTransferService,
 		populationService,
 		kmlUpdateService,
 		osmCityUpdateService,
