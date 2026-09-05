@@ -1,12 +1,15 @@
 import compression       from 'compression';
 import express           from 'express';
 import helmet            from 'helmet';
-import path              from 'node:path';
+import {readFileSync}     from 'node:fs';
+import path               from 'node:path';
 import {CITY_MARKER_ICON} from '../public/js/city-marker-icon.js';
 import {createAdminTaskManager} from './data/admin-task-manager.js';
 import {createBasicAuth} from './http/basic-auth.js';
+import {projectManifest, renderProjectPage} from './http/project-page.js';
 import {createApiRouter} from './routes/api.js';
 import {createLineTypesRouter} from './routes/line-types-api.js';
+import {createProjectSettingsRouter} from './routes/project-settings-api.js';
 
 const PUBLIC_ASSETS = new Map([
 	['/favicon.ico', 'favicon.ico'],
@@ -15,7 +18,6 @@ const PUBLIC_ASSETS = new Map([
 	['/apple-touch-icon.png', 'apple-touch-icon.png'],
 	['/android-chrome-192x192.png', 'android-chrome-192x192.png'],
 	['/android-chrome-512x512.png', 'android-chrome-512x512.png'],
-	['/site.webmanifest', 'site.webmanifest'],
 	['/bus-lanes.jpeg', 'bus-lanes.jpeg'],
 	['/bus-lanes.csv', 'bus-lanes.csv'],
 	['/bus-lanes.geojson', 'bus-lanes.geojson'],
@@ -26,6 +28,7 @@ const CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'base64');
  * @param {{
  *   repository: import('./routes/api.js').CitiesRepository,
  *   lineTypesRepository: { list: () => Promise<any[]>, save: (payload: unknown) => Promise<any[]> },
+ *   projectSettingsRepository: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
  *   exportRepository: import('./routes/api.js').DataExportRepository,
  *   importService: import('./routes/api.js').DataImportService,
  *   cityBoundaryTransferService: import('./routes/api.js').CityBoundaryTransferService,
@@ -39,6 +42,7 @@ const CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'base64');
 export function createApp({
 	repository,
 	lineTypesRepository,
+	projectSettingsRepository,
 	exportRepository,
 	importService,
 	cityBoundaryTransferService,
@@ -52,6 +56,10 @@ export function createApp({
 	const isProduction    = config.environment === 'production';
 	const publicDirectory = path.join(config.projectRoot, 'public');
 	const adminDirectory  = path.join(config.projectRoot, 'admin');
+	const publicPageTemplate = readFileSync(
+		path.join(config.projectRoot, 'index.html'),
+		'utf8',
+	);
 	const requireAdminAuth = createBasicAuth({
 		username: config.importApi.username,
 		password: config.importApi.password,
@@ -115,6 +123,14 @@ export function createApp({
 	);
 	app.use(
 		'/api',
+		createProjectSettingsRouter({
+			projectSettingsRepository,
+			adminTasks,
+			importApi: config.importApi,
+		}),
+	);
+	app.use(
+		'/api',
 		createApiRouter({
 			repository,
 			exportRepository,
@@ -137,8 +153,28 @@ export function createApp({
 		});
 	}
 
-	app.get('/', (_request, response) => {
-		response.sendFile('index.html', {root: config.projectRoot});
+	app.get('/site.webmanifest', async (_request, response, next) => {
+		try {
+			const settings = await projectSettingsRepository.get();
+			response
+				.set('Cache-Control', 'no-cache')
+				.type('application/manifest+json')
+				.send(JSON.stringify(projectManifest(settings)));
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	app.get('/', async (_request, response, next) => {
+		try {
+			const settings = await projectSettingsRepository.get();
+			response
+				.set('Cache-Control', 'no-cache')
+				.type('html')
+				.send(renderProjectPage(publicPageTemplate, settings));
+		} catch (error) {
+			next(error);
+		}
 	});
 
 	app.use((request, response) => {
