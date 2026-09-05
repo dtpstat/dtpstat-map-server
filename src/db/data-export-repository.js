@@ -34,7 +34,7 @@ const EXPORT_CITY_BOUNDARIES_SQL = `
       ),
       '[]'::json
     )
-  ) AS payload
+  )::text AS payload
   FROM city_boundaries AS boundary
   LEFT JOIN cities AS city ON city.id = boundary.city_id
 `;
@@ -71,7 +71,7 @@ const EXPORT_LINES_SQL = `
       ),
       '[]'::json
     )
-  ) AS payload
+  )::text AS payload
   FROM city_geometries AS geometry
   LEFT JOIN cities AS city ON city.id = geometry.city_id
   LEFT JOIN city_boundaries AS boundary ON boundary.id = geometry.boundary_id
@@ -95,13 +95,16 @@ const EXPORT_POPULATIONS_SQL = `
       ),
       '[]'::json
     )
-  ) AS payload
+  )::text AS payload
   FROM city_populations AS population
   JOIN cities AS city ON city.id = population.city_id
 `;
 
 /**
  * Read-only portable snapshots used for backup, transfer and synchronization.
+ * PostgreSQL returns already serialized JSON text so large polygon snapshots do
+ * not need to be parsed and serialized again by Node.js.
+ *
  * @param {{ query: (text: string, values?: unknown[]) => Promise<{rows: any[]}> }} database
  */
 export function createDataExportRepository(database) {
