@@ -6,6 +6,7 @@
   <title>Администрирование — выделенные полосы</title>
   <link rel="stylesheet" href="/admin/admin.css">
   <link rel="stylesheet" href="/admin/line-types.css">
+  <script type="module" src="/admin/json-examples.js"></script>
   <script type="module" src="/admin/admin.js"></script>
   <script type="module" src="/admin/line-types-editor.js"></script>
 </head>
@@ -126,6 +127,7 @@
             <div class="form-fields">
               <label>GeoJSON городов
                 <input name="file" type="file" accept=".json,.geojson,application/json,application/geo+json" required>
+                <small>Ожидается FeatureCollection с Polygon/MultiPolygon и свойствами placeType, osmType, osmId, osmName. Файл собственного экспорта принимается без преобразования.</small>
               </label>
               <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
             </div>
@@ -173,7 +175,10 @@
           </p>
           <form id="kml-form" data-task-form="kml" data-task-type="kml-update">
             <div class="form-fields">
-              <label>Источники JSON<textarea name="sources" rows="8" placeholder='[{"URL":"https://…","layers":[{"name":"…","multiple":1,"type":"default"}]}]'></textarea></label>
+              <label>Источники JSON
+                <textarea name="sources" rows="12" placeholder="Загрузка актуального примера…"></textarea>
+                <small>Каждый слой: name + multiple (1 или 2) + необязательный type. type — строковый код из вкладки «Типы линий»; без type используется default. Неизвестный type отклоняется до замены данных.</small>
+              </label>
               <label>Буфер города, м
                 <input name="cityBufferMeters" type="number" inputmode="numeric"
                        min="0" step="1" placeholder="из ENV">
@@ -202,6 +207,7 @@
             <div class="form-fields">
               <label>GeoJSON линий
                 <input name="file" type="file" accept=".json,.geojson,application/json,application/geo+json" required>
+                <small>Канонический schemaVersion 2 переносит lineTypes и _dtpstat.lineType. Legacy GeoJSON без типов тоже поддерживается и получает type=default.</small>
               </label>
             </div>
             <button class="task-action" type="submit" data-task-action="kml"
@@ -247,9 +253,11 @@
             <div class="form-fields">
               <label>JSON-файл
                 <input name="file" type="file" accept=".json,application/json">
+                <small>Файл собственного экспорта принимается без преобразования, включая schemaVersion/exportedAt и индивидуальные asOf/source.</small>
               </label>
               <label>Или данные JSON
-                <textarea name="payload" rows="8" placeholder='{"asOf":"2026-01-01","source":"…","populations":[…]}'></textarea>
+                <textarea name="payload" rows="16" placeholder="Загрузка актуального примера…"></textarea>
+                <small>Обязательны populations[].name и populations[].population. Общие asOf/source в корне используются как значения по умолчанию; их можно переопределить у отдельного города. attributes — произвольный JSON-объект.</small>
               </label>
             </div>
             <button class="task-action" type="submit" data-task-action="population"
