@@ -39,6 +39,11 @@ function normalizedName(value, label) {
   return name;
 }
 
+/** @param {string} value */
+function comparableName(value) {
+  return value.toLocaleLowerCase('ru-RU');
+}
+
 /** @param {unknown} value @param {string} label */
 function normalizedColor(value, label) {
   if (typeof value !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(value.trim())) {
@@ -78,6 +83,7 @@ export function buildLineTypesPlan(payload) {
   }
 
   const seen = new Set();
+  const seenNames = new Map();
   const lineTypes = rawTypes.map((rawType, index) => {
     if (!rawType || typeof rawType !== 'object' || Array.isArray(rawType)) {
       throw new LineTypeValidationError(`lineTypes[${index}] must be an object`);
@@ -95,9 +101,19 @@ export function buildLineTypesPlan(payload) {
       throw new LineTypeValidationError(`Duplicate line type: ${type}`);
     }
     seen.add(type);
+
+    const name = normalizedName(rawType.name, `lineTypes[${index}].name`);
+    const normalizedNameKey = comparableName(name);
+    if (seenNames.has(normalizedNameKey)) {
+      throw new LineTypeValidationError(
+        `Duplicate line type name ignoring case: ${name}`,
+      );
+    }
+    seenNames.set(normalizedNameKey, type);
+
     return {
       type,
-      name: normalizedName(rawType.name, `lineTypes[${index}].name`),
+      name,
       color: normalizedColor(rawType.color, `lineTypes[${index}].color`),
       style: normalizedStyle(rawType.style, `lineTypes[${index}].style`),
       width: normalizedWidth(rawType.width, `lineTypes[${index}].width`),
