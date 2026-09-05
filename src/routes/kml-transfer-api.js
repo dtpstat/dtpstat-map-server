@@ -103,10 +103,11 @@ export function createKmlTransferRouter({
       try {
         const task = adminTasks.start(
           {
-            type: 'kml-transfer-import',
+            type: 'kml-update',
             endpoint: '/api/admin/import/lines.kml',
             recordsSuccessfulUpdate: true,
             parameters: {
+              mode: 'portable-kml',
               features: collection.features.length,
               businessLineTypes: collection.lineTypes.length,
             },
@@ -116,7 +117,7 @@ export function createKmlTransferRouter({
             onCommit: () => context.beginCommit(),
             onProgress: (progress) => context.log(
               progress.phase === 'validated'
-                ? 'KML: словарь типов и геометрии проверены'
+                ? 'KML: словарь бизнес-типов и геометрии проверены'
                 : progress.phase === 'database'
                   ? 'KML: изменения базы данных подготовлены'
                   : `KML: ${progress.phase}`,
