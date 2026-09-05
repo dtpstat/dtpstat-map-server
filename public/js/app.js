@@ -57,7 +57,7 @@ function renderLineLegend(lineTypes) {
     button.type = 'button';
     button.className = 'line-legend-item';
     button.setAttribute('aria-pressed', 'true');
-    button.dataset.lineType = lineType.type;
+    button.dataset.lineTypeCode = String(lineType.code);
     button.title = lineType.geometryCount === 0
       ? 'Сейчас линий этого типа нет'
       : `Линий этого типа: ${lineType.geometryCount}`;
@@ -69,13 +69,13 @@ function renderLineLegend(lineTypes) {
     sample.style.borderTopWidth = `${Math.max(2, Math.min(8, lineType.width))}px`;
 
     const name = document.createElement('span');
-    name.textContent = lineType.name;
+    name.textContent = lineType.title ?? lineType.name;
     button.append(sample, name);
     button.addEventListener('click', () => {
       const enabled = button.getAttribute('aria-pressed') !== 'true';
       button.setAttribute('aria-pressed', String(enabled));
       button.classList.toggle('is-disabled', !enabled);
-      mapController.setLineTypeVisibility(lineType.type, enabled);
+      mapController.setLineTypeVisibility(lineType.code, enabled);
     });
     legend.append(button);
   }
@@ -86,9 +86,10 @@ function renderLineLegend(lineTypes) {
 /** @param {any[]} lineTypes */
 function applyLineTypes(lineTypes) {
   const signature = JSON.stringify(
-    lineTypes.map(({ type, name, color, style, width, geometryCount }) => ({
-      type,
+    lineTypes.map(({ code, name, title, color, style, width, geometryCount }) => ({
+      code,
       name,
+      title,
       color,
       style,
       width,
