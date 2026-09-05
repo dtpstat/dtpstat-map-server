@@ -154,7 +154,7 @@ export function parseKmlSource(xml, source) {
           features.push({
             geometry,
             multiple: layer.multiple,
-            lineType: layer.type,
+            businessTypeName: layer.type,
             fingerprint,
             properties: {
               source: 'kml',
