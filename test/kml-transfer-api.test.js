@@ -9,10 +9,10 @@ const authorization = `Basic ${Buffer.from('importer:test-secret').toString('bas
 
 const snapshot = {
   type: 'FeatureCollection',
-  schemaVersion: 2,
+  schemaVersion: 3,
   lineTypes: [
-    { type: 'default', name: 'Обычные', color: '#045b69', style: 'solid', width: 4 },
-    { type: 'one-way', name: 'Односторонние', color: '#cc4400', style: 'dashed', width: 5 },
+    { code: 0, name: 'default', title: 'Обычные', color: '#045b69', style: 'solid', width: 4 },
+    { code: 7, name: 'Односторонние', title: 'Односторонние полосы', color: '#cc4400', style: 'dashed', width: 5 },
   ],
   features: [
     {
@@ -26,7 +26,7 @@ const snapshot = {
           citySlug: 'testograd',
           boundaryOsmType: 'relation',
           boundaryOsmId: 123,
-          lineType: 'one-way',
+          businessTypeCode: 7,
         },
       },
     },
@@ -92,7 +92,7 @@ async function withServer(callback) {
   }
 }
 
-test('portable KML export requires auth and carries the business type dictionary', async () => {
+test('portable KML export requires auth and carries numeric code/name/title dictionary', async () => {
   await withServer(async (baseUrl) => {
     const unauthorized = await fetch(`${baseUrl}/api/admin/export/lines.kml`);
     assert.equal(unauthorized.status, 401);
@@ -105,7 +105,9 @@ test('portable KML export requires auth and carries the business type dictionary
     const xml = await response.text();
     assert.match(xml, /dtpstat\.businessLineTypes/);
     const parsed = parseLinesKml(xml);
-    assert.equal(parsed.lineTypes[1].type, 'one-way');
+    assert.equal(parsed.lineTypes[1].code, 7);
+    assert.equal(parsed.lineTypes[1].name, 'Односторонние');
+    assert.equal(parsed.lineTypes[1].title, 'Односторонние полосы');
     assert.equal(parsed.lineTypes[1].style, 'dashed');
   });
 });
@@ -132,8 +134,8 @@ test('portable KML import parses metadata before starting the database task', as
     assert.deepEqual(state.getImported().lineTypes, snapshot.lineTypes);
     assert.equal(state.getImported().features[0].geometry.type, 'LineString');
     assert.equal(
-      state.getImported().features[0].properties._dtpstat.lineType,
-      'one-way',
+      state.getImported().features[0].properties._dtpstat.businessTypeCode,
+      7,
     );
   });
 });
