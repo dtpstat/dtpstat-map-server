@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
 import { downloadKml } from '../data/kml-downloader.js';
 import { parseKmlSource } from '../data/kml-parser.js';
+import { comparableLineTypeName } from '../data/line-types.js';
 import {
   KmlUpdateValidationError,
   resolveKmlUpdateRequest,
@@ -97,61 +98,48 @@ const MATCH_GEOMETRIES_SQL = `
   ORDER BY prepared."inputIndex"
 `;
 
-const FIND_MISSING_LINE_TYPE_NAME_DUPLICATES_SQL = `
-  WITH requested AS (
-    SELECT DISTINCT code
-    FROM unnest($1::text[]) AS requested(code)
-  ),
-  missing AS (
-    SELECT requested.code
-    FROM requested
-    LEFT JOIN line_types AS exact_type ON exact_type.code = requested.code
-    WHERE exact_type.id IS NULL
-  )
-  SELECT
-    LOWER(BTRIM(code)) AS "normalizedName",
-    array_agg(code ORDER BY code) AS codes
-  FROM missing
-  GROUP BY LOWER(BTRIM(code))
-  HAVING COUNT(*) > 1
-  ORDER BY LOWER(BTRIM(code))
-`;
-
-const FIND_LINE_TYPE_NAME_CONFLICTS_SQL = `
-  WITH requested AS (
-    SELECT DISTINCT code
-    FROM unnest($1::text[]) AS requested(code)
-  )
-  SELECT
-    requested.code AS "requestedCode",
-    existing.code AS "existingCode",
-    existing.name AS "existingName"
-  FROM requested
-  LEFT JOIN line_types AS exact_type ON exact_type.code = requested.code
-  JOIN line_types AS existing
-    ON LOWER(BTRIM(existing.name)) = LOWER(BTRIM(requested.code))
-   AND existing.code <> requested.code
-  WHERE exact_type.id IS NULL
-  ORDER BY requested.code
-`;
-
 const INSERT_MISSING_LINE_TYPES_SQL = `
   WITH requested AS (
-    SELECT DISTINCT code
-    FROM unnest($1::text[]) AS requested(code)
+    SELECT DISTINCT BTRIM(name) AS name
+    FROM unnest($1::text[]) AS requested(name)
   )
-  INSERT INTO line_types (code, name)
-  SELECT requested.code, requested.code
+  INSERT INTO line_types (name, title)
+  SELECT requested.name, requested.name
   FROM requested
-  LEFT JOIN line_types AS existing ON existing.code = requested.code
-  WHERE existing.id IS NULL
-  ON CONFLICT (code) DO NOTHING
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM line_types AS existing
+    WHERE LOWER(BTRIM(existing.name)) = LOWER(BTRIM(requested.name))
+  )
+  ON CONFLICT DO NOTHING
   RETURNING
-    code AS type,
+    id::integer AS id,
+    code::integer AS code,
     name,
+    title,
     color,
     line_style AS style,
     width::double precision AS width
+`;
+
+const LOAD_LINE_TYPES_SQL = `
+  WITH requested AS (
+    SELECT DISTINCT BTRIM(name) AS name
+    FROM unnest($1::text[]) AS requested(name)
+  )
+  SELECT
+    requested.name AS "requestedName",
+    line_type.id::integer AS id,
+    line_type.code::integer AS code,
+    line_type.name,
+    line_type.title,
+    line_type.color,
+    line_type.line_style AS style,
+    line_type.width::double precision AS width
+  FROM requested
+  JOIN line_types AS line_type
+    ON LOWER(BTRIM(line_type.name)) = LOWER(BTRIM(requested.name))
+  ORDER BY line_type.code
 `;
 
 const INSERT_GEOMETRIES_SQL = `
@@ -160,7 +148,7 @@ const INSERT_GEOMETRIES_SQL = `
     FROM jsonb_to_recordset($1::jsonb) AS payload(
       "cityId" bigint,
       "boundaryId" bigint,
-      "lineType" text,
+      "lineTypeId" bigint,
       multiple smallint,
       properties jsonb,
       geometry jsonb
@@ -188,14 +176,13 @@ const INSERT_GEOMETRIES_SQL = `
   SELECT
     prepared."cityId",
     prepared."boundaryId",
-    line_type.id,
+    prepared."lineTypeId",
     prepared.multiple,
     ST_Length(prepared.geom::geography),
     ST_Length(prepared.geom::geography) * prepared.multiple,
     prepared.properties,
     prepared.geom
   FROM prepared
-  JOIN line_types AS line_type ON line_type.code = prepared."lineType"
 `;
 
 const INSERT_UPDATE_RUN_SQL = `
@@ -228,7 +215,8 @@ function removeDuplicateFeatures(features) {
     }
     if (
       previous.multiple !== feature.multiple ||
-      previous.lineType !== feature.lineType
+      comparableLineTypeName(previous.businessTypeName) !==
+        comparableLineTypeName(feature.businessTypeName)
     ) {
       throw new KmlUpdateValidationError(
         `The same KML geometry has conflicting multiple/type values: ${feature.fingerprint}`,
@@ -237,6 +225,16 @@ function removeDuplicateFeatures(features) {
     duplicates += 1;
   }
   return { features: unique, duplicates };
+}
+
+/** @param {Array<any>} features */
+function referencedTypeNames(features) {
+  const names = new Map();
+  for (const feature of features) {
+    const key = comparableLineTypeName(feature.businessTypeName);
+    if (!names.has(key)) names.set(key, feature.businessTypeName);
+  }
+  return [...names.values()].sort((left, right) => left.localeCompare(right, 'ru'));
 }
 
 /**
@@ -308,8 +306,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
       }
       const deduplicated = removeDuplicateFeatures(allFeatures);
       const features = deduplicated.features;
-      const referencedLineTypes = [...new Set(features.map((feature) => feature.lineType))]
-        .sort();
+      const referencedNames = referencedTypeNames(features);
       const matchPayload = features.map((feature, inputIndex) => ({
         inputIndex,
         geometry: feature.geometry,
@@ -324,38 +321,22 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
         );
         throwIfAdminTaskCancelled(operation.signal);
 
-        const duplicateMissingNames = await client.query(
-          FIND_MISSING_LINE_TYPE_NAME_DUPLICATES_SQL,
-          [referencedLineTypes],
-        );
-        if (duplicateMissingNames.rows.length > 0) {
-          const conflicts = duplicateMissingNames.rows
-            .map((row) => row.codes.join(', '))
-            .join('; ');
-          throw new KmlUpdateValidationError(
-            `Cannot auto-create KML line types because their initial names would duplicate ignoring case: ${conflicts}`,
-          );
-        }
-
-        const nameConflicts = await client.query(
-          FIND_LINE_TYPE_NAME_CONFLICTS_SQL,
-          [referencedLineTypes],
-        );
-        if (nameConflicts.rows.length > 0) {
-          const conflicts = nameConflicts.rows
-            .map((row) =>
-              `type "${row.requestedCode}" conflicts with name "${row.existingName}" of code "${row.existingCode}"`)
-            .join('; ');
-          throw new KmlUpdateValidationError(
-            `Cannot auto-create KML line types: ${conflicts}. Use the existing line type code in KML settings.`,
-          );
-        }
-
         const createdLineTypesResult = await client.query(
           INSERT_MISSING_LINE_TYPES_SQL,
-          [referencedLineTypes],
+          [referencedNames],
         );
         const pendingLineTypes = createdLineTypesResult.rows;
+
+        const typeRowsResult = await client.query(LOAD_LINE_TYPES_SQL, [referencedNames]);
+        const typeByName = new Map(
+          typeRowsResult.rows.map((lineType) => [
+            comparableLineTypeName(lineType.requestedName),
+            lineType,
+          ]),
+        );
+        if (typeByName.size !== referencedNames.length) {
+          throw new Error('Not every imported KML business type was resolved');
+        }
 
         const boundaryResult = await client.query(
           'SELECT EXISTS (SELECT 1 FROM city_boundaries) AS ready',
@@ -377,9 +358,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
         }
 
         const unmatched = matchResult.rows.filter((row) => row.boundaryId === null);
-        const ambiguous = matchResult.rows.filter(
-          (row) => row.candidateCount > 1,
-        );
+        const ambiguous = matchResult.rows.filter((row) => row.candidateCount > 1);
         if (unmatched.length > 0 && options.unmatchedPolicy === 'fail') {
           throw new KmlUpdateMatchError(
             `${unmatched.length} KML geometries do not overlap an OSM place polygon`,
@@ -393,14 +372,20 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
 
         const matched = matchResult.rows
           .filter((row) => row.boundaryId !== null)
-          .map((row) => ({
-            cityId: row.cityId,
-            boundaryId: row.boundaryId,
-            lineType: features[row.inputIndex].lineType,
-            multiple: features[row.inputIndex].multiple,
-            properties: features[row.inputIndex].properties,
-            geometry: features[row.inputIndex].geometry,
-          }));
+          .map((row) => {
+            const feature = features[row.inputIndex];
+            const lineType = typeByName.get(comparableLineTypeName(feature.businessTypeName));
+            return {
+              cityId: row.cityId,
+              boundaryId: row.boundaryId,
+              lineTypeId: lineType.id,
+              businessTypeCode: lineType.code,
+              businessTypeName: lineType.name,
+              multiple: feature.multiple,
+              properties: feature.properties,
+              geometry: feature.geometry,
+            };
+          });
         if (matched.length === 0) {
           throw new KmlUpdateMatchError('No KML geometries overlap an OSM place polygon');
         }
@@ -416,10 +401,11 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           ambiguous: ambiguous.length,
           citiesUpdated,
           placesUpdated,
-          lineTypes: referencedLineTypes,
-          newLineTypes: pendingLineTypes.map((lineType) => lineType.type),
+          lineTypes: typeRowsResult.rows.map(({ requestedName, ...lineType }) => lineType),
+          newLineTypes: pendingLineTypes.map((lineType) => lineType.code),
         });
         throwIfAdminTaskCancelled(operation.signal);
+
         const completedAt = new Date().toISOString();
         const result = {
           dryRun: options.dryRun,
@@ -430,7 +416,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           duplicates: deduplicated.duplicates,
           ignoredNonLines,
           cityBufferMeters: options.cityBufferMeters,
-          lineTypes: referencedLineTypes,
+          lineTypes: typeRowsResult.rows.map(({ requestedName, ...lineType }) => lineType),
           createdLineTypes: options.dryRun ? [] : pendingLineTypes,
           wouldCreateLineTypes: options.dryRun ? pendingLineTypes : [],
           importedGeometries: matched.length,
@@ -448,7 +434,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
               sourceURL: feature.properties.sourceURL,
               layer: feature.properties.layer,
               placemarkName: feature.properties.placemarkName,
-              lineType: feature.lineType,
+              businessTypeName: feature.businessTypeName,
             };
           }),
         };
