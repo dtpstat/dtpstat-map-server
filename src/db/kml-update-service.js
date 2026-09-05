@@ -97,12 +97,21 @@ const MATCH_GEOMETRIES_SQL = `
   ORDER BY prepared."inputIndex"
 `;
 
+const FIND_UNKNOWN_LINE_TYPES_SQL = `
+  SELECT requested.type
+  FROM unnest($1::text[]) AS requested(type)
+  LEFT JOIN line_types AS line_type ON line_type.code = requested.type
+  WHERE line_type.id IS NULL
+  ORDER BY requested.type
+`;
+
 const INSERT_GEOMETRIES_SQL = `
   WITH payload_rows AS (
     SELECT *
     FROM jsonb_to_recordset($1::jsonb) AS payload(
       "cityId" bigint,
       "boundaryId" bigint,
+      "lineType" text,
       multiple smallint,
       properties jsonb,
       geometry jsonb
@@ -120,6 +129,7 @@ const INSERT_GEOMETRIES_SQL = `
   INSERT INTO city_geometries (
     city_id,
     boundary_id,
+    line_type_id,
     lanes,
     length_m,
     lane_length_m,
@@ -129,12 +139,14 @@ const INSERT_GEOMETRIES_SQL = `
   SELECT
     prepared."cityId",
     prepared."boundaryId",
+    line_type.id,
     prepared.multiple,
     ST_Length(prepared.geom::geography),
     ST_Length(prepared.geom::geography) * prepared.multiple,
     prepared.properties,
     prepared.geom
   FROM prepared
+  JOIN line_types AS line_type ON line_type.code = prepared."lineType"
 `;
 
 const INSERT_UPDATE_RUN_SQL = `
@@ -165,9 +177,12 @@ function removeDuplicateFeatures(features) {
       unique.push(feature);
       continue;
     }
-    if (previous.multiple !== feature.multiple) {
+    if (
+      previous.multiple !== feature.multiple ||
+      previous.lineType !== feature.lineType
+    ) {
       throw new KmlUpdateValidationError(
-        `The same KML geometry has conflicting multiple values: ${feature.fingerprint}`,
+        `The same KML geometry has conflicting multiple/type values: ${feature.fingerprint}`,
       );
     }
     duplicates += 1;
@@ -244,6 +259,8 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
       }
       const deduplicated = removeDuplicateFeatures(allFeatures);
       const features = deduplicated.features;
+      const referencedLineTypes = [...new Set(features.map((feature) => feature.lineType))]
+        .sort();
       const matchPayload = features.map((feature, inputIndex) => ({
         inputIndex,
         geometry: feature.geometry,
@@ -257,6 +274,17 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           `SELECT pg_advisory_xact_lock(hashtext('dtpstat-buslines:data-import'))`,
         );
         throwIfAdminTaskCancelled(operation.signal);
+
+        const unknownLineTypes = await client.query(
+          FIND_UNKNOWN_LINE_TYPES_SQL,
+          [referencedLineTypes],
+        );
+        if (unknownLineTypes.rows.length > 0) {
+          throw new KmlUpdateValidationError(
+            `Unknown line types: ${unknownLineTypes.rows.map((row) => row.type).join(', ')}. Configure them in the admin panel first.`,
+          );
+        }
+
         const boundaryResult = await client.query(
           'SELECT EXISTS (SELECT 1 FROM city_boundaries) AS ready',
         );
@@ -296,6 +324,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           .map((row) => ({
             cityId: row.cityId,
             boundaryId: row.boundaryId,
+            lineType: features[row.inputIndex].lineType,
             multiple: features[row.inputIndex].multiple,
             properties: features[row.inputIndex].properties,
             geometry: features[row.inputIndex].geometry,
@@ -315,6 +344,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           ambiguous: ambiguous.length,
           citiesUpdated,
           placesUpdated,
+          lineTypes: referencedLineTypes,
         });
         throwIfAdminTaskCancelled(operation.signal);
         const completedAt = new Date().toISOString();
@@ -327,6 +357,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           duplicates: deduplicated.duplicates,
           ignoredNonLines,
           cityBufferMeters: options.cityBufferMeters,
+          lineTypes: referencedLineTypes,
           importedGeometries: matched.length,
           skippedWithoutCity: unmatched.length,
           skippedWithoutPlace: unmatched.length,
@@ -342,6 +373,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
               sourceURL: feature.properties.sourceURL,
               layer: feature.properties.layer,
               placemarkName: feature.properties.placemarkName,
+              lineType: feature.lineType,
             };
           }),
         };
