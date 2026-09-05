@@ -1,12 +1,18 @@
 import pg from 'pg';
+import {
+  databaseApplicationName,
+  databaseSearchPath,
+  normalizeDatabaseSchema,
+} from './database-environment.js';
 
 const { Pool } = pg;
 
 /**
- * @param {{ host: string, port: number, database: string, user: string, password: string, ssl: false | { rejectUnauthorized: boolean }, maxConnections: number }} config
+ * @param {{ host: string, port: number, database: string, user: string, password: string, ssl: false | { rejectUnauthorized: boolean }, maxConnections: number, schema?: string }} config
  */
 export function createPool(config) {
-  return new Pool({
+  const schema = normalizeDatabaseSchema(config.schema);
+  const pool = new Pool({
     host: config.host,
     port: config.port,
     database: config.database,
@@ -14,7 +20,9 @@ export function createPool(config) {
     password: config.password,
     max: config.maxConnections,
     ssl: config.ssl,
-    application_name: 'dtpstat-buslines',
-    options: '-c search_path=buslanes,public',
+    application_name: databaseApplicationName(schema, 'server'),
+    options: databaseSearchPath(schema),
   });
+  pool.databaseSchema = schema;
+  return pool;
 }
