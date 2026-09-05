@@ -5,6 +5,8 @@ const SELECT_SETTINGS_SQL = `
     project_name AS "projectName",
     keywords,
     footer_html AS "footerHtml",
+    yandex_metrika_id AS "yandexMetrikaId",
+    google_analytics_id AS "googleAnalyticsId",
     updated_at AS "updatedAt"
   FROM project_settings
   WHERE id = 1
@@ -16,12 +18,16 @@ const UPDATE_SETTINGS_SQL = `
     project_name = $1,
     keywords = $2::text[],
     footer_html = $3,
+    yandex_metrika_id = $4,
+    google_analytics_id = $5,
     updated_at = now()
   WHERE id = 1
   RETURNING
     project_name AS "projectName",
     keywords,
     footer_html AS "footerHtml",
+    yandex_metrika_id AS "yandexMetrikaId",
+    google_analytics_id AS "googleAnalyticsId",
     updated_at AS "updatedAt"
 `;
 
@@ -43,6 +49,8 @@ export function createProjectSettingsRepository(database) {
       plan.projectName,
       plan.keywords,
       plan.footerHtml,
+      plan.yandexMetrikaId,
+      plan.googleAnalyticsId,
     ]);
     if (!result.rows[0]) {
       throw new Error('Project settings row is missing; run database migrations');
