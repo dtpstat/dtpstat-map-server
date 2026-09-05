@@ -232,9 +232,33 @@ function referencedTypeNames(features) {
   const names = new Map();
   for (const feature of features) {
     const key = comparableLineTypeName(feature.businessTypeName);
-    if (!names.has(key)) names.set(key, feature.businessTypeName);
+    if (!names.has(key)) names.set(key, feature.businessTypeName.trim().normalize('NFC'));
   }
   return [...names.values()].sort((left, right) => left.localeCompare(right, 'ru'));
+}
+
+/** @param {string[]} names @param {any[]} rows */
+function missingTypeNames(names, rows) {
+  const existing = new Set(rows.map((row) => comparableLineTypeName(row.name)));
+  return names.filter((name) => !existing.has(comparableLineTypeName(name)));
+}
+
+/** @param {string[]} names */
+function previewLineTypes(names) {
+  return names.map((name) => ({
+    id: null,
+    code: null,
+    name,
+    title: name,
+    color: '#045b69',
+    style: 'solid',
+    width: 4,
+  }));
+}
+
+/** @param {any[]} rows */
+function publicLineTypes(rows) {
+  return rows.map(({ requestedName, ...lineType }) => lineType);
 }
 
 /**
@@ -304,6 +328,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
       if (allFeatures.length === 0) {
         throw new KmlUpdateValidationError('Selected KML layers contain no lines');
       }
+
       const deduplicated = removeDuplicateFeatures(allFeatures);
       const features = deduplicated.features;
       const referencedNames = referencedTypeNames(features);
@@ -321,16 +346,37 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
         );
         throwIfAdminTaskCancelled(operation.signal);
 
-        const createdLineTypesResult = await client.query(
-          INSERT_MISSING_LINE_TYPES_SQL,
+        let typeRows = (await client.query(
+          LOAD_LINE_TYPES_SQL,
           [referencedNames],
-        );
-        const pendingLineTypes = createdLineTypesResult.rows;
+        )).rows;
+        const missingNames = missingTypeNames(referencedNames, typeRows);
+        let createdLineTypes = [];
+        let wouldCreateLineTypes = [];
 
-        const typeRowsResult = await client.query(LOAD_LINE_TYPES_SQL, [referencedNames]);
+        if (options.dryRun) {
+          // PostgreSQL sequences are non-transactional. Do not INSERT here:
+          // a rolled-back dry run must not consume future numeric CODE values.
+          wouldCreateLineTypes = previewLineTypes(missingNames);
+          typeRows = [...typeRows, ...wouldCreateLineTypes.map((lineType) => ({
+            requestedName: lineType.name,
+            ...lineType,
+          }))];
+        } else if (missingNames.length > 0) {
+          const created = await client.query(
+            INSERT_MISSING_LINE_TYPES_SQL,
+            [missingNames],
+          );
+          createdLineTypes = created.rows;
+          typeRows = (await client.query(
+            LOAD_LINE_TYPES_SQL,
+            [referencedNames],
+          )).rows;
+        }
+
         const typeByName = new Map(
-          typeRowsResult.rows.map((lineType) => [
-            comparableLineTypeName(lineType.requestedName),
+          typeRows.map((lineType) => [
+            comparableLineTypeName(lineType.requestedName ?? lineType.name),
             lineType,
           ]),
         );
@@ -374,7 +420,9 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           .filter((row) => row.boundaryId !== null)
           .map((row) => {
             const feature = features[row.inputIndex];
-            const lineType = typeByName.get(comparableLineTypeName(feature.businessTypeName));
+            const lineType = typeByName.get(
+              comparableLineTypeName(feature.businessTypeName),
+            );
             return {
               cityId: row.cityId,
               boundaryId: row.boundaryId,
@@ -394,6 +442,13 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           matched.map((row) => row.cityId).filter((cityId) => cityId !== null),
         ).size;
         const placesUpdated = new Set(matched.map((row) => row.boundaryId)).size;
+        const reportedLineTypes = publicLineTypes(typeRows)
+          .sort((left, right) => {
+            if (left.code === null) return 1;
+            if (right.code === null) return -1;
+            return left.code - right.code;
+          });
+
         operation.onProgress?.({
           phase: 'database',
           matched: matched.length,
@@ -401,8 +456,10 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           ambiguous: ambiguous.length,
           citiesUpdated,
           placesUpdated,
-          lineTypes: typeRowsResult.rows.map(({ requestedName, ...lineType }) => lineType),
-          newLineTypes: pendingLineTypes.map((lineType) => lineType.code),
+          lineTypes: reportedLineTypes,
+          newLineTypes: options.dryRun
+            ? wouldCreateLineTypes.map((lineType) => lineType.name)
+            : createdLineTypes.map((lineType) => lineType.code),
         });
         throwIfAdminTaskCancelled(operation.signal);
 
@@ -416,9 +473,9 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           duplicates: deduplicated.duplicates,
           ignoredNonLines,
           cityBufferMeters: options.cityBufferMeters,
-          lineTypes: typeRowsResult.rows.map(({ requestedName, ...lineType }) => lineType),
-          createdLineTypes: options.dryRun ? [] : pendingLineTypes,
-          wouldCreateLineTypes: options.dryRun ? pendingLineTypes : [],
+          lineTypes: reportedLineTypes,
+          createdLineTypes,
+          wouldCreateLineTypes,
           importedGeometries: matched.length,
           skippedWithoutCity: unmatched.length,
           skippedWithoutPlace: unmatched.length,
