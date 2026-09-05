@@ -26,6 +26,7 @@
       content="{{PROJECT_NAME}} — рейтинг городов и открытые картографические данные."
     >
     <meta name="twitter:image" content="/bus-lanes.jpeg">
+    {{PROJECT_METRICS_META}}
     <title>{{PROJECT_NAME}}</title>
 
     <link rel="icon" href="/favicon.ico" sizes="any">
@@ -114,10 +115,12 @@
     </div>
 
     <noscript>
+      {{YANDEX_METRIKA_NOSCRIPT}}
       <p class="noscript-message">Для интерактивной карты необходимо включить JavaScript.</p>
     </noscript>
 
     <script src="/vendor/mapbox-gl/mapbox-gl.js"></script>
     <script type="module" src="/js/app.js"></script>
+    {{PROJECT_METRICS_SCRIPT}}
   </body>
 </html>
