@@ -222,21 +222,8 @@ export function createDataImportService(pool) {
         throwIfAdminTaskCancelled(operation.signal);
 
         await client.query(UPSERT_CITIES_SQL, [JSON.stringify(plan.cities)]);
-        if (plan.lineTypes.length > 0) {
-          await client.query(UPSERT_LINE_TYPES_SQL, [JSON.stringify(plan.lineTypes)]);
-        }
 
         const serializedGeometries = JSON.stringify(plan.geometries);
-        const unknownLineTypes = await client.query(
-          FIND_UNKNOWN_LINE_TYPES_SQL,
-          [serializedGeometries],
-        );
-        if (unknownLineTypes.rows.length > 0) {
-          throw new GeoJsonValidationError(
-            `Line GeoJSON references unknown line types: ${unknownLineTypes.rows.map((row) => row.line_type).join(', ')}`,
-          );
-        }
-
         const unknownBoundaries = await client.query(
           FIND_UNKNOWN_BOUNDARIES_SQL,
           [serializedGeometries],
@@ -267,11 +254,21 @@ export function createDataImportService(pool) {
 
         await client.query('DELETE FROM city_geometries');
         if (plan.lineTypes.length > 0) {
-          await client.query(
-            DELETE_OMITTED_LINE_TYPES_SQL,
-            [plan.lineTypes.map((lineType) => lineType.type)],
+          const lineTypeCodes = plan.lineTypes.map((lineType) => lineType.type);
+          await client.query(DELETE_OMITTED_LINE_TYPES_SQL, [lineTypeCodes]);
+          await client.query(UPSERT_LINE_TYPES_SQL, [JSON.stringify(plan.lineTypes)]);
+        }
+
+        const unknownLineTypes = await client.query(
+          FIND_UNKNOWN_LINE_TYPES_SQL,
+          [serializedGeometries],
+        );
+        if (unknownLineTypes.rows.length > 0) {
+          throw new GeoJsonValidationError(
+            `Line GeoJSON references unknown line types: ${unknownLineTypes.rows.map((row) => row.line_type).join(', ')}`,
           );
         }
+
         const geometryResult = await client.query(INSERT_GEOMETRIES_SQL, [
           serializedGeometries,
         ]);
