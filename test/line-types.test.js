@@ -47,6 +47,31 @@ test('line type plan validates and normalizes portable styles', () => {
   ]);
 });
 
+test('line type names are trimmed, keep case, and are unique ignoring case', () => {
+  const plan = buildLineTypesPlan({
+    lineTypes: [
+      { ...payload.lineTypes[0], name: '  Выделенные полосы  ' },
+      { ...payload.lineTypes[1], name: '  Приоритет Трамвая  ' },
+    ],
+  });
+  assert.equal(plan.lineTypes[0].name, 'Выделенные полосы');
+  assert.equal(plan.lineTypes[1].name, 'Приоритет Трамвая');
+
+  assert.throws(
+    () => buildLineTypesPlan({
+      lineTypes: [
+        payload.lineTypes[0],
+        {
+          ...payload.lineTypes[1],
+          type: 'another-code',
+          name: '  ВЫДЕЛЕННЫЕ ПОЛОСЫ ',
+        },
+      ],
+    }),
+    /Duplicate line type name ignoring case/,
+  );
+});
+
 test('line type plan requires default and rejects invalid styles', () => {
   assert.throws(
     () => buildLineTypesPlan({ lineTypes: [payload.lineTypes[1]] }),
