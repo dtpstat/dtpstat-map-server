@@ -22,7 +22,7 @@ export function createLineTypesRouter({
 
   router.get('/line-types', async (_request, response, next) => {
     try {
-      response.set('Cache-Control', 'public, max-age=300');
+      response.set('Cache-Control', 'no-store');
       response.json({ lineTypes: await lineTypesRepository.list() });
     } catch (error) {
       next(error);
