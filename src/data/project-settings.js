@@ -128,8 +128,8 @@ function normalizeYandexMetrikaId(value) {
   return normalizeOptionalIdentifier(
     value,
     'yandexMetrikaId',
-    /^[1-9][0-9]{0,19}$/,
-    'a positive numeric counter ID',
+    /^[1-9][0-9]{0,14}$/,
+    'a positive numeric counter ID up to 15 digits',
   );
 }
 
