@@ -18,8 +18,15 @@ function collection(properties = {}) {
         osmName: 'Тестоград',
         tags: { place: 'city', name: 'Тестоград' },
         osmTimestamp: '2026-09-01T12:00:00Z',
+        updatedAt: '2026-09-01T13:00:00Z',
         citySlug: 'testograd',
         cityName: 'Тестоград',
+        city: {
+          slug: 'testograd',
+          name: 'Тестоград',
+          fullName: 'Город Тестоград',
+          attributes: { source: 'transfer-test' },
+        },
         ...properties,
       },
       geometry: {
@@ -35,8 +42,9 @@ function collection(properties = {}) {
   };
 }
 
-test('city boundary transfer plan preserves portable OSM properties', () => {
-  const plan = buildCityBoundaryGeoJsonPlan(collection());
+test('city boundary transfer plan preserves OSM and linked city properties', () => {
+  const source = collection();
+  const plan = buildCityBoundaryGeoJsonPlan(source);
   assert.deepEqual(plan.boundaries, [{
     placeType: 'city',
     osmType: 'relation',
@@ -44,9 +52,16 @@ test('city boundary transfer plan preserves portable OSM properties', () => {
     osmName: 'Тестоград',
     tags: { place: 'city', name: 'Тестоград' },
     osmTimestamp: '2026-09-01T12:00:00.000Z',
+    updatedAt: '2026-09-01T13:00:00.000Z',
     citySlug: 'testograd',
     cityName: 'Тестоград',
-    geometry: collection().features[0].geometry,
+    geometry: source.features[0].geometry,
+  }]);
+  assert.deepEqual(plan.cities, [{
+    slug: 'testograd',
+    name: 'Тестоград',
+    fullName: 'Город Тестоград',
+    attributes: { source: 'transfer-test' },
   }]);
 });
 
