@@ -21,6 +21,7 @@ test('loadConfig enables HTTP with safe defaults', () => {
   assert.equal(config.database.host, '127.0.0.1');
   assert.equal(config.database.port, 5432);
   assert.equal(config.database.user, 'example_app');
+  assert.equal(config.database.schema, 'buslanes');
   assert.equal(config.importApi.maxBodyBytes, 25 * 1024 * 1024);
   assert.equal(config.kmlUpdate.sources.length, 0);
   assert.equal(config.kmlUpdate.timeoutMs, 30000);
@@ -43,7 +44,7 @@ test('loadConfig enables HTTP with safe defaults', () => {
   assert.equal(config.osmCityUpdate.retryMaxDelayMs, 240000);
   assert.equal(
     config.osmCityUpdate.userAgent,
-    'dtpstat-buslines/2.0 OSM city updater',
+    'buslanes/2.0 OSM city updater',
   );
   assert.deepEqual(
     [...config.osmCityUpdate.allowedHosts],
@@ -63,6 +64,23 @@ test('loadConfig enables HTTP with safe defaults', () => {
       'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
     ],
   );
+});
+
+test('loadConfig derives instance defaults from DATABASE_SCHEMA', () => {
+  const config = loadConfig({
+    ...REQUIRED_ENV,
+    DATABASE_SCHEMA: 'tramlanes',
+  }, '/project');
+
+  assert.equal(config.database.schema, 'tramlanes');
+  assert.equal(config.osmCityUpdate.userAgent, 'tramlanes/2.0 OSM city updater');
+
+  const explicitUserAgent = loadConfig({
+    ...REQUIRED_ENV,
+    DATABASE_SCHEMA: 'tramlanes',
+    OSM_CITY_UPDATE_USER_AGENT: 'custom-agent/1.0',
+  }, '/project');
+  assert.equal(explicitUserAgent.osmCityUpdate.userAgent, 'custom-agent/1.0');
 });
 
 test('loadConfig requires the default OSM endpoint in the exact URL allowlist', () => {
