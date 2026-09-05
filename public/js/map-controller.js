@@ -1,11 +1,19 @@
 import { CITY_MARKER_ICON_URL } from './city-marker-icon.js';
 
 const SOURCE_ID = 'bus-lanes';
-const LAYER_ID = 'bus-lanes-lines';
+const LAYER_PREFIX = 'bus-lanes-lines-';
 const CITY_SOURCE_ID = 'ranked-cities';
 const CITY_LAYER_ID = 'ranked-cities-markers';
 const CITY_IMAGE_ID = 'ranked-city-bus';
 const EMPTY_COLLECTION = { type: 'FeatureCollection', features: [] };
+const DEFAULT_LINE_TYPE = {
+  type: 'default',
+  name: 'Выделенные полосы',
+  color: '#045b69',
+  style: 'solid',
+  width: 4,
+  geometryCount: 0,
+};
 
 export const ROAD_DATA_MIN_ZOOM = 8;
 
@@ -19,14 +27,22 @@ export const ROAD_DATA_MIN_ZOOM = 8;
 export function findTopLabelLayerId(layers = []) {
   let lastNonSymbolIndex = -1;
   for (const [index, layer] of layers.entries()) {
-    if (layer.id !== LAYER_ID && layer.type !== 'symbol') {
+    if (!layer.id.startsWith(LAYER_PREFIX) && layer.type !== 'symbol') {
       lastNonSymbolIndex = index;
     }
   }
 
   return layers
     .slice(lastNonSymbolIndex + 1)
-    .find((layer) => layer.id !== LAYER_ID && layer.type === 'symbol')?.id;
+    .find((layer) =>
+      !layer.id.startsWith(LAYER_PREFIX) && layer.type === 'symbol')?.id;
+}
+
+/** @param {string} style */
+function dashArray(style) {
+  if (style === 'dashed') return [2.5, 1.5];
+  if (style === 'dotted') return [0.1, 1.8];
+  return null;
 }
 
 /** @param {any} city */
@@ -141,8 +157,11 @@ export async function createMapController(config) {
 
   let currentGeoJson = EMPTY_COLLECTION;
   let currentCities = EMPTY_COLLECTION;
+  let currentLineTypes = [DEFAULT_LINE_TYPE];
   let viewportHandler = null;
   let citySelectHandler = null;
+  const disabledLineTypes = new Set();
+  let lineLayerIds = new Map();
 
   async function ensureCityMarkerLayer() {
     if (!map.hasImage(CITY_IMAGE_ID)) {
@@ -183,7 +202,14 @@ export async function createMapController(config) {
     }
   }
 
-  function ensureBusLaneLayer() {
+  function removeBusLaneLayers() {
+    for (const layerId of lineLayerIds.values()) {
+      if (map.getLayer(layerId)) map.removeLayer(layerId);
+    }
+    lineLayerIds = new Map();
+  }
+
+  function ensureBusLaneLayers() {
     const labelLayerId = findTopLabelLayerId(map.getStyle().layers);
     if (!map.getSource(SOURCE_ID)) {
       map.addSource(SOURCE_ID, {
@@ -191,37 +217,46 @@ export async function createMapController(config) {
         data: currentGeoJson,
       });
     }
-    if (!map.getLayer(LAYER_ID)) {
-      map.addLayer(
-        {
-          id: LAYER_ID,
-          type: 'line',
-          source: SOURCE_ID,
-          minzoom: ROAD_DATA_MIN_ZOOM,
-          layout: {
-            'line-cap': 'round',
-            'line-join': 'round',
-          },
-          paint: {
-            'line-color': 'rgba(4, 91, 105, 0.8)',
-            'line-width': ['match', ['get', 'lanes'], 2, 8, 4],
-          },
-        },
-        labelLayerId,
-      );
-    }
 
-    // Roads and other geometry stay below; the final label block stays above.
-    map.moveLayer(LAYER_ID, labelLayerId);
+    for (const [index, lineType] of currentLineTypes.entries()) {
+      const layerId = `${LAYER_PREFIX}${index}`;
+      lineLayerIds.set(lineType.type, layerId);
+      if (!map.getLayer(layerId)) {
+        const paint = {
+          'line-color': lineType.color,
+          'line-width': lineType.width,
+        };
+        const dash = dashArray(lineType.style);
+        if (dash) paint['line-dasharray'] = dash;
+        map.addLayer(
+          {
+            id: layerId,
+            type: 'line',
+            source: SOURCE_ID,
+            minzoom: ROAD_DATA_MIN_ZOOM,
+            filter: ['==', ['get', 'lineType'], lineType.type],
+            layout: {
+              'line-cap': 'round',
+              'line-join': 'round',
+              visibility: disabledLineTypes.has(lineType.type) ? 'none' : 'visible',
+            },
+            paint,
+          },
+          labelLayerId,
+        );
+      }
+      map.moveLayer(layerId, labelLayerId);
+    }
   }
 
   async function ensureMapLayers() {
     await ensureCityMarkerLayer();
-    ensureBusLaneLayer();
+    ensureBusLaneLayers();
   }
 
   await ensureMapLayers();
   map.on('style.load', () => {
+    lineLayerIds = new Map();
     void ensureMapLayers()
       .then(() => {
         map.getSource(CITY_SOURCE_ID).setData(currentCities);
@@ -252,6 +287,24 @@ export async function createMapController(config) {
       map.getSource(CITY_SOURCE_ID).setData(currentCities);
     },
 
+    /** @param {any[]} lineTypes */
+    setLineTypes(lineTypes) {
+      const normalized = lineTypes.length > 0 ? lineTypes : [DEFAULT_LINE_TYPE];
+      removeBusLaneLayers();
+      currentLineTypes = normalized;
+      ensureBusLaneLayers();
+    },
+
+    /** @param {string} type @param {boolean} enabled */
+    setLineTypeVisibility(type, enabled) {
+      if (enabled) disabledLineTypes.delete(type);
+      else disabledLineTypes.add(type);
+      const layerId = lineLayerIds.get(type);
+      if (layerId && map.getLayer(layerId)) {
+        map.setLayoutProperty(layerId, 'visibility', enabled ? 'visible' : 'none');
+      }
+    },
+
     /** @param {(viewport: { zoom: number, bbox: [number, number, number, number], center: [number, number] }) => void} handler */
     onViewportChange(handler) {
       viewportHandler = handler;
@@ -266,7 +319,7 @@ export async function createMapController(config) {
     /** @param {GeoJSON.FeatureCollection} geojson */
     setViewportData(geojson) {
       currentGeoJson = geojson;
-      ensureBusLaneLayer();
+      ensureBusLaneLayers();
       map.getSource(SOURCE_ID).setData(geojson);
     },
 
