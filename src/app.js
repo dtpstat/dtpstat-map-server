@@ -221,7 +221,7 @@ export function createApp({
 			response
 				.set('Cache-Control', 'no-cache')
 				.type('application/manifest+json')
-				.send(JSON.stringify(projectManifest(settings));
+				.send(JSON.stringify(projectManifest(settings)));
 		} catch (error) {
 			next(error);
 		}
