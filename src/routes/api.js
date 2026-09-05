@@ -23,28 +23,26 @@ import {createBasicAuth}        from '../http/basic-auth.js';
 
 /**
  * @typedef {{
- *   replaceFromGeoJson: (collection: unknown) => Promise<{
- *     cities: number,
- *     geometries: number,
- *     ignoredFeatures: number,
- *     updatedAt: string
- *   }>
- * }} DataImportService
+ *   exportCityBoundaries: () => Promise<object>,
+ *   exportLines: () => Promise<object>,
+ *   exportPopulations: () => Promise<object>
+ * }} DataExportRepository
  */
 
 /**
- * @typedef {{
- *   updateFromJson: (payload: unknown) => Promise<{
- *     cities: number,
- *     asOf: string | null,
- *     source: string | null,
- *     updatedAt: string
- *   }>
- * }} PopulationImportService
+ * @typedef {{ replaceFromGeoJson: (collection: unknown, operation?: object) => Promise<object> }} DataImportService
  */
 
 /**
- * @typedef {{ update: (body: unknown, query: Record<string, unknown>) => Promise<object> }} KmlUpdateService
+ * @typedef {{ replaceFromGeoJson: (collection: unknown, operation?: object) => Promise<object> }} CityBoundaryTransferService
+ */
+
+/**
+ * @typedef {{ updateFromJson: (payload: unknown, operation?: object) => Promise<object> }} PopulationImportService
+ */
+
+/**
+ * @typedef {{ update: (body: unknown, query: Record<string, unknown>, operation?: object) => Promise<object> }} KmlUpdateService
  */
 
 /**
@@ -54,7 +52,9 @@ import {createBasicAuth}        from '../http/basic-auth.js';
 /**
  * @param {{
  *   repository: CitiesRepository,
+ *   exportRepository: DataExportRepository,
  *   importService: DataImportService,
+ *   cityBoundaryTransferService: CityBoundaryTransferService,
  *   populationService: PopulationImportService,
  *   kmlUpdateService: KmlUpdateService,
  *   osmCityUpdateService: OsmCityUpdateService,
@@ -67,7 +67,9 @@ import {createBasicAuth}        from '../http/basic-auth.js';
  */
 export function createApiRouter({
 	                                repository,
+	                                exportRepository,
 	                                importService,
+	                                cityBoundaryTransferService,
 	                                populationService,
 	                                kmlUpdateService,
 	                                osmCityUpdateService,
@@ -135,6 +137,12 @@ export function createApiRouter({
 		const coordinates = parts.map((part) => Number(part));
 		return coordinates.every(Number.isFinite) ? coordinates : null;
 	};
+	const parseBoolean = (value, fallback = false) => {
+		if(value === undefined) return fallback;
+		if(value === 'true' || value === true) return true;
+		if(value === 'false' || value === false) return false;
+		return null;
+	};
 	const startAdminTask = (request, response, next, definition, executor) => {
 		try{
 			const task = adminTasks.start(definition, executor);
@@ -154,6 +162,26 @@ export function createApiRouter({
 			next(error);
 		}
 	};
+	const jsonBody = (limit, type) => express.json({
+		limit,
+		strict: true,
+		inflate: true,
+		type,
+	});
+	const sendDownload = (response, fileName, contentType, payload) => {
+		response.set('Cache-Control', 'no-store');
+		response.set('Content-Disposition', `attachment; filename="${fileName}"`);
+		response.type(contentType).send(JSON.stringify(payload));
+	};
+	const exportRoute = (fileName, contentType, loader) =>
+		async(_request, response, next) => {
+			try{
+				const payload = await loader();
+				sendDownload(response, fileName, contentType, payload);
+			}catch(error){
+				next(error);
+			}
+		};
 
 	router.get('/config', (_request, response) => {
 		response.set('Cache-Control', 'public, max-age=300');
@@ -246,15 +274,75 @@ export function createApiRouter({
 		}
 	});
 
-	router.post(
-		'/admin/import',
+	router.get(
+		'/admin/export/cities',
+		requireImportAuth,
+		exportRoute(
+			'dtpstat-buslines-cities.geojson',
+			'application/geo+json',
+			() => exportRepository.exportCityBoundaries(),
+		),
+	);
+	router.get(
+		'/admin/export/lines',
+		requireImportAuth,
+		exportRoute(
+			'dtpstat-buslines-lines.geojson',
+			'application/geo+json',
+			() => exportRepository.exportLines(),
+		),
+	);
+	router.get(
+		'/admin/export/populations',
+		requireImportAuth,
+		exportRoute(
+			'dtpstat-buslines-populations.json',
+			'application/json',
+			() => exportRepository.exportPopulations(),
+		),
+	);
+
+	const lineImportMiddleware = [
 		requireImportAuth,
 		rejectWhileAdminTaskActive,
-		express.json({
-			limit:  importApi.maxBodyBytes,
-			strict: true,
-			type:   ['application/json', 'application/geo+json'],
-		}),
+		jsonBody(
+			importApi.maxBodyBytes,
+			['application/json', 'application/geo+json'],
+		),
+	];
+	const importLines = (request, response, next) => {
+		if(request.body === undefined){
+			response.status(415).json({
+				error: 'Content-Type must be application/json or application/geo+json',
+			});
+			return;
+		}
+
+		startAdminTask(request, response, next, {
+			type: 'geojson-import',
+			endpoint: '/api/admin/import/lines',
+			recordsSuccessfulUpdate: true,
+		}, async(context) => importService.replaceFromGeoJson(
+			request.body,
+			{
+				signal: context.signal,
+				onCommit: () => context.beginCommit(),
+				onProgress: (progress) => progressLog(context, progress),
+			},
+		));
+	};
+	// Legacy endpoint remains available for existing scripts.
+	router.post('/admin/import', ...lineImportMiddleware, importLines);
+	router.post('/admin/import/lines', ...lineImportMiddleware, importLines);
+
+	router.post(
+		'/admin/import/cities',
+		requireImportAuth,
+		rejectWhileAdminTaskActive,
+		jsonBody(
+			importApi.maxBodyBytes,
+			['application/json', 'application/geo+json'],
+		),
 		(request, response, next) => {
 			if(request.body === undefined){
 				response.status(415).json({
@@ -262,14 +350,20 @@ export function createApiRouter({
 				});
 				return;
 			}
-
+			const dryRun = parseBoolean(request.query.dryRun, false);
+			if(dryRun === null){
+				response.status(400).json({error: 'dryRun must be true or false'});
+				return;
+			}
 			startAdminTask(request, response, next, {
-				type: 'geojson-import',
-				endpoint: '/api/admin/import',
-				recordsSuccessfulUpdate: true,
-			}, async(context) => importService.replaceFromGeoJson(
+				type: 'city-geojson-import',
+				endpoint: '/api/admin/import/cities',
+				recordsSuccessfulUpdate: !dryRun,
+				parameters: {dryRun},
+			}, async(context) => cityBoundaryTransferService.replaceFromGeoJson(
 				request.body,
 				{
+					dryRun,
 					signal: context.signal,
 					onCommit: () => context.beginCommit(),
 					onProgress: (progress) => progressLog(context, progress),
@@ -282,11 +376,7 @@ export function createApiRouter({
 		'/admin/update',
 		requireImportAuth,
 		rejectWhileAdminTaskActive,
-		express.json({
-			limit:  kmlUpdate.maxRequestBodyBytes,
-			strict: true,
-			type:   'application/json',
-		}),
+		jsonBody(kmlUpdate.maxRequestBodyBytes, 'application/json'),
 		(request, response, next) => {
 			const hasRequestBody =
 				request.get('transfer-encoding') !== undefined ||
@@ -334,11 +424,7 @@ export function createApiRouter({
 		'/admin/update/cities',
 		requireImportAuth,
 		rejectWhileAdminTaskActive,
-		express.json({
-			limit:  osmCityUpdate.maxRequestBodyBytes,
-			strict: true,
-			type:   'application/json',
-		}),
+		jsonBody(osmCityUpdate.maxRequestBodyBytes, 'application/json'),
 		(request, response, next) => {
 			const hasRequestBody =
 				request.get('transfer-encoding') !== undefined ||
@@ -392,6 +478,10 @@ export function createApiRouter({
 		(request, response) => {
 			response.set('Cache-Control', 'no-store');
 			response.json({
+				transfer: {
+					requestCompression: ['gzip', 'deflate', 'br'],
+					responseCompression: 'Accept-Encoding negotiation',
+				},
 				osmCityUpdate: {
 					allowedURLs: [...osmCityUpdate.allowedURLs],
 					defaults: {
@@ -511,11 +601,7 @@ export function createApiRouter({
 		'/admin/populations',
 		requireImportAuth,
 		rejectWhileAdminTaskActive,
-		express.json({
-			limit:  importApi.maxBodyBytes,
-			strict: true,
-			type:   'application/json',
-		}),
+		jsonBody(importApi.maxBodyBytes, 'application/json'),
 		(request, response, next) => {
 			if(request.body === undefined){
 				response.status(415).json({
