@@ -2,6 +2,7 @@ import {
   buildLineTypeSettingsPlan,
   LineTypeValidationError,
 } from '../data/line-types.js';
+import { acquireDataImportLock } from './database-locks.js';
 
 const LIST_LINE_TYPES_SQL = `
   SELECT
@@ -73,7 +74,7 @@ const UPDATE_SETTINGS_SQL = `
   WHERE line_type.code = stage.code
 `;
 
-/** @param {{ query: Function, connect: Function }} database */
+/** @param {{ query: Function, connect: Function, databaseSchema?: string }} database */
 export function createLineTypesRepository(database) {
   async function list(queryable = database) {
     const result = await queryable.query(LIST_LINE_TYPES_SQL);
@@ -89,9 +90,7 @@ export function createLineTypesRepository(database) {
       const client = await database.connect();
       try {
         await client.query('BEGIN');
-        await client.query(
-          `SELECT pg_advisory_xact_lock(hashtext('dtpstat-buslines:data-import'))`,
-        );
+        await acquireDataImportLock(client, database);
         await client.query(CREATE_STAGE_SQL);
         await client.query(INSERT_STAGE_SQL, [JSON.stringify(plan.lineTypes)]);
 
