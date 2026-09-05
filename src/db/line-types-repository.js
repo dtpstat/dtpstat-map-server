@@ -1,4 +1,7 @@
-import { buildLineTypesPlan } from '../data/line-types.js';
+import {
+  buildLineTypesPlan,
+  LineTypeValidationError,
+} from '../data/line-types.js';
 
 const LIST_LINE_TYPES_SQL = `
   SELECT
@@ -116,7 +119,7 @@ export function createLineTypesRepository(database) {
           const description = referenced.rows
             .map((row) => `${row.code} (${row.geometry_count})`)
             .join(', ');
-          throw new Error(
+          throw new LineTypeValidationError(
             `Cannot remove line types that are used by geometries: ${description}`,
           );
         }
