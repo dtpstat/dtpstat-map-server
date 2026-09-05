@@ -3,12 +3,19 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  DEFAULT_DATABASE_SCHEMA,
+  databaseLockKey,
+  loadDatabaseSchema,
+  normalizeDatabaseSchema,
+} from '../src/db/database-environment.js';
 import { createDatabaseClient } from './database.js';
 
 const scriptPath = fileURLToPath(import.meta.url);
 const projectRoot = path.resolve(path.dirname(scriptPath), '..');
 const migrationsDirectory = path.join(projectRoot, 'db', 'migrations');
 const MIGRATION_FILE = /^V(\d{3})__([a-z0-9][a-z0-9_-]*)\.sql$/i;
+const LEGACY_HISTORY_TABLE = 'public.buslanes_schema_versions';
 
 /** @param {string} fileName */
 export function parseMigrationFileName(fileName) {
@@ -55,6 +62,8 @@ export async function loadMigrations(directory = migrationsDirectory) {
       return {
         ...migration,
         sql,
+        // Checksum is always calculated from the immutable repository file.
+        // DATABASE_SCHEMA substitution happens only immediately before execute.
         checksum: crypto.createHash('sha256').update(sql).digest('hex'),
       };
     }),
@@ -62,12 +71,38 @@ export async function loadMigrations(directory = migrationsDirectory) {
 }
 
 /**
- * @param {{ query: (text: string, values?: unknown[]) => Promise<{ rows: any[] }> }} client
- * @param {Awaited<ReturnType<typeof loadMigrations>>} migrations
+ * Historical migrations use BUSLANES as a schema token. Do not rewrite those
+ * files: existing installations verify their checksums. Instead substitute the
+ * configured, strictly validated identifier at execution time.
+ *
+ * @param {string} sql
+ * @param {string} [schema]
  */
-export async function applyMigrations(client, migrations) {
+export function renderMigrationSql(sql, schema = DEFAULT_DATABASE_SCHEMA) {
+  const target = normalizeDatabaseSchema(schema);
+  return sql.replace(/\bBUSLANES\b/gi, target);
+}
+
+/** @param {string} schema */
+function migrationHistoryTable(schema) {
+  return `${normalizeDatabaseSchema(schema)}.schema_versions`;
+}
+
+/**
+ * Migration history is now local to DATABASE_SCHEMA. For the default schema,
+ * transparently copy the old public.buslanes_schema_versions history once so
+ * existing databases continue without modifying any applied migration.
+ *
+ * @param {{ query: (text: string, values?: unknown[]) => Promise<{ rows: any[] }> }} client
+ * @param {string} schema
+ */
+async function ensureMigrationHistory(client, schema) {
+  const target = normalizeDatabaseSchema(schema);
+  const historyTable = migrationHistoryTable(target);
+
+  await client.query(`CREATE SCHEMA IF NOT EXISTS ${target}`);
   await client.query(`
-    CREATE TABLE IF NOT EXISTS public.buslanes_schema_versions (
+    CREATE TABLE IF NOT EXISTS ${historyTable} (
       version integer PRIMARY KEY CHECK (version > 0),
       filename text NOT NULL UNIQUE,
       name text NOT NULL,
@@ -76,9 +111,47 @@ export async function applyMigrations(client, migrations) {
     )
   `);
 
+  if (target === DEFAULT_DATABASE_SCHEMA) {
+    const legacyResult = await client.query(
+      `SELECT to_regclass($1) AS legacy`,
+      [LEGACY_HISTORY_TABLE],
+    );
+    if (legacyResult.rows[0]?.legacy) {
+      await client.query(`
+        INSERT INTO ${historyTable} (
+          version,
+          filename,
+          name,
+          checksum,
+          applied_at
+        )
+        SELECT
+          version,
+          filename,
+          name,
+          checksum,
+          applied_at
+        FROM ${LEGACY_HISTORY_TABLE}
+        ON CONFLICT (version) DO NOTHING
+      `);
+    }
+  }
+
+  return historyTable;
+}
+
+/**
+ * @param {{ query: (text: string, values?: unknown[]) => Promise<{ rows: any[] }> }} client
+ * @param {Awaited<ReturnType<typeof loadMigrations>>} migrations
+ * @param {{ schema?: string }} [options]
+ */
+export async function applyMigrations(client, migrations, options = {}) {
+  const schema = normalizeDatabaseSchema(options.schema);
+  const historyTable = await ensureMigrationHistory(client, schema);
+
   const appliedResult = await client.query(`
     SELECT version, filename, checksum
-    FROM public.buslanes_schema_versions
+    FROM ${historyTable}
     ORDER BY version
   `);
   const appliedRows = appliedResult.rows;
@@ -110,9 +183,9 @@ export async function applyMigrations(client, migrations) {
 
     await client.query('BEGIN');
     try {
-      await client.query(migration.sql);
+      await client.query(renderMigrationSql(migration.sql, schema));
       await client.query(
-        `INSERT INTO public.buslanes_schema_versions (
+        `INSERT INTO ${historyTable} (
            version,
            filename,
            name,
@@ -138,18 +211,22 @@ export async function applyMigrations(client, migrations) {
 
 async function main() {
   const migrations = await loadMigrations();
+  const schema = loadDatabaseSchema();
+  const lockKey = databaseLockKey(schema, 'migrations');
   const client = createDatabaseClient();
   await client.connect();
 
   try {
     await client.query(
-      `SELECT pg_advisory_lock(hashtext('dtpstat-buslines:migrations'))`,
+      'SELECT pg_advisory_lock(hashtext($1))',
+      [lockKey],
     );
-    const version = await applyMigrations(client, migrations);
-    console.log(`Schema is current at version ${version}.`);
+    const version = await applyMigrations(client, migrations, { schema });
+    console.log(`Schema ${schema} is current at version ${version}.`);
   } finally {
     await client.query(
-      `SELECT pg_advisory_unlock(hashtext('dtpstat-buslines:migrations'))`,
+      'SELECT pg_advisory_unlock(hashtext($1))',
+      [lockKey],
     ).catch(() => {});
     await client.end();
   }
