@@ -164,7 +164,6 @@ export function parseKmlSource(xml, source) {
               layer: layerName,
               placemarkName: placemarkName || null,
               multiple: layer.multiple,
-              lineType: layer.type,
               fingerprint,
             },
           });
