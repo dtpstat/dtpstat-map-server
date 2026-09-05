@@ -24,14 +24,68 @@ test('line type migration creates a default type and mandatory geometry link', a
   assert.match(sql, /ON DELETE RESTRICT/i);
 });
 
-test('admin line panel connects the style editor and documents KML type', async () => {
+test('admin groups data by entity and exposes operation-level tabs', async () => {
+  const [html, admin, css] = await Promise.all([
+    source('admin/index.html'),
+    source('admin/admin.js'),
+    source('admin/admin.css'),
+  ]);
+
+  assert.match(html, />\s*Города\s*</);
+  assert.match(html, />\s*Линии данных\s*</);
+  assert.match(html, />\s*Население\s*</);
+  for (const operation of [
+    'osm-update',
+    'osm-geojson',
+    'kml-external',
+    'kml-geojson',
+    'kml-types',
+    'population-json',
+  ]) {
+    assert.match(html, new RegExp(`data-operation-tab="${operation}"`));
+    assert.match(html, new RegExp(`data-operation-panel="${operation}"`));
+  }
+  assert.match(admin, /'osm-city-update': 'osm-update'/);
+  assert.match(admin, /'city-geojson-import': 'osm-geojson'/);
+  assert.match(admin, /'kml-update': 'kml-external'/);
+  assert.match(admin, /'geojson-import': 'kml-geojson'/);
+  assert.match(admin, /selectOperation\(activeOperation\)/);
+  assert.match(css, /\.operation-tabs \{/);
+});
+
+test('successful-update timestamps stay inside their operation blocks', async () => {
+  const [html, css] = await Promise.all([
+    source('admin/index.html'),
+    source('admin/admin.css'),
+  ]);
+
+  for (const taskType of [
+    'osm-city-update',
+    'city-geojson-import',
+    'kml-update',
+    'geojson-import',
+    'population-update',
+  ]) {
+    assert.match(
+      html,
+      new RegExp(`class="last-success" data-last-success="${taskType}"`),
+    );
+  }
+  assert.match(css, /\.last-success \{/);
+  assert.doesNotMatch(css, /\.task-panel\s*>\s*\.last-success/);
+});
+
+test('admin line type operation connects the style editor and documents KML type', async () => {
   const [html, editor] = await Promise.all([
     source('admin/index.html'),
     source('admin/line-types-editor.js'),
   ]);
 
   assert.match(html, /src="\/admin\/line-types-editor\.js"/);
+  assert.match(html, /href="\/admin\/line-types\.css"/);
+  assert.match(html, /id="line-types-editor-host"/);
   assert.match(html, /"multiple":1,"type":"default"/);
+  assert.match(editor, /querySelector\('#line-types-editor-host'\)/);
   assert.match(editor, /input\.type = 'color'/);
   assert.match(editor, /\['solid', 'Сплошная'\]/);
   assert.match(editor, /\['dashed', 'Штриховая'\]/);
