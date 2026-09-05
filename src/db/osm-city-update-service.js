@@ -39,6 +39,8 @@ function abortableDelay(milliseconds, signal) {
   });
 }
 
+const DROP_STAGE_SQL = 'DROP TABLE IF EXISTS osm_city_boundary_stage';
+
 const CREATE_STAGE_SQL = `
   CREATE TEMP TABLE osm_city_boundary_stage (
     name text NOT NULL,
@@ -471,6 +473,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
       let inTransaction = false;
       try {
         throwIfAdminTaskCancelled(operation.signal);
+        await client.query(DROP_STAGE_SQL);
         await client.query(CREATE_STAGE_SQL);
         let cityPlaces = 0;
         let townPlaces = 0;
@@ -604,6 +607,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         if (inTransaction) await client.query('ROLLBACK');
         throw error;
       } finally {
+        await client.query(DROP_STAGE_SQL).catch(() => {});
         client.release();
       }
     },
