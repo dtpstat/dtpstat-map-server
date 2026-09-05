@@ -7,6 +7,7 @@ import {
   KmlUpdateValidationError,
   resolveKmlUpdateRequest,
 } from '../data/kml-update-options.js';
+import { acquireDataImportLock } from './database-locks.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 export class KmlUpdateMatchError extends Error {
@@ -262,7 +263,7 @@ function publicLineTypes(rows) {
 }
 
 /**
- * @param {{ connect: () => Promise<any> }} pool
+ * @param {{ connect: () => Promise<any>, databaseSchema?: string }} pool
  * @param {any} config
  * @param {{ download?: typeof downloadKml, parse?: typeof parseKmlSource }} [dependencies]
  */
@@ -341,9 +342,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
       try {
         throwIfAdminTaskCancelled(operation.signal);
         await client.query('BEGIN');
-        await client.query(
-          `SELECT pg_advisory_xact_lock(hashtext('dtpstat-buslines:data-import'))`,
-        );
+        await acquireDataImportLock(client, pool);
         throwIfAdminTaskCancelled(operation.signal);
 
         let typeRows = (await client.query(
