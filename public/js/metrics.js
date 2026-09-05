@@ -12,7 +12,7 @@ function appendScript(src, provider) {
 }
 
 function startYandexMetrika(counterId) {
-  if (!/^[1-9][0-9]{0,19}$/.test(counterId)) return;
+  if (!/^[1-9][0-9]{0,14}$/.test(counterId)) return;
 
   window.ym = window.ym || function yandexMetrikaQueue() {
     (window.ym.a = window.ym.a || []).push(arguments);
