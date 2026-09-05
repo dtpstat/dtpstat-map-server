@@ -7,14 +7,21 @@ const taskTypeTabs = Object.freeze({
   'geojson-import': 'kml',
   'population-update': 'population',
 });
+const taskTypeOperations = Object.freeze({
+  'osm-city-update': 'osm-update',
+  'city-geojson-import': 'osm-geojson',
+  'kml-update': 'kml-external',
+  'geojson-import': 'kml-geojson',
+  'population-update': 'population-json',
+});
 const tabTaskTypes = Object.freeze({
   osm: ['osm-city-update', 'city-geojson-import'],
   kml: ['kml-update', 'geojson-import'],
   population: ['population-update'],
 });
 const taskNames = Object.freeze({
-  osm: 'Города OSM',
-  kml: 'Линии',
+  osm: 'Города',
+  kml: 'Линии данных',
   population: 'Население',
 });
 const statusLabels = Object.freeze({
@@ -38,6 +45,11 @@ const state = {
   adminConfig: null,
   lastSuccessfulUpdates: {},
   selected: 'osm',
+  selectedOperations: {
+    osm: 'osm-update',
+    kml: 'kml-external',
+    population: 'population-json',
+  },
   socket: null,
   reconnectTimer: null,
 };
@@ -53,6 +65,8 @@ const elements = {
   refresh: document.querySelector('#refresh-task'),
   tabs: [...document.querySelectorAll('[data-task-tab]')],
   panels: [...document.querySelectorAll('[data-task-panel]')],
+  operationTabs: [...document.querySelectorAll('[data-operation-tab]')],
+  operationPanels: [...document.querySelectorAll('[data-operation-panel]')],
   forms: [...document.querySelectorAll('[data-task-form]')],
   actions: [...document.querySelectorAll('[data-task-action]')],
   successfulUpdates: [...document.querySelectorAll('[data-last-success]')],
@@ -83,6 +97,26 @@ function setTaskNotice(taskKey, message, tone = 'warning') {
   taskNotices.setForTask(taskKey, message, tone);
 }
 
+function selectOperation(operationKey) {
+  const selectedTab = elements.operationTabs.find(
+    (tab) => tab.dataset.operationTab === operationKey,
+  );
+  if (!selectedTab) return;
+  const group = selectedTab.dataset.operationGroup;
+  state.selectedOperations[group] = operationKey;
+
+  for (const tab of elements.operationTabs) {
+    if (tab.dataset.operationGroup !== group) continue;
+    const selected = tab.dataset.operationTab === operationKey;
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+  }
+  for (const panel of elements.operationPanels) {
+    if (panel.dataset.operationGroup !== group) continue;
+    panel.hidden = panel.dataset.operationPanel !== operationKey;
+  }
+}
+
 function selectTab(taskKey) {
   if (!elements.tabs.some((tab) => tab.dataset.taskTab === taskKey)) return;
   state.selected = taskKey;
@@ -94,6 +128,8 @@ function selectTab(taskKey) {
   for (const panel of elements.panels) {
     panel.hidden = panel.dataset.taskPanel !== taskKey;
   }
+  const operation = state.selectedOperations[taskKey];
+  if (operation) selectOperation(operation);
 }
 
 function metaItem(label, value, wide = false) {
@@ -170,10 +206,15 @@ function renderResult(task) {
 function renderControls(task) {
   const locked = Boolean(active(task));
   const activeTab = locked ? taskTypeTabs[task.type] : null;
-  if (activeTab) selectTab(activeTab);
-  else selectTab(state.selected);
+  const activeOperation = locked ? taskTypeOperations[task.type] : null;
+  if (activeTab) {
+    selectTab(activeTab);
+    if (activeOperation) selectOperation(activeOperation);
+  } else {
+    selectTab(state.selected);
+  }
 
-  for (const tab of elements.tabs) {
+  for (const tab of [...elements.tabs, ...elements.operationTabs]) {
     tab.disabled = locked;
     tab.setAttribute('aria-disabled', String(locked));
   }
@@ -197,8 +238,10 @@ function renderControls(task) {
   }
 }
 
-function latestSuccessfulUpdate(tabKey) {
-  const updates = (tabTaskTypes[tabKey] ?? [])
+function latestSuccessfulUpdate(key) {
+  const direct = state.lastSuccessfulUpdates[key];
+  if (direct) return direct;
+  const updates = (tabTaskTypes[key] ?? [])
     .map((taskType) => state.lastSuccessfulUpdates[taskType])
     .filter(Boolean);
   updates.sort((left, right) =>
@@ -453,6 +496,13 @@ for (const tab of elements.tabs) {
   tab.addEventListener('click', () => {
     if (active(state.task)) return;
     selectTab(tab.dataset.taskTab);
+  });
+}
+
+for (const tab of elements.operationTabs) {
+  tab.addEventListener('click', () => {
+    if (active(state.task)) return;
+    selectOperation(tab.dataset.operationTab);
   });
 }
 
