@@ -65,7 +65,7 @@ test('ranked cities become low-zoom marker points', () => {
   });
 });
 
-test('bus-lane layer stays above roads and below the final label block', async () => {
+test('typed bus-lane layers stay below labels and can be toggled', async () => {
   const calls = [];
   let map;
 
@@ -138,12 +138,23 @@ test('bus-lane layer stays above roads and below the final label block', async (
     }
 
     addLayer(layer, beforeId) {
-      this.layers.set(layer.id, layer);
+      this.layers.set(layer.id, structuredClone(layer));
       calls.push(['addLayer', layer.id, beforeId]);
+    }
+
+    removeLayer(id) {
+      this.layers.delete(id);
+      calls.push(['removeLayer', id]);
     }
 
     moveLayer(id, beforeId) {
       calls.push(['moveLayer', id, beforeId]);
+    }
+
+    setLayoutProperty(id, property, value) {
+      const layer = this.layers.get(id);
+      layer.layout[property] = value;
+      calls.push(['setLayoutProperty', id, property, value]);
     }
 
     on(event, layerOrHandler, delegatedHandler) {
@@ -202,18 +213,45 @@ test('bus-lane layer stays above roads and below the final label block', async (
       'ranked-cities-markers',
       undefined,
     ]);
-    assert.deepEqual(calls.find((call) => call[1] === 'bus-lanes-lines'), [
+    assert.deepEqual(calls.find((call) => call[1] === 'bus-lanes-lines-0'), [
       'addLayer',
-      'bus-lanes-lines',
-      'road-label',
-    ]);
-    assert.deepEqual(calls.find((call) => call[0] === 'moveLayer'), [
-      'moveLayer',
-      'bus-lanes-lines',
+      'bus-lanes-lines-0',
       'road-label',
     ]);
     assert.equal(map.getLayer('ranked-cities-markers').maxzoom, ROAD_DATA_MIN_ZOOM);
-    assert.equal(map.getLayer('bus-lanes-lines').minzoom, ROAD_DATA_MIN_ZOOM);
+    assert.equal(map.getLayer('bus-lanes-lines-0').minzoom, ROAD_DATA_MIN_ZOOM);
+
+    controller.setLineTypes([
+      {
+        id: 1,
+        type: 'default',
+        name: 'Автобусные полосы',
+        color: '#112233',
+        style: 'solid',
+        width: 4,
+        geometryCount: 10,
+      },
+      {
+        id: 2,
+        type: 'tram',
+        name: 'Трамвай',
+        color: '#aabbcc',
+        style: 'dashed',
+        width: 6,
+        geometryCount: 4,
+      },
+    ]);
+    assert.equal(map.getLayer('bus-lanes-lines-0').paint['line-color'], '#112233');
+    assert.equal(map.getLayer('bus-lanes-lines-1').paint['line-color'], '#aabbcc');
+    assert.deepEqual(map.getLayer('bus-lanes-lines-1').paint['line-dasharray'], [2.5, 1.5]);
+    assert.deepEqual(map.getLayer('bus-lanes-lines-1').filter, [
+      '==', ['get', 'lineType'], 'tram',
+    ]);
+
+    controller.setLineTypeVisibility('tram', false);
+    assert.equal(map.getLayer('bus-lanes-lines-1').layout.visibility, 'none');
+    controller.setLineTypeVisibility('tram', true);
+    assert.equal(map.getLayer('bus-lanes-lines-1').layout.visibility, 'visible');
 
     const cities = [{
       id: 1,
@@ -244,11 +282,6 @@ test('bus-lane layer stays above roads and below the final label block', async (
     };
     controller.setViewportData(geojson);
     assert.equal(map.getSource('bus-lanes').data, geojson);
-    assert.deepEqual(calls.at(-2), [
-      'moveLayer',
-      'bus-lanes-lines',
-      'road-label',
-    ]);
     assert.deepEqual(calls.at(-1), ['setData', 'bus-lanes']);
 
     let viewport;
@@ -286,6 +319,7 @@ test('bus-lane layer stays above roads and below the final label block', async (
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(map.getSource('ranked-cities').data.features[0].id, 1);
     assert.equal(map.getSource('bus-lanes').data, geojson);
+    assert.equal(map.getLayer('bus-lanes-lines-1').paint['line-color'], '#aabbcc');
     assert.deepEqual(calls.at(-1), ['setData', 'bus-lanes']);
   } finally {
     if (previousWindow === undefined) {
