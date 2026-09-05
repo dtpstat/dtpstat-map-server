@@ -1,0 +1,86 @@
+.project-settings-grid {
+  display: grid;
+  gap: .9rem;
+}
+
+.project-settings-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  margin: .2rem 0 .55rem;
+}
+
+.project-settings-toolbar button {
+  padding: .45rem .65rem;
+  color: var(--text);
+  background: #294047;
+  font-size: .72rem;
+  font-weight: 750;
+}
+
+.project-settings-help {
+  display: grid;
+  gap: .45rem;
+  margin: .7rem 0 0;
+  padding: .7rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0d171a;
+  color: var(--muted);
+  font-size: .7rem;
+  line-height: 1.45;
+}
+
+.project-settings-help code {
+  color: #c8e3e1;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.project-settings-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 .8rem;
+  padding: .55rem .65rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0b1518;
+  color: var(--muted);
+  font-size: .72rem;
+}
+
+.project-settings-meta time {
+  color: var(--success);
+  text-align: right;
+}
+
+#project-settings-form textarea[name="footerHtml"] {
+  min-height: 20rem;
+  resize: vertical;
+}
+
+.project-settings-message {
+  min-height: 1.3rem;
+  margin: .7rem 0 0;
+  color: var(--warning);
+}
+
+.project-settings-message.is-success {
+  color: var(--success);
+}
+
+.project-settings-message.is-error {
+  color: var(--danger);
+}
+
+@media (max-width: 700px) {
+  .project-settings-meta {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .project-settings-meta time {
+    text-align: left;
+  }
+}
