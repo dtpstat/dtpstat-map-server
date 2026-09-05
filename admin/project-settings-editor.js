@@ -28,7 +28,7 @@ if (typeof document !== 'undefined') {
     panel.hidden = true;
     panel.innerHTML = `
       <h3>Проект</h3>
-      <p class="panel-description">Название, служебные метатеги, ключевые слова и информационный блок публичной карты.</p>
+      <p class="panel-description">Название, служебные метатеги, счётчики аналитики, ключевые слова и информационный блок публичной карты.</p>
 
       <nav class="operation-tabs operation-tabs-single" role="tablist" aria-label="Настройки проекта">
         <button class="operation-tab" id="operation-tab-project-settings" type="button" role="tab"
@@ -65,6 +65,27 @@ if (typeof document !== 'undefined') {
                         placeholder="выделенные полосы\nобщественный транспорт\nрейтинг городов"></textarea>
               <small>По одному на строку или через запятую. Используются в meta keywords; дубликаты удаляются.</small>
             </label>
+
+            <section class="project-settings-section" aria-labelledby="project-metrics-title">
+              <div>
+                <h5 id="project-metrics-title">Сбор метрик</h5>
+                <p>Код интеграции фиксирован. Пустой ID отключает соответствующий счётчик и внешний скрипт не загружается.</p>
+              </div>
+              <div class="project-metrics-grid">
+                <label>Yandex Metrica ID
+                  <input name="yandexMetrikaId" type="text" inputmode="numeric"
+                         maxlength="20" pattern="[1-9][0-9]{0,19}"
+                         placeholder="Например: 12345678">
+                  <small>Числовой ID счётчика Яндекс Метрики.</small>
+                </label>
+                <label>Google Analytics 4 Measurement ID
+                  <input name="googleAnalyticsId" type="text" maxlength="34"
+                         pattern="[Gg]-[A-Za-z0-9]{4,32}"
+                         placeholder="Например: G-XXXXXXXXXX">
+                  <small>Measurement ID GA4 вида G-…. Регистр нормализуется автоматически.</small>
+                </label>
+              </div>
+            </section>
 
             <label>Информационный блок / подвал — HTML
               <div class="project-settings-toolbar" id="project-html-toolbar" aria-label="Готовые HTML-стили">
@@ -103,6 +124,8 @@ if (typeof document !== 'undefined') {
   if (form) {
     const projectName = form.elements.namedItem('projectName');
     const keywords = form.elements.namedItem('keywords');
+    const yandexMetrikaId = form.elements.namedItem('yandexMetrikaId');
+    const googleAnalyticsId = form.elements.namedItem('googleAnalyticsId');
     const footerHtml = form.elements.namedItem('footerHtml');
     const message = document.querySelector('#project-settings-message');
     const updatedAt = document.querySelector('#project-settings-updated-at');
@@ -157,6 +180,15 @@ if (typeof document !== 'undefined') {
       if (snippet) insertSnippet(snippet);
     });
 
+    function applySettings(settings) {
+      projectName.value = settings.projectName;
+      keywords.value = settings.keywords.join('\n');
+      yandexMetrikaId.value = settings.yandexMetrikaId ?? '';
+      googleAnalyticsId.value = settings.googleAnalyticsId ?? '';
+      footerHtml.value = settings.footerHtml;
+      updatedAt.textContent = formatUpdatedAt(settings.updatedAt);
+    }
+
     async function load() {
       setMessage('Загружаем настройки…');
       try {
@@ -166,10 +198,7 @@ if (typeof document !== 'undefined') {
         });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
-        projectName.value = payload.settings.projectName;
-        keywords.value = payload.settings.keywords.join('\n');
-        footerHtml.value = payload.settings.footerHtml;
-        updatedAt.textContent = formatUpdatedAt(payload.settings.updatedAt);
+        applySettings(payload.settings);
         allowedTags.textContent = payload.editor.tags.map((tag) => `<${tag}>`).join(' · ');
         allowedClasses.textContent = payload.editor.classes.map((name) => `.${name}`).join(' · ');
         setMessage('Настройки загружены.');
@@ -193,15 +222,14 @@ if (typeof document !== 'undefined') {
           body: JSON.stringify({
             projectName: projectName.value.trim(),
             keywords: splitKeywords(keywords.value),
+            yandexMetrikaId: yandexMetrikaId.value.trim() || null,
+            googleAnalyticsId: googleAnalyticsId.value.trim() || null,
             footerHtml: footerHtml.value,
           }),
         });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
-        projectName.value = payload.settings.projectName;
-        keywords.value = payload.settings.keywords.join('\n');
-        footerHtml.value = payload.settings.footerHtml;
-        updatedAt.textContent = formatUpdatedAt(payload.settings.updatedAt);
+        applySettings(payload.settings);
         setMessage('Настройки проекта сохранены.', 'success');
       } catch (error) {
         setMessage(error.message, 'error');
