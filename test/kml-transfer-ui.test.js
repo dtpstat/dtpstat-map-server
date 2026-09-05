@@ -17,7 +17,9 @@ test('admin exposes portable KML import/export and distinguishes business type f
   assert.match(editor, /\/api\/admin\/export\/lines\.kml/);
   assert.match(editor, /\/api\/admin\/import\/lines\.kml/);
   assert.match(editor, /businessTypeCode/);
-  assert.match(editor, /LINE_TYPES\.CODE/);
+  assert.match(editor, /type — NAME бизнес-типа из источника/);
+  assert.match(editor, /CODE назначает БД/);
+  assert.match(editor, /TITLE сначала равен NAME/);
   assert.match(editor, /LineString\/MultiLineString/);
-  assert.match(editor, /справочником бизнес-типов и стилей/);
+  assert.match(editor, /code\/name\/title\/color\/style\/width/);
 });
