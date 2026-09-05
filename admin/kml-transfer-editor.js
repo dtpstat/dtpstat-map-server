@@ -2,8 +2,16 @@ if (typeof document !== 'undefined') {
   const panel = document.querySelector('#operation-kml-external');
   const externalForm = document.querySelector('#kml-form');
   if (panel && externalForm) {
+    const externalHint = externalForm
+      .querySelector('textarea[name="sources"]')
+      ?.closest('label')
+      ?.querySelector('small');
+    if (externalHint) {
+      externalHint.textContent = 'Каждый слой: name + multiple (1 или 2) + необязательный type. type — это бизнес-код LINE_TYPES.CODE, а не геометрический LineString/MultiLineString. Без type используется default; отсутствующий code при реальном импорте создаётся с дефолтным стилем.';
+    }
+
     const transfer = document.createElement('div');
-    transfer.className = 'portable-kml-transfer';
+    transfer.className = 'transfer-mode portable-kml-transfer';
     transfer.innerHTML = `
       <div class="mode-heading">
         <div>
