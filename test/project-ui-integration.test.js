@@ -32,7 +32,7 @@ test('admin bootstraps a fourth Project tab with metadata and restricted HTML ed
   ]);
 
   assert.match(notices, /import '\.\/project-settings-editor\.js'/);
-  assert.match(editor, /data\.taskTab = 'project'/);
+  assert.match(editor, /dataset\.taskTab = 'project'/);
   assert.match(editor, /data-operation-tab="project-settings"/);
   assert.match(editor, /name="projectName"/);
   assert.match(editor, /name="keywords"/);
