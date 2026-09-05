@@ -99,7 +99,10 @@ function createPool({ referencedOmitted = [] } = {}) {
     async query(text) {
       const normalized = text.trim();
       queries.push(normalized);
-      if (normalized.startsWith('SELECT line_type.id::integer')) {
+      if (
+        normalized.startsWith('SELECT') &&
+        normalized.includes('line_type.id::integer AS id')
+      ) {
         return { rows, rowCount: rows.length };
       }
       if (normalized.startsWith('SELECT line_type.code')) {
