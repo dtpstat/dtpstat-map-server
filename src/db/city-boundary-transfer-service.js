@@ -1,5 +1,6 @@
 import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
 import { buildCityBoundaryGeoJsonPlan } from '../data/city-boundary-geojson-plan.js';
+import { acquireDataImportLock } from './database-locks.js';
 
 const UPSERT_CITIES_SQL = `
   INSERT INTO cities (
@@ -164,7 +165,7 @@ const RESTORE_GEOMETRY_LINKS_SQL = `
  * restore their portable attributes but all derived statistics remain local
  * and are recalculated by line/population imports.
  *
- * @param {{ connect: () => Promise<any> }} pool
+ * @param {{ connect: () => Promise<any>, databaseSchema?: string }} pool
  */
 export function createCityBoundaryTransferService(pool) {
   return {
@@ -183,9 +184,7 @@ export function createCityBoundaryTransferService(pool) {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        await client.query(
-          `SELECT pg_advisory_xact_lock(hashtext('dtpstat-buslines:data-import'))`,
-        );
+        await acquireDataImportLock(client, pool);
         throwIfAdminTaskCancelled(operation.signal);
 
         if (plan.cities.length > 0) {
