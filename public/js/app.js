@@ -27,6 +27,8 @@ let activeRequest = null;
 let mapController = null;
 let citiesById = new Map();
 let focusedCityId = null;
+let lineTypesSignature = '';
+let lineTypesRefresh = null;
 
 function setMapMessage(message, isError = false) {
   mapMessage.hidden = !message;
@@ -78,6 +80,42 @@ function renderLineLegend(lineTypes) {
   }
 
   mapPanel.append(legend);
+}
+
+/** @param {any[]} lineTypes */
+function applyLineTypes(lineTypes) {
+  const signature = JSON.stringify(
+    lineTypes.map(({ type, name, color, style, width, geometryCount }) => ({
+      type,
+      name,
+      color,
+      style,
+      width,
+      geometryCount,
+    })),
+  );
+  if (signature === lineTypesSignature) return false;
+  lineTypesSignature = signature;
+  mapController.setLineTypes(lineTypes);
+  renderLineLegend(lineTypes);
+  return true;
+}
+
+async function refreshLineTypes() {
+  if (!mapController) return;
+  if (lineTypesRefresh) return lineTypesRefresh;
+  lineTypesRefresh = (async () => {
+    try {
+      const lineTypes = await loadLineTypes();
+      if (!lineTypes.length) return;
+      applyLineTypes(lineTypes);
+    } catch (error) {
+      console.error('Не удалось обновить справочник типов линий', error);
+    } finally {
+      lineTypesRefresh = null;
+    }
+  })();
+  return lineTypesRefresh;
 }
 
 function selectCity(city) {
@@ -147,8 +185,7 @@ async function start() {
     if (!cities.length) throw new Error('Список городов пуст');
     if (!lineTypes.length) throw new Error('Справочник типов линий пуст');
 
-    mapController.setLineTypes(lineTypes);
-    renderLineLegend(lineTypes);
+    applyLineTypes(lineTypes);
     cityList.setCities(cities);
     citiesById = new Map(cities.map((city) => [city.id, city]));
     mapController.setCities(cities);
@@ -169,5 +206,12 @@ async function start() {
     console.error(error);
   }
 }
+
+window.addEventListener('focus', () => {
+  void refreshLineTypes();
+});
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) void refreshLineTypes();
+});
 
 start();
