@@ -13,7 +13,7 @@ const projectRoot = path.resolve(
   '..',
 );
 
-test('legacy repository GeoJSON derives cities, multipliers, and default line type', async () => {
+test('legacy repository GeoJSON derives cities, multipliers, and default imported type name', async () => {
   const source = JSON.parse(
     await fs.readFile(path.join(projectRoot, 'bus-lanes.geojson'), 'utf8'),
   );
@@ -27,56 +27,85 @@ test('legacy repository GeoJSON derives cities, multipliers, and default line ty
     [1, 2],
   );
   assert.deepEqual(
-    [...new Set(plan.geometries.map((geometry) => geometry.lineType))],
+    [...new Set(plan.geometries.map((geometry) => geometry.lineTypeName))],
     ['default'],
   );
   assert.equal(plan.cities.some((city) => 'bounds' in city), false);
 });
 
-test('versioned line GeoJSON carries line type styles and feature code links without storing duplicate code in properties', () => {
+test('versioned line GeoJSON resolves numeric business code through dictionary name and strips transport metadata', () => {
   const collection = {
     type: 'FeatureCollection',
-    schemaVersion: 2,
+    schemaVersion: 3,
     lineTypes: [
       {
-        type: 'default',
-        name: 'Основные',
+        code: 0,
+        name: 'default',
+        title: 'Основные',
         color: '#045b69',
         style: 'solid',
         width: 4,
       },
       {
-        type: 'tram',
+        code: 7,
         name: 'Трамвай',
+        title: 'Трамвайные линии',
         color: '#cc4400',
         style: 'dashed',
         width: 6,
       },
     ],
-    features: [feature('Тест', 1, [30, 60], [30.1, 60.1], 'tram')],
+    features: [feature('Тест', 1, [30, 60], [30.1, 60.1], 7)],
   };
 
   const plan = buildGeoJsonPlan(collection);
-  assert.equal(plan.geometries[0].lineType, 'tram');
+  assert.equal(plan.geometries[0].lineTypeName, 'Трамвай');
   assert.equal(plan.geometries[0].properties._dtpstat, undefined);
-  assert.equal(plan.geometries[0].properties.lineType, undefined);
+  assert.equal(plan.geometries[0].properties.businessTypeCode, undefined);
   assert.deepEqual(plan.lineTypes[1], {
-    type: 'tram',
+    code: 7,
     name: 'Трамвай',
+    title: 'Трамвайные линии',
     color: '#cc4400',
     style: 'dashed',
     width: 6,
   });
 });
 
+test('legacy schemaVersion 2 string type becomes imported NAME and old name becomes TITLE', () => {
+  const collection = {
+    type: 'FeatureCollection',
+    schemaVersion: 2,
+    lineTypes: [
+      { type: 'one-way', name: 'Односторонние', color: '#cc4400', style: 'solid', width: 4 },
+    ],
+    features: [legacyFeature('Тест', 1, [30, 60], [30.1, 60.1], 'one-way')],
+  };
+
+  const plan = buildGeoJsonPlan(collection);
+  assert.equal(plan.lineTypes[0].name, 'one-way');
+  assert.equal(plan.lineTypes[0].title, 'Односторонние');
+  assert.equal(plan.geometries[0].lineTypeName, 'one-way');
+});
+
+test('GeoJSON plan rejects numeric business code outside the dictionary before DB work', () => {
+  const collection = {
+    type: 'FeatureCollection',
+    schemaVersion: 3,
+    lineTypes: [
+      { code: 0, name: 'default', title: 'Основные', color: '#045b69', style: 'solid', width: 4 },
+    ],
+    features: [feature('Тест', 1, [1, 2], [3, 4], 99)],
+  };
+
+  assert.throws(() => buildGeoJsonPlan(collection), /unknown business type code: 99/);
+});
+
 test('GeoJSON plan rejects direction multipliers other than one or two', () => {
   const collection = {
     type: 'FeatureCollection',
-    features: [
-      feature('Тест', 3, [1, 2], [3, 4]),
-    ],
+    features: [feature('Тест', 3, [1, 2], [3, 4])],
   };
-
   assert.throws(
     () => buildGeoJsonPlan(collection),
     (error) =>
@@ -85,18 +114,30 @@ test('GeoJSON plan rejects direction multipliers other than one or two', () => {
   );
 });
 
-function feature(cityName, lanes, start, end, lineType) {
+function feature(cityName, lanes, start, end, businessTypeCode) {
   return {
     type: 'Feature',
     properties: {
       short_name: cityName,
       name: cityName,
       lanes,
-      ...(lineType ? { _dtpstat: { lineType } } : {}),
+      ...(businessTypeCode === undefined
+        ? {}
+        : { _dtpstat: { businessTypeCode } }),
     },
-    geometry: {
-      type: 'LineString',
-      coordinates: [start, end],
+    geometry: { type: 'LineString', coordinates: [start, end] },
+  };
+}
+
+function legacyFeature(cityName, lanes, start, end, lineType) {
+  return {
+    type: 'Feature',
+    properties: {
+      short_name: cityName,
+      name: cityName,
+      lanes,
+      _dtpstat: { lineType },
     },
+    geometry: { type: 'LineString', coordinates: [start, end] },
   };
 }
