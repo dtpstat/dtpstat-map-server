@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildImportPlan } from '../src/data/import-plan.js';
 import { createDataImportService } from '../src/db/data-import-service.js';
+import { loadDatabaseSchema } from '../src/db/database-environment.js';
 import { createPopulationImportService } from '../src/db/population-import-service.js';
 import { createDatabaseClient } from './database.js';
 
@@ -20,9 +21,11 @@ async function main() {
   const plan = buildImportPlan(csvText, geojsonText);
   const geojson = JSON.parse(geojsonText);
   const client = createDatabaseClient();
+  const databaseSchema = loadDatabaseSchema();
 
   await client.connect();
   const poolAdapter = {
+    databaseSchema,
     async connect() {
       return {
         query: (...args) => client.query(...args),
