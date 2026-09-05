@@ -1,5 +1,6 @@
 import './line-types-editor.js';
 import './project-settings-editor.js';
+import './project-branding.js';
 
 /**
  * Keep each operation notice inside its own tab panel. A notice from one task
