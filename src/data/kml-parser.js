@@ -89,7 +89,7 @@ function geometryFingerprint(geometry) {
 
 /**
  * @param {string} xml
- * @param {{ URL: string, mapId: string | null, layers: Array<{ name: string, multiple: number }> }} source
+ * @param {{ URL: string, mapId: string | null, layers: Array<{ name: string, multiple: number, type: string }> }} source
  */
 export function parseKmlSource(xml, source) {
   if (/<!DOCTYPE|<!ENTITY/i.test(xml)) {
@@ -154,6 +154,7 @@ export function parseKmlSource(xml, source) {
           features.push({
             geometry,
             multiple: layer.multiple,
+            lineType: layer.type,
             fingerprint,
             properties: {
               source: 'kml',
@@ -163,6 +164,7 @@ export function parseKmlSource(xml, source) {
               layer: layerName,
               placemarkName: placemarkName || null,
               multiple: layer.multiple,
+              lineType: layer.type,
               fingerprint,
             },
           });
