@@ -1,6 +1,33 @@
 import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
 import { buildCityBoundaryGeoJsonPlan } from '../data/city-boundary-geojson-plan.js';
 
+const UPSERT_CITIES_SQL = `
+  INSERT INTO cities (
+    slug,
+    name,
+    full_name,
+    lane_length_m,
+    attributes
+  )
+  SELECT
+    payload.slug,
+    payload.name,
+    payload."fullName",
+    0,
+    payload.attributes
+  FROM jsonb_to_recordset($1::jsonb) AS payload(
+    slug text,
+    name text,
+    "fullName" text,
+    attributes jsonb
+  )
+  ON CONFLICT (name) DO UPDATE SET
+    slug = EXCLUDED.slug,
+    full_name = EXCLUDED.full_name,
+    attributes = EXCLUDED.attributes,
+    updated_at = now()
+`;
+
 const CREATE_STAGE_SQL = `
   CREATE TEMP TABLE city_boundary_transfer_stage (
     place_type text NOT NULL,
@@ -9,6 +36,7 @@ const CREATE_STAGE_SQL = `
     osm_name text NOT NULL,
     tags jsonb NOT NULL,
     osm_timestamp timestamptz,
+    updated_at timestamptz,
     city_slug text,
     city_name text,
     geom geometry(MultiPolygon, 4326) NOT NULL,
@@ -27,6 +55,7 @@ const INSERT_STAGE_SQL = `
       "osmName" text,
       tags jsonb,
       "osmTimestamp" timestamptz,
+      "updatedAt" timestamptz,
       "citySlug" text,
       "cityName" text,
       geometry jsonb
@@ -50,6 +79,7 @@ const INSERT_STAGE_SQL = `
     osm_name,
     tags,
     osm_timestamp,
+    updated_at,
     city_slug,
     city_name,
     geom,
@@ -62,6 +92,7 @@ const INSERT_STAGE_SQL = `
     "osmName",
     tags,
     "osmTimestamp",
+    "updatedAt",
     "citySlug",
     "cityName",
     geom,
@@ -95,7 +126,8 @@ const INSERT_BOUNDARIES_SQL = `
     tags,
     geom,
     bounds,
-    osm_timestamp
+    osm_timestamp,
+    updated_at
   )
   SELECT
     COALESCE(
@@ -109,7 +141,8 @@ const INSERT_BOUNDARIES_SQL = `
     stage.tags,
     stage.geom,
     stage.bounds,
-    stage.osm_timestamp
+    stage.osm_timestamp,
+    COALESCE(stage.updated_at, now())
   FROM city_boundary_transfer_stage AS stage
   ORDER BY stage.osm_type, stage.osm_id
 `;
@@ -127,7 +160,9 @@ const RESTORE_GEOMETRY_LINKS_SQL = `
 /**
  * Atomically replace the complete OSM city/town boundary snapshot from a
  * portable GeoJSON export. Existing line-to-boundary links survive when the
- * same OSM object exists in the imported snapshot.
+ * same OSM object exists in the imported snapshot. Linked ranked-city records
+ * restore their portable attributes but all derived statistics remain local
+ * and are recalculated by line/population imports.
  *
  * @param {{ connect: () => Promise<any> }} pool
  */
@@ -143,6 +178,7 @@ export function createCityBoundaryTransferService(pool) {
       operation.onProgress?.({
         phase: 'validated',
         places: plan.boundaries.length,
+        cities: plan.cities.length,
       });
       const client = await pool.connect();
       try {
@@ -151,6 +187,16 @@ export function createCityBoundaryTransferService(pool) {
           `SELECT pg_advisory_xact_lock(hashtext('dtpstat-buslines:data-import'))`,
         );
         throwIfAdminTaskCancelled(operation.signal);
+
+        if (plan.cities.length > 0) {
+          const cityResult = await client.query(UPSERT_CITIES_SQL, [
+            JSON.stringify(plan.cities),
+          ]);
+          if (cityResult.rowCount !== plan.cities.length) {
+            throw new Error('Not every linked city record was imported');
+          }
+        }
+
         await client.query(CREATE_STAGE_SQL);
         const stageResult = await client.query(INSERT_STAGE_SQL, [
           JSON.stringify(plan.boundaries),
@@ -184,6 +230,7 @@ export function createCityBoundaryTransferService(pool) {
         const result = {
           dryRun: Boolean(operation.dryRun),
           importedPlaces: plan.boundaries.length,
+          importedCities: plan.cities.length,
           linkedCities: linkedResult.rows[0]?.count ?? 0,
           restoredGeometryLinks: restored.rowCount,
           completedAt: new Date().toISOString(),
@@ -191,6 +238,7 @@ export function createCityBoundaryTransferService(pool) {
         operation.onProgress?.({
           phase: 'database',
           places: result.importedPlaces,
+          cities: result.importedCities,
           linkedCities: result.linkedCities,
           restoredGeometryLinks: result.restoredGeometryLinks,
         });
