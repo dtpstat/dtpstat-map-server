@@ -21,10 +21,38 @@ test('population plan validates and normalizes an update batch', () => {
       {
         name: 'Казань',
         population: 1300000,
+        asOf: '2026-01-01',
+        source: 'Росстат',
         attributes: { year: 2026 },
       },
     ],
   });
+});
+
+test('population plan preserves per-city source and date from an export', () => {
+  const plan = buildPopulationPlan({
+    schemaVersion: 1,
+    populations: [
+      {
+        name: 'Казань',
+        population: 1300000,
+        asOf: '2026-01-01',
+        source: 'Росстат',
+        attributes: { year: 2026 },
+      },
+      {
+        name: 'Москва',
+        population: 13000000,
+        asOf: '2025-01-01',
+        source: 'Другой источник',
+      },
+    ],
+  });
+
+  assert.equal(plan.asOf, null);
+  assert.equal(plan.source, null);
+  assert.equal(plan.populations[0].source, 'Росстат');
+  assert.equal(plan.populations[1].asOf, '2025-01-01');
 });
 
 test('population plan rejects invalid dates, values, and duplicate cities', () => {
