@@ -7,6 +7,34 @@
   gap: .9rem;
 }
 
+.project-settings-section {
+  display: grid;
+  gap: .75rem;
+  padding: .8rem;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #0d171a;
+}
+
+.project-settings-section h5 {
+  margin: 0 0 .25rem;
+  color: var(--text);
+  font-size: .82rem;
+}
+
+.project-settings-section > div > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: .72rem;
+  line-height: 1.45;
+}
+
+.project-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem;
+}
+
 .project-settings-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -80,6 +108,10 @@
 
 @media (max-width: 700px) {
   .task-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .project-metrics-grid {
     grid-template-columns: 1fr;
   }
 
