@@ -59,11 +59,11 @@ async function withServer(callback, options = {}) {
   }
 }
 
-test('public line type API exposes styles and geometry counts', async () => {
+test('public line type API exposes fresh styles and geometry counts', async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/line-types`);
     assert.equal(response.status, 200);
-    assert.match(response.headers.get('cache-control'), /max-age=300/);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.deepEqual(await response.json(), { lineTypes });
   });
 });
