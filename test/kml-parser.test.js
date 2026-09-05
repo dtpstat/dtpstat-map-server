@@ -6,8 +6,8 @@ const source = {
   URL: 'https://www.google.com/maps/d/viewer?mid=test',
   mapId: 'test',
   layers: [
-    { name: 'Двусторонние', multiple: 2 },
-    { name: 'Односторонние', multiple: 1 },
+    { name: 'Двусторонние', multiple: 2, type: 'bus' },
+    { name: 'Односторонние', multiple: 1, type: 'priority' },
   ],
 };
 
@@ -43,7 +43,7 @@ const kml = `<?xml version="1.0" encoding="UTF-8"?>
   </Document>
 </kml>`;
 
-test('KML parser extracts only configured folders with explicit multipliers', () => {
+test('KML parser extracts configured folders with multipliers and line types', () => {
   const result = parseKmlSource(kml, source);
 
   assert.equal(result.documentName, 'Тестовая карта');
@@ -51,8 +51,11 @@ test('KML parser extracts only configured folders with explicit multipliers', ()
   assert.equal(result.ignoredNonLines, 1);
   assert.equal(result.features.length, 2);
   assert.equal(result.features[0].multiple, 2);
+  assert.equal(result.features[0].lineType, 'bus');
+  assert.equal(result.features[0].properties.lineType, 'bus');
   assert.equal(result.features[0].geometry.type, 'LineString');
   assert.equal(result.features[1].multiple, 1);
+  assert.equal(result.features[1].lineType, 'priority');
   assert.equal(result.features[1].geometry.type, 'MultiLineString');
   assert.equal(result.features[1].geometry.coordinates.length, 2);
   assert.equal(result.features[0].fingerprint.length, 64);
@@ -62,7 +65,7 @@ test('KML parser rejects missing layers, entities, and invalid coordinates', () 
   assert.throws(
     () => parseKmlSource(kml, {
       ...source,
-      layers: [{ name: 'Нет слоя', multiple: 1 }],
+      layers: [{ name: 'Нет слоя', multiple: 1, type: 'default' }],
     }),
     /layer not found/,
   );
