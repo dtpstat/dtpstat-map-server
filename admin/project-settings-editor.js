@@ -1,3 +1,102 @@
+const stylesheet = document.createElement('link');
+stylesheet.rel = 'stylesheet';
+stylesheet.href = '/admin/project-settings.css';
+document.head.append(stylesheet);
+
+const taskTabs = document.querySelector('.task-tabs');
+const controlCard = document.querySelector('.control-card');
+
+if (taskTabs && controlCard && !document.querySelector('[data-task-tab="project"]')) {
+  const tab = document.createElement('button');
+  tab.className = 'task-tab';
+  tab.id = 'tab-project';
+  tab.type = 'button';
+  tab.role = 'tab';
+  tab.setAttribute('aria-selected', 'false');
+  tab.setAttribute('aria-controls', 'panel-project');
+  tab.dataset.taskTab = 'project';
+  tab.textContent = 'Проект';
+  taskTabs.append(tab);
+
+  const panel = document.createElement('article');
+  panel.className = 'task-panel';
+  panel.id = 'panel-project';
+  panel.role = 'tabpanel';
+  panel.setAttribute('aria-labelledby', 'tab-project');
+  panel.dataset.taskPanel = 'project';
+  panel.hidden = true;
+  panel.innerHTML = `
+    <h3>Проект</h3>
+    <p class="panel-description">Название, служебные метатеги, ключевые слова и информационный блок публичной карты.</p>
+
+    <nav class="operation-tabs operation-tabs-single" role="tablist" aria-label="Настройки проекта">
+      <button class="operation-tab" id="operation-tab-project-settings" type="button" role="tab"
+              aria-selected="true" aria-controls="operation-project-settings"
+              data-operation-tab="project-settings" data-operation-group="project">
+        Оформление и метаданные
+      </button>
+    </nav>
+
+    <section class="operation-panel transfer-mode" id="operation-project-settings" role="tabpanel"
+             aria-labelledby="operation-tab-project-settings"
+             data-operation-panel="project-settings" data-operation-group="project">
+      <div class="mode-heading">
+        <div>
+          <h4>Оформление и метаданные</h4>
+          <p>Название используется в H1, title, PWA manifest, OpenGraph/Twitter и остальных служебных тегах страницы.</p>
+        </div>
+      </div>
+
+      <p class="project-settings-meta">
+        <span>Последнее изменение</span><time id="project-settings-updated-at">—</time>
+      </p>
+
+      <form id="project-settings-form" data-task-form="project">
+        <div class="form-fields project-settings-grid">
+          <label>Название проекта
+            <input name="projectName" type="text" maxlength="160" required
+                   placeholder="Например: Выделенные полосы в России">
+            <small>Одно значение транзитом попадает в видимый заголовок и служебные title/meta/PWA-теги.</small>
+          </label>
+
+          <label>Ключевые слова
+            <textarea name="keywords" rows="5"
+                      placeholder="выделенные полосы\nобщественный транспорт\nрейтинг городов"></textarea>
+            <small>По одному на строку или через запятую. Используются в meta keywords; дубликаты удаляются.</small>
+          </label>
+
+          <label>Информационный блок / подвал — HTML
+            <div class="project-settings-toolbar" id="project-html-toolbar" aria-label="Готовые HTML-стили">
+              <button type="button" data-project-snippet="h2">H2</button>
+              <button type="button" data-project-snippet="paragraph">Абзац</button>
+              <button type="button" data-project-snippet="link">Ссылка</button>
+              <button type="button" data-project-snippet="strong">Жирный</button>
+              <button type="button" data-project-snippet="list">Список</button>
+              <button type="button" data-project-snippet="lead">Лид</button>
+              <button type="button" data-project-snippet="muted">Приглушённый</button>
+              <button type="button" data-project-snippet="callout">Акцент-блок</button>
+              <button type="button" data-project-snippet="columns">2 колонки</button>
+              <button type="button" data-project-snippet="button">Кнопка-ссылка</button>
+            </div>
+            <textarea name="footerHtml" rows="18" required spellcheck="false"
+                      placeholder="<h2>О проекте</h2>\n<p>Описание проекта…</p>"></textarea>
+          </label>
+
+          <div class="project-settings-help">
+            <div><strong>Разрешённые теги:</strong> <code id="project-allowed-tags">загрузка…</code></div>
+            <div><strong>Стили проекта:</strong> <code id="project-allowed-classes">загрузка…</code></div>
+            <div>Inline style, script, iframe, обработчики событий и неизвестные классы сервер не принимает.</div>
+          </div>
+        </div>
+        <button class="task-action" type="submit">Сохранить настройки проекта</button>
+      </form>
+      <p class="project-settings-message" id="project-settings-message" role="status"></p>
+    </section>
+    <p class="notice" data-task-notice="project" role="status"></p>
+  `;
+  controlCard.append(panel);
+}
+
 const form = document.querySelector('#project-settings-form');
 
 if (form) {
@@ -28,17 +127,13 @@ if (form) {
       .filter(Boolean);
   }
 
-  function insertSnippet(snippet, cursorOffset = null) {
+  function insertSnippet(snippet) {
     const start = footerHtml.selectionStart ?? footerHtml.value.length;
     const end = footerHtml.selectionEnd ?? start;
     const selected = footerHtml.value.slice(start, end);
     const content = snippet.replace('{{selection}}', selected || 'Текст');
     footerHtml.setRangeText(content, start, end, 'end');
     footerHtml.focus();
-    if (cursorOffset !== null && !selected) {
-      const position = start + cursorOffset;
-      footerHtml.setSelectionRange(position, position);
-    }
   }
 
   const snippets = Object.freeze({
