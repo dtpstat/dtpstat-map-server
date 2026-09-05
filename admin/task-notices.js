@@ -1,3 +1,5 @@
+import './line-types-editor.js';
+
 /**
  * Keep each operation notice inside its own tab panel. A notice from one task
  * must never be rendered in another task's live region.
