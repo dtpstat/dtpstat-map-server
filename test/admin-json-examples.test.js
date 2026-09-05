@@ -50,7 +50,7 @@ test('admin population hint shows and validates the complete item structure', ()
   assert.equal(typeof plan.populations[1].attributes, 'object');
 });
 
-test('admin loads schema-backed examples and current KML auto-create guidance', async () => {
+test('admin loads schema-backed examples and explains NAME/CODE/TITLE ownership', async () => {
   const [html, examples] = await Promise.all([
     fs.readFile(path.join(projectRoot, 'admin/index.html'), 'utf8'),
     fs.readFile(path.join(projectRoot, 'admin/json-examples.js'), 'utf8'),
@@ -59,8 +59,9 @@ test('admin loads schema-backed examples and current KML auto-create guidance', 
   assert.match(html, /src="\/admin\/json-examples\.js"/);
   assert.doesNotMatch(html, /"populations":\[…\]/);
   assert.match(examples, /multiple \(1 или 2\)/);
-  assert.match(examples, /type — стабильный code справочника/);
-  assert.match(examples, /Отсутствующий code создаётся автоматически/);
+  assert.match(examples, /type — NAME бизнес-типа из источника/);
+  assert.match(examples, /CODE назначает БД/);
+  assert.match(examples, /TITLE сначала равен NAME/);
   assert.match(html, /populations\[\]\.name/);
   assert.match(html, /populations\[\]\.population/);
 });
