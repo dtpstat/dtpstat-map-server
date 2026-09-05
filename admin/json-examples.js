@@ -43,6 +43,12 @@ if (typeof document !== 'undefined') {
     }
   }
 
+  const lineGeoJson = document.querySelector('#line-geojson-form input[name="file"]');
+  const lineGeoJsonHint = lineGeoJson?.closest('label')?.querySelector('small');
+  if (lineGeoJsonHint) {
+    lineGeoJsonHint.textContent = 'Канонический schemaVersion 3 переносит lineTypes[{code,name,title,color,style,width}], а каждая линия ссылается на numeric _dtpstat.businessTypeCode. При импорте другой сервер сопоставляет типы по NAME и генерирует собственные CODE для отсутствующих NAME. Legacy GeoJSON v2 и старые файлы без типов поддерживаются.';
+  }
+
   const population = document.querySelector('#population-form textarea[name="payload"]');
   if (population) population.placeholder = jsonExample(POPULATION_JSON_EXAMPLE);
 }
