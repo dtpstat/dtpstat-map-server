@@ -24,7 +24,9 @@ const CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'base64');
 /**
  * @param {{
  *   repository: import('./routes/api.js').CitiesRepository,
+ *   exportRepository: import('./routes/api.js').DataExportRepository,
  *   importService: import('./routes/api.js').DataImportService,
+ *   cityBoundaryTransferService: import('./routes/api.js').CityBoundaryTransferService,
  *   populationService: import('./routes/api.js').PopulationImportService,
  *   kmlUpdateService: import('./routes/api.js').KmlUpdateService,
  *   osmCityUpdateService: import('./routes/api.js').OsmCityUpdateService,
@@ -34,7 +36,9 @@ const CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'base64');
  */
 export function createApp({
 	repository,
+	exportRepository,
 	importService,
+	cityBoundaryTransferService,
 	populationService,
 	kmlUpdateService,
 	osmCityUpdateService,
@@ -102,7 +106,9 @@ export function createApp({
 		'/api',
 		createApiRouter({
 			repository,
+			exportRepository,
 			importService,
+			cityBoundaryTransferService,
 			populationService,
 			kmlUpdateService,
 			osmCityUpdateService,
@@ -139,6 +145,10 @@ export function createApp({
 		}
 		if(error?.type === 'entity.parse.failed'){
 			response.status(400).json({error: 'Request body is not valid JSON'});
+			return;
+		}
+		if(error?.status === 415 || error?.type === 'encoding.unsupported'){
+			response.status(415).json({error: error.message || 'Unsupported content encoding'});
 			return;
 		}
 
