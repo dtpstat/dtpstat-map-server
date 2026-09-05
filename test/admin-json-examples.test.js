@@ -26,8 +26,8 @@ test('admin KML hint is accepted by the real KML schema', () => {
   assert.deepEqual(
     sources[0].layers.map(({ name, multiple, type }) => ({ name, multiple, type })),
     [
-      { name: 'Двусторонние', multiple: 2, type: 'default' },
-      { name: 'Односторонние', multiple: 1, type: 'tram' },
+      { name: 'Двусторонние', multiple: 2, type: 'Двусторонние' },
+      { name: 'Односторонние', multiple: 1, type: 'Односторонние' },
     ],
   );
 });
@@ -50,13 +50,17 @@ test('admin population hint shows and validates the complete item structure', ()
   assert.equal(typeof plan.populations[1].attributes, 'object');
 });
 
-test('admin loads schema-backed examples and no longer contains abbreviated JSON placeholders', async () => {
-  const html = await fs.readFile(path.join(projectRoot, 'admin/index.html'), 'utf8');
+test('admin loads schema-backed examples and current KML auto-create guidance', async () => {
+  const [html, examples] = await Promise.all([
+    fs.readFile(path.join(projectRoot, 'admin/index.html'), 'utf8'),
+    fs.readFile(path.join(projectRoot, 'admin/json-examples.js'), 'utf8'),
+  ]);
 
   assert.match(html, /src="\/admin\/json-examples\.js"/);
   assert.doesNotMatch(html, /"populations":\[…\]/);
-  assert.match(html, /multiple \(1 или 2\)/);
-  assert.match(html, /type — строковый код/);
+  assert.match(examples, /multiple \(1 или 2\)/);
+  assert.match(examples, /type — стабильный code справочника/);
+  assert.match(examples, /Отсутствующий code создаётся автоматически/);
   assert.match(html, /populations\[\]\.name/);
   assert.match(html, /populations\[\]\.population/);
 });
