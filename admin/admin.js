@@ -527,7 +527,15 @@ elements.populationForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   if (await cancelActiveTask()) return;
-  const raw = String(new FormData(form).get('payload')).trim();
+  const data = new FormData(form);
+  const file = data.get('file');
+  const raw = file instanceof File && file.size > 0
+    ? (await file.text()).trim()
+    : String(data.get('payload') ?? '').trim();
+  if (!raw) {
+    setTaskNotice('population', 'выберите JSON-файл или вставьте JSON.', 'error');
+    return;
+  }
   try { JSON.parse(raw); }
   catch { setTaskNotice('population', 'некорректный JSON.', 'error'); return; }
   await start(
