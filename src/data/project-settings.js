@@ -111,6 +111,37 @@ function normalizeKeywords(value) {
   return result;
 }
 
+function normalizeOptionalIdentifier(value, fieldName, pattern, format) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string') {
+    throw new ProjectSettingsValidationError(`${fieldName} must be a string or null`);
+  }
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) return null;
+  if (!pattern.test(normalized)) {
+    throw new ProjectSettingsValidationError(`${fieldName} must match ${format}`);
+  }
+  return normalized;
+}
+
+function normalizeYandexMetrikaId(value) {
+  return normalizeOptionalIdentifier(
+    value,
+    'yandexMetrikaId',
+    /^[1-9][0-9]{0,19}$/,
+    'a positive numeric counter ID',
+  );
+}
+
+function normalizeGoogleAnalyticsId(value) {
+  return normalizeOptionalIdentifier(
+    value,
+    'googleAnalyticsId',
+    /^G-[A-Z0-9]{4,32}$/,
+    'G- followed by 4-32 letters or digits',
+  );
+}
+
 function safeHref(value) {
   const href = value.trim();
   if (!href) return false;
@@ -285,7 +316,13 @@ export function buildProjectSettingsPlan(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new ProjectSettingsValidationError('Request body must be a JSON object');
   }
-  const allowed = new Set(['projectName', 'keywords', 'footerHtml']);
+  const allowed = new Set([
+    'projectName',
+    'keywords',
+    'footerHtml',
+    'yandexMetrikaId',
+    'googleAnalyticsId',
+  ]);
   const unknown = Object.keys(payload).filter((key) => !allowed.has(key));
   if (unknown.length > 0) {
     throw new ProjectSettingsValidationError(
@@ -296,5 +333,7 @@ export function buildProjectSettingsPlan(payload) {
     projectName: normalizeProjectName(payload.projectName),
     keywords: normalizeKeywords(payload.keywords),
     footerHtml: normalizeProjectFooterHtml(payload.footerHtml),
+    yandexMetrikaId: normalizeYandexMetrikaId(payload.yandexMetrikaId),
+    googleAnalyticsId: normalizeGoogleAnalyticsId(payload.googleAnalyticsId),
   };
 }
