@@ -1,4 +1,9 @@
-import { loadCities, loadMapConfig, loadViewportGeometries } from './api.js';
+import {
+  loadCities,
+  loadLineTypes,
+  loadMapConfig,
+  loadViewportGeometries,
+} from './api.js';
 import { createCityList } from './city-list.js';
 import {
   createMapController,
@@ -6,6 +11,7 @@ import {
 } from './map-controller.js';
 
 const mapMessage = document.querySelector('#map-message');
+const mapPanel = document.querySelector('.map-panel');
 const cityList = createCityList({
   list: document.querySelector('#city-list'),
   status: document.querySelector('#status'),
@@ -21,6 +27,50 @@ function setMapMessage(message, isError = false) {
   mapMessage.hidden = !message;
   mapMessage.textContent = message;
   mapMessage.classList.toggle('is-error', isError);
+}
+
+/** @param {any[]} lineTypes */
+function renderLineLegend(lineTypes) {
+  document.querySelector('#line-legend')?.remove();
+  const usedTypes = lineTypes.filter((lineType) => lineType.geometryCount > 0);
+  if (usedTypes.length <= 1) return;
+
+  const legend = document.createElement('section');
+  legend.id = 'line-legend';
+  legend.className = 'line-legend';
+  legend.setAttribute('aria-label', 'Типы линий');
+
+  const title = document.createElement('div');
+  title.className = 'line-legend-title';
+  title.textContent = 'Типы линий';
+  legend.append(title);
+
+  for (const lineType of usedTypes) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'line-legend-item';
+    button.setAttribute('aria-pressed', 'true');
+    button.dataset.lineType = lineType.type;
+
+    const sample = document.createElement('span');
+    sample.className = 'line-legend-sample';
+    sample.style.borderTopColor = lineType.color;
+    sample.style.borderTopStyle = lineType.style === 'solid' ? 'solid' : lineType.style;
+    sample.style.borderTopWidth = `${Math.max(2, Math.min(8, lineType.width))}px`;
+
+    const name = document.createElement('span');
+    name.textContent = lineType.name;
+    button.append(sample, name);
+    button.addEventListener('click', () => {
+      const enabled = button.getAttribute('aria-pressed') !== 'true';
+      button.setAttribute('aria-pressed', String(enabled));
+      button.classList.toggle('is-disabled', !enabled);
+      mapController.setLineTypeVisibility(lineType.type, enabled);
+    });
+    legend.append(button);
+  }
+
+  mapPanel.append(legend);
 }
 
 function selectCity(city) {
@@ -83,10 +133,15 @@ async function start() {
     const mapConfig = await loadMapConfig();
     mapController = await createMapController(mapConfig);
 
-    // Markers are ready before the first fitBounds triggers a viewport request.
-    const cities = await loadCities();
+    const [cities, lineTypes] = await Promise.all([
+      loadCities(),
+      loadLineTypes(),
+    ]);
     if (!cities.length) throw new Error('Список городов пуст');
+    if (!lineTypes.length) throw new Error('Справочник типов линий пуст');
 
+    mapController.setLineTypes(lineTypes);
+    renderLineLegend(lineTypes);
     cityList.setCities(cities);
     citiesById = new Map(cities.map((city) => [city.id, city]));
     mapController.setCities(cities);
