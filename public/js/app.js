@@ -2,6 +2,7 @@ import {
   loadCities,
   loadLineTypes,
   loadMapConfig,
+  loadReportConfig,
   loadViewportGeometries,
 } from './api.js';
 import { createCityList } from './city-list.js';
@@ -149,7 +150,7 @@ async function updateViewport(viewport) {
   if (viewport.zoom < ROAD_DATA_MIN_ZOOM) {
     focusedCityId = null;
     mapController.clearViewportData();
-    cityList.setStatus('Выберите город или увеличьте карту для показа полос');
+    cityList.setStatus('Выберите город или увеличьте карту для показа линий');
     setMapMessage('');
     return;
   }
@@ -193,13 +194,15 @@ async function start() {
     const mapConfig = await loadMapConfig();
     mapController = await createMapController(mapConfig);
 
-    const [cities, lineTypes] = await Promise.all([
+    const [cities, lineTypes, reportConfig] = await Promise.all([
       loadCities(),
       loadLineTypes(),
+      loadReportConfig(),
     ]);
     if (!lineTypes.length) throw new Error('Справочник типов линий пуст');
 
     applyLineTypes(lineTypes);
+    cityList.setReportConfig(reportConfig);
     cityList.setCities(cities);
     citiesById = new Map(cities.map((city) => [city.id, city]));
     mapController.setCities(cities);
