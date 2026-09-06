@@ -32,10 +32,10 @@ const EXPORT_PUBLIC_GEOJSON_SQL = `
 
 const EXPORT_PUBLIC_CSV_SQL = `
   SELECT
-    city.name AS short_name,
-    city.lane_length_m::double precision AS lanes_length,
-    population.population::integer AS population,
-    city.lane_m_per_1000::double precision AS lanes_per_1k,
+    city.name,
+    CASE WHEN city.is_large THEN 'large' ELSE 'small' END AS category,
+    report.rank::integer AS rank,
+    COALESCE(report.values, '{}'::jsonb) AS metrics,
     MIN(ST_XMin(boundary.bounds))::double precision AS minx,
     MIN(ST_YMin(boundary.bounds))::double precision AS miny,
     MAX(ST_XMax(boundary.bounds))::double precision AS maxx,
@@ -43,13 +43,20 @@ const EXPORT_PUBLIC_CSV_SQL = `
   FROM cities AS city
   JOIN city_populations AS population ON population.city_id = city.id
   JOIN city_boundaries AS boundary ON boundary.city_id = city.id
+  LEFT JOIN city_report_values AS report ON report.city_id = city.id
   GROUP BY
     city.id,
     city.name,
-    city.lane_length_m,
-    city.lane_m_per_1000,
-    population.population
-  ORDER BY city.lane_m_per_1000 DESC NULLS LAST, city.name ASC
+    city.is_large,
+    report.rank,
+    report.values
+  ORDER BY city.is_large DESC, report.rank NULLS LAST, city.name ASC
+`;
+
+const EXPORT_PUBLIC_CSV_COLUMNS_SQL = `
+  SELECT csv_columns AS "csvColumns"
+  FROM report_config
+  WHERE id = 1
 `;
 
 /**
@@ -72,6 +79,11 @@ export function createPublicDownloadRepository(database) {
     async exportCsvRows() {
       const result = await database.query(EXPORT_PUBLIC_CSV_SQL);
       return result.rows;
+    },
+
+    async exportCsvColumns() {
+      const result = await database.query(EXPORT_PUBLIC_CSV_COLUMNS_SQL);
+      return result.rows[0]?.csvColumns ?? [];
     },
   };
 }
