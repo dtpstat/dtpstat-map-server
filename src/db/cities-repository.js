@@ -12,10 +12,9 @@ const LIST_CITIES_SQL = `
     city.lane_length_m AS "laneLengthMeters",
     city.lane_m_per_1000 AS "laneMetersPer1000",
     CASE WHEN city.is_large THEN 'large' ELSE 'small' END AS category,
-    ROW_NUMBER() OVER (
-      PARTITION BY city.is_large
-      ORDER BY city.lane_m_per_1000 DESC, city.name ASC
-    )::integer AS rank,
+    report.rank::integer AS rank,
+    report.rank_value AS "rankValue",
+    COALESCE(report.values, '{}'::jsonb) AS metrics,
     json_build_array(
       ST_XMin(boundary.bounds),
       ST_YMin(boundary.bounds),
@@ -29,7 +28,8 @@ const LIST_CITIES_SQL = `
   FROM cities AS city
   JOIN city_populations AS population ON population.city_id = city.id
   JOIN city_boundaries AS boundary ON boundary.city_id = city.id
-  ORDER BY city.is_large DESC, city.lane_m_per_1000 DESC, city.name ASC
+  LEFT JOIN city_report_values AS report ON report.city_id = city.id
+  ORDER BY city.is_large DESC, report.rank NULLS LAST, city.name ASC
 `;
 
 const CITY_GEOMETRIES_SQL = `
