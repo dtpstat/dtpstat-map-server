@@ -11,6 +11,20 @@ document.body.append(host);
 
 const MAX_TOASTS = 4;
 const DEFAULT_TIMEOUT_MS = 5000;
+const MESSAGE_SELECTOR = [
+  '.project-settings-message',
+  '.report-config-message',
+  '.line-types-message',
+  '.security-message',
+  '.profile-message',
+  '.project-transfer-message',
+  '.notice.notice-success',
+  '.notice.notice-error',
+].join(',');
+
+function isFeedbackSource(element) {
+  return element instanceof Element && element.matches(MESSAGE_SELECTOR);
+}
 
 function toneFromElement(element) {
   const classes = element.classList;
@@ -63,7 +77,7 @@ window.addEventListener('dtpstat:admin-feedback', (event) => {
 const observed = new WeakMap();
 
 function watch(element) {
-  if (observed.has(element)) return;
+  if (!isFeedbackSource(element) || observed.has(element)) return;
   let previous = '';
   const sync = () => {
     const tone = toneFromElement(element);
@@ -84,18 +98,7 @@ function watch(element) {
 }
 
 function discover(root = document) {
-  for (const element of root.querySelectorAll([
-    '.project-settings-message',
-    '.report-config-message',
-    '.line-types-message',
-    '.security-message',
-    '.profile-message',
-    '.project-transfer-message',
-    '.notice.notice-success',
-    '.notice.notice-error',
-  ].join(','))) {
-    watch(element);
-  }
+  for (const element of root.querySelectorAll(MESSAGE_SELECTOR)) watch(element);
 }
 
 discover();
@@ -103,7 +106,10 @@ new MutationObserver((records) => {
   for (const record of records) {
     for (const node of record.addedNodes) {
       if (!(node instanceof Element)) continue;
-      if (toneFromElement(node)) watch(node);
+      // Toasts also carry is-success/is-error. Never observe our own output:
+      // doing so turns one notification into an unbounded MutationObserver loop.
+      if (node === host || host.contains(node)) continue;
+      if (isFeedbackSource(node)) watch(node);
       discover(node);
     }
   }
