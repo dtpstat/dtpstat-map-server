@@ -6,6 +6,8 @@ const LABEL_LAYER_PREFIX = 'bus-lanes-labels-';
 const CITY_SOURCE_ID = 'ranked-cities';
 const CITY_LAYER_ID = 'ranked-cities-markers';
 const CITY_IMAGE_ID = 'ranked-city-bus';
+const CITY_MARKER_TARGET_WIDTH = 32;
+const UNRANKED_CITY_PRIORITY = 999;
 const EMPTY_COLLECTION = { type: 'FeatureCollection', features: [] };
 const DEFAULT_LINE_TYPE = {
   code: 0,
@@ -68,6 +70,14 @@ function markerCoordinates(city) {
   return null;
 }
 
+/** @param {any} city */
+function cityMarkerPriority(city) {
+  const rank = typeof city.rank === 'number' && Number.isFinite(city.rank)
+    ? city.rank
+    : UNRANKED_CITY_PRIORITY;
+  return (city.category === 'large' ? 0 : 1000) + rank;
+}
+
 /** @param {any[]} cities */
 export function citiesToMarkerGeoJson(cities) {
   return {
@@ -82,7 +92,7 @@ export function citiesToMarkerGeoJson(cities) {
         properties: {
           cityId: city.id,
           name: city.name,
-          priority: (city.category === 'large' ? 0 : 1000) + city.rank,
+          priority: cityMarkerPriority(city),
         },
       }];
     }),
@@ -170,6 +180,7 @@ export async function createMapController(config) {
   let currentLineTypes = [DEFAULT_LINE_TYPE];
   let viewportHandler = null;
   let citySelectHandler = null;
+  let cityMarkerIconSize = 1;
   const disabledLineTypes = new Set();
   let lineLayerIds = new Map();
   let lineLabelLayerIds = new Map();
@@ -177,6 +188,9 @@ export async function createMapController(config) {
   async function ensureCityMarkerLayer() {
     if (!map.hasImage(CITY_IMAGE_ID)) {
       const image = await loadMapImage(map, CITY_MARKER_ICON_URL);
+      if (Number.isFinite(image?.width) && image.width > 0) {
+        cityMarkerIconSize = CITY_MARKER_TARGET_WIDTH / image.width;
+      }
       if (!map.hasImage(CITY_IMAGE_ID)) map.addImage(CITY_IMAGE_ID, image, { pixelRatio: 1 });
     }
     if (!map.getSource(CITY_SOURCE_ID)) {
@@ -190,7 +204,7 @@ export async function createMapController(config) {
         maxzoom: ROAD_DATA_MIN_ZOOM,
         layout: {
           'icon-image': CITY_IMAGE_ID,
-          'icon-size': 1,
+          'icon-size': cityMarkerIconSize,
           'icon-padding': 3,
           'text-field': ['get', 'name'],
           'text-size': 12,
@@ -205,6 +219,8 @@ export async function createMapController(config) {
           'text-halo-width': 1.5,
         },
       });
+    } else {
+      map.setLayoutProperty(CITY_LAYER_ID, 'icon-size', cityMarkerIconSize);
     }
   }
 
