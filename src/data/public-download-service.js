@@ -2,16 +2,16 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-const CSV_COLUMNS = [
-  ['short_name', 'short_name'],
-  ['lanes_length', 'lanes_length'],
-  ['population', 'population'],
-  ['lanes_per_1K', 'lanes_per_1k'],
-  ['minx', 'minx'],
-  ['miny', 'miny'],
-  ['maxx', 'maxx'],
-  ['maxy', 'maxy'],
-];
+const LEGACY_PUBLIC_CSV_COLUMNS = Object.freeze([
+  Object.freeze({ kind: 'city', title: 'short_name' }),
+  Object.freeze({ kind: 'metric', metricKey: 'lane_length_m', title: 'lanes_length', scale: 1, decimals: null }),
+  Object.freeze({ kind: 'metric', metricKey: 'population', title: 'population', scale: 1, decimals: null }),
+  Object.freeze({ kind: 'metric', metricKey: 'lane_m_per_1000', title: 'lanes_per_1K', scale: 1, decimals: null }),
+  Object.freeze({ kind: 'minx', title: 'minx' }),
+  Object.freeze({ kind: 'miny', title: 'miny' }),
+  Object.freeze({ kind: 'maxx', title: 'maxx' }),
+  Object.freeze({ kind: 'maxy', title: 'maxy' }),
+]);
 
 /** @param {unknown} value */
 function csvValue(value) {
@@ -21,12 +21,40 @@ function csvValue(value) {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
-/** @param {any[]} rows */
-export function serializePublicCsv(rows) {
-  const lines = [CSV_COLUMNS.map(([header]) => header).join(',')];
+/** @param {unknown} value @param {{ scale?: number, decimals?: number | null }} column */
+function metricCsvValue(value, column) {
+  if (value === null || value === undefined) return '';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '';
+  const scaled = number * (column.scale ?? 1);
+  return column.decimals === null || column.decimals === undefined
+    ? String(scaled)
+    : scaled.toFixed(column.decimals);
+}
+
+/** @param {any} row @param {any} column */
+function columnValue(row, column) {
+  if (column.kind === 'city') return row.name;
+  if (column.kind === 'rank') return row.rank;
+  if (column.kind === 'category') return row.category;
+  if (column.kind === 'metric') {
+    return metricCsvValue(row.metrics?.[column.metricKey], column);
+  }
+  if (['minx', 'miny', 'maxx', 'maxy'].includes(column.kind)) {
+    return row[column.kind];
+  }
+  return '';
+}
+
+/** @param {any[]} rows @param {any[]} [columns] */
+export function serializePublicCsv(rows, columns = LEGACY_PUBLIC_CSV_COLUMNS) {
+  const effectiveColumns = Array.isArray(columns) && columns.length > 0
+    ? columns
+    : LEGACY_PUBLIC_CSV_COLUMNS;
+  const lines = [effectiveColumns.map((column) => csvValue(column.title)).join(',')];
   for (const row of rows) {
     lines.push(
-      CSV_COLUMNS.map(([, property]) => csvValue(row[property])).join(','),
+      effectiveColumns.map((column) => csvValue(columnValue(row, column))).join(','),
     );
   }
   return `${lines.join('\n')}\n`;
@@ -37,7 +65,11 @@ export function serializePublicCsv(rows) {
  * payloads are fully calculated before either visible file is replaced.
  *
  * @param {{
- *   repository: { exportGeoJson: () => Promise<object>, exportCsvRows: () => Promise<any[]> },
+ *   repository: {
+ *     exportGeoJson: () => Promise<object>,
+ *     exportCsvRows: () => Promise<any[]>,
+ *     exportCsvColumns?: () => Promise<any[]>
+ *   },
  *   directory: string
  * }} dependencies
  */
@@ -51,12 +83,13 @@ export function createPublicDownloadService({ repository, directory }) {
     csvPath,
 
     async refresh() {
-      const [geoJson, csvRows] = await Promise.all([
+      const [geoJson, csvRows, csvColumns] = await Promise.all([
         repository.exportGeoJson(),
         repository.exportCsvRows(),
+        repository.exportCsvColumns?.() ?? Promise.resolve(LEGACY_PUBLIC_CSV_COLUMNS),
       ]);
       const geoJsonText = `${JSON.stringify(geoJson)}\n`;
-      const csvText = serializePublicCsv(csvRows);
+      const csvText = serializePublicCsv(csvRows, csvColumns);
       const token = `${process.pid}-${Date.now()}-${crypto.randomUUID()}`;
       const geoJsonTempPath = path.join(directory, `.bus-lanes.geojson.${token}.tmp`);
       const csvTempPath = path.join(directory, `.bus-lanes.csv.${token}.tmp`);
@@ -81,6 +114,7 @@ export function createPublicDownloadService({ repository, directory }) {
         csvBytes: Buffer.byteLength(csvText),
         featureCount: Array.isArray(geoJson.features) ? geoJson.features.length : 0,
         cityCount: csvRows.length,
+        csvColumns: Array.isArray(csvColumns) ? csvColumns.length : 0,
       };
     },
   };
