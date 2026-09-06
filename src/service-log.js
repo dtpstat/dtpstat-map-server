@@ -32,6 +32,19 @@ export function serviceLog(level, event, details = {}, output = console) {
 }
 
 /**
+ * Emit exactly one JSON object on one line for security tooling such as fail2ban.
+ * Do not include passwords, session tokens, temporary passwords, hashes or other
+ * secrets in details.
+ *
+ * @param {string} event
+ * @param {object} [details]
+ * @param {Pick<Console, 'warn'>} [output]
+ */
+export function securityLog(event, details = {}, output = console) {
+  output.warn(`[security] ${JSON.stringify({ event, ...details })}`);
+}
+
+/**
  * Log the start, successful completion and failure of an internal operation.
  *
  * @template T
