@@ -138,7 +138,15 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     3000,
     { min: 1, max: 65535 },
   );
-  const httpsPort = integerValue(env, 'HTTPS_PORT', 3443, { min: 1, max: 65535 });
+  const httpsPort = integerValue(env, 'HTTPS_PORT', 3443, {
+    min: 1,
+    max: 65535,
+  });
+  const trustProxyHops = integerValue(env, 'HTTP_TRUST_PROXY_HOPS', 0, {
+    min: 0,
+    max: 16,
+  });
+
   if (httpEnabled && httpsEnabled && httpPort === httpsPort) {
     throw new Error('HTTP_PORT and HTTPS_PORT must be different');
   }
@@ -157,7 +165,10 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     min: 1,
     max: 100,
   });
-  const kmlConstraints = { allowedHosts: kmlAllowedHosts, maxSources: kmlMaxSources };
+  const kmlConstraints = {
+    allowedHosts: kmlAllowedHosts,
+    maxSources: kmlMaxSources,
+  };
   const kmlCityBufferMaxMeters = integerValue(
     env,
     'KML_UPDATE_CITY_BUFFER_MAX_METERS',
@@ -225,7 +236,11 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     environment: env.NODE_ENV?.trim() || 'development',
     host: env.HOST?.trim() || '0.0.0.0',
     projectRoot,
-    http: { enabled: httpEnabled, port: httpPort },
+    http: {
+      enabled: httpEnabled,
+      port: httpPort,
+      trustProxyHops,
+    },
     https: { enabled: httpsEnabled, port: httpsPort, keyPath, certPath },
     database: {
       ...loadApplicationDatabaseConnection(env),
