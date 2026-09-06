@@ -4,28 +4,25 @@ import {
   PROJECT_CONTENT_TAGS,
   ProjectSettingsValidationError,
 } from '../data/project-settings.js';
-import { createBasicAuth } from '../http/basic-auth.js';
+import { createAdminOperationAudit } from '../http/admin-auth.js';
 
 /**
  * @param {{
  *   projectSettingsRepository: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
- *   adminTasks: ReturnType<import('../data/admin-task-manager.js').createAdminTaskManager>,
- *   importApi: { username: string, password: string, maxBodyBytes: number }
+ *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
+ *   securityService: ReturnType<import('../data/admin-security.js').createAdminSecurityService>,
+ *   maxBodyBytes: number
  * }} dependencies
  */
 export function createProjectSettingsRouter({
   projectSettingsRepository,
-  adminTasks,
-  importApi,
+  adminAuth,
+  securityService,
+  maxBodyBytes,
 }) {
   const router = Router();
-  const requireAdminAuth = createBasicAuth({
-    username: importApi.username,
-    password: importApi.password,
-    realm: 'data-import',
-  });
   const jsonBody = express.json({
-    limit: Math.min(importApi.maxBodyBytes, 256 * 1024),
+    limit: Math.min(maxBodyBytes, 256 * 1024),
     strict: true,
     inflate: true,
     type: 'application/json',
@@ -43,7 +40,7 @@ export function createProjectSettingsRouter({
 
   router.get(
     '/admin/project-settings',
-    requireAdminAuth,
+    adminAuth.requireInterface,
     async (_request, response, next) => {
       try {
         const settings = await projectSettingsRepository.get();
@@ -63,22 +60,10 @@ export function createProjectSettingsRouter({
 
   router.put(
     '/admin/project-settings',
-    requireAdminAuth,
+    adminAuth.requireInterface,
+    createAdminOperationAudit(securityService, 'interface.project.update'),
     jsonBody,
     async (request, response, next) => {
-      const activeTask = adminTasks.active();
-      if (activeTask) {
-        response.status(409).json({
-          error: 'Another admin task is already active',
-          taskId: activeTask.id,
-          task: {
-            id: activeTask.id,
-            type: activeTask.type,
-            status: activeTask.status,
-          },
-        });
-        return;
-      }
       try {
         const settings = await projectSettingsRepository.save(request.body);
         response.set('Cache-Control', 'no-store');
