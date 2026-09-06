@@ -78,9 +78,7 @@ function compileOperand(operand, parameters) {
   if (operand.kind === 'constant') {
     return `${parameter(parameters, operand.value)}::double precision`;
   }
-  if (operand.kind === 'field') {
-    return FIELD_SQL[operand.field];
-  }
+  if (operand.kind === 'field') return FIELD_SQL[operand.field];
 
   const aggregate = AGGREGATE_SQL[operand.aggregate];
   const field = FIELD_SQL[operand.field];
@@ -160,8 +158,8 @@ async function loadConfig(queryable) {
 }
 
 async function materialize(queryable, config) {
+  await queryable.query('DELETE FROM city_report_values');
   const inserted = await queryable.query(`
-    DELETE FROM city_report_values;
     INSERT INTO city_report_values (city_id, values, updated_at)
     SELECT id, '{}'::jsonb, now()
     FROM cities
