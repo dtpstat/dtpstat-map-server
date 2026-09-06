@@ -200,9 +200,19 @@ async function materialize(queryable, config) {
   await queryable.query('DELETE FROM city_report_values');
   const inserted = await queryable.query(`
     INSERT INTO city_report_values (city_id, values, updated_at)
-    SELECT id, '{}'::jsonb, now()
-    FROM cities
-    ORDER BY id
+    SELECT city.id, '{}'::jsonb, now()
+    FROM cities AS city
+    WHERE EXISTS (
+      SELECT 1
+      FROM city_boundaries AS boundary_presence
+      WHERE boundary_presence.city_id = city.id
+    )
+      AND EXISTS (
+        SELECT 1
+        FROM city_geometries AS geometry_presence
+        WHERE geometry_presence.city_id = city.id
+      )
+    ORDER BY city.id
     RETURNING city_id
   `);
 
