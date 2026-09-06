@@ -1,9 +1,12 @@
-const integerFormatter = new Intl.NumberFormat('ru-RU', {
-  maximumFractionDigits: 0,
-});
-const decimalFormatter = new Intl.NumberFormat('ru-RU', {
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
+const DEFAULT_REPORT_CONFIG = Object.freeze({
+  tableColumns: Object.freeze([
+    Object.freeze({ kind: 'rank', title: '№' }),
+    Object.freeze({ kind: 'city', title: 'город' }),
+    Object.freeze({ kind: 'metric', metricKey: 'lane_length_m', title: 'длина ВП (км)', scale: 0.001, decimals: 1 }),
+    Object.freeze({ kind: 'metric', metricKey: 'population', title: 'жители (тыс.)', scale: 0.001, decimals: 0 }),
+    Object.freeze({ kind: 'metric', metricKey: 'lane_m_per_1000', title: 'ВП (м/1000 чел.)', scale: 1, decimals: 1 }),
+  ]),
+  rank: Object.freeze({ metricKey: 'lane_m_per_1000', direction: 'desc' }),
 });
 
 /** @param {HTMLElement} element */
@@ -11,11 +14,53 @@ function clear(element) {
   element.replaceChildren();
 }
 
-/** @param {string} value */
-function tableCell(value) {
-  const cell = document.createElement('td');
-  cell.textContent = value;
-  return cell;
+/** @param {unknown} value */
+function missing(value) {
+  return value === null || value === undefined || Number.isNaN(value);
+}
+
+/** @param {unknown} value @param {{ scale?: number, decimals?: number | null }} column */
+function formatMetric(value, column) {
+  if (missing(value)) return '—';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  const decimals = column.decimals;
+  const options = decimals === null || decimals === undefined
+    ? { maximumFractionDigits: 6 }
+    : { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
+  return new Intl.NumberFormat('ru-RU', options).format(
+    number * (column.scale ?? 1),
+  );
+}
+
+/** @param {any} city @param {string} field */
+function sortValue(city, field) {
+  if (field === 'rank') return city.rank;
+  if (field === 'name') return city.name;
+  if (field.startsWith('metric:')) {
+    return city.metrics?.[field.slice('metric:'.length)] ?? null;
+  }
+  return null;
+}
+
+/** @param {any} column */
+function sortField(column) {
+  if (column.kind === 'rank') return 'rank';
+  if (column.kind === 'city') return 'name';
+  if (column.kind === 'metric') return `metric:${column.metricKey}`;
+  return null;
+}
+
+/** @param {any} column @param {any} reportConfig */
+function cellClass(column, reportConfig) {
+  const classes = [`column-${column.kind}`];
+  if (
+    column.kind === 'metric' &&
+    column.metricKey === reportConfig.rank?.metricKey
+  ) {
+    classes.push('is-rank-metric');
+  }
+  return classes.join(' ');
 }
 
 /**
@@ -28,12 +73,18 @@ export function createCityList(elements) {
   let cities = [];
   let category = 'large';
   let selectedCityId = null;
+  let reportConfig = DEFAULT_REPORT_CONFIG;
   let sort = { field: 'rank', direction: 'asc' };
   let selectHandler = () => {};
-  const sortButtons = document.querySelectorAll('[data-sort]');
+  const table = elements.list.closest('table');
+  const head = table?.querySelector('thead');
+
+  function sortButtons() {
+    return head ? [...head.querySelectorAll('[data-sort]')] : [];
+  }
 
   function updateSortIndicators() {
-    for (const button of sortButtons) {
+    for (const button of sortButtons()) {
       const isActive = button.dataset.sort === sort.field;
       const direction = isActive ? sort.direction : 'none';
       const header = button.closest('th');
@@ -57,16 +108,72 @@ export function createCityList(elements) {
     }
   }
 
+  function renderHeader() {
+    if (!head) return;
+    const row = document.createElement('tr');
+    for (const column of reportConfig.tableColumns) {
+      const header = document.createElement('th');
+      header.scope = 'col';
+      header.className = cellClass(column, reportConfig);
+      const field = sortField(column);
+      if (field) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.sort = field;
+        button.textContent = column.title;
+        header.append(button);
+      } else {
+        header.textContent = column.title;
+      }
+      row.append(header);
+    }
+    head.replaceChildren(row);
+    updateSortIndicators();
+  }
+
   function visibleCities() {
     const direction = sort.direction === 'asc' ? 1 : -1;
     return cities
       .filter((city) => city.category === category)
       .sort((left, right) => {
-        const a = left[sort.field];
-        const b = right[sort.field];
-        if (typeof a === 'string') return a.localeCompare(b, 'ru') * direction;
-        return (a - b) * direction;
+        const a = sortValue(left, sort.field);
+        const b = sortValue(right, sort.field);
+        if (missing(a) && missing(b)) return left.name.localeCompare(right.name, 'ru');
+        if (missing(a)) return 1;
+        if (missing(b)) return -1;
+        if (typeof a === 'string' || typeof b === 'string') {
+          return String(a).localeCompare(String(b), 'ru') * direction;
+        }
+        const difference = (Number(a) - Number(b)) * direction;
+        return difference || left.name.localeCompare(right.name, 'ru');
       });
+  }
+
+  function cityCell(city, column) {
+    const cell = document.createElement('td');
+    cell.className = cellClass(column, reportConfig);
+    cell.dataset.label = column.title;
+
+    if (column.kind === 'rank') {
+      cell.textContent = missing(city.rank) ? '—' : String(city.rank);
+      return cell;
+    }
+    if (column.kind === 'city') {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'city-link';
+      button.dataset.cityId = String(city.id);
+      button.textContent = city.name;
+      button.setAttribute('aria-label', `Показать ${city.name} на карте`);
+      cell.append(button);
+      return cell;
+    }
+    if (column.kind === 'metric') {
+      cell.textContent = formatMetric(city.metrics?.[column.metricKey], column);
+      return cell;
+    }
+    cell.textContent = '—';
+    return cell;
   }
 
   function render() {
@@ -78,22 +185,9 @@ export function createCityList(elements) {
       row.dataset.cityId = String(city.id);
       row.classList.toggle('is-active', city.id === selectedCityId);
       row.setAttribute('aria-selected', String(city.id === selectedCityId));
-
-      row.append(tableCell(String(city.rank)));
-
-      const nameCell = document.createElement('td');
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'city-link';
-      button.dataset.cityId = String(city.id);
-      button.textContent = city.name;
-      button.setAttribute('aria-label', `Показать ${city.name} на карте`);
-      nameCell.append(button);
-      row.append(nameCell);
-
-      row.append(tableCell(decimalFormatter.format(city.laneLengthMeters / 1000)));
-      row.append(tableCell(integerFormatter.format(city.population / 1000)));
-      row.append(tableCell(decimalFormatter.format(city.laneMetersPer1000)));
+      for (const column of reportConfig.tableColumns) {
+        row.append(cityCell(city, column));
+      }
       fragment.append(row);
     }
 
@@ -109,6 +203,20 @@ export function createCityList(elements) {
     if (city) selectHandler(city);
   });
 
+  head?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-sort]');
+    if (!button) return;
+    const field = button.dataset.sort;
+    sort = sort.field === field
+      ? { field, direction: sort.direction === 'asc' ? 'desc' : 'asc' }
+      : {
+          field,
+          direction: field === 'name' || field === 'rank' ? 'asc' : 'desc',
+        };
+    updateSortIndicators();
+    render();
+  });
+
   for (const button of elements.categoryButtons) {
     button.addEventListener('click', () => {
       category = button.dataset.category;
@@ -121,24 +229,17 @@ export function createCityList(elements) {
     });
   }
 
-  for (const button of sortButtons) {
-    button.addEventListener('click', () => {
-      const field = button.dataset.sort;
-      sort =
-        sort.field === field
-          ? { field, direction: sort.direction === 'asc' ? 'desc' : 'asc' }
-          : {
-              field,
-              direction: field === 'name' || field === 'rank' ? 'asc' : 'desc',
-            };
-      updateSortIndicators();
-      render();
-    });
-  }
-
-  updateSortIndicators();
+  renderHeader();
 
   return {
+    /** @param {any} nextConfig */
+    setReportConfig(nextConfig) {
+      if (!nextConfig || !Array.isArray(nextConfig.tableColumns)) return;
+      reportConfig = nextConfig;
+      sort = { field: 'rank', direction: 'asc' };
+      renderHeader();
+      render();
+    },
     /** @param {any[]} nextCities */
     setCities(nextCities) {
       cities = nextCities;
