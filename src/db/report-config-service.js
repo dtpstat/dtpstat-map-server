@@ -1,4 +1,5 @@
 import {
+  reportMetricToRpn,
   ReportConfigValidationError,
   validateReportConfig,
 } from '../data/report-config.js';
@@ -95,31 +96,50 @@ function compileOperand(operand, parameters) {
   return `(${expression})::double precision`;
 }
 
-function applyOperation(left, operation, parameters) {
-  const right = compileOperand(operation.operand, parameters);
-  if (operation.operator === 'add') return `(${left} + ${right})`;
-  if (operation.operator === 'subtract') return `(${left} - ${right})`;
-  if (operation.operator === 'multiply') return `(${left} * ${right})`;
-  if (operation.operator === 'divide') {
+function applyBinaryOperator(left, right, operator) {
+  if (operator === 'add') return `(${left} + ${right})`;
+  if (operator === 'subtract') return `(${left} - ${right})`;
+  if (operator === 'multiply') return `(${left} * ${right})`;
+  if (operator === 'divide') {
     return `(CASE WHEN ${right} IS NULL OR ${right} = 0 THEN NULL ELSE ${left} / ${right} END)`;
   }
-  if (operation.operator === 'percent') {
+  if (operator === 'percent') {
     return `(CASE WHEN ${right} IS NULL OR ${right} = 0 THEN NULL ELSE (${left} / ${right}) * 100.0 END)`;
   }
-  throw new ReportConfigValidationError(`Unsupported arithmetic operator: ${operation.operator}`);
+  throw new ReportConfigValidationError(`Unsupported arithmetic operator: ${operator}`);
+}
+
+function compileMetricExpression(metric, parameters) {
+  const stack = [];
+  for (const token of reportMetricToRpn(metric)) {
+    if (token.kind === 'operand') {
+      stack.push(compileOperand(token.operand, parameters));
+      continue;
+    }
+
+    if (stack.length < 2) {
+      throw new ReportConfigValidationError('Invalid report metric expression');
+    }
+    const right = stack.pop();
+    const left = stack.pop();
+    stack.push(applyBinaryOperator(left, right, token.operator));
+  }
+
+  if (stack.length !== 1) {
+    throw new ReportConfigValidationError('Invalid report metric expression');
+  }
+  return stack[0];
 }
 
 /**
  * Compile one validated metric using only server-owned SQL fragments. User
  * values remain query parameters; field/table/aggregate identifiers never come
- * from request text.
+ * from request text. The editor's precedence levels are first converted to
+ * Reverse Polish Notation, so explicit grouping is deterministic.
  */
 export function compileReportMetricQuery(metric) {
   const parameters = [metric.key];
-  let expression = compileOperand(metric.source, parameters);
-  for (const operation of metric.operations) {
-    expression = applyOperation(expression, operation, parameters);
-  }
+  const expression = compileMetricExpression(metric, parameters);
 
   return {
     text: `
