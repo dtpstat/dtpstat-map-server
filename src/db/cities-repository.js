@@ -2,21 +2,21 @@
  * @typedef {{ query: (text: string, values?: unknown[]) => Promise<{ rows: any[] }> }} Queryable
  */
 
-export const VIEWPORT_PADDING_RATIO = 0.2;
+export const VIEWPORT_EXPANSION_RATIO = 0.2;
 
 /**
- * Expand a visible WGS84 viewport by 20% of its width/height on every side.
- * API validation is intentionally performed against the actual visible window;
- * only the database selector is padded. The returned line geometries are never
- * clipped, so any complete line touching the padded selector remains visible.
+ * Expand a visible WGS84 viewport to 120% of its width and height: the extra
+ * 20% is split evenly, so each side receives 10% padding. API validation is
+ * performed against the actual visible window; only the DB selector is padded.
+ * Returned line geometries are never clipped.
  *
  * @param {{ west: number, south: number, east: number, north: number }} viewport
  */
 export function expandViewportBounds(viewport) {
   const width = viewport.east - viewport.west;
   const height = viewport.north - viewport.south;
-  const horizontalPadding = width * VIEWPORT_PADDING_RATIO;
-  const verticalPadding = height * VIEWPORT_PADDING_RATIO;
+  const horizontalPadding = width * VIEWPORT_EXPANSION_RATIO / 2;
+  const verticalPadding = height * VIEWPORT_EXPANSION_RATIO / 2;
   return {
     west: Math.max(-180, viewport.west - horizontalPadding),
     south: Math.max(-90, viewport.south - verticalPadding),
@@ -165,9 +165,9 @@ export function createCitiesRepository(database) {
     },
 
     /**
-     * Return complete line geometries that intersect a selector padded by 20%
-     * on every side of the current viewport. The original center remains the
-     * city-selection point; only the line selector is expanded.
+     * Return complete line geometries that intersect a selector 20% larger
+     * than the visible viewport. The original center remains the city-selection
+     * point; only the line selector is expanded.
      *
      * @param {{ west: number, south: number, east: number, north: number, centerLng: number, centerLat: number }} viewport
      */
