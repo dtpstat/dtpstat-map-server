@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { serviceErrorDetails, serviceLog } from '../service-log.js';
 import {
   databaseApplicationName,
   databaseSearchPath,
@@ -20,7 +21,7 @@ const { Pool } = pg;
 export function attachPoolErrorHandlers(
   pool,
   schema,
-  logError = (message, details) => console.error(message, details),
+  logError = (_message, details) => serviceLog('error', 'postgres.connection:error', details),
 ) {
   const reported = new WeakSet();
 
@@ -33,8 +34,7 @@ export function attachPoolErrorHandlers(
     logError('Unexpected PostgreSQL connection error', {
       schema,
       processId: client?.processID ?? null,
-      code: error?.code ?? null,
-      message: error instanceof Error ? error.message : String(error),
+      ...serviceErrorDetails(error),
     });
   };
 
