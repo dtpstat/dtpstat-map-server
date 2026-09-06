@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Администрирование — выделенные полосы</title>
+  <title>Администрирование — карта данных</title>
   <link rel="stylesheet" href="/admin/admin.css">
   <link rel="stylesheet" href="/admin/line-types.css">
   <script type="module" src="/admin/json-examples.js"></script>
@@ -13,7 +13,7 @@
 <body>
   <header class="topbar">
     <div>
-      <p class="eyebrow">DTPSTAT BUSLINES</p>
+      <p class="eyebrow">MAP SERVER</p>
       <h1>Администрирование данных</h1>
     </div>
     <div class="connection connection-pending" id="connection-state">WebSocket: подключение…</div>
@@ -177,7 +177,7 @@
             <div class="form-fields">
               <label>Источники JSON
                 <textarea name="sources" rows="12" placeholder="Загрузка актуального примера…"></textarea>
-                <small>Каждый слой: name + multiple (1 или 2) + необязательный type. type — строковый код из вкладки «Типы линий»; без type используется default. Неизвестный type отклоняется до замены данных.</small>
+                <small>Каждый слой: name + multiple (1 или 2) + необязательный type. type — исходное LINE_TYPES.NAME; сопоставление без учёта регистра и внешних пробелов. Отсутствующий NAME создаётся автоматически, CODE назначает БД.</small>
               </label>
               <label>Буфер города, м
                 <input name="cityBufferMeters" type="number" inputmode="numeric"
@@ -207,7 +207,7 @@
             <div class="form-fields">
               <label>GeoJSON линий
                 <input name="file" type="file" accept=".json,.geojson,application/json,application/geo+json" required>
-                <small>Канонический schemaVersion 2 переносит lineTypes и _dtpstat.lineType. Legacy GeoJSON без типов тоже поддерживается и получает type=default.</small>
+                <small>Канонический schemaVersion 3 переносит lineTypes и _dtpstat.businessTypeCode. Сопоставление на целевой БД идёт по NAME; локальные CODE могут отличаться. Legacy v2 тоже поддерживается.</small>
               </label>
             </div>
             <button class="task-action" type="submit" data-task-action="kml"

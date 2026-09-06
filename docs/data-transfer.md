@@ -1,24 +1,26 @@
 # Перенос и синхронизация данных
 
-Сервер поддерживает перенос трёх независимых наборов данных без повторного обращения к Overpass:
+Admin API поддерживает перенос трёх независимых наборов без повторного обращения к исходным источникам:
 
-1. OSM города/посёлки и их полигоны — GeoJSON.
-2. Линии и справочник их типов/стилей — GeoJSON.
-3. Население — JSON.
+1. OSM city/town и их границы — GeoJSON;
+2. линии вместе со словарём бизнес-типов — GeoJSON или KML;
+3. население — JSON.
 
-Все transfer-endpoint защищены теми же `IMPORT_API_USERNAME` / `IMPORT_API_PASSWORD`, что и остальные admin-операции.
+Все endpoint защищены теми же `IMPORT_API_USERNAME` / `IMPORT_API_PASSWORD`, что и web-admin.
 
-## Порядок переноса на новый сервер
+Публичные `/bus-lanes.geojson` и `/bus-lanes.csv` **не являются transfer/backup форматом**. Это упрощённые статические snapshots для пользователей страницы. Для round-trip используйте только `/api/admin/export/*`.
 
-Для полного переноса рекомендуется порядок:
+## Рекомендуемый порядок переноса
+
+Для полного переноса на чистый экземпляр:
 
 1. города;
-2. линии вместе с `line_types`;
+2. линии;
 3. население.
 
-Линии versioned-экспорта содержат переносимую ссылку на OSM-полигон (`osmType` + `osmId`). Если такой полигон отсутствует на принимающем сервере, импорт линий завершается ошибкой и предлагает сначала загрузить снимок городов.
+Линии содержат переносимую ссылку на OSM boundary (`osmType` + `osmId`). Если нужной границы нет на принимающем сервере, импорт линий не должен молча привязывать геометрию к другому объекту.
 
-Локальные surrogate ID таблиц (`cities.id`, `city_boundaries.id`, `line_types.id`) в формат переноса не входят и между серверами совпадать не обязаны. Для типов линий переносимым ключом служит `line_types.code`, который в API и KML-конфигурации называется `type`.
+Локальные surrogate ID (`cities.id`, `city_boundaries.id`, `line_types.id`) между серверами переноситься и совпадать не должны.
 
 ## Города
 
@@ -28,22 +30,23 @@
 GET /api/admin/export/cities
 ```
 
-Файл: `dtpstat-buslines-cities.geojson`.
+Имя скачиваемого файла:
 
-GeoJSON содержит полный снимок `city_boundaries`. Для каждого Feature передаются:
+```text
+cities.geojson
+```
 
-- `placeType` — `city` или `town`;
-- `osmType` — `way` или `relation`;
+Формат — GeoJSON `FeatureCollection`, `schemaVersion: 1`. Для каждого Feature передаются:
+
+- `placeType`: `city` или `town`;
+- `osmType`: `way` или `relation`;
 - `osmId`;
 - `osmName`;
-- полный объект OSM `tags`;
+- OSM `tags`;
 - `osmTimestamp`;
 - `updatedAt`;
-- необязательные `citySlug` и `cityName` для связи с рейтинговым городом;
-- переносимые свойства связанного `cities`: `slug`, `name`, `fullName`, `attributes`;
-- Polygon/MultiPolygon geometry.
-
-В корне находятся `schemaVersion: 1` и `exportedAt`.
+- переносимые данные связанного рейтингового города;
+- `Polygon` / `MultiPolygon` geometry.
 
 ### Импорт
 
@@ -52,164 +55,185 @@ POST /api/admin/import/cities
 Content-Type: application/geo+json
 ```
 
-Необязательный query-параметр:
+Опционально:
 
 ```text
 dryRun=true
 ```
 
-Импорт проверяет весь снимок и атомарно заменяет `city_boundaries`. Существующие связи линий с полигонами сохраняются по естественному OSM-ключу `osmType/osmId`.
+Импорт сначала валидирует весь FeatureCollection, затем в одной транзакции staging-геометрии загружаются пакетами по 50 Feature. Это ограничивает размер одного PostgreSQL JSONB-параметра и memory spike на больших snapshots. После staging проверяется PostGIS validity, сохраняются существующие связи линий с OSM-объектами и выполняется атомарная замена `city_boundaries`.
 
-## Линии и типы линий
+Существующие line-to-boundary связи восстанавливаются по естественному ключу `osmType/osmId`.
 
-### Экспорт
+## Линии и словарь типов
+
+### Актуальный GeoJSON экспорт
 
 ```text
 GET /api/admin/export/lines
 ```
 
-Файл: `dtpstat-buslines-lines.geojson`.
+Имя файла:
 
-Актуальный формат имеет `schemaVersion: 2`. В корне находится полный переносимый справочник:
+```text
+lines.geojson
+```
+
+Канонический формат — `schemaVersion: 3`.
+
+В корне передаётся словарь:
 
 ```json
 {
+  "schemaVersion": 3,
   "lineTypes": [
     {
-      "type": "default",
-      "name": "Выделенные полосы",
-      "color": "#045b69",
-      "style": "solid",
-      "width": 4
-    },
-    {
-      "type": "tram",
-      "name": "Трамвай",
+      "code": 7,
+      "name": "Односторонние",
+      "title": "Односторонние полосы",
       "color": "#cc4400",
       "style": "dashed",
-      "width": 6
+      "width": 5.5
     }
   ]
 }
 ```
 
-`type` — стабильный переносимый ключ. `name` используется в легенде карты. Поддерживаемые стили: `solid`, `dashed`, `dotted`; `width` задаётся в пикселях и должен быть от `0.5` до `32`.
+Семантика:
 
-Кроме исходных properties каждая линия получает актуальные `lanes`, `length`, `lanes_length` и служебный объект:
+- `code` — числовой **source CODE**;
+- `name` — стабильная source/import identity;
+- `title` — подпись легенды;
+- `color`, `style`, `width` — оформление.
+
+Каждая геометрия содержит служебную ссылку:
 
 ```json
 {
   "_dtpstat": {
+    "businessTypeCode": 7,
     "citySlug": "...",
     "boundaryOsmType": "relation",
-    "boundaryOsmId": 123456,
-    "lineType": "tram"
+    "boundaryOsmId": 123456
   }
 }
 ```
 
-Эти значения нужны для точного round-trip между серверами; локальные ID БД не передаются.
+### Главное правило CODE/NAME
 
-### Импорт
+Числовой CODE переносим как компактную ссылку **внутри конкретного snapshot**, но source CODE не считается глобальным ID и не обязан совпадать с CODE в целевой БД.
 
-Канонический endpoint:
+Импорт выполняется так:
+
+1. полностью разбирается и валидируется `lineTypes`;
+2. source `businessTypeCode` разрешается в source dictionary;
+3. из dictionary получается source `NAME`;
+4. целевой `LINE_TYPES` ищется по нормализованному `NAME` — без учёта регистра и внешних пробелов;
+5. если `NAME` уже существует, обновляются `TITLE` и style-поля, а локальный target `CODE` сохраняется;
+6. если `NAME` отсутствует, он создаётся, target `CODE` генерирует БД;
+7. геометрия получает локальный target `LINE_TYPE_ID`.
+
+`TITLE` никогда не участвует в identity/matching.
+
+### Импорт линий
 
 ```text
 POST /api/admin/import/lines
 Content-Type: application/geo+json
 ```
 
-Старый endpoint `/api/admin/import` оставлен как совместимый alias.
+Старый `/api/admin/import` остаётся compatibility alias.
 
-Versioned GeoJSON v2 полностью заменяет `city_geometries`, синхронизирует `line_types`, восстанавливает `city_id`, `boundary_id` и `line_type_id` по переносимым ключам и заново рассчитывает длины и рейтинг PostGIS. Если импорт завершается ошибкой, все изменения откатываются одной транзакцией.
+Полный versioned snapshot атомарно синхронизирует словарь и заменяет `city_geometries`, затем PostGIS пересчитывает длины и рейтинг.
 
-Legacy GeoJSON без `lineTypes` и `_dtpstat.lineType` остаётся совместимым: его линии получают тип `default`, а существующий справочник типов на сервере не удаляется.
+Поддерживается legacy GeoJSON v2: старый строковый `type` интерпретируется как imported `NAME`, а старое display `name` — как `TITLE`. Unversioned legacy geometry без business type получает `default`.
 
-## KML и `type`
+## Внешний KML / Google My Maps
 
-Каждый выбранный KML-слой может задавать одновременно статистический множитель `multiple` и тип линии `type`:
+Это **не** тот же формат, что переносимый KML.
+
+Конфигурация источника может задавать:
 
 ```json
 [
   {
     "URL": "https://www.google.com/maps/d/viewer?mid=...",
     "layers": [
-      { "name": "Автобусные", "multiple": 2, "type": "bus" },
-      { "name": "Трамвайные", "multiple": 1, "type": "tram" }
+      { "name": "Автобусные", "multiple": 2, "type": "Двусторонние" },
+      { "name": "Односторонние", "multiple": 1, "type": "Односторонние" }
     ]
   }
 ]
 ```
 
-`multiple` по-прежнему означает коэффициент длины `1` или `2` и не задаёт визуальную толщину. `type` ссылается на заранее настроенный `line_types.code`. Если `type` отсутствует, используется `default`. Если указан неизвестный тип, KML-import завершается ошибкой до замены линий.
+Здесь:
 
-Справочник типов редактируется в web-admin внутри вкладки линий. Для каждого типа настраиваются:
+- `multiple` — статистический множитель `1` или `2`;
+- `type` — **source/import `LINE_TYPES.NAME`**, не numeric CODE;
+- NAME сопоставляется без учёта регистра и внешних пробелов;
+- отсутствующий NAME создаётся автоматически;
+- новый `CODE` назначает БД;
+- начальный `TITLE = NAME`.
 
-- переносимый ключ `type`;
-- имя для легенды;
-- цвет `#RRGGBB`;
-- стиль `solid` / `dashed` / `dotted`;
-- толщина.
+Если `type` не указан, используется source NAME `default`.
 
-Публичный клиент получает справочник через:
+## Переносимый KML
+
+Экспорт:
 
 ```text
-GET /api/line-types
+GET /api/admin/export/lines.kml
 ```
 
-Если в `line_types` больше одной записи, на карте отображается легенда. Клик по её элементу динамически включает или отключает соответствующий тип без повторного запроса геометрий.
+Импорт:
 
-## Выбор геометрий по viewport
+```text
+POST /api/admin/import/lines.kml
+Content-Type: application/vnd.google-earth.kml+xml
+```
 
-`GET /api/geometries` использует bbox только как условие отбора:
+Имя файла:
 
-- сначала применяется GiST-предикат `geom && viewport`;
-- затем точный `ST_Intersects(geom, viewport)`;
-- выбранная линия возвращается **целиком**.
+```text
+lines.kml
+```
 
-`ST_Intersection` с viewport не выполняется. Поэтому линия, пересекающая край текущего окна, больше не обрезается по этому краю.
+Переносимый KML использует тот же принцип numeric source CODE → dictionary NAME → target local type. Подробности: [kml-transfer.md](kml-transfer.md).
 
 ## Население
 
-### Экспорт
+Экспорт:
 
 ```text
 GET /api/admin/export/populations
 ```
 
-Файл: `dtpstat-buslines-populations.json`.
+Имя файла:
 
-Для каждого города сохраняются:
+```text
+populations.json
+```
 
-- `name`;
-- `citySlug`;
-- `population`;
-- `asOf`;
-- `source`;
-- `attributes`.
-
-### Импорт
+Импорт:
 
 ```text
 POST /api/admin/populations
 Content-Type: application/json
 ```
 
-Старый формат с общими `asOf` и `source` в корне остаётся совместимым. Экспортный формат может хранить разные `asOf`/`source` у отдельных городов и импортирует их без потери.
+Для каждого города переносятся `name`, `citySlug`, `population`, `asOf`, `source`, `attributes`. Формат с общими `asOf`/`source` в корне также поддерживается как legacy input.
 
-## HTTP compression
+## Compression
 
-### Ответы сервера
+### Ответы
 
-Экспортные ответы проходят через HTTP content negotiation. Если клиент отправляет:
+Admin exports проходят через Express compression/content negotiation. Клиент может использовать:
 
 ```text
 Accept-Encoding: gzip
 ```
 
-достаточно большой JSON/GeoJSON будет передан с `Content-Encoding: gzip`. Также middleware может согласовать `br` или `deflate`.
-
-Например `curl --compressed` автоматически объявляет поддержку сжатия и распаковывает ответ:
+Например:
 
 ```bash
 curl --fail-with-body --compressed \
@@ -220,7 +244,7 @@ curl --fail-with-body --compressed \
 
 ### Сжатые запросы
 
-JSON/GeoJSON import-endpoint принимают сжатое тело запроса. Для gzip:
+JSON/GeoJSON import-endpoint принимают gzip/deflate/br через Express body parser. Пример gzip:
 
 ```bash
 gzip -c cities.geojson | curl --fail-with-body \
@@ -232,9 +256,7 @@ gzip -c cities.geojson | curl --fail-with-body \
   "https://target.example/api/admin/import/cities"
 ```
 
-Аналогично работают `/api/admin/import/lines` и `/api/admin/populations`.
-
-Web-admin использует `CompressionStream('gzip')` для JSON/GeoJSON upload размером от 1 KiB, если API доступен браузеру; иначе автоматически отправляет обычное несжатое тело.
+Web-admin при наличии `CompressionStream('gzip')` может сжимать крупные JSON/GeoJSON uploads в браузере.
 
 ## Пример полного переноса
 
@@ -261,4 +283,10 @@ gzip -c populations.json | curl --fail-with-body --user "$AUTH" \
   --data-binary @- https://target.example/api/admin/populations
 ```
 
-Все mutating admin-операции по-прежнему проходят через общий single-task guard: одновременно выполняется только одна операция обновления. Изменение `line_types` не создаёт отдельную длительную задачу, но API запрещает его во время активного импорта/обновления.
+## Single-task и производные публичные файлы
+
+Все mutating admin-операции проходят через общий single-task guard: одновременно выполняется только одна длительная операция.
+
+После успешного **реального** изменения городов, линий или населения сервер пересобирает статические public snapshots в `var/public-downloads/`. `dryRun` этого не делает.
+
+Ошибки и прогресс операции доступны в admin log/WebSocket; служебный server log имеет отдельный префикс `[service]`.

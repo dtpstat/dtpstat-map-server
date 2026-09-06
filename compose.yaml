@@ -8,7 +8,7 @@ services:
     ports:
       - "${DATABASE_PORT:-5432}:5432"
     volumes:
-      - buslines-postgres:/var/lib/postgresql/data
+      - database-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 5s
@@ -16,4 +16,4 @@ services:
       retries: 10
 
 volumes:
-  buslines-postgres:
+  database-data:

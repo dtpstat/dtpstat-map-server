@@ -278,7 +278,7 @@ export function createApiRouter({
 		'/admin/export/cities',
 		requireImportAuth,
 		exportRoute(
-			'dtpstat-buslines-cities.geojson',
+			'cities.geojson',
 			'application/geo+json',
 			() => exportRepository.exportCityBoundaries(),
 		),
@@ -287,7 +287,7 @@ export function createApiRouter({
 		'/admin/export/lines',
 		requireImportAuth,
 		exportRoute(
-			'dtpstat-buslines-lines.geojson',
+			'lines.geojson',
 			'application/geo+json',
 			() => exportRepository.exportLines(),
 		),
@@ -296,7 +296,7 @@ export function createApiRouter({
 		'/admin/export/populations',
 		requireImportAuth,
 		exportRoute(
-			'dtpstat-buslines-populations.json',
+			'populations.json',
 			'application/json',
 			() => exportRepository.exportPopulations(),
 		),
@@ -585,8 +585,8 @@ export function createApiRouter({
 		}
 		response.status(202).json({
 			status: 'cancelling',
-			taskId,
 			statusURL,
+			taskId,
 		});
 	};
 

@@ -197,7 +197,6 @@ async function start() {
       loadCities(),
       loadLineTypes(),
     ]);
-    if (!cities.length) throw new Error('Список городов пуст');
     if (!lineTypes.length) throw new Error('Справочник типов линий пуст');
 
     applyLineTypes(lineTypes);
@@ -211,8 +210,14 @@ async function start() {
     mapController.onViewportChange((viewport) => {
       void updateViewport(viewport);
     });
-    cityList.setStatus(`Доступно городов: ${cities.length}`);
 
+    if (!cities.length) {
+      cityList.setStatus('Данные пока не загружены');
+      setMapMessage('Данные пока не загружены');
+      return;
+    }
+
+    cityList.setStatus(`Доступно городов: ${cities.length}`);
     const firstCity = cities.find((city) => city.category === 'large') ?? cities[0];
     selectCity(firstCity);
   } catch (error) {

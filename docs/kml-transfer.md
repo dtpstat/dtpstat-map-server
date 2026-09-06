@@ -1,49 +1,56 @@
 # Переносимый KML линий
 
-Переносимый KML предназначен для полного round-trip набора линий между экземплярами приложения.
-Он отличается от внешнего KML / Google My Maps импорта: внешний источник не обязан содержать служебные metadata, а переносимый KML всегда содержит полный справочник бизнес-типов и стилей.
+Переносимый KML предназначен для полного round-trip линий между экземплярами `dtpstat-map-server`. Он отличается от импорта внешнего KML / Google My Maps: внешний источник передаёт только исходные слои, а переносимый KML содержит полный словарь бизнес-типов и служебные ссылки, необходимые для точного восстановления.
 
-## Два независимых понятия
+## Геометрический и бизнес-тип
 
-Геометрический тип и бизнес-тип линии никогда не смешиваются:
+Это независимые понятия:
 
-- геометрический тип: KML `LineString` / `MultiGeometry` (в GeoJSON — `LineString` / `MultiLineString`);
-- бизнес-тип: `BUSLANES.LINE_TYPES.CODE`, на который в БД ссылается `CITY_GEOMETRIES.LINE_TYPE_ID`.
+- геометрический тип: KML `LineString` / `MultiGeometry`;
+- бизнес-тип: запись `LINE_TYPES`, на которую `CITY_GEOMETRIES` ссылается через локальный `LINE_TYPE_ID`.
 
-Текстовое имя бизнес-типа в геометрии не хранится.
+PostGIS/KML geometry type никогда не используется как business type.
 
-## Справочник типов и стилей
+## Актуальный формат
 
-В `Document/ExtendedData` находится один авторитетный property:
+Канонический переносимый KML имеет `schemaVersion: 2`.
+
+В `Document/ExtendedData` находится:
 
 ```text
 dtpstat.businessLineTypes
 ```
 
-Его значение — JSON:
+Его значение — JSON-словарь, например:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "lineTypes": [
     {
-      "code": "one-way",
+      "code": 7,
       "name": "Односторонние",
+      "title": "Односторонние полосы",
       "color": "#cc4400",
       "style": "dashed",
-      "width": 5
+      "width": 5.5
     }
   ]
 }
 ```
 
-`code` — стабильный бизнес-ключ. `name` — подпись легенды. `color`, `style`, `width` — оформление приложения.
+Поля:
 
-Дополнительно KML содержит обычные `<Style>` с цветом и толщиной, чтобы файл был удобнее открывать во внешних KML-просмотрщиках. Они не являются источником истины: стандартный KML не умеет полноценно передавать наши `dashed` / `dotted`, поэтому приложение восстанавливает оформление только из `dtpstat.businessLineTypes`.
+- `code` — числовой source CODE;
+- `name` — source/import identity;
+- `title` — подпись легенды;
+- `color`, `style`, `width` — оформление приложения.
 
-## Placemark
+Обычные KML `<Style>` также записываются для внешних viewers, но не являются источником истины. Стандартный KML не описывает полностью наши `dashed` / `dotted`, поэтому round-trip style восстанавливается из `dtpstat.businessLineTypes`.
 
-Каждая линия содержит отдельные metadata:
+## Placemark metadata
+
+Каждая линия может содержать:
 
 ```text
 dtpstat.businessTypeCode
@@ -56,24 +63,33 @@ dtpstat.boundaryOsmId
 dtpstat.properties
 ```
 
-`dtpstat.businessTypeCode` ссылается только на `lineTypes[].code`.
+`dtpstat.businessTypeCode` — numeric source reference на `lineTypes[].code` внутри этого KML.
 
-`dtpstat.multiple` — статистический множитель 1/2. Он не является стилем и не определяет геометрический тип.
+`dtpstat.multiple` — статистический множитель `1`/`2`, а не визуальная толщина и не geometry type.
 
-Геометрия Placemark хранится отдельно обычными KML-элементами `LineString`/`MultiGeometry`.
+Сама геометрия хранится обычным `LineString` или `MultiGeometry`.
 
-## Порядок импорта
+## Почему CODE не является глобальным ID
 
-Импорт выполняется в строгом порядке:
+Два экземпляра могут иметь разные локальные числовые CODE для одного и того же бизнес-типа. Поэтому импорт **не** выполняет `source CODE == target CODE`.
 
-1. XML и `Document/ExtendedData` проверяются до запуска DB-задачи.
-2. Полностью читается и валидируется `dtpstat.businessLineTypes`.
-3. Проверяются уникальность `code`, уникальность `name` без учёта регистра и внешних пробелов, цвет, стиль и ширина.
-4. Только после успешной проверки справочника читаются Placemark и их геометрии.
-5. Каждый `businessTypeCode` проверяется на наличие в словаре.
-6. В одной DB-транзакции синхронизируется справочник, затем линии получают `LINE_TYPE_ID` по `CODE`.
+Порядок:
 
-При любой ошибке словаря или ссылок линии не заменяются.
+1. XML и `Document/ExtendedData` проверяются до изменения БД;
+2. полностью валидируется `dtpstat.businessLineTypes`;
+3. проверяются source CODE, NAME, TITLE, цвет, стиль и ширина;
+4. каждый Placemark `businessTypeCode` разрешается в source dictionary;
+5. source CODE преобразуется в source `NAME`;
+6. target type ищется по нормализованному NAME без учёта регистра и внешних пробелов;
+7. для существующего NAME сохраняется локальный target CODE, обновляются TITLE/style-поля;
+8. для нового NAME запись создаётся без ручного CODE — CODE назначает target DB;
+9. геометрия получает локальный target `LINE_TYPE_ID`.
+
+`TITLE` в matching не участвует.
+
+## Legacy compatibility
+
+Поддерживается старый portable KML `schemaVersion: 1`, где code был строковым source identifier. При чтении такой словарь переводится в актуальную модель: старый code трактуется как imported `NAME`, после чего используется обычное NAME-based сопоставление.
 
 ## API
 
@@ -83,6 +99,12 @@ dtpstat.properties
 GET /api/admin/export/lines.kml
 ```
 
+Скачиваемое имя:
+
+```text
+lines.kml
+```
+
 Импорт:
 
 ```text
@@ -90,4 +112,18 @@ POST /api/admin/import/lines.kml
 Content-Type: application/vnd.google-earth.kml+xml
 ```
 
-Оба endpoint защищены тем же Basic Auth, что и остальные административные операции.
+Также принимаются `application/xml` и `text/xml`.
+
+Оба endpoint защищены Basic Auth админки. Импорт участвует в общем single-task guard и выполняет замену линий в транзакции.
+
+## Внешний KML — другое правило
+
+Для обычного KML / Google My Maps конфигурация слоя выглядит, например, так:
+
+```json
+{ "name": "Односторонние", "multiple": 1, "type": "Односторонние" }
+```
+
+Поле `type` там является `LINE_TYPES.NAME`, а не `businessTypeCode`. Если NAME отсутствует в target DB, он создаётся автоматически, БД генерирует CODE, начальный TITLE равен NAME.
+
+То есть `dtpstat.businessTypeCode` используется только в переносимом snapshot с собственным словарём; внешний KML работает по source NAME.

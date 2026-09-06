@@ -51,7 +51,7 @@ export function createKmlTransferRouter({
         const kml = serializeLinesKml(geojson);
         response
           .set('Cache-Control', 'no-store')
-          .set('Content-Disposition', 'attachment; filename="dtpstat-buslines-lines.kml"')
+          .set('Content-Disposition', 'attachment; filename="lines.kml"')
           .type('application/vnd.google-earth.kml+xml')
           .send(kml);
       } catch (error) {
