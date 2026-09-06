@@ -230,10 +230,13 @@ async function materialize(queryable, config) {
     WITH ranked AS (
       SELECT
         report.city_id,
-        ROW_NUMBER() OVER (
-          PARTITION BY city.is_large
-          ORDER BY report.rank_value ${order} NULLS LAST, city.name ASC
-        )::integer AS rank
+        CASE
+          WHEN report.rank_value IS NULL THEN NULL
+          ELSE ROW_NUMBER() OVER (
+            PARTITION BY COALESCE(city.is_large, FALSE)
+            ORDER BY report.rank_value ${order} NULLS LAST, city.name ASC
+          )::integer
+        END AS rank
       FROM city_report_values AS report
       JOIN cities AS city ON city.id = report.city_id
     )
