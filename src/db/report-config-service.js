@@ -95,9 +95,14 @@ function compileOperand(operand, parameters) {
   }
   if (operand.kind === 'field') return FIELD_SQL[operand.field];
 
-  const aggregate = AGGREGATE_SQL[operand.aggregate];
   const field = FIELD_SQL[operand.field];
-  let expression = `${aggregate}(${field})`;
+  let expression;
+  if (operand.aggregate === 'median') {
+    expression = `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ${field})`;
+  } else {
+    const aggregate = AGGREGATE_SQL[operand.aggregate];
+    expression = `${aggregate}(${field})`;
+  }
   if (operand.groupBy === 'line_type.name') {
     const value = parameter(parameters, operand.groupValue);
     expression += ` FILTER (
