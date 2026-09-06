@@ -5,7 +5,10 @@ import {
   parseLinesKml,
   serializeLinesKml,
 } from '../data/kml-transfer.js';
-import { createBasicAuth } from '../http/basic-auth.js';
+import {
+  adminClientIp,
+  createAdminOperationAudit,
+} from '../http/admin-auth.js';
 
 /**
  * Portable KML transfer is deliberately separate from the external Google My
@@ -16,26 +19,26 @@ import { createBasicAuth } from '../http/basic-auth.js';
  *   exportRepository: { exportLines: () => Promise<object> },
  *   importService: { replaceFromGeoJson: (collection: unknown, operation?: object) => Promise<object> },
  *   adminTasks: ReturnType<import('../data/admin-task-manager.js').createAdminTaskManager>,
- *   importApi: { username: string, password: string, maxBodyBytes: number }
+ *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
+ *   securityService: ReturnType<import('../data/admin-security.js').createAdminSecurityService>,
+ *   maxBodyBytes: number
  * }} dependencies
  */
 export function createKmlTransferRouter({
   exportRepository,
   importService,
   adminTasks,
-  importApi,
+  adminAuth,
+  securityService,
+  maxBodyBytes,
 }) {
   const router = Router();
-  const requireAdminAuth = createBasicAuth({
-    username: importApi.username,
-    password: importApi.password,
-  });
 
   function activeTaskResponse(request, response, task) {
     const statusURL = `${request.baseUrl}/admin/status/${task.id}`;
     response.set('Cache-Control', 'no-store');
     response.status(409).json({
-      error: 'Another admin task is already active',
+      error: 'Another data-management task is already active',
       taskId: task.id,
       task: { id: task.id, type: task.type, status: task.status },
       statusURL,
@@ -44,7 +47,8 @@ export function createKmlTransferRouter({
 
   router.get(
     '/admin/export/lines.kml',
-    requireAdminAuth,
+    adminAuth.requireData,
+    createAdminOperationAudit(securityService, 'data.export.lines-kml'),
     async (_request, response, next) => {
       try {
         const geojson = await exportRepository.exportLines();
@@ -62,7 +66,7 @@ export function createKmlTransferRouter({
 
   router.post(
     '/admin/import/lines.kml',
-    requireAdminAuth,
+    adminAuth.requireData,
     (request, response, next) => {
       const activeTask = adminTasks.active();
       if (!activeTask) {
@@ -72,7 +76,7 @@ export function createKmlTransferRouter({
       activeTaskResponse(request, response, activeTask);
     },
     express.text({
-      limit: importApi.maxBodyBytes,
+      limit: maxBodyBytes,
       inflate: true,
       type: [
         'application/vnd.google-earth.kml+xml',
@@ -106,6 +110,11 @@ export function createKmlTransferRouter({
             type: 'kml-update',
             endpoint: '/api/admin/import/lines.kml',
             recordsSuccessfulUpdate: true,
+            actor: {
+              userId: request.adminUser.id,
+              username: request.adminUser.username,
+              ipAddress: adminClientIp(request),
+            },
             parameters: {
               mode: 'portable-kml',
               features: collection.features.length,
