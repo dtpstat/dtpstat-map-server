@@ -30,6 +30,7 @@ test('unexpected pooled client errors are handled without crashing the process',
       details: {
         schema: 'tramlanes',
         processId: 4242,
+        name: 'Error',
         code: '57P01',
         message: 'Connection terminated unexpectedly',
       },
