@@ -83,23 +83,33 @@ function testReportConfigService() {
   };
 }
 
+function testSecuritySettings() {
+  return {
+    maxFailedAttempts: 5,
+    failureWindowSeconds: 900,
+    lockoutSeconds: 900,
+    ipMaxFailedAttempts: 20,
+    ipFailureWindowSeconds: 900,
+    ipLockoutSeconds: 3600,
+    sessionIdleSeconds: 1800,
+    sessionAbsoluteSeconds: 43200,
+    auditRetentionDays: 365,
+  };
+}
+
 function testSettingsTransferService() {
   return {
     async exportSettings() {
       return {
         _dtpstat: {
           kind: 'project-settings',
-          schemaVersion: 1,
+          schemaVersion: 2,
           exportedAt: '2026-01-01T00:00:00.000Z',
         },
         projectSettings: TEST_PROJECT_SETTINGS,
         lineTypes: [],
         reportConfig: structuredClone(DEFAULT_REPORT_CONFIG),
-        securitySettings: {
-          maxFailedAttempts: 5,
-          failureWindowSeconds: 900,
-          lockoutSeconds: 900,
-        },
+        securitySettings: testSecuritySettings(),
       };
     },
     async importSettings() {
@@ -120,39 +130,73 @@ function testSecurity(config) {
   const testUser = {
     id: 1,
     username,
+    displayName: username,
     email: null,
     canManageData: true,
     canManageInterface: true,
+    canManageUsers: true,
+    canViewAudit: true,
+    canManageSecurity: true,
     isSuperuser: true,
     isBootstrap: true,
     isBlocked: false,
+    mustChangePassword: false,
+    hasAvatar: false,
   };
   const requireAuth = (request, response, next) => basic(request, response, () => {
     request.adminUser = testUser;
+    request.adminSessionId = null;
+    request.adminAuthMethod = 'basic';
     next();
   });
   const adminAuth = {
     requireAny: requireAuth,
     requireAdminEntry: requireAuth,
+    requireProfile: requireAuth,
     requireData: requireAuth,
     requireInterface: requireAuth,
+    requireUsers: requireAuth,
+    requireAudit: requireAuth,
+    requireSecurity: requireAuth,
     requireSuperuser: requireAuth,
   };
   const securityService = {
-    async appendAudit() {},
-    async listUsers() { return [testUser]; },
-    async createUser() { return testUser; },
-    async updateUser() { return testUser; },
-    async changePassword() { return testUser; },
-    async getSecuritySettings() {
+    async login(payload) {
+      if (payload?.username !== username || payload?.password !== password) {
+        return { status: 'invalid' };
+      }
       return {
-        maxFailedAttempts: 5,
-        failureWindowSeconds: 900,
-        lockoutSeconds: 900,
+        status: 'success',
+        user: testUser,
+        token: 'test-session-token',
+        sessionId: 1,
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
       };
     },
+    async logout() {},
+    async appendAudit() {},
+    async listUsers() { return [testUser]; },
+    async createUser() { return { user: testUser, temporaryPassword: 'Temp-Password-1234' }; },
+    async updateUser() { return testUser; },
+    async deleteUser() { return testUser; },
+    async resetTemporaryPassword() { return { user: testUser, temporaryPassword: 'Temp-Password-1234' }; },
+    async blockUser() { return testUser; },
+    async unblockUser() { return testUser; },
+    async updateOwnProfile() { return testUser; },
+    async changeOwnPassword() { return testUser; },
+    async getAvatar() { return null; },
+    async saveAvatar() { return testUser; },
+    async clearAvatar() { return testUser; },
+    async listUserSessions() { return []; },
+    async revokeSession() { return true; },
+    async revokeOtherSessions() { return 0; },
+    async getSecuritySettings() { return testSecuritySettings(); },
     async saveSecuritySettings(payload) { return payload; },
+    async listIpBlocks() { return []; },
+    async createIpBlock(payload) { return { id: 1, ...payload }; },
+    async deleteIpBlock() { return true; },
     async listAudit() { return []; },
+    async auditFacets() { return { eventTypes: [], operationTypes: [], statuses: [] }; },
   };
   return { adminAuth, securityService };
 }
@@ -272,9 +316,6 @@ export function createApp({
       .send(CITY_MARKER_PNG);
   });
 
-  // Only entry HTML is authenticated here. Static admin CSS/JS contain no
-  // secrets and stay readable so one bad Basic credential counts as one login
-  // attempt rather than a separate failure for every asset request.
   for (const route of ['/admin', '/admin/', '/admin/index.html']) {
     app.get(route, effectiveAdminAuth.requireAdminEntry, (_request, response) => {
       response.set('Cache-Control', 'no-store');
