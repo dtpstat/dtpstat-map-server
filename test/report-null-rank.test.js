@@ -15,7 +15,8 @@ function configRow() {
   };
 }
 
-test('report materialization leaves rank null when ranking metric is missing', async () => {
+test('report materialization ranks only visible cities and leaves missing metric rank null', async () => {
+  let materializeSql = '';
   let rankingSql = '';
   const client = {
     async query(text) {
@@ -23,6 +24,7 @@ test('report materialization leaves rank null when ranking metric is missing', a
         return { rows: [configRow()] };
       }
       if (/INSERT INTO city_report_values \(city_id, values, updated_at\)/.test(text)) {
+        materializeSql = text;
         return { rows: [{ city_id: 1 }, { city_id: 2 }] };
       }
       if (/WITH ranked AS/.test(text)) rankingSql = text;
@@ -38,6 +40,14 @@ test('report materialization leaves rank null when ranking metric is missing', a
   const result = await createReportConfigService(pool).refresh();
 
   assert.equal(result.cities, 2);
+  assert.match(
+    materializeSql,
+    /FROM city_boundaries AS boundary_presence\s*WHERE boundary_presence\.city_id = city\.id/s,
+  );
+  assert.match(
+    materializeSql,
+    /FROM city_geometries AS geometry_presence\s*WHERE geometry_presence\.city_id = city\.id/s,
+  );
   assert.match(
     rankingSql,
     /WHEN report\.rank_value IS NULL THEN NULL/,
