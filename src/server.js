@@ -1,7 +1,9 @@
 import 'dotenv/config';
+import path from 'node:path';
 import {createApp}                 from './app.js';
 import {loadConfig}                from './config.js';
 import {createAdminTaskManager}    from './data/admin-task-manager.js';
+import {createPublicDownloadService} from './data/public-download-service.js';
 import {createAdminTaskSuccessRepository} from './db/admin-task-success-repository.js';
 import {createCitiesRepository}    from './db/cities-repository.js';
 import {createCityBoundaryTransferService} from './db/city-boundary-transfer-service.js';
@@ -12,9 +14,18 @@ import {createLineTypesRepository} from './db/line-types-repository.js';
 import {createOsmCityUpdateService} from './db/osm-city-update-service.js';
 import {createPopulationImportService} from './db/population-import-service.js';
 import {createProjectSettingsRepository} from './db/project-settings-repository.js';
+import {createPublicDownloadRepository} from './db/public-download-repository.js';
 import {createPool}                from './db/pool.js';
 import {closeServer, startServers} from './http/start-servers.js';
 import {createAdminWebSocketGateway} from './http/admin-websocket.js';
+
+const PUBLIC_DOWNLOAD_TASK_TYPES = new Set([
+	'geojson-import',
+	'city-geojson-import',
+	'kml-update',
+	'osm-city-update',
+	'population-update',
+]);
 
 async function main(){
 	const config     = loadConfig();
@@ -23,6 +34,11 @@ async function main(){
 	const lineTypesRepository = createLineTypesRepository(pool);
 	const projectSettingsRepository = createProjectSettingsRepository(pool);
 	const exportRepository = createDataExportRepository(pool);
+	const publicDownloadRepository = createPublicDownloadRepository(pool);
+	const publicDownloadService = createPublicDownloadService({
+		repository: publicDownloadRepository,
+		directory: path.join(config.projectRoot, 'var', 'public-downloads'),
+	});
 	const importService = createDataImportService(pool);
 	const cityBoundaryTransferService = createCityBoundaryTransferService(pool);
 	const populationService = createPopulationImportService(pool);
@@ -35,11 +51,17 @@ async function main(){
 
 	await repository.health();
 	await projectSettingsRepository.get();
+	const initialPublicDownloads = await publicDownloadService.refresh();
+	console.info('Public download snapshots refreshed', initialPublicDownloads);
 	const initialSuccessfulUpdates = await adminTaskSuccessRepository.list();
 	const adminTasks = createAdminTaskManager({
 		initialSuccessfulUpdates,
 		recordSuccessfulUpdate: (update) =>
 			adminTaskSuccessRepository.record(update),
+		afterSuccessfulUpdate: (update) => {
+			if(!PUBLIC_DOWNLOAD_TASK_TYPES.has(update.taskType)) return undefined;
+			return publicDownloadService.refresh();
+		},
 	});
 	const adminWebSocket = createAdminWebSocketGateway({
 		adminTasks,
