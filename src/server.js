@@ -18,6 +18,11 @@ import {createPublicDownloadRepository} from './db/public-download-repository.js
 import {createPool}                from './db/pool.js';
 import {closeServer, startServers} from './http/start-servers.js';
 import {createAdminWebSocketGateway} from './http/admin-websocket.js';
+import {
+	runServiceOperation,
+	serviceErrorDetails,
+	serviceLog,
+} from './service-log.js';
 
 const PUBLIC_DOWNLOAD_TASK_TYPES = new Set([
 	'geojson-import',
@@ -29,6 +34,25 @@ const PUBLIC_DOWNLOAD_TASK_TYPES = new Set([
 
 async function main(){
 	const config     = loadConfig();
+	serviceLog('info', 'startup', {
+		pid: process.pid,
+		node: process.version,
+		environment: config.environment,
+		instance: config.database.schema,
+		database: {
+			host: config.database.host,
+			port: config.database.port,
+			name: config.database.database,
+			schema: config.database.schema,
+			ssl: config.database.ssl !== false,
+		},
+		listeners: {
+			host: config.host,
+			http: config.http.enabled ? config.http.port : null,
+			https: config.https.enabled ? config.https.port : null,
+		},
+	});
+
 	const pool       = createPool(config.database);
 	const repository = createCitiesRepository(pool);
 	const lineTypesRepository = createLineTypesRepository(pool);
@@ -49,18 +73,56 @@ async function main(){
 	);
 	const adminTaskSuccessRepository = createAdminTaskSuccessRepository(pool);
 
-	await repository.health();
-	await projectSettingsRepository.get();
-	const initialPublicDownloads = await publicDownloadService.refresh();
-	console.info('Public download snapshots refreshed', initialPublicDownloads);
-	const initialSuccessfulUpdates = await adminTaskSuccessRepository.list();
+	await runServiceOperation(
+		'database.health',
+		() => repository.health(),
+		{details: {schema: config.database.schema}},
+	);
+	await runServiceOperation(
+		'project-settings.load',
+		() => projectSettingsRepository.get(),
+		{
+			successDetails: (settings) => ({
+				projectName: settings.projectName,
+			}),
+		},
+	);
+	await runServiceOperation(
+		'public-downloads.refresh',
+		() => publicDownloadService.refresh(),
+		{
+			details: {
+				reason: 'startup',
+				directory: publicDownloadService.directory,
+			},
+			successDetails: (result) => result,
+		},
+	);
+	const initialSuccessfulUpdates = await runServiceOperation(
+		'admin-success-state.load',
+		() => adminTaskSuccessRepository.list(),
+		{
+			successDetails: (updates) => ({records: updates.length}),
+		},
+	);
 	const adminTasks = createAdminTaskManager({
 		initialSuccessfulUpdates,
 		recordSuccessfulUpdate: (update) =>
 			adminTaskSuccessRepository.record(update),
 		afterSuccessfulUpdate: (update) => {
 			if(!PUBLIC_DOWNLOAD_TASK_TYPES.has(update.taskType)) return undefined;
-			return publicDownloadService.refresh();
+			return runServiceOperation(
+				'public-downloads.refresh',
+				() => publicDownloadService.refresh(),
+				{
+					details: {
+						reason: 'admin-update',
+						taskType: update.taskType,
+						taskId: update.taskId,
+					},
+					successDetails: (result) => result,
+				},
+			);
 		},
 	});
 	const adminWebSocket = createAdminWebSocketGateway({
@@ -81,23 +143,55 @@ async function main(){
 		adminTasks,
 		config,
 	});
-	const servers    = await startServers({
-		app,
-		config,
-		webSocketGateway: adminWebSocket,
+	const servers    = await runServiceOperation(
+		'http-servers.start',
+		() => startServers({
+			app,
+			config,
+			webSocketGateway: adminWebSocket,
+		}),
+		{
+			successDetails: (startedServers) => ({
+				servers: startedServers.length,
+			}),
+		},
+	);
+	serviceLog('info', 'startup:ready', {
+		instance: config.database.schema,
+		servers: servers.length,
 	});
 	let shuttingDown = false;
 
 	async function shutdown(signal){
 		if(shuttingDown){
+			serviceLog('warning', 'shutdown:duplicate', {signal});
 			return;
 		}
 		shuttingDown = true;
-		console.log(`Received ${signal}; shutting down`);
+		const startedAt = Date.now();
+		serviceLog('info', 'shutdown:start', {signal});
 
-		await adminWebSocket.close();
-		await Promise.allSettled(servers.map((server) => closeServer(server)));
-		await pool.end();
+		await runServiceOperation(
+			'admin-websocket.close',
+			() => adminWebSocket.close(),
+		);
+		const closeResults = await Promise.allSettled(
+			servers.map((server) => closeServer(server)),
+		);
+		const failedServers = closeResults.filter((result) => result.status === 'rejected');
+		if(failedServers.length > 0){
+			serviceLog('warning', 'http-servers.close:partial', {
+				failed: failedServers.length,
+				total: closeResults.length,
+			});
+		}else{
+			serviceLog('info', 'http-servers.close:ok', {servers: closeResults.length});
+		}
+		await runServiceOperation('database.pool.close', () => pool.end());
+		serviceLog('info', 'shutdown:ok', {
+			signal,
+			durationMs: Date.now() - startedAt,
+		});
 	}
 
 	for(const signal of ['SIGINT', 'SIGTERM']){
@@ -105,7 +199,10 @@ async function main(){
 			shutdown(signal)
 				.then(() => process.exit(0))
 				.catch((error) => {
-					console.error('Graceful shutdown failed', error);
+					serviceLog('error', 'shutdown:error', {
+						signal,
+						...serviceErrorDetails(error),
+					});
 					process.exit(1);
 				});
 		});
@@ -113,6 +210,6 @@ async function main(){
 }
 
 main().catch((error) => {
-	console.error('Server failed to start', error);
+	serviceLog('error', 'startup:error', serviceErrorDetails(error));
 	process.exitCode = 1;
 });
