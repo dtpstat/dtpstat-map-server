@@ -27,6 +27,41 @@ const USER_FIELDS_SQL = `
   updated_at AS "updatedAt"
 `;
 
+const SESSION_USER_FIELDS = `
+  session.id::integer AS "sessionId",
+  session.created_at AS "sessionCreatedAt",
+  session.last_seen_at AS "sessionLastSeenAt",
+  session.expires_at AS "sessionExpiresAt",
+  host(session.ip_address) AS "sessionIpAddress",
+  session.user_agent AS "sessionUserAgent",
+  users.id::integer AS id,
+  users.username,
+  users.display_name AS "displayName",
+  users.email,
+  users.can_manage_data AS "canManageData",
+  users.can_manage_interface AS "canManageInterface",
+  users.can_manage_users AS "canManageUsers",
+  users.can_view_audit AS "canViewAudit",
+  users.can_manage_security AS "canManageSecurity",
+  users.is_superuser AS "isSuperuser",
+  users.is_bootstrap AS "isBootstrap",
+  users.is_blocked AS "isBlocked",
+  users.manual_blocked_at AS "manualBlockedAt",
+  users.manual_blocked_until AS "manualBlockedUntil",
+  users.manual_block_reason AS "manualBlockReason",
+  users.manual_blocked_by::integer AS "manualBlockedBy",
+  users.must_change_password AS "mustChangePassword",
+  (users.avatar_data IS NOT NULL) AS "hasAvatar",
+  users.avatar_mime AS "avatarMime",
+  users.failed_login_count AS "failedLoginCount",
+  users.failed_login_window_started_at AS "failedLoginWindowStartedAt",
+  users.locked_until AS "lockedUntil",
+  users.last_login_at AS "lastLoginAt",
+  users.password_changed_at AS "passwordChangedAt",
+  users.created_at AS "createdAt",
+  users.updated_at AS "updatedAt"
+`;
+
 const AUTH_USER_SQL = `
   SELECT ${USER_FIELDS_SQL}, password_hash AS "passwordHash"
   FROM admin_users
@@ -194,33 +229,6 @@ const RECORD_FAILED_IP_SQL = `
     failed_login_count AS "failedLoginCount",
     failure_window_started_at AS "failureWindowStartedAt",
     locked_until AS "lockedUntil"
-`;
-
-const SESSION_USER_FIELDS = `
-  session.id::integer AS "sessionId",
-  session.created_at AS "sessionCreatedAt",
-  session.last_seen_at AS "sessionLastSeenAt",
-  session.expires_at AS "sessionExpiresAt",
-  host(session.ip_address) AS "sessionIpAddress",
-  session.user_agent AS "sessionUserAgent",
-  ${USER_FIELDS_SQL.replaceAll('id::integer', 'users.id::integer')
-    .replaceAll('username,', 'users.username,')
-    .replaceAll('display_name', 'users.display_name')
-    .replaceAll('email,', 'users.email,')
-    .replaceAll('can_manage_', 'users.can_manage_')
-    .replaceAll('is_superuser', 'users.is_superuser')
-    .replaceAll('is_bootstrap', 'users.is_bootstrap')
-    .replaceAll('is_blocked', 'users.is_blocked')
-    .replaceAll('manual_blocked_', 'users.manual_blocked_')
-    .replaceAll('must_change_password', 'users.must_change_password')
-    .replaceAll('avatar_data', 'users.avatar_data')
-    .replaceAll('avatar_mime', 'users.avatar_mime')
-    .replaceAll('failed_login_', 'users.failed_login_')
-    .replaceAll('locked_until', 'users.locked_until')
-    .replaceAll('last_login_at', 'users.last_login_at')
-    .replaceAll('password_changed_at', 'users.password_changed_at')
-    .replaceAll('created_at AS "createdAt"', 'users.created_at AS "createdAt"')
-    .replaceAll('updated_at AS "updatedAt"', 'users.updated_at AS "updatedAt"')}
 `;
 
 /** @param {{ query: Function }} database */
@@ -452,7 +460,10 @@ export function createAdminSecurityRepository(database) {
     async listAudit(options = {}) {
       const values = [];
       const where = [];
-      const add = (sql, value) => { values.push(value); where.push(sql.replace('?', `$${values.length}`)); };
+      const add = (sql, value) => {
+        values.push(value);
+        where.push(sql.replace('?', `$${values.length}`));
+      };
       if (options.from) add('created_at >= ?::timestamptz', options.from);
       if (options.to) add('created_at < ?::timestamptz', options.to);
       if (options.eventType) add('event_type = ?', options.eventType);
