@@ -146,20 +146,20 @@ export function createAdminTaskManager(dependencies = {}) {
     try {
       task.result = await executor(context);
       throwIfAdminTaskCancelled(task.controller.signal);
-      task.status = 'succeeded';
-      task.completedAt = now();
-      appendLog(task, 'info', 'Задача успешно завершена');
+      const completedAt = now();
+      let successfulUpdate = null;
+
       if (task.recordsSuccessfulUpdate) {
-        const update = {
+        successfulUpdate = {
           taskType: task.type,
           taskId: task.id,
           endpoint: task.endpoint,
-          completedAt: task.completedAt,
+          completedAt,
         };
-        successfulUpdates.set(task.type, update);
+        successfulUpdates.set(task.type, successfulUpdate);
         if (recordSuccessfulUpdate) {
           try {
-            await recordSuccessfulUpdate(structuredClone(update));
+            await recordSuccessfulUpdate(structuredClone(successfulUpdate));
           } catch (error) {
             appendLog(task, 'warning', 'Не удалось сохранить отметку успешного обновления', {
               message: error instanceof Error ? error.message : String(error),
@@ -168,7 +168,9 @@ export function createAdminTaskManager(dependencies = {}) {
         }
         if (afterSuccessfulUpdate) {
           try {
-            const details = await afterSuccessfulUpdate(structuredClone(update));
+            const details = await afterSuccessfulUpdate(
+              structuredClone(successfulUpdate),
+            );
             if (details !== undefined) {
               appendLog(task, 'info', 'Производные публичные данные обновлены', details);
             }
@@ -178,8 +180,12 @@ export function createAdminTaskManager(dependencies = {}) {
             });
           }
         }
-        emit({ type: 'success', update });
       }
+
+      task.status = 'succeeded';
+      task.completedAt = completedAt;
+      appendLog(task, 'info', 'Задача успешно завершена');
+      if (successfulUpdate) emit({ type: 'success', update: successfulUpdate });
     } catch (error) {
       if (
         task.controller.signal.aborted ||
