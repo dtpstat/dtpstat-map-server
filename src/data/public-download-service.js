@@ -13,6 +13,12 @@ const LEGACY_PUBLIC_CSV_COLUMNS = Object.freeze([
   Object.freeze({ kind: 'maxy', title: 'maxy' }),
 ]);
 
+const LEGACY_METRIC_PROPERTIES = Object.freeze({
+  lane_length_m: 'lanes_length',
+  population: 'population',
+  lane_m_per_1000: 'lanes_per_1k',
+});
+
 /** @param {unknown} value */
 function csvValue(value) {
   if (value === null || value === undefined) return '';
@@ -34,11 +40,14 @@ function metricCsvValue(value, column) {
 
 /** @param {any} row @param {any} column */
 function columnValue(row, column) {
-  if (column.kind === 'city') return row.name;
+  if (column.kind === 'city') return row.name ?? row.short_name;
   if (column.kind === 'rank') return row.rank;
   if (column.kind === 'category') return row.category;
   if (column.kind === 'metric') {
-    return metricCsvValue(row.metrics?.[column.metricKey], column);
+    const legacyProperty = LEGACY_METRIC_PROPERTIES[column.metricKey];
+    const value = row.metrics?.[column.metricKey] ??
+      (legacyProperty ? row[legacyProperty] : undefined);
+    return metricCsvValue(value, column);
   }
   if (['minx', 'miny', 'maxx', 'maxy'].includes(column.kind)) {
     return row[column.kind];
