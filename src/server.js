@@ -16,6 +16,7 @@ import {createLineTypesRepository} from './db/line-types-repository.js';
 import {createOsmCityUpdateService} from './db/osm-city-update-service.js';
 import {createPopulationImportService} from './db/population-import-service.js';
 import {createProjectSettingsRepository} from './db/project-settings-repository.js';
+import {createProjectSettingsTransferService} from './db/project-settings-transfer-service.js';
 import {createPublicDownloadRepository} from './db/public-download-repository.js';
 import {createReportConfigService} from './db/report-config-service.js';
 import {createPool} from './db/pool.js';
@@ -61,6 +62,7 @@ async function main() {
   const repository = createCitiesRepository(pool);
   const lineTypesRepository = createLineTypesRepository(pool);
   const projectSettingsRepository = createProjectSettingsRepository(pool);
+  const settingsTransferService = createProjectSettingsTransferService(pool);
   const reportConfigService = createReportConfigService(pool);
   const exportRepository = createDataExportRepository(pool);
   const publicDownloadRepository = createPublicDownloadRepository(pool);
@@ -154,8 +156,11 @@ async function main() {
     repository,
     lineTypesRepository,
     projectSettingsRepository,
+    settingsTransferService,
     reportConfigService,
     refreshPublicDownloads: () => refreshPublicDownloads({reason: 'report-config'}),
+    refreshPublicDownloadsAfterSettingsImport: () =>
+      refreshPublicDownloads({reason: 'project-settings-import'}),
     exportRepository,
     importService,
     cityBoundaryTransferService,
