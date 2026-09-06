@@ -63,6 +63,12 @@ const UPDATE_USER_SQL = `
   RETURNING ${USER_FIELDS_SQL}
 `;
 
+const DELETE_USER_SQL = `
+  DELETE FROM admin_users
+  WHERE id = $1
+  RETURNING ${USER_FIELDS_SQL}
+`;
+
 const UPDATE_PASSWORD_SQL = `
   UPDATE admin_users
   SET
@@ -232,6 +238,11 @@ export function createAdminSecurityRepository(database) {
         user.canManageInterface,
         user.isBlocked,
       ]);
+      return result.rows[0] ?? null;
+    },
+
+    async deleteUser(userId) {
+      const result = await database.query(DELETE_USER_SQL, [userId]);
       return result.rows[0] ?? null;
     },
 
