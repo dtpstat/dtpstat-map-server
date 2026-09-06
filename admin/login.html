@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вход — администрирование</title>
+  <link rel="stylesheet" href="/admin/admin.css">
+  <link rel="stylesheet" href="/admin/login.css">
+  <script type="module" src="/admin/login.js"></script>
+</head>
+<body class="admin-login-page">
+  <main class="admin-login-card">
+    <p class="eyebrow">MAP SERVER</p>
+    <h1>Администрирование</h1>
+    <p class="admin-login-hint">Войдите под учётной записью администратора проекта.</p>
+    <form id="admin-login-form">
+      <label>Логин
+        <input name="username" type="text" maxlength="64" required autofocus autocomplete="username">
+      </label>
+      <label>Пароль
+        <input name="password" type="password" maxlength="1024" required autocomplete="current-password">
+      </label>
+      <button type="submit">Войти</button>
+    </form>
+    <p id="admin-login-message" class="notice" role="status"></p>
+  </main>
+</body>
+</html>
