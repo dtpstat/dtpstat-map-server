@@ -131,6 +131,16 @@ lines.geojson
 }
 ```
 
+Исходные свойства `CITY_GEOMETRIES.PROPERTIES` также входят в admin GeoJSON. Поэтому, если линия пришла из KML с непустым `<Placemark><name>`, переносится дополнительное свойство:
+
+```json
+{
+  "placemarkName": "Проспект Мира"
+}
+```
+
+`placemarkName` — именно имя линии. Обычный `properties.name` в каноническом transfer GeoJSON используется для полного имени города и не должен трактоваться как подпись линии.
+
 ### Главное правило CODE/NAME
 
 Числовой CODE переносим как компактную ссылку **внутри конкретного snapshot**, но source CODE не считается глобальным ID и не обязан совпадать с CODE в целевой БД.
@@ -156,7 +166,7 @@ Content-Type: application/geo+json
 
 Старый `/api/admin/import` остаётся compatibility alias.
 
-Полный versioned snapshot атомарно синхронизирует словарь и заменяет `city_geometries`, затем PostGIS пересчитывает длины и рейтинг.
+Полный versioned snapshot атомарно синхронизирует словарь и заменяет `city_geometries`, затем PostGIS пересчитывает длины и рейтинг. Source properties, включая `placemarkName`, сохраняются вместе с геометрией.
 
 Поддерживается legacy GeoJSON v2: старый строковый `type` интерпретируется как imported `NAME`, а старое display `name` — как `TITLE`. Unversioned legacy geometry без business type получает `default`.
 
@@ -189,6 +199,17 @@ Content-Type: application/geo+json
 
 Если `type` не указан, используется source NAME `default`.
 
+Для каждого импортируемого линейного Placemark стандартный KML элемент:
+
+```xml
+<Placemark>
+  <name>Проспект Мира</name>
+  ...
+</Placemark>
+```
+
+сохраняется как `CITY_GEOMETRIES.PROPERTIES.placemarkName`. Пустое/отсутствующее имя сохранять нечего. Публичный viewport API отдаёт source properties вместе с линией; frontend показывает непустой `placemarkName` в popup при наведении мыши. Popup получает строку через Mapbox `setText`, без HTML-интерпретации.
+
 ## Переносимый KML
 
 Экспорт:
@@ -210,7 +231,7 @@ Content-Type: application/vnd.google-earth.kml+xml
 lines.kml
 ```
 
-Переносимый KML использует тот же принцип numeric source CODE → dictionary NAME → target local type. Подробности: [kml-transfer.md](kml-transfer.md).
+Переносимый KML использует тот же принцип numeric source CODE → dictionary NAME → target local type. Настоящее имя исходной линии переносится внутри `dtpstat.properties.placemarkName`; видимый `<Placemark><name>` может быть сгенерирован для удобства внешних viewers и сам по себе не является источником истины для line popup. Подробности: [kml-transfer.md](kml-transfer.md).
 
 ## Население
 
