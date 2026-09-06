@@ -1,24 +1,22 @@
 import express, { Router } from 'express';
 import { LineTypeValidationError } from '../data/line-types.js';
-import { createBasicAuth } from '../http/basic-auth.js';
+import { createAdminOperationAudit } from '../http/admin-auth.js';
 
 /**
  * @param {{
  *   lineTypesRepository: { list: () => Promise<any[]>, save: (payload: unknown) => Promise<any[]> },
- *   adminTasks: ReturnType<import('../data/admin-task-manager.js').createAdminTaskManager>,
- *   importApi: { username: string, password: string, maxBodyBytes: number }
+ *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
+ *   securityService: ReturnType<import('../data/admin-security.js').createAdminSecurityService>,
+ *   maxBodyBytes: number
  * }} dependencies
  */
 export function createLineTypesRouter({
   lineTypesRepository,
-  adminTasks,
-  importApi,
+  adminAuth,
+  securityService,
+  maxBodyBytes,
 }) {
   const router = Router();
-  const requireAdminAuth = createBasicAuth({
-    username: importApi.username,
-    password: importApi.password,
-  });
 
   router.get('/line-types', async (_request, response, next) => {
     try {
@@ -31,26 +29,10 @@ export function createLineTypesRouter({
 
   router.put(
     '/admin/line-types',
-    requireAdminAuth,
-    (request, response, next) => {
-      const task = adminTasks.active();
-      if (!task) {
-        next();
-        return;
-      }
-      response.set('Cache-Control', 'no-store');
-      response.status(409).json({
-        error: 'Another admin task is already active',
-        taskId: task.id,
-        task: {
-          id: task.id,
-          type: task.type,
-          status: task.status,
-        },
-      });
-    },
+    adminAuth.requireInterface,
+    createAdminOperationAudit(securityService, 'interface.line-types.update'),
     express.json({
-      limit: Math.min(importApi.maxBodyBytes, 256 * 1024),
+      limit: Math.min(maxBodyBytes, 256 * 1024),
       strict: true,
       inflate: true,
       type: 'application/json',
