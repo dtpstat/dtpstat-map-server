@@ -38,22 +38,26 @@ function createPool() {
   const queries = [];
   const parameters = [];
   let released = false;
+  let releaseError;
+  let stagedRows = 0;
   const client = {
     async query(text, values = []) {
       const normalized = text.trim();
       queries.push(normalized);
       parameters.push(values);
       if (normalized.startsWith('INSERT INTO cities')) {
-        return { rows: [], rowCount: 1 };
+        return { rows: [], rowCount: JSON.parse(values[0]).length };
       }
       if (normalized.startsWith('WITH payload_rows AS')) {
-        return { rows: [], rowCount: 1 };
+        const rows = JSON.parse(values[0]).length;
+        stagedRows += rows;
+        return { rows: [], rowCount: rows };
       }
       if (normalized.startsWith('SELECT osm_type')) {
         return { rows: [], rowCount: 0 };
       }
       if (normalized.startsWith('INSERT INTO city_boundaries')) {
-        return { rows: [], rowCount: 1 };
+        return { rows: [], rowCount: stagedRows };
       }
       if (normalized.startsWith('UPDATE city_geometries')) {
         return { rows: [], rowCount: 1 };
@@ -63,14 +67,16 @@ function createPool() {
       }
       return { rows: [], rowCount: 0 };
     },
-    release() {
+    release(error) {
       released = true;
+      releaseError = error;
     },
   };
   return {
     queries,
     parameters,
     get released() { return released; },
+    get releaseError() { return releaseError; },
     async connect() { return client; },
   };
 }
@@ -92,8 +98,10 @@ test('city transfer restores city attributes, boundaries, and geometry links ato
   assert.ok(pool.queries.some((query) => query.startsWith('DELETE FROM city_boundaries')));
   assert.equal(pool.queries.at(-1), 'COMMIT');
   assert.equal(pool.released, true);
+  assert.equal(pool.releaseError, undefined);
   assert.equal(progress[0].phase, 'validated');
   assert.equal(progress.at(-1).phase, 'database');
+  assert.equal(progress.find((value) => value.phase === 'stage').batchCount, 1);
 
   const cityInsertIndex = pool.queries.findIndex((query) => query.startsWith('INSERT INTO cities'));
   const boundaryDeleteIndex = pool.queries.indexOf('DELETE FROM city_boundaries');
@@ -105,6 +113,38 @@ test('city transfer restores city attributes, boundaries, and geometry links ato
     fullName: 'Город Тестоград',
     attributes: { source: 'snapshot' },
   }]);
+});
+
+test('city transfer stages large snapshots in bounded batches', async () => {
+  const features = Array.from({ length: 121 }, (_value, index) => ({
+    ...snapshot.features[0],
+    properties: {
+      ...snapshot.features[0].properties,
+      osmId: 20000 + index,
+      osmName: `Тестоград ${index}`,
+      city: null,
+    },
+  }));
+  const pool = createPool();
+  const progress = [];
+  const service = createCityBoundaryTransferService(pool);
+
+  const result = await service.replaceFromGeoJson({
+    type: 'FeatureCollection',
+    schemaVersion: 1,
+    features,
+  }, {
+    onProgress(value) { progress.push(value); },
+  });
+
+  assert.equal(result.importedPlaces, 121);
+  const stageQueries = pool.queries.filter((query) =>
+    query.startsWith('WITH payload_rows AS'));
+  assert.equal(stageQueries.length, 3);
+  const stageProgress = progress.filter((value) => value.phase === 'stage');
+  assert.deepEqual(stageProgress.map((value) => value.batchPlaces), [50, 50, 21]);
+  assert.deepEqual(stageProgress.map((value) => value.stagedPlaces), [50, 100, 121]);
+  assert.ok(stageProgress.every((value) => value.payloadBytes > 0));
 });
 
 test('city transfer dryRun performs a full validation and rolls back', async () => {
