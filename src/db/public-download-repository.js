@@ -33,7 +33,7 @@ const EXPORT_PUBLIC_GEOJSON_SQL = `
 const EXPORT_PUBLIC_CSV_SQL = `
   SELECT
     city.name,
-    CASE WHEN city.is_large THEN 'large' ELSE 'small' END AS category,
+    CASE WHEN city.is_large IS TRUE THEN 'large' ELSE 'small' END AS category,
     report.rank::integer AS rank,
     COALESCE(report.values, '{}'::jsonb) AS metrics,
     MIN(ST_XMin(boundary.bounds))::double precision AS minx,
@@ -41,7 +41,6 @@ const EXPORT_PUBLIC_CSV_SQL = `
     MAX(ST_XMax(boundary.bounds))::double precision AS maxx,
     MAX(ST_YMax(boundary.bounds))::double precision AS maxy
   FROM cities AS city
-  JOIN city_populations AS population ON population.city_id = city.id
   JOIN city_boundaries AS boundary ON boundary.city_id = city.id
   LEFT JOIN city_report_values AS report ON report.city_id = city.id
   GROUP BY
@@ -50,7 +49,7 @@ const EXPORT_PUBLIC_CSV_SQL = `
     city.is_large,
     report.rank,
     report.values
-  ORDER BY city.is_large DESC, report.rank NULLS LAST, city.name ASC
+  ORDER BY city.is_large DESC NULLS LAST, report.rank NULLS LAST, city.name ASC
 `;
 
 const EXPORT_PUBLIC_CSV_COLUMNS_SQL = `
