@@ -6,29 +6,39 @@ Admin API поддерживает перенос трёх независимы�
 2. линии вместе со словарём бизнес-типов — GeoJSON или KML;
 3. население — JSON.
 
-Все endpoint защищены теми же `IMPORT_API_USERNAME` / `IMPORT_API_PASSWORD`, что и web-admin.
+Data-transfer endpoint требуют DB-пользователя с `CAN_MANAGE_DATA` либо superadmin. HTTP Basic передаёт credentials, но проверка выполняется по `ADMIN_USERS`; bootstrap ENV credentials после создания DB-user не являются отдельным fallback.
 
-Публичные `/bus-lanes.geojson` и `/bus-lanes.csv` **не являются transfer/backup форматом**. Это упрощённые статические snapshots для пользователей страницы. Для round-trip используйте только `/api/admin/export/*`.
+Публичные `/bus-lanes.geojson` и `/bus-lanes.csv` **не являются transfer/backup форматом**. Это упрощённые статические snapshots для пользователей страницы. Для round-trip используйте `/api/admin/export/*`.
 
 ## Что не переносится вместе с данными
 
 Настройки конкретного экземпляра намеренно не входят в transfer-файлы городов, линий и населения. В частности отдельно настраиваются:
 
-- `PROJECT_SETTINGS` — название проекта, footer, keywords и analytics IDs;
-- `REPORT_CONFIG` — расчётные метрики, колонки публичной таблицы, CSV и правило рейтинга;
+- `PROJECT_SETTINGS` — название, footer, keywords, analytics IDs и подписи линий;
+- `REPORT_CONFIG` — расчётные метрики, публичная таблица, CSV и ranking;
+- `ADMIN_SECURITY_SETTINGS`;
 - deployment `.env`, включая `DATABASE_SCHEMA`, порты и секреты.
 
-Это позволяет импортировать один и тот же набор исходных геометрий в проекты с разной бизнес-интерпретацией. Например один экземпляр может ранжировать города по метрам выделенных полос на 1000 жителей, а другой — по доле обособленной трамвайной сети.
+Это позволяет импортировать один и тот же набор исходных геометрий в проекты с разной бизнес-интерпретацией.
 
-После переноса данных настройте вкладку `/admin/` → **Расчёты** на принимающем экземпляре. Сохранение `REPORT_CONFIG` сразу пересчитывает `CITY_REPORT_VALUES` и публичный CSV. Подробнее: [report-config.md](report-config.md).
+Если нужно перенести и DB-backed конфигурацию, superadmin использует отдельный `project-settings` package:
 
-## Рекомендуемый порядок переноса
+```text
+GET  /api/admin/settings/export
+POST /api/admin/settings/import
+```
 
-Для полного переноса на чистый экземпляр:
+Он описан в [project-settings-transfer.md](project-settings-transfer.md). Пользователи, пароли и audit log в этот пакет не входят.
+
+## Рекомендуемый порядок переноса данных
+
+Для полного переноса данных на чистый экземпляр:
 
 1. города;
 2. линии;
 3. население.
+
+При необходимости после/до этого отдельно импортируется пакет настроек проекта. `CITY_REPORT_VALUES` не переносится как источник истины — он пересчитывается по данным целевого экземпляра и текущему `REPORT_CONFIG`.
 
 Линии содержат переносимую ссылку на OSM boundary (`osmType` + `osmId`). Если нужной границы нет на принимающем сервере, импорт линий не должен молча привязывать геометрию к другому объекту.
 
@@ -208,7 +218,9 @@ Content-Type: application/geo+json
 </Placemark>
 ```
 
-сохраняется как `CITY_GEOMETRIES.PROPERTIES.placemarkName`. Пустое/отсутствующее имя сохранять нечего. Публичный viewport API отдаёт source properties вместе с линией; frontend показывает непустой `placemarkName` в popup при наведении мыши. Popup получает строку через Mapbox `setText`, без HTML-интерпретации.
+сохраняется как `CITY_GEOMETRIES.PROPERTIES.placemarkName`. Пустое/отсутствующее имя сохранять нечего. Публичный viewport API отдаёт source properties вместе с линией; frontend показывает непустой `placemarkName` в hover-popup и, если `PROJECT_SETTINGS.SHOW_LINE_LABELS=true`, постоянной подписью вдоль линии.
+
+Popup использует Mapbox `setText`, без HTML-интерпретации.
 
 ## Переносимый KML
 
@@ -231,7 +243,7 @@ Content-Type: application/vnd.google-earth.kml+xml
 lines.kml
 ```
 
-Переносимый KML использует тот же принцип numeric source CODE → dictionary NAME → target local type. Настоящее имя исходной линии переносится внутри `dtpstat.properties.placemarkName`; видимый `<Placemark><name>` может быть сгенерирован для удобства внешних viewers и сам по себе не является источником истины для line popup. Подробности: [kml-transfer.md](kml-transfer.md).
+Переносимый KML использует тот же принцип numeric source CODE → dictionary NAME → target local type. Настоящее имя исходной линии переносится внутри `dtpstat.properties.placemarkName`; видимый `<Placemark><name>` может быть сгенерирован для удобства внешних viewers и сам по себе не является источником истины для line popup/label. Подробности: [kml-transfer.md](kml-transfer.md).
 
 ## Население
 
@@ -266,11 +278,13 @@ Admin exports проходят через Express compression/content negotiatio
 Accept-Encoding: gzip
 ```
 
-Например:
+Для shell-примеров ниже `ADMIN_USERNAME/ADMIN_PASSWORD` — credentials **DB-пользователя**, а не обязательные runtime ENV-переменные приложения:
 
 ```bash
+AUTH="$ADMIN_USERNAME:$ADMIN_PASSWORD"
+
 curl --fail-with-body --compressed \
-  --user "$IMPORT_API_USERNAME:$IMPORT_API_PASSWORD" \
+  --user "$AUTH" \
   --output cities.geojson \
   "https://source.example/api/admin/export/cities"
 ```
@@ -281,7 +295,7 @@ JSON/GeoJSON import-endpoint принимают gzip/deflate/br через Expre
 
 ```bash
 gzip -c cities.geojson | curl --fail-with-body \
-  --user "$IMPORT_API_USERNAME:$IMPORT_API_PASSWORD" \
+  --user "$AUTH" \
   --request POST \
   --header "Content-Type: application/geo+json" \
   --header "Content-Encoding: gzip" \
@@ -291,10 +305,10 @@ gzip -c cities.geojson | curl --fail-with-body \
 
 Web-admin при наличии `CompressionStream('gzip')` может сжимать крупные JSON/GeoJSON uploads в браузере.
 
-## Пример полного переноса
+## Пример полного переноса данных
 
 ```bash
-AUTH="$IMPORT_API_USERNAME:$IMPORT_API_PASSWORD"
+AUTH="$ADMIN_USERNAME:$ADMIN_PASSWORD"
 
 curl --fail-with-body --compressed --user "$AUTH" \
   -o cities.geojson https://source.example/api/admin/export/cities
@@ -316,10 +330,12 @@ gzip -c populations.json | curl --fail-with-body --user "$AUTH" \
   --data-binary @- https://target.example/api/admin/populations
 ```
 
+Для этих операций пользователь должен иметь `CAN_MANAGE_DATA`.
+
 ## Single-task и производные публичные файлы
 
-Все mutating admin-операции проходят через общий single-task guard: одновременно выполняется только одна длительная операция.
+Все длительные mutating операции **управления данными** проходят через общий single-task guard: одновременно выполняется только одна такая задача. Это блокирует data-management UI, но не глобально весь интерфейс настроек.
 
-После успешного **реального** изменения городов, линий или населения сервер сначала пересчитывает `CITY_REPORT_VALUES`, затем пересобирает статические public snapshots в `var/public-downloads/`. `dryRun` этого не делает.
+После успешного реального изменения городов, линий или населения сервер сначала пересчитывает `CITY_REPORT_VALUES`, затем пересобирает статические public snapshots в `var/public-downloads/`. `dryRun` этого не делает.
 
-Ошибки и прогресс операции доступны в admin log/WebSocket; служебный server log имеет отдельный префикс `[service]`.
+Ошибки и прогресс data-операции доступны в её admin log/WebSocket. Завершение задачи также записывается в `ADMIN_AUDIT_LOG` с пользователем, IP, status и duration.
