@@ -437,8 +437,8 @@ function normalizeFormatRule(value, label) {
   const rule = object(value, label);
   const min = optionalFiniteNumber(rule.min, `${label}.min`);
   const max = optionalFiniteNumber(rule.max, `${label}.max`);
-  if (min !== null && max !== null && min > max) {
-    throw new ReportConfigValidationError(`${label}.min must not be greater than max`);
+  if (min !== null && max !== null && min >= max) {
+    throw new ReportConfigValidationError(`${label}.min must be less than max`);
   }
   const color = rule.color === null || rule.color === undefined || rule.color === ''
     ? null
