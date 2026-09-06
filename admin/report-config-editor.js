@@ -27,19 +27,9 @@ if (taskTabs && controlCard && !document.querySelector('[data-task-tab="report"]
   panel.hidden = true;
   panel.innerHTML = `
     <h3>Расчёты и таблица</h3>
-    <p class="panel-description">Безопасный конструктор расчётных показателей, колонок публичного рейтинга и статического CSV. SQL и произвольные имена полей не принимаются.</p>
+    <p class="panel-description">Безопасный конструктор расчётных показателей, колонок публичного рейтинга и статического CSV. SQL и произвольные технические имена не принимаются.</p>
 
-    <nav class="operation-tabs operation-tabs-single" role="tablist" aria-label="Настройки расчётов">
-      <button class="operation-tab" id="operation-tab-report-config" type="button" role="tab"
-              aria-selected="true" aria-controls="operation-report-config"
-              data-operation-tab="report-config" data-operation-group="report">
-        Конструктор отчёта
-      </button>
-    </nav>
-
-    <section class="operation-panel transfer-mode report-config-editor" id="operation-report-config" role="tabpanel"
-             aria-labelledby="operation-tab-report-config"
-             data-operation-panel="report-config" data-operation-group="report">
+    <section class="transfer-mode report-config-editor">
       <div class="mode-heading">
         <div>
           <h4>Материализованный отчёт по городам</h4>
@@ -51,43 +41,59 @@ if (taskTabs && controlCard && !document.querySelector('[data-task-tab="report"]
         <span>Последнее изменение</span><time id="report-config-updated-at">—</time>
       </p>
 
+      <nav class="report-view-tabs" role="tablist" aria-label="Разделы конструктора расчётов">
+        <button class="report-view-tab is-active" type="button" role="tab" aria-selected="true"
+                aria-controls="report-view-metrics" data-report-view-tab="metrics">Метрики</button>
+        <button class="report-view-tab" type="button" role="tab" aria-selected="false"
+                aria-controls="report-view-table" data-report-view-tab="table">Публичная таблица</button>
+        <button class="report-view-tab" type="button" role="tab" aria-selected="false"
+                aria-controls="report-view-csv" data-report-view-tab="csv">CSV</button>
+        <button class="report-view-tab" type="button" role="tab" aria-selected="false"
+                aria-controls="report-view-rank" data-report-view-tab="rank">Рейтинг</button>
+      </nav>
+
       <form id="report-config-form" data-task-form="report">
         <div class="form-fields report-config-sections">
-          <section class="report-builder-section">
+          <section class="report-builder-section report-view-panel" id="report-view-metrics"
+                   role="tabpanel" data-report-view-panel="metrics">
             <div class="report-section-heading">
               <div>
                 <h5>Расчётные метрики</h5>
-                <p>Метрика может использовать поля города, агрегаты геометрий и уже определённые расчётные метрики. Зависимости пересчитываются автоматически в правильном порядке; циклические ссылки запрещены. Арифметические операции имеют явный приоритет. Карточки метрик и операции внутри них можно переставлять вверх/вниз.</p>
+                <p>Метрика может использовать поля города, агрегаты геометрий и уже определённые метрики. Зависимости пересчитываются автоматически; циклы запрещены. Карточки и операции можно переставлять ↑/↓.</p>
               </div>
               <button class="secondary report-add-button" id="report-add-metric" type="button">Добавить метрику</button>
             </div>
             <div id="report-metrics"></div>
           </section>
 
-          <section class="report-builder-section">
+          <section class="report-builder-section report-view-panel" id="report-view-table"
+                   role="tabpanel" data-report-view-panel="table" hidden>
             <div class="report-section-heading">
               <div>
                 <h5>Публичная таблица</h5>
-                <p>Порядок, подписи и формат колонок рейтинга.</p>
+                <p>Порядок, подписи, формат чисел и условное оформление диапазонов. Диапазоны задаются в отображаемых единицах после масштаба.</p>
               </div>
               <button class="secondary report-add-button" id="report-add-table-column" type="button">Добавить колонку</button>
             </div>
             <div class="report-column-list" id="report-table-columns"></div>
           </section>
 
-          <section class="report-builder-section">
+          <section class="report-builder-section report-view-panel" id="report-view-csv"
+                   role="tabpanel" data-report-view-panel="csv" hidden>
             <div class="report-section-heading">
               <div>
                 <h5>CSV</h5>
-                <p>Независимый набор колонок статического /bus-lanes.csv. Можно добавлять границы и категорию города.</p>
+                <p>Независимый набор колонок статического /bus-lanes.csv. Экранное условное форматирование в CSV не переносится.</p>
               </div>
               <button class="secondary report-add-button" id="report-add-csv-column" type="button">Добавить колонку</button>
             </div>
             <div class="report-column-list" id="report-csv-columns"></div>
           </section>
 
-          <section class="report-builder-section">
+          <section class="report-builder-section report-view-panel" id="report-view-rank"
+                   role="tabpanel" data-report-view-panel="rank" hidden>
             <h5>Рейтинг</h5>
+            <p>Выберите материализованную метрику, по которой присваивается место внутри каждой категории городов.</p>
             <div class="report-rank-grid">
               <label>Метрика рейтинга
                 <select id="report-rank-metric"></select>
@@ -101,7 +107,7 @@ if (taskTabs && controlCard && !document.querySelector('[data-task-tab="report"]
             </div>
           </section>
         </div>
-        <button class="task-action" type="submit">Сохранить и пересчитать</button>
+        <button class="task-action report-save-button" type="submit">Сохранить и пересчитать</button>
       </form>
       <p class="report-config-message" id="report-config-message" role="status"></p>
     </section>
@@ -117,6 +123,7 @@ if (form) {
     config: null,
     catalog: null,
     lineTypes: [],
+    view: 'metrics',
   };
   let keyCounter = 0;
 
@@ -127,10 +134,28 @@ if (form) {
   const rankDirection = document.querySelector('#report-rank-direction');
   const updatedAt = document.querySelector('#report-config-updated-at');
   const message = document.querySelector('#report-config-message');
+  const viewTabs = [...document.querySelectorAll('[data-report-view-tab]')];
+  const viewPanels = [...document.querySelectorAll('[data-report-view-panel]')];
 
   function setMessage(text, tone = '') {
     message.textContent = text;
     message.className = `report-config-message${tone ? ` is-${tone}` : ''}`;
+  }
+
+  function setView(view) {
+    state.view = view;
+    for (const tab of viewTabs) {
+      const active = tab.dataset.reportViewTab === view;
+      tab.classList.toggle('is-active', active);
+      tab.setAttribute('aria-selected', String(active));
+    }
+    for (const panel of viewPanels) {
+      panel.hidden = panel.dataset.reportViewPanel !== view;
+    }
+  }
+
+  for (const tab of viewTabs) {
+    tab.addEventListener('click', () => setView(tab.dataset.reportViewTab));
   }
 
   function formatUpdatedAt(value) {
@@ -160,9 +185,7 @@ if (form) {
 
   function select(options, selected) {
     const element = document.createElement('select');
-    for (const item of options) {
-      element.append(option(item.value, item.label));
-    }
+    for (const item of options) element.append(option(item.value, item.label));
     element.value = String(selected ?? options[0]?.value ?? '');
     return element;
   }
@@ -213,16 +236,11 @@ if (form) {
     return state.config.metrics
       .filter((metric) => metric.key !== excludeKey)
       .filter((metric) => !dependencyFor || !metricDependsOn(metric.key, dependencyFor))
-      .map((metric) => ({
-        value: metric.key,
-        label: metric.name,
-      }));
+      .map((metric) => ({ value: metric.key, label: metric.name }));
   }
 
   function defaultOperand(kind = 'aggregate', currentMetricKey = null) {
-    if (kind === 'constant') {
-      return { kind, value: state.catalog.constants[0] };
-    }
+    if (kind === 'constant') return { kind, value: state.catalog.constants[0] };
     if (kind === 'metric') {
       const candidate = metricOptions({
         excludeKey: currentMetricKey,
@@ -246,9 +264,7 @@ if (form) {
     const fallback = state.config.metrics[0]?.key;
     for (const columns of [state.config.tableColumns, state.config.csvColumns]) {
       for (const column of columns) {
-        if (column.kind === 'metric' && !keys.has(column.metricKey)) {
-          column.metricKey = fallback;
-        }
+        if (column.kind === 'metric' && !keys.has(column.metricKey)) column.metricKey = fallback;
       }
     }
     if (!keys.has(state.config.rank.metricKey)) state.config.rank.metricKey = fallback;
@@ -285,10 +301,7 @@ if (form) {
         operator: operation.operator,
         priority: Number.isInteger(operation.priority) ? operation.priority : 1,
       };
-      while (
-        operators.length > 0 &&
-        operators[operators.length - 1].priority >= current.priority
-      ) {
+      while (operators.length > 0 && operators[operators.length - 1].priority >= current.priority) {
         output.push(operators.pop());
       }
       operators.push(current);
@@ -321,12 +334,7 @@ if (form) {
     };
   }
 
-  function renderOperand(
-    host,
-    getter,
-    setter,
-    { allowConstant = true, currentMetricKey = null } = {},
-  ) {
+  function renderOperand(host, getter, setter, { allowConstant = true, currentMetricKey = null } = {}) {
     host.replaceChildren();
     const operand = getter();
     const dependencyOptions = metricOptions({
@@ -425,11 +433,8 @@ if (form) {
     host.append(groupLabel);
     groupSelect.addEventListener('change', () => {
       operand.groupBy = groupSelect.value;
-      if (operand.groupBy === 'line_type.name') {
-        operand.groupValue = state.lineTypes[0]?.name;
-      } else {
-        delete operand.groupValue;
-      }
+      if (operand.groupBy === 'line_type.name') operand.groupValue = state.lineTypes[0]?.name;
+      else delete operand.groupValue;
       renderAll();
     });
 
@@ -459,7 +464,6 @@ if (form) {
     state.config.metrics.forEach((metric, metricIndex) => {
       const card = document.createElement('article');
       card.className = 'report-metric-card';
-
       const header = document.createElement('div');
       header.className = 'report-card-heading';
       const title = document.createElement('div');
@@ -510,9 +514,7 @@ if (form) {
       remove.title = 'Удалить метрику';
       const dependencyTarget = metricIsReferencedByMetric(metric.key);
       remove.disabled = state.config.metrics.length <= 1 || dependencyTarget;
-      if (dependencyTarget) {
-        remove.title = 'Сначала уберите ссылки на эту метрику из других метрик';
-      }
+      if (dependencyTarget) remove.title = 'Сначала уберите ссылки на эту метрику из других метрик';
       metricActions.append(upMetric, downMetric, remove);
       header.append(title, metricActions);
       card.append(header);
@@ -550,7 +552,7 @@ if (form) {
 
       const priorityHelp = document.createElement('p');
       priorityHelp.className = 'report-priority-help';
-      priorityHelp.textContent = 'Больший уровень выполняется раньше. Одинаковый уровень — слева направо. Порядок строк операций также является частью формулы и меняется кнопками ↑/↓. Ссылки на другие метрики выбираются из списка; варианты, создающие уже очевидный цикл зависимостей, скрываются.';
+      priorityHelp.textContent = 'Больший уровень выполняется раньше. Одинаковый — слева направо. Порядок строк является частью формулы. Ссылки, создающие очевидный цикл, скрываются.';
       card.append(priorityHelp);
 
       addOperation.addEventListener('click', () => {
@@ -584,10 +586,7 @@ if (form) {
         const priorityLabel = document.createElement('label');
         priorityLabel.textContent = 'Приоритет';
         const prioritySelect = select(
-          state.catalog.precedenceLevels.map((item) => ({
-            value: item.value,
-            label: item.label,
-          })),
+          state.catalog.precedenceLevels.map((item) => ({ value: item.value, label: item.label })),
           operation.priority,
         );
         priorityLabel.append(prioritySelect);
@@ -667,9 +666,171 @@ if (form) {
       rpn.textContent = preview.rpn;
       previewBox.append(previewTitle, infix, rpnLabel, rpn);
       card.append(previewBox);
-
       metricsHost.append(card);
     });
+  }
+
+  function defaultFormatRule() {
+    return {
+      min: null,
+      max: null,
+      bold: true,
+      italic: false,
+      underline: false,
+      strike: false,
+      color: null,
+      fontSizeStep: 0,
+    };
+  }
+
+  function renderFormatRules(host, column) {
+    if (!Array.isArray(column.formatRules)) column.formatRules = [];
+    const box = document.createElement('section');
+    box.className = 'report-formatting-box';
+    const heading = document.createElement('div');
+    heading.className = 'report-subheading';
+    const title = document.createElement('strong');
+    title.textContent = 'Условное форматирование';
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'secondary report-small-button';
+    add.textContent = 'Добавить диапазон';
+    add.disabled = column.formatRules.length >= (state.catalog.maxFormatRules ?? 8);
+    add.addEventListener('click', () => {
+      column.formatRules.push(defaultFormatRule());
+      renderAll();
+    });
+    heading.append(title, add);
+    box.append(heading);
+
+    const help = document.createElement('p');
+    help.className = 'report-format-help';
+    help.textContent = 'Границы включаются в диапазон; пустая нижняя/верхняя граница означает −∞/+∞. Для метрик используются отображаемые значения после масштаба. При пересечении диапазонов применяется первый сверху.';
+    box.append(help);
+
+    const list = document.createElement('div');
+    list.className = 'report-format-rule-list';
+    column.formatRules.forEach((rule, ruleIndex) => {
+      const row = document.createElement('div');
+      row.className = 'report-format-rule-row';
+
+      const minLabel = document.createElement('label');
+      minLabel.textContent = 'От';
+      const min = document.createElement('input');
+      min.type = 'number';
+      min.step = 'any';
+      min.placeholder = '−∞';
+      min.value = rule.min ?? '';
+      minLabel.append(min);
+      min.addEventListener('change', () => {
+        rule.min = min.value === '' ? null : Number(min.value);
+      });
+
+      const maxLabel = document.createElement('label');
+      maxLabel.textContent = 'До';
+      const max = document.createElement('input');
+      max.type = 'number';
+      max.step = 'any';
+      max.placeholder = '+∞';
+      max.value = rule.max ?? '';
+      maxLabel.append(max);
+      max.addEventListener('change', () => {
+        rule.max = max.value === '' ? null : Number(max.value);
+      });
+
+      const styleBox = document.createElement('div');
+      styleBox.className = 'report-format-style-controls';
+      const styleOptions = [
+        ['bold', 'Жирный'],
+        ['italic', 'Курсив'],
+        ['underline', 'Подчёркнутый'],
+        ['strike', 'Зачёркнутый'],
+      ];
+      for (const [key, labelText] of styleOptions) {
+        const label = document.createElement('label');
+        label.className = 'report-check-control';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = rule[key] === true;
+        checkbox.addEventListener('change', () => { rule[key] = checkbox.checked; });
+        label.append(checkbox, document.createTextNode(labelText));
+        styleBox.append(label);
+      }
+
+      const colorLabel = document.createElement('label');
+      colorLabel.className = 'report-color-control';
+      const colorEnabled = document.createElement('input');
+      colorEnabled.type = 'checkbox';
+      colorEnabled.checked = Boolean(rule.color);
+      const color = document.createElement('input');
+      color.type = 'color';
+      color.value = rule.color ?? '#17373b';
+      color.disabled = !colorEnabled.checked;
+      const colorText = document.createElement('span');
+      colorText.textContent = 'Цвет';
+      colorEnabled.addEventListener('change', () => {
+        color.disabled = !colorEnabled.checked;
+        rule.color = colorEnabled.checked ? color.value : null;
+      });
+      color.addEventListener('input', () => { if (colorEnabled.checked) rule.color = color.value; });
+      colorLabel.append(colorEnabled, colorText, color);
+
+      const sizeLabel = document.createElement('label');
+      sizeLabel.textContent = 'Размер';
+      const size = select(
+        (state.catalog.formatFontSizes ?? []).map((item) => ({ value: item.value, label: item.label })),
+        rule.fontSizeStep ?? 0,
+      );
+      sizeLabel.append(size);
+      size.addEventListener('change', () => { rule.fontSizeStep = Number(size.value); });
+
+      const actions = document.createElement('div');
+      actions.className = 'report-row-actions';
+      const up = document.createElement('button');
+      up.type = 'button';
+      up.className = 'secondary report-small-button';
+      up.textContent = '↑';
+      up.title = 'Поднять правило';
+      up.disabled = ruleIndex === 0;
+      up.addEventListener('click', () => {
+        [column.formatRules[ruleIndex - 1], column.formatRules[ruleIndex]] = [
+          column.formatRules[ruleIndex], column.formatRules[ruleIndex - 1],
+        ];
+        renderAll();
+      });
+      const down = document.createElement('button');
+      down.type = 'button';
+      down.className = 'secondary report-small-button';
+      down.textContent = '↓';
+      down.title = 'Опустить правило';
+      down.disabled = ruleIndex === column.formatRules.length - 1;
+      down.addEventListener('click', () => {
+        [column.formatRules[ruleIndex + 1], column.formatRules[ruleIndex]] = [
+          column.formatRules[ruleIndex], column.formatRules[ruleIndex + 1],
+        ];
+        renderAll();
+      });
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'danger report-small-button';
+      remove.textContent = '×';
+      remove.title = 'Удалить правило';
+      remove.addEventListener('click', () => {
+        column.formatRules.splice(ruleIndex, 1);
+        renderAll();
+      });
+      actions.append(up, down, remove);
+      row.append(minLabel, maxLabel, styleBox, colorLabel, sizeLabel, actions);
+      list.append(row);
+    });
+    if (!column.formatRules.length) {
+      const empty = document.createElement('p');
+      empty.className = 'report-empty';
+      empty.textContent = 'Условное форматирование не задано.';
+      list.append(empty);
+    }
+    box.append(list);
+    host.append(box);
   }
 
   function defaultColumn(kind, csv = false) {
@@ -680,16 +841,23 @@ if (form) {
         title: state.config.metrics[0].name,
         scale: 1,
         decimals: 1,
+        ...(csv ? {} : { formatRules: [] }),
       };
     }
     const kindCatalog = csv ? state.catalog.csvColumnKinds : state.catalog.tableColumnKinds;
     const definition = kindCatalog.find((item) => item.key === kind);
-    return { kind, title: definition?.label ?? kind };
+    return {
+      kind,
+      title: definition?.label ?? kind,
+      ...(!csv && kind === 'rank' ? { formatRules: [] } : {}),
+    };
   }
 
   function renderColumns(host, columns, catalog, { csv = false } = {}) {
     host.replaceChildren();
     columns.forEach((column, index) => {
+      const card = document.createElement('article');
+      card.className = 'report-column-card';
       const row = document.createElement('div');
       row.className = 'report-column-row';
 
@@ -713,9 +881,7 @@ if (form) {
       title.required = true;
       title.value = column.title;
       titleLabel.append(title);
-      title.addEventListener('change', () => {
-        column.title = title.value.trim() || column.title;
-      });
+      title.addEventListener('change', () => { column.title = title.value.trim() || column.title; });
 
       const details = document.createElement('div');
       details.className = 'report-column-details';
@@ -724,9 +890,7 @@ if (form) {
         metricLabel.textContent = 'Метрика';
         const metricSelect = select(metricOptions(), column.metricKey);
         metricLabel.append(metricSelect);
-        metricSelect.addEventListener('change', () => {
-          column.metricKey = metricSelect.value;
-        });
+        metricSelect.addEventListener('change', () => { column.metricKey = metricSelect.value; });
 
         const scaleLabel = document.createElement('label');
         scaleLabel.textContent = 'Масштаб';
@@ -735,9 +899,7 @@ if (form) {
           column.scale ?? 1,
         );
         scaleLabel.append(scaleSelect);
-        scaleSelect.addEventListener('change', () => {
-          column.scale = Number(scaleSelect.value);
-        });
+        scaleSelect.addEventListener('change', () => { column.scale = Number(scaleSelect.value); });
 
         const decimalsLabel = document.createElement('label');
         decimalsLabel.textContent = 'Знаков после запятой';
@@ -751,9 +913,7 @@ if (form) {
         );
         decimalsLabel.append(decimalsSelect);
         decimalsSelect.addEventListener('change', () => {
-          column.decimals = decimalsSelect.value === 'raw'
-            ? null
-            : Number(decimalsSelect.value);
+          column.decimals = decimalsSelect.value === 'raw' ? null : Number(decimalsSelect.value);
         });
         details.append(metricLabel, scaleLabel, decimalsLabel);
       }
@@ -792,7 +952,12 @@ if (form) {
       });
       actions.append(up, down, remove);
       row.append(kindLabel, titleLabel, details, actions);
-      host.append(row);
+      card.append(row);
+
+      if (!csv && (column.kind === 'rank' || column.kind === 'metric')) {
+        renderFormatRules(card, column);
+      }
+      host.append(card);
     });
   }
 
@@ -807,26 +972,14 @@ if (form) {
     normalizeReferences();
     updatedAt.textContent = formatUpdatedAt(state.config.updatedAt);
     renderMetrics();
-    renderColumns(
-      tableColumnsHost,
-      state.config.tableColumns,
-      state.catalog.tableColumnKinds,
-    );
-    renderColumns(
-      csvColumnsHost,
-      state.config.csvColumns,
-      state.catalog.csvColumnKinds,
-      { csv: true },
-    );
+    renderColumns(tableColumnsHost, state.config.tableColumns, state.catalog.tableColumnKinds);
+    renderColumns(csvColumnsHost, state.config.csvColumns, state.catalog.csvColumnKinds, { csv: true });
     renderRank();
+    setView(state.view);
   }
 
-  rankMetric.addEventListener('change', () => {
-    state.config.rank.metricKey = rankMetric.value;
-  });
-  rankDirection.addEventListener('change', () => {
-    state.config.rank.direction = rankDirection.value;
-  });
+  rankMetric.addEventListener('change', () => { state.config.rank.metricKey = rankMetric.value; });
+  rankDirection.addEventListener('change', () => { state.config.rank.direction = rankDirection.value; });
 
   document.querySelector('#report-add-metric').addEventListener('click', () => {
     const source = defaultOperand('aggregate');
@@ -900,5 +1053,6 @@ if (form) {
     }
   });
 
+  setView('metrics');
   void load();
 }
