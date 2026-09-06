@@ -57,7 +57,7 @@ if (taskTabs && controlCard && !document.querySelector('[data-task-tab="report"]
             <div class="report-section-heading">
               <div>
                 <h5>Расчётные метрики</h5>
-                <p>Исходное поле/агрегат и последовательность арифметических операций. Все технические значения выбираются только из списков.</p>
+                <p>Исходное поле/агрегат и арифметические операции с явным приоритетом. Чем выше уровень, тем раньше операция выполняется. Сервер преобразует формулу в обратную польскую запись.</p>
               </div>
               <button class="secondary report-add-button" id="report-add-metric" type="button">Добавить метрику</button>
             </div>
@@ -171,6 +171,14 @@ if (form) {
     return state.catalog.fields.find((field) => field.key === key);
   }
 
+  function aggregateDefinition(key) {
+    return state.catalog.aggregates.find((aggregate) => aggregate.key === key);
+  }
+
+  function operatorDefinition(key) {
+    return state.catalog.operators.find((operator) => operator.key === key);
+  }
+
   function fieldsFor(kind) {
     return state.catalog.fields
       .filter((field) => field.sourceKinds.includes(kind))
@@ -211,6 +219,64 @@ if (form) {
     }));
   }
 
+  function operandLabel(operand) {
+    if (operand.kind === 'constant') return String(operand.value);
+    const field = fieldDefinition(operand.field);
+    const fieldLabel = field?.label ?? operand.field;
+    if (operand.kind === 'field') return fieldLabel;
+    const aggregate = aggregateDefinition(operand.aggregate);
+    const aggregateLabel = aggregate?.label ?? operand.aggregate;
+    const group = operand.groupBy === 'line_type.name'
+      ? ` [тип: ${operand.groupValue ?? '—'}]`
+      : '';
+    return `${aggregateLabel}(${fieldLabel})${group}`;
+  }
+
+  function metricRpnTokens(metric) {
+    const output = [{ kind: 'operand', operand: metric.source }];
+    const operators = [];
+    for (const operation of metric.operations ?? []) {
+      const current = {
+        kind: 'operator',
+        operator: operation.operator,
+        priority: Number.isInteger(operation.priority) ? operation.priority : 1,
+      };
+      while (
+        operators.length > 0 &&
+        operators[operators.length - 1].priority >= current.priority
+      ) {
+        output.push(operators.pop());
+      }
+      operators.push(current);
+      output.push({ kind: 'operand', operand: operation.operand });
+    }
+    while (operators.length > 0) output.push(operators.pop());
+    return output;
+  }
+
+  function expressionPreview(metric) {
+    const rpn = metricRpnTokens(metric);
+    const stack = [];
+    const rpnLabels = [];
+    for (const token of rpn) {
+      if (token.kind === 'operand') {
+        const label = operandLabel(token.operand);
+        stack.push(label);
+        rpnLabels.push(label);
+        continue;
+      }
+      const symbol = operatorDefinition(token.operator)?.label ?? token.operator;
+      const right = stack.pop() ?? '?';
+      const left = stack.pop() ?? '?';
+      stack.push(`(${left} ${symbol} ${right})`);
+      rpnLabels.push(symbol);
+    }
+    return {
+      infix: stack.length === 1 ? stack[0] : 'Некорректное выражение',
+      rpn: rpnLabels.join('  '),
+    };
+  }
+
   function renderOperand(host, getter, setter, { allowConstant = true } = {}) {
     host.replaceChildren();
     const operand = getter();
@@ -240,6 +306,7 @@ if (form) {
       label.append(control);
       control.addEventListener('change', () => {
         operand.value = Number(control.value);
+        renderAll();
       });
       host.append(label);
       return;
@@ -274,6 +341,7 @@ if (form) {
     host.append(aggregateLabel);
     aggregateSelect.addEventListener('change', () => {
       operand.aggregate = aggregateSelect.value;
+      renderAll();
     });
 
     const groupingOptions = state.catalog.groupings
@@ -310,6 +378,7 @@ if (form) {
       host.append(valueLabel);
       valueSelect.addEventListener('change', () => {
         operand.groupValue = valueSelect.value;
+        renderAll();
       });
     }
   }
@@ -365,16 +434,23 @@ if (form) {
       const operationsHeading = document.createElement('div');
       operationsHeading.className = 'report-subheading';
       const operationsTitle = document.createElement('strong');
-      operationsTitle.textContent = 'Арифметика';
+      operationsTitle.textContent = 'Арифметика и приоритет';
       const addOperation = document.createElement('button');
       addOperation.type = 'button';
       addOperation.className = 'secondary report-small-button';
       addOperation.textContent = 'Добавить операцию';
       operationsHeading.append(operationsTitle, addOperation);
       card.append(operationsHeading);
+
+      const priorityHelp = document.createElement('p');
+      priorityHelp.className = 'report-priority-help';
+      priorityHelp.textContent = 'Больший уровень выполняется раньше. Одинаковый уровень — слева направо. Так можно задавать эквивалент скобок без ручного ввода формулы.';
+      card.append(priorityHelp);
+
       addOperation.addEventListener('click', () => {
         metric.operations.push({
           operator: state.catalog.operators[0].key,
+          priority: 1,
           operand: defaultOperand('constant'),
         });
         renderAll();
@@ -383,8 +459,10 @@ if (form) {
       const operations = document.createElement('div');
       operations.className = 'report-operation-list';
       metric.operations.forEach((operation, operationIndex) => {
+        if (!Number.isInteger(operation.priority)) operation.priority = 1;
         const row = document.createElement('div');
         row.className = 'report-operation-row';
+
         const operatorLabel = document.createElement('label');
         operatorLabel.textContent = 'Операция';
         const operatorSelect = select(
@@ -394,6 +472,22 @@ if (form) {
         operatorLabel.append(operatorSelect);
         operatorSelect.addEventListener('change', () => {
           operation.operator = operatorSelect.value;
+          renderAll();
+        });
+
+        const priorityLabel = document.createElement('label');
+        priorityLabel.textContent = 'Приоритет';
+        const prioritySelect = select(
+          state.catalog.precedenceLevels.map((item) => ({
+            value: item.value,
+            label: item.label,
+          })),
+          operation.priority,
+        );
+        priorityLabel.append(prioritySelect);
+        prioritySelect.addEventListener('change', () => {
+          operation.priority = Number(prioritySelect.value);
+          renderAll();
         });
 
         const operandHost = document.createElement('div');
@@ -412,7 +506,7 @@ if (form) {
           metric.operations.splice(operationIndex, 1);
           renderAll();
         });
-        row.append(operatorLabel, operandHost, removeOperation);
+        row.append(operatorLabel, priorityLabel, operandHost, removeOperation);
         operations.append(row);
       });
       if (!metric.operations.length) {
@@ -422,6 +516,21 @@ if (form) {
         operations.append(empty);
       }
       card.append(operations);
+
+      const preview = expressionPreview(metric);
+      const previewBox = document.createElement('section');
+      previewBox.className = 'report-expression-preview';
+      const previewTitle = document.createElement('strong');
+      previewTitle.textContent = 'Фактический порядок вычисления';
+      const infix = document.createElement('code');
+      infix.textContent = preview.infix;
+      const rpnLabel = document.createElement('span');
+      rpnLabel.textContent = 'ОПЗ';
+      const rpn = document.createElement('code');
+      rpn.textContent = preview.rpn;
+      previewBox.append(previewTitle, infix, rpnLabel, rpn);
+      card.append(previewBox);
+
       metricsHost.append(card);
     });
   }
