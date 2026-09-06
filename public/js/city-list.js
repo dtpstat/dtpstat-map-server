@@ -46,6 +46,42 @@ function valueMatchesRule(value, rule) {
 }
 
 /**
+ * Resolve one complete cell style for the first matching conditional rule.
+ * Boolean formatting controls are authoritative: an unchecked "bold" or
+ * "italic" explicitly resets a base table style such as .is-rank-metric.
+ * Otherwise the rank column's default bold style would leak into ranges where
+ * the administrator deliberately left "Жирный" disabled.
+ *
+ * Color/font-size are optional modifiers. An empty value intentionally falls
+ * back to the normal column CSS.
+ *
+ * @param {number | null} numericValue
+ * @param {any[]} rules
+ */
+export function conditionalFormattingStyle(numericValue, rules = []) {
+  if (numericValue === null || !Number.isFinite(numericValue)) return null;
+  const rule = rules.find((candidate) => valueMatchesRule(numericValue, candidate));
+  if (!rule) return null;
+
+  const decorations = [];
+  if (rule.underline) decorations.push('underline');
+  if (rule.strike) decorations.push('line-through');
+  const fontSizeStep = Number(rule.fontSizeStep ?? 0);
+  const hasFontSizeStep = fontSizeStep !== 0 && Number.isInteger(fontSizeStep);
+  const fontSizeSign = fontSizeStep > 0 ? '+' : '-';
+
+  return {
+    fontWeight: rule.bold ? '700' : '400',
+    fontStyle: rule.italic ? 'italic' : 'normal',
+    textDecoration: decorations.length > 0 ? decorations.join(' ') : 'none',
+    color: rule.color ?? '',
+    fontSize: hasFontSizeStep
+      ? `calc(1em ${fontSizeSign} ${Math.abs(fontSizeStep)}pt)`
+      : '',
+  };
+}
+
+/**
  * Conditional ranges are evaluated against the number as displayed in this
  * column (after scale, before decimal string formatting). First matching rule
  * wins so overlapping ranges remain deterministic.
@@ -54,22 +90,9 @@ function valueMatchesRule(value, rule) {
  * @param {any[]} rules
  */
 function applyConditionalFormatting(cell, numericValue, rules = []) {
-  if (numericValue === null || !Number.isFinite(numericValue)) return;
-  const rule = rules.find((candidate) => valueMatchesRule(numericValue, candidate));
-  if (!rule) return;
-
-  if (rule.bold) cell.style.fontWeight = '700';
-  if (rule.italic) cell.style.fontStyle = 'italic';
-  const decorations = [];
-  if (rule.underline) decorations.push('underline');
-  if (rule.strike) decorations.push('line-through');
-  if (decorations.length > 0) cell.style.textDecoration = decorations.join(' ');
-  if (rule.color) cell.style.color = rule.color;
-  const fontSizeStep = Number(rule.fontSizeStep ?? 0);
-  if (fontSizeStep !== 0 && Number.isInteger(fontSizeStep)) {
-    const sign = fontSizeStep > 0 ? '+' : '-';
-    cell.style.fontSize = `calc(1em ${sign} ${Math.abs(fontSizeStep)}pt)`;
-  }
+  const style = conditionalFormattingStyle(numericValue, rules);
+  if (!style) return;
+  Object.assign(cell.style, style);
 }
 
 /** @param {any} city @param {string} field */
@@ -133,7 +156,8 @@ export function createCityList(elements) {
       button.dataset.sortDirection = direction;
       if (isActive) {
         const nextDirection = direction === 'asc' ? 'убыванию' : 'возрастанию';
-        const currentDirection = direction === 'asc' ? 'по возрастанию' : 'по убыванию';
+        const currentDirection =
+          direction === 'asc' ? 'по возрастанию' : 'по убыванию';
         header?.setAttribute(
           'aria-sort',
           direction === 'asc' ? 'ascending' : 'descending',
