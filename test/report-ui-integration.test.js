@@ -31,6 +31,12 @@ test('admin report builder is catalog-driven and has no free-form expression edi
   assert.match(editor, /Фактический порядок вычисления/);
   assert.match(editor, /ОПЗ/);
   assert.match(editor, /generatedMetricKey/);
+  assert.match(editor, /Поднять метрику/);
+  assert.match(editor, /Опустить метрику/);
+  assert.match(editor, /Поднять операцию/);
+  assert.match(editor, /Опустить операцию/);
+  assert.match(editor, /state\.config\.metrics\[metricIndex - 1\]/);
+  assert.match(editor, /metric\.operations\[operationIndex - 1\]/);
   assert.doesNotMatch(editor, /<textarea/i);
 
   assert.match(reportConfig, /key: 'city\.area_m2'/);
