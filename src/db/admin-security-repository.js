@@ -5,6 +5,7 @@ const USER_FIELDS_SQL = `
   can_manage_data AS "canManageData",
   can_manage_interface AS "canManageInterface",
   is_superuser AS "isSuperuser",
+  is_bootstrap AS "isBootstrap",
   is_blocked AS "isBlocked",
   failed_login_count AS "failedLoginCount",
   failed_login_window_started_at AS "failedLoginWindowStartedAt",
@@ -27,7 +28,7 @@ const AUTH_USER_SQL = `
 const LIST_USERS_SQL = `
   SELECT ${USER_FIELDS_SQL}
   FROM admin_users
-  ORDER BY is_superuser DESC, LOWER(username), id
+  ORDER BY is_bootstrap DESC, is_superuser DESC, LOWER(username), id
 `;
 
 const GET_USER_SQL = `
@@ -43,9 +44,10 @@ const CREATE_USER_SQL = `
     password_hash,
     can_manage_data,
     can_manage_interface,
-    is_superuser
+    is_superuser,
+    is_bootstrap
   )
-  VALUES ($1, $2, $3, $4, $5, $6)
+  VALUES ($1, $2, $3, $4, $5, $6, $7)
   RETURNING ${USER_FIELDS_SQL}
 `;
 
@@ -217,6 +219,7 @@ export function createAdminSecurityRepository(database) {
         user.canManageData,
         user.canManageInterface,
         user.isSuperuser,
+        Boolean(user.isBootstrap),
       ]);
       return result.rows[0];
     },
