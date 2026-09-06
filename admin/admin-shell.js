@@ -52,6 +52,38 @@ function ensureProfileSection() {
   }
 }
 
+function clearBasicAuthCache() {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+
+    try {
+      const request = new XMLHttpRequest();
+      request.open(
+        'GET',
+        `/admin/logout-basic.txt?_=${Date.now()}`,
+        true,
+        'sim',
+        'salabim',
+      );
+      request.setRequestHeader('Cache-Control', 'no-store');
+      request.onloadend = finish;
+      request.onerror = finish;
+      request.ontimeout = finish;
+      request.timeout = 2500;
+      request.send();
+    } catch {
+      finish();
+    }
+
+    window.setTimeout(finish, 3000);
+  });
+}
+
 function ensureTopbarActions() {
   const host = document.querySelector('.topbar-status');
   if (!host || document.querySelector('#admin-logout')) return;
@@ -62,15 +94,19 @@ function ensureTopbarActions() {
   button.textContent = 'Выйти';
   button.addEventListener('click', async () => {
     button.disabled = true;
+    button.textContent = 'Выходим…';
     try {
       await fetch('/api/admin/logout', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { Accept: 'application/json' },
       });
-    } finally {
-      window.location.replace('/admin/login.html');
+    } catch {
+      // Continue with browser Basic Auth cache replacement even when the
+      // server-side session has already expired or the network reply was lost.
     }
+    await clearBasicAuthCache();
+    window.location.replace('/admin/login.html');
   });
   host.append(button);
 }
@@ -88,7 +124,14 @@ function normalizeInterfaceEditorNodes() {
     delete reportPanel.dataset.taskPanel;
     reportPanel.dataset.interfacePanel = 'report';
     reportPanel.id = 'interface-panel-report';
+    reportPanel.classList.add('interface-task-panel', 'report-interface-panel');
     reportPanel.setAttribute('aria-labelledby', 'interface-tab-report');
+
+    // The report editor originated as a data-task panel. Once mounted under
+    // interface settings, remove the legacy form/scroll hooks so it is governed
+    // only by the interface role and by the outer interface panel scroller.
+    reportPanel.querySelector('#report-config-form')?.removeAttribute('data-task-form');
+    reportPanel.querySelector('.report-config-sections')?.classList.remove('form-fields');
     document.querySelector('#interface-panels')?.append(reportPanel);
   }
 
@@ -137,6 +180,9 @@ async function loadInterfaceEditors(user) {
   await import('./project-settings-editor.js');
   await import('./line-types-editor.js');
 
+  // Compatibility bootstrap for the legacy report module only. The temporary
+  // classes are removed immediately and normalizeInterfaceEditorNodes() strips
+  // every remaining data-task marker before the editor becomes visible.
   const interfaceTabs = document.querySelector('#interface-tabs');
   const interfaceCard = document.querySelector('#interface-card');
   interfaceTabs?.classList.add('task-tabs');
@@ -240,6 +286,7 @@ function updateUserBadge(user) {
 async function startAdminShell() {
   const userBadge = document.querySelector('#admin-user');
   try {
+    await import('./action-feedback.js');
     const session = await globalThis.dtpstatAdminSession;
     const user = session.user;
     ensureProfileSection();
