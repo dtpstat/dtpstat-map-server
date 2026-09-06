@@ -3,9 +3,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildImportPlan } from '../src/data/import-plan.js';
+import { createPublicDownloadService } from '../src/data/public-download-service.js';
 import { createDataImportService } from '../src/db/data-import-service.js';
 import { loadDatabaseSchema } from '../src/db/database-environment.js';
 import { createPopulationImportService } from '../src/db/population-import-service.js';
+import { createPublicDownloadRepository } from '../src/db/public-download-repository.js';
 import { createDatabaseClient } from './database.js';
 
 const projectRoot = path.resolve(
@@ -41,12 +43,18 @@ async function main() {
     const populationResult = await createPopulationImportService(
       poolAdapter,
     ).updateFromJson(plan.populationPayload);
+    const publicDownloads = await createPublicDownloadService({
+      repository: createPublicDownloadRepository(client),
+      directory: path.join(projectRoot, 'var', 'public-downloads'),
+    }).refresh();
 
     console.log(
       `Imported ${geometryResult.cities} cities, ` +
         `${geometryResult.geometries} geometries and ` +
         `${populationResult.cities} population records; ` +
-        `ignored ${geometryResult.ignoredFeatures} unnamed source artifacts.`,
+        `ignored ${geometryResult.ignoredFeatures} unnamed source artifacts; ` +
+        `materialized ${publicDownloads.featureCount} public GeoJSON features ` +
+        `and ${publicDownloads.cityCount} CSV rows.`,
     );
   } finally {
     await client.end();
