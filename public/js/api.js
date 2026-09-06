@@ -33,6 +33,10 @@ export async function loadLineTypes() {
   return payload.lineTypes;
 }
 
+export async function loadReportConfig() {
+  return getJson('/api/report-config');
+}
+
 export function loadCityGeometries(cityId, signal) {
   return getJson(`/api/cities/${cityId}/geometries`, { signal });
 }
