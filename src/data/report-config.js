@@ -2,6 +2,7 @@ const MAX_METRICS = 20;
 const MAX_OPERATIONS = 12;
 const MAX_TABLE_COLUMNS = 12;
 const MAX_CSV_COLUMNS = 24;
+const MAX_FORMAT_RULES = 8;
 
 export class ReportConfigValidationError extends Error {
   constructor(message) {
@@ -27,19 +28,19 @@ export const REPORT_FIELDS = Object.freeze([
     key: 'geometry.length_m',
     label: 'Длина геометрии, м',
     sourceKinds: ['aggregate'],
-    aggregates: ['sum', 'avg', 'min', 'max'],
+    aggregates: ['sum', 'avg', 'median', 'min', 'max'],
   }),
   Object.freeze({
     key: 'geometry.lane_length_m',
     label: 'Длина × коэффициент/полосы, м',
     sourceKinds: ['aggregate'],
-    aggregates: ['sum', 'avg', 'min', 'max'],
+    aggregates: ['sum', 'avg', 'median', 'min', 'max'],
   }),
   Object.freeze({
     key: 'geometry.lanes',
     label: 'Коэффициент / количество полос',
     sourceKinds: ['aggregate'],
-    aggregates: ['sum', 'avg', 'min', 'max'],
+    aggregates: ['sum', 'avg', 'median', 'min', 'max'],
   }),
   Object.freeze({
     key: 'geometry.id',
@@ -52,6 +53,7 @@ export const REPORT_FIELDS = Object.freeze([
 export const REPORT_AGGREGATES = Object.freeze([
   Object.freeze({ key: 'sum', label: 'Сумма' }),
   Object.freeze({ key: 'avg', label: 'Среднее' }),
+  Object.freeze({ key: 'median', label: 'Медиана' }),
   Object.freeze({ key: 'min', label: 'Минимум' }),
   Object.freeze({ key: 'max', label: 'Максимум' }),
   Object.freeze({ key: 'count', label: 'Количество' }),
@@ -110,6 +112,14 @@ export const REPORT_SCALES = Object.freeze([
 
 export const REPORT_DECIMALS = Object.freeze([null, 0, 1, 2, 3, 4, 6]);
 
+export const REPORT_FORMAT_FONT_SIZES = Object.freeze([
+  Object.freeze({ value: -2, label: '−2 пункта' }),
+  Object.freeze({ value: -1, label: '−1 пункт' }),
+  Object.freeze({ value: 0, label: 'обычный' }),
+  Object.freeze({ value: 1, label: '+1 пункт' }),
+  Object.freeze({ value: 2, label: '+2 пункта' }),
+]);
+
 export const REPORT_TABLE_COLUMN_KINDS = Object.freeze([
   Object.freeze({ key: 'rank', label: '№ / место' }),
   Object.freeze({ key: 'city', label: 'Город' }),
@@ -141,10 +151,7 @@ export const DEFAULT_REPORT_CONFIG = Object.freeze({
     Object.freeze({
       key: 'population',
       name: 'Население',
-      source: Object.freeze({
-        kind: 'field',
-        field: 'city.population',
-      }),
+      source: Object.freeze({ kind: 'field', field: 'city.population' }),
       operations: Object.freeze([]),
     }),
     Object.freeze({
@@ -171,7 +178,7 @@ export const DEFAULT_REPORT_CONFIG = Object.freeze({
     }),
   ]),
   tableColumns: Object.freeze([
-    Object.freeze({ kind: 'rank', title: '№' }),
+    Object.freeze({ kind: 'rank', title: '№', formatRules: Object.freeze([]) }),
     Object.freeze({ kind: 'city', title: 'город' }),
     Object.freeze({
       kind: 'metric',
@@ -179,6 +186,7 @@ export const DEFAULT_REPORT_CONFIG = Object.freeze({
       title: 'длина ВП (км)',
       scale: 0.001,
       decimals: 1,
+      formatRules: Object.freeze([]),
     }),
     Object.freeze({
       kind: 'metric',
@@ -186,6 +194,7 @@ export const DEFAULT_REPORT_CONFIG = Object.freeze({
       title: 'жители (тыс.)',
       scale: 0.001,
       decimals: 0,
+      formatRules: Object.freeze([]),
     }),
     Object.freeze({
       kind: 'metric',
@@ -193,31 +202,14 @@ export const DEFAULT_REPORT_CONFIG = Object.freeze({
       title: 'ВП (м/1000 чел.)',
       scale: 1,
       decimals: 1,
+      formatRules: Object.freeze([]),
     }),
   ]),
   csvColumns: Object.freeze([
     Object.freeze({ kind: 'city', title: 'short_name' }),
-    Object.freeze({
-      kind: 'metric',
-      metricKey: 'lane_length_m',
-      title: 'lanes_length',
-      scale: 1,
-      decimals: null,
-    }),
-    Object.freeze({
-      kind: 'metric',
-      metricKey: 'population',
-      title: 'population',
-      scale: 1,
-      decimals: null,
-    }),
-    Object.freeze({
-      kind: 'metric',
-      metricKey: 'lane_m_per_1000',
-      title: 'lanes_per_1K',
-      scale: 1,
-      decimals: null,
-    }),
+    Object.freeze({ kind: 'metric', metricKey: 'lane_length_m', title: 'lanes_length', scale: 1, decimals: null }),
+    Object.freeze({ kind: 'metric', metricKey: 'population', title: 'population', scale: 1, decimals: null }),
+    Object.freeze({ kind: 'metric', metricKey: 'lane_m_per_1000', title: 'lanes_per_1K', scale: 1, decimals: null }),
     Object.freeze({ kind: 'minx', title: 'minx' }),
     Object.freeze({ kind: 'miny', title: 'miny' }),
     Object.freeze({ kind: 'maxx', title: 'maxx' }),
@@ -236,6 +228,8 @@ const CSV_KIND_KEYS = new Set(REPORT_CSV_COLUMN_KINDS.map((kind) => kind.key));
 const CONSTANT_KEYS = new Set(REPORT_CONSTANTS.map(String));
 const SCALE_KEYS = new Set(REPORT_SCALES.map((scale) => String(scale.value)));
 const DECIMAL_KEYS = new Set(REPORT_DECIMALS.map(String));
+const FONT_SIZE_KEYS = new Set(REPORT_FORMAT_FONT_SIZES.map((size) => String(size.value)));
+const COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
 
 function object(value, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -283,17 +277,12 @@ function normalizeOperand(value, label, { allowConstant = true, allowedLineTypeN
   const kind = text(source.kind, `${label}.kind`, 20);
 
   if (kind === 'constant') {
-    if (!allowConstant) {
-      throw new ReportConfigValidationError(`${label} cannot be a constant`);
-    }
+    if (!allowConstant) throw new ReportConfigValidationError(`${label} cannot be a constant`);
     return { kind, value: normalizeConstant(source.value, `${label}.value`) };
   }
 
   if (kind === 'metric') {
-    return {
-      kind,
-      metricKey: metricKey(source.metricKey, `${label}.metricKey`),
-    };
+    return { kind, metricKey: metricKey(source.metricKey, `${label}.metricKey`) };
   }
 
   const field = text(source.field, `${label}.field`, 64);
@@ -344,25 +333,14 @@ function normalizeMetric(value, index, options) {
     }),
     operations: operations.map((item, operationIndex) => {
       const operation = object(item, `metrics[${index}].operations[${operationIndex}]`);
-      const operator = text(
-        operation.operator,
-        `metrics[${index}].operations[${operationIndex}].operator`,
-        20,
-      );
+      const operator = text(operation.operator, `metrics[${index}].operations[${operationIndex}].operator`, 20);
       if (!OPERATOR_KEYS.has(operator)) {
         throw new ReportConfigValidationError(`Arithmetic operator ${operator} is not allowed`);
       }
       return {
         operator,
-        priority: normalizePriority(
-          operation.priority,
-          `metrics[${index}].operations[${operationIndex}].priority`,
-        ),
-        operand: normalizeOperand(
-          operation.operand,
-          `metrics[${index}].operations[${operationIndex}].operand`,
-          options,
-        ),
+        priority: normalizePriority(operation.priority, `metrics[${index}].operations[${operationIndex}].priority`),
+        operand: normalizeOperand(operation.operand, `metrics[${index}].operations[${operationIndex}].operand`, options),
       };
     }),
   };
@@ -380,10 +358,6 @@ export function reportMetricDependencies(metric) {
   return [...dependencies];
 }
 
-/**
- * Return metrics in dependency order. Independent metrics keep their original
- * relative order. Missing references and cycles are configuration errors.
- */
 export function orderReportMetricsByDependencies(metrics) {
   const byKey = new Map(metrics.map((metric) => [metric.key, metric]));
   const state = new Map();
@@ -398,15 +372,12 @@ export function orderReportMetricsByDependencies(metrics) {
       const cycle = [...trail.slice(Math.max(0, start)), metric.key];
       throw new ReportConfigValidationError(`Metric dependency cycle: ${cycle.join(' -> ')}`);
     }
-
     state.set(metric.key, 'visiting');
     trail.push(metric.key);
     for (const dependencyKey of reportMetricDependencies(metric)) {
       const dependency = byKey.get(dependencyKey);
       if (!dependency) {
-        throw new ReportConfigValidationError(
-          `Metric ${metric.key} references unknown metric ${dependencyKey}`,
-        );
+        throw new ReportConfigValidationError(`Metric ${metric.key} references unknown metric ${dependencyKey}`);
       }
       visit(dependency);
     }
@@ -419,35 +390,21 @@ export function orderReportMetricsByDependencies(metrics) {
   return ordered;
 }
 
-/**
- * Convert the linear metric editor representation into Reverse Polish
- * Notation. Higher numeric priority executes first; equal priorities are
- * left-associative. Existing configurations without priority therefore keep
- * their historic strict left-to-right semantics because every operation
- * normalizes to priority 1.
- *
- * @param {{ source: object, operations?: Array<{ operator: string, priority?: number, operand: object }> }} metric
- */
 export function reportMetricToRpn(metric) {
   const output = [{ kind: 'operand', operand: metric.source }];
   const operators = [];
-
   for (const operation of metric.operations ?? []) {
     const current = {
       kind: 'operator',
       operator: operation.operator,
       priority: Number.isInteger(operation.priority) ? operation.priority : 1,
     };
-    while (
-      operators.length > 0 &&
-      operators[operators.length - 1].priority >= current.priority
-    ) {
+    while (operators.length > 0 && operators[operators.length - 1].priority >= current.priority) {
       output.push(operators.pop());
     }
     operators.push(current);
     output.push({ kind: 'operand', operand: operation.operand });
   }
-
   while (operators.length > 0) output.push(operators.pop());
   return output;
 }
@@ -466,6 +423,51 @@ function normalizeDecimals(value, label) {
     throw new ReportConfigValidationError(`${label} must be selected from the precision catalog`);
   }
   return decimals;
+}
+
+function optionalFiniteNumber(value, label) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new ReportConfigValidationError(`${label} must be a finite number or null`);
+  }
+  return value;
+}
+
+function normalizeFormatRule(value, label) {
+  const rule = object(value, label);
+  const min = optionalFiniteNumber(rule.min, `${label}.min`);
+  const max = optionalFiniteNumber(rule.max, `${label}.max`);
+  if (min !== null && max !== null && min > max) {
+    throw new ReportConfigValidationError(`${label}.min must not be greater than max`);
+  }
+  const color = rule.color === null || rule.color === undefined || rule.color === ''
+    ? null
+    : text(rule.color, `${label}.color`, 7);
+  if (color !== null && !COLOR_PATTERN.test(color)) {
+    throw new ReportConfigValidationError(`${label}.color must be a #RRGGBB value`);
+  }
+  const fontSizeStep = rule.fontSizeStep === undefined ? 0 : rule.fontSizeStep;
+  if (!Number.isInteger(fontSizeStep) || !FONT_SIZE_KEYS.has(String(fontSizeStep))) {
+    throw new ReportConfigValidationError(`${label}.fontSizeStep must be selected from the font-size catalog`);
+  }
+  return {
+    min,
+    max,
+    bold: rule.bold === true,
+    italic: rule.italic === true,
+    underline: rule.underline === true,
+    strike: rule.strike === true,
+    color: color?.toLowerCase() ?? null,
+    fontSizeStep,
+  };
+}
+
+function normalizeFormatRules(value, label) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > MAX_FORMAT_RULES) {
+    throw new ReportConfigValidationError(`${label} must contain 0-${MAX_FORMAT_RULES} items`);
+  }
+  return value.map((rule, index) => normalizeFormatRule(rule, `${label}[${index}]`));
 }
 
 function normalizeColumn(value, index, metricKeys, allowedKinds, label) {
@@ -487,6 +489,11 @@ function normalizeColumn(value, index, metricKeys, allowedKinds, label) {
     normalized.scale = normalizeScale(column.scale, `${label}[${index}].scale`);
     normalized.decimals = normalizeDecimals(column.decimals, `${label}[${index}].decimals`);
   }
+  if (label === 'tableColumns' && (kind === 'rank' || kind === 'metric')) {
+    normalized.formatRules = normalizeFormatRules(column.formatRules, `${label}[${index}].formatRules`);
+  } else if (label === 'tableColumns' && Array.isArray(column.formatRules) && column.formatRules.length > 0) {
+    throw new ReportConfigValidationError(`${label}[${index}] cannot use numeric conditional formatting`);
+  }
   return normalized;
 }
 
@@ -498,13 +505,10 @@ export function validateReportConfig(payload, options = {}) {
   const allowedLineTypeNames = options.allowedLineTypeNames
     ? new Set([...options.allowedLineTypeNames].map((name) => String(name).trim().toLocaleLowerCase('ru-RU')))
     : null;
-  const metrics = input.metrics.map((metric, index) =>
-    normalizeMetric(metric, index, { allowedLineTypeNames }));
+  const metrics = input.metrics.map((metric, index) => normalizeMetric(metric, index, { allowedLineTypeNames }));
   const metricKeys = new Set();
   for (const metric of metrics) {
-    if (metricKeys.has(metric.key)) {
-      throw new ReportConfigValidationError(`Duplicate metric key: ${metric.key}`);
-    }
+    if (metricKeys.has(metric.key)) throw new ReportConfigValidationError(`Duplicate metric key: ${metric.key}`);
     metricKeys.add(metric.key);
   }
   orderReportMetricsByDependencies(metrics);
@@ -570,6 +574,8 @@ export const REPORT_CONFIG_CATALOG = Object.freeze({
   constants: REPORT_CONSTANTS,
   scales: REPORT_SCALES,
   decimals: REPORT_DECIMALS,
+  formatFontSizes: REPORT_FORMAT_FONT_SIZES,
+  maxFormatRules: MAX_FORMAT_RULES,
   tableColumnKinds: REPORT_TABLE_COLUMN_KINDS,
   csvColumnKinds: REPORT_CSV_COLUMN_KINDS,
 });
