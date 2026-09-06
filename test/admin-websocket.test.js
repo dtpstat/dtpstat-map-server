@@ -5,17 +5,34 @@ import { WebSocket } from 'ws';
 import { createAdminTaskManager } from '../src/data/admin-task-manager.js';
 import { createAdminWebSocketGateway } from '../src/http/admin-websocket.js';
 
-const credentials = {
-  username: 'importer',
-  password: 'test:secret',
-};
 const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
 
-test('admin WebSocket requires Basic Auth and streams task log events', async () => {
+function testAdminAuth() {
+  return {
+    async authenticateUpgrade(request, permission) {
+      if (request.headers.authorization !== authorization) {
+        return { status: 'invalid', user: null };
+      }
+      assert.equal(permission, 'data');
+      return {
+        status: 'success',
+        user: {
+          id: 1,
+          username: 'importer',
+          canManageData: true,
+          canManageInterface: false,
+          isSuperuser: false,
+        },
+      };
+    },
+  };
+}
+
+test('admin WebSocket requires DB-backed admin authorization and streams task log events', async () => {
   const adminTasks = createAdminTaskManager({ randomUUID: () => 'ws-task' });
   const gateway = createAdminWebSocketGateway({
     adminTasks,
-    importApi: credentials,
+    adminAuth: testAdminAuth(),
   });
   const server = http.createServer((_request, response) => response.end());
   gateway.attach(server);
