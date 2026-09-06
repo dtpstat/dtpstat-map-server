@@ -347,7 +347,9 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
       dryRun: booleanValue(env, 'OSM_CITY_UPDATE_DRY_RUN', false),
     },
     publicMap: {
-      accessToken: requiredValue(env, 'MAPBOX_ACCESS_TOKEN'),
+      // V019 bootstraps this value into PROJECT_SETTINGS once. After that the
+      // database is authoritative and MAPBOX_ACCESS_TOKEN may be removed from ENV.
+      bootstrapAccessToken: env.MAPBOX_ACCESS_TOKEN?.trim() || null,
       styleUrl:
         env.MAPBOX_STYLE_URL?.trim() ||
         'mapbox://styles/culebron/cj7ornxjab8oq2spdw84gxob0',
