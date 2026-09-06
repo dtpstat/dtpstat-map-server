@@ -57,7 +57,7 @@ if (taskTabs && controlCard && !document.querySelector('[data-task-tab="report"]
             <div class="report-section-heading">
               <div>
                 <h5>Расчётные метрики</h5>
-                <p>Исходное поле/агрегат и арифметические операции с явным приоритетом. Чем выше уровень, тем раньше операция выполняется. Сервер преобразует формулу в обратную польскую запись.</p>
+                <p>Метрика может использовать поля города, агрегаты геометрий и уже определённые расчётные метрики. Зависимости пересчитываются автоматически в правильном порядке; циклические ссылки запрещены. Арифметические операции имеют явный приоритет.</p>
               </div>
               <button class="secondary report-add-button" id="report-add-metric" type="button">Добавить метрику</button>
             </div>
@@ -185,9 +185,51 @@ if (form) {
       .map((field) => ({ value: field.key, label: field.label }));
   }
 
-  function defaultOperand(kind = 'aggregate') {
+  function metricByKey(key) {
+    return state.config.metrics.find((metric) => metric.key === key);
+  }
+
+  function metricDependencyKeys(metric) {
+    const dependencies = new Set();
+    const collect = (operand) => {
+      if (operand?.kind === 'metric' && operand.metricKey) dependencies.add(operand.metricKey);
+    };
+    collect(metric.source);
+    for (const operation of metric.operations ?? []) collect(operation.operand);
+    return [...dependencies];
+  }
+
+  function metricDependsOn(metricKey, targetKey, visited = new Set()) {
+    if (metricKey === targetKey) return true;
+    if (visited.has(metricKey)) return false;
+    visited.add(metricKey);
+    const metric = metricByKey(metricKey);
+    if (!metric) return false;
+    return metricDependencyKeys(metric).some((dependencyKey) =>
+      metricDependsOn(dependencyKey, targetKey, visited));
+  }
+
+  function metricOptions({ excludeKey = null, dependencyFor = null } = {}) {
+    return state.config.metrics
+      .filter((metric) => metric.key !== excludeKey)
+      .filter((metric) => !dependencyFor || !metricDependsOn(metric.key, dependencyFor))
+      .map((metric) => ({
+        value: metric.key,
+        label: metric.name,
+      }));
+  }
+
+  function defaultOperand(kind = 'aggregate', currentMetricKey = null) {
     if (kind === 'constant') {
       return { kind, value: state.catalog.constants[0] };
+    }
+    if (kind === 'metric') {
+      const candidate = metricOptions({
+        excludeKey: currentMetricKey,
+        dependencyFor: currentMetricKey,
+      })[0];
+      if (candidate) return { kind, metricKey: candidate.value };
+      return defaultOperand('field', currentMetricKey);
     }
     const field = state.catalog.fields.find((item) => item.sourceKinds.includes(kind));
     if (kind === 'field') return { kind, field: field.key };
@@ -212,15 +254,17 @@ if (form) {
     if (!keys.has(state.config.rank.metricKey)) state.config.rank.metricKey = fallback;
   }
 
-  function metricOptions() {
-    return state.config.metrics.map((metric) => ({
-      value: metric.key,
-      label: metric.name,
-    }));
+  function metricIsReferencedByMetric(key) {
+    return state.config.metrics.some((metric) =>
+      metric.key !== key && metricDependencyKeys(metric).includes(key));
   }
 
   function operandLabel(operand) {
     if (operand.kind === 'constant') return String(operand.value);
+    if (operand.kind === 'metric') {
+      const metric = metricByKey(operand.metricKey);
+      return `Метрика «${metric?.name ?? operand.metricKey}»`;
+    }
     const field = fieldDefinition(operand.field);
     const fieldLabel = field?.label ?? operand.field;
     if (operand.kind === 'field') return fieldLabel;
@@ -277,14 +321,28 @@ if (form) {
     };
   }
 
-  function renderOperand(host, getter, setter, { allowConstant = true } = {}) {
+  function renderOperand(
+    host,
+    getter,
+    setter,
+    { allowConstant = true, currentMetricKey = null } = {},
+  ) {
     host.replaceChildren();
     const operand = getter();
-    const kinds = [
-      { value: 'field', label: 'Поле города' },
-      { value: 'aggregate', label: 'Агрегат геометрий' },
-      ...(allowConstant ? [{ value: 'constant', label: 'Константа' }] : []),
+    const dependencyOptions = metricOptions({
+      excludeKey: currentMetricKey,
+      dependencyFor: currentMetricKey,
+    });
+    const kindCatalog = state.catalog.operandKinds ?? [
+      { key: 'field', label: 'Поле города' },
+      { key: 'aggregate', label: 'Агрегат геометрий' },
+      { key: 'metric', label: 'Другая метрика' },
+      { key: 'constant', label: 'Константа' },
     ];
+    const kinds = kindCatalog
+      .filter((kind) => allowConstant || kind.key !== 'constant')
+      .filter((kind) => kind.key !== 'metric' || dependencyOptions.length > 0)
+      .map((kind) => ({ value: kind.key, label: kind.label }));
 
     const kindLabel = document.createElement('label');
     kindLabel.textContent = 'Источник';
@@ -292,7 +350,7 @@ if (form) {
     kindLabel.append(kindSelect);
     host.append(kindLabel);
     kindSelect.addEventListener('change', () => {
-      setter(defaultOperand(kindSelect.value));
+      setter(defaultOperand(kindSelect.value, currentMetricKey));
       renderAll();
     });
 
@@ -306,6 +364,19 @@ if (form) {
       label.append(control);
       control.addEventListener('change', () => {
         operand.value = Number(control.value);
+        renderAll();
+      });
+      host.append(label);
+      return;
+    }
+
+    if (operand.kind === 'metric') {
+      const label = document.createElement('label');
+      label.textContent = 'Метрика';
+      const control = select(dependencyOptions, operand.metricKey);
+      label.append(control);
+      control.addEventListener('change', () => {
+        operand.metricKey = control.value;
         renderAll();
       });
       host.append(label);
@@ -407,7 +478,11 @@ if (form) {
       remove.type = 'button';
       remove.className = 'danger report-small-button';
       remove.textContent = 'Удалить';
-      remove.disabled = state.config.metrics.length <= 1;
+      const dependencyTarget = metricIsReferencedByMetric(metric.key);
+      remove.disabled = state.config.metrics.length <= 1 || dependencyTarget;
+      if (dependencyTarget) {
+        remove.title = 'Сначала уберите ссылки на эту метрику из других метрик';
+      }
       header.append(title, remove);
       card.append(header);
 
@@ -427,7 +502,7 @@ if (form) {
         source,
         () => metric.source,
         (value) => { metric.source = value; },
-        { allowConstant: false },
+        { allowConstant: false, currentMetricKey: metric.key },
       );
       card.append(source);
 
@@ -444,14 +519,14 @@ if (form) {
 
       const priorityHelp = document.createElement('p');
       priorityHelp.className = 'report-priority-help';
-      priorityHelp.textContent = 'Больший уровень выполняется раньше. Одинаковый уровень — слева направо. Так можно задавать эквивалент скобок без ручного ввода формулы.';
+      priorityHelp.textContent = 'Больший уровень выполняется раньше. Одинаковый уровень — слева направо. Ссылки на другие метрики выбираются из списка; варианты, создающие уже очевидный цикл зависимостей, скрываются.';
       card.append(priorityHelp);
 
       addOperation.addEventListener('click', () => {
         metric.operations.push({
           operator: state.catalog.operators[0].key,
           priority: 1,
-          operand: defaultOperand('constant'),
+          operand: defaultOperand('constant', metric.key),
         });
         renderAll();
       });
@@ -496,6 +571,7 @@ if (form) {
           operandHost,
           () => operation.operand,
           (value) => { operation.operand = value; },
+          { currentMetricKey: metric.key },
         );
         const removeOperation = document.createElement('button');
         removeOperation.type = 'button';
