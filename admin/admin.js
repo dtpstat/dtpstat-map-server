@@ -203,6 +203,23 @@ function renderResult(task) {
   }
 }
 
+function setFormTaskLock(form, locked) {
+  for (const control of form.elements) {
+    if (control.matches('[data-task-action]')) continue;
+    if (locked) {
+      if (control.dataset.taskLockWasDisabled === undefined) {
+        control.dataset.taskLockWasDisabled = String(control.disabled);
+      }
+      control.disabled = true;
+      continue;
+    }
+    if (control.dataset.taskLockWasDisabled !== undefined) {
+      control.disabled = control.dataset.taskLockWasDisabled === 'true';
+      delete control.dataset.taskLockWasDisabled;
+    }
+  }
+}
+
 function renderControls(task) {
   const locked = Boolean(active(task));
   const activeTab = locked ? taskTypeTabs[task.type] : null;
@@ -218,11 +235,7 @@ function renderControls(task) {
     tab.disabled = locked;
     tab.setAttribute('aria-disabled', String(locked));
   }
-  for (const form of elements.forms) {
-    for (const control of form.elements) {
-      if (!control.matches('[data-task-action]')) control.disabled = locked;
-    }
-  }
+  for (const form of elements.forms) setFormTaskLock(form, locked);
   for (const action of elements.actions) {
     const ownsActiveTask = locked && action.dataset.taskType === task?.type;
     action.textContent = action.dataset.startLabel;
