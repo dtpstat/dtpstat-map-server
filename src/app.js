@@ -5,12 +5,17 @@ import {readFileSync}     from 'node:fs';
 import path               from 'node:path';
 import {CITY_MARKER_ICON} from '../public/js/city-marker-icon.js';
 import {createAdminTaskManager} from './data/admin-task-manager.js';
+import {
+	DEFAULT_REPORT_CONFIG,
+	validateReportConfig,
+} from './data/report-config.js';
 import {createBasicAuth} from './http/basic-auth.js';
 import {projectManifest, renderProjectPage} from './http/project-page.js';
 import {createApiRouter} from './routes/api.js';
 import {createKmlTransferRouter} from './routes/kml-transfer-api.js';
 import {createLineTypesRouter} from './routes/line-types-api.js';
 import {createProjectSettingsRouter} from './routes/project-settings-api.js';
+import {createReportConfigRouter} from './routes/report-config-api.js';
 
 const PUBLIC_ASSETS = new Map([
 	['/favicon.ico', 'favicon.ico'],
@@ -49,11 +54,42 @@ function testProjectSettingsRepository(){
 	};
 }
 
+function testLineTypesRepository(){
+	return {
+		async list(){ return []; },
+		async save(){ return []; },
+	};
+}
+
+function testReportConfigService(){
+	let config = structuredClone(DEFAULT_REPORT_CONFIG);
+	return {
+		async get(){ return structuredClone(config); },
+		async save(payload){
+			config = {
+				...validateReportConfig(payload),
+				updatedAt: new Date().toISOString(),
+			};
+			return {
+				config: structuredClone(config),
+				materialized: {
+					cities: 0,
+					metrics: config.metrics.length,
+					rankMetricKey: config.rank.metricKey,
+					rankDirection: config.rank.direction,
+				},
+			};
+		},
+	};
+}
+
 /**
  * @param {{
  *   repository: import('./routes/api.js').CitiesRepository,
- *   lineTypesRepository: { list: () => Promise<any[]>, save: (payload: unknown) => Promise<any[]> },
+ *   lineTypesRepository?: { list: () => Promise<any[]>, save: (payload: unknown) => Promise<any[]> },
  *   projectSettingsRepository?: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
+ *   reportConfigService?: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
+ *   refreshPublicDownloads?: () => Promise<any>,
  *   exportRepository: import('./routes/api.js').DataExportRepository,
  *   importService: import('./routes/api.js').DataImportService,
  *   cityBoundaryTransferService: import('./routes/api.js').CityBoundaryTransferService,
@@ -68,6 +104,8 @@ export function createApp({
 	repository,
 	lineTypesRepository,
 	projectSettingsRepository,
+	reportConfigService,
+	refreshPublicDownloads,
 	exportRepository,
 	importService,
 	cityBoundaryTransferService,
@@ -79,10 +117,20 @@ export function createApp({
 }){
 	const app             = express();
 	const isProduction    = config.environment === 'production';
+	const effectiveLineTypesRepository = lineTypesRepository ??
+		(config.environment === 'test' ? testLineTypesRepository() : null);
 	const effectiveProjectSettingsRepository = projectSettingsRepository ??
 		(config.environment === 'test' ? testProjectSettingsRepository() : null);
+	const effectiveReportConfigService = reportConfigService ??
+		(config.environment === 'test' ? testReportConfigService() : null);
+	if(!effectiveLineTypesRepository){
+		throw new Error('lineTypesRepository is required');
+	}
 	if(!effectiveProjectSettingsRepository){
 		throw new Error('projectSettingsRepository is required');
+	}
+	if(!effectiveReportConfigService){
+		throw new Error('reportConfigService is required');
 	}
 	const publicDirectory = path.join(config.projectRoot, 'public');
 	const adminDirectory  = path.join(config.projectRoot, 'admin');
@@ -176,7 +224,7 @@ export function createApp({
 	app.use(
 		'/api',
 		createLineTypesRouter({
-			lineTypesRepository,
+			lineTypesRepository: effectiveLineTypesRepository,
 			adminTasks,
 			importApi: config.importApi,
 		}),
@@ -187,6 +235,16 @@ export function createApp({
 			projectSettingsRepository: effectiveProjectSettingsRepository,
 			adminTasks,
 			importApi: config.importApi,
+		}),
+	);
+	app.use(
+		'/api',
+		createReportConfigRouter({
+			reportConfigService: effectiveReportConfigService,
+			lineTypesRepository: effectiveLineTypesRepository,
+			adminTasks,
+			importApi: config.importApi,
+			afterSave: async () => refreshPublicDownloads?.(),
 		}),
 	);
 	app.use(
