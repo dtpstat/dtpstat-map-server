@@ -4,6 +4,7 @@ import {
   citiesToMarkerGeoJson,
   createMapController,
   findTopLabelLayerId,
+  lineFeatureName,
   ROAD_DATA_MIN_ZOOM,
 } from '../public/js/map-controller.js';
 
@@ -19,6 +20,16 @@ test('label anchor is selected after all non-symbol road layers', () => {
     ]),
     'road-label',
   );
+});
+
+test('line hover names only use the KML Placemark source property', () => {
+  assert.equal(
+    lineFeatureName({ properties: { placemarkName: '  Проспект Победы  ' } }),
+    'Проспект Победы',
+  );
+  assert.equal(lineFeatureName({ properties: { placemarkName: '   ' } }), null);
+  assert.equal(lineFeatureName({ properties: { name: 'Название города' } }), null);
+  assert.equal(lineFeatureName(null), null);
 });
 
 test('ranked cities become low-zoom marker points', () => {
@@ -57,9 +68,37 @@ test('ranked cities become low-zoom marker points', () => {
   });
 });
 
-test('typed bus-lane layers stay below labels and can be toggled by numeric code', async () => {
+test('typed bus-lane layers stay below labels, show names on hover and can be toggled by numeric code', async () => {
   const calls = [];
   let map;
+  let popup;
+
+  class FakePopup {
+    constructor(options) {
+      this.options = options;
+      this.removed = false;
+      popup = this;
+    }
+    setLngLat(value) {
+      this.lngLat = value;
+      return this;
+    }
+    setText(value) {
+      this.text = value;
+      return this;
+    }
+    addTo(target) {
+      this.target = target;
+      this.removed = false;
+      calls.push(['popup:add', this.text]);
+      return this;
+    }
+    remove() {
+      this.removed = true;
+      calls.push(['popup:remove']);
+      return this;
+    }
+  }
 
   class FakeMap {
     constructor() {
@@ -67,7 +106,12 @@ test('typed bus-lane layers stay below labels and can be toggled by numeric code
       this.layers = new Map();
       this.images = new Map();
       this.handlers = new Map();
-      this.canvas = { style: { cursor: '' } };
+      this.canvasHandlers = new Map();
+      this.canvas = {
+        style: { cursor: '' },
+        addEventListener: (event, handler) => this.canvasHandlers.set(event, handler),
+      };
+      this.renderedFeatures = [];
       this.zoom = 6;
       this.center = { lng: 37.62, lat: 55.75 };
       this.bounds = {
@@ -127,6 +171,10 @@ test('typed bus-lane layers stay below labels and can be toggled by numeric code
       const key = delegated ? `${event}:${layerOrHandler}` : event;
       this.handlers.set(key, delegated ? delegatedHandler : layerOrHandler);
     }
+    queryRenderedFeatures(_point, options) {
+      calls.push(['queryRenderedFeatures', options.layers]);
+      return this.renderedFeatures;
+    }
     getCanvas() { return this.canvas; }
     getBounds() { return this.bounds; }
     getCenter() { return this.center; }
@@ -138,6 +186,7 @@ test('typed bus-lane layers stay below labels and can be toggled by numeric code
   globalThis.window = {
     mapboxgl: {
       Map: FakeMap,
+      Popup: FakePopup,
       NavigationControl: class {},
       accessToken: '',
     },
@@ -152,6 +201,11 @@ test('typed bus-lane layers stay below labels and can be toggled by numeric code
       initialZoom: 1,
     });
 
+    assert.deepEqual(popup.options, {
+      closeButton: false,
+      closeOnClick: false,
+      offset: 8,
+    });
     assert.deepEqual(calls.find((call) => call[0] === 'addImage'), [
       'addImage', 'ranked-city-bus',
     ]);
@@ -192,6 +246,25 @@ test('typed bus-lane layers stay below labels and can be toggled by numeric code
     assert.deepEqual(map.getLayer('bus-lanes-lines-7').filter, [
       '==', ['get', 'businessTypeCode'], 7,
     ]);
+
+    map.renderedFeatures = [
+      { properties: { placemarkName: '', name: 'Не использовать' } },
+      { properties: { placemarkName: 'Проспект Победы' } },
+    ];
+    const hoverPoint = { x: 10, y: 20 };
+    const hoverLngLat = { lng: 49.12, lat: 55.79 };
+    map.handlers.get('mousemove')({ point: hoverPoint, lngLat: hoverLngLat });
+    assert.equal(popup.text, 'Проспект Победы');
+    assert.equal(popup.target, map);
+    assert.deepEqual(popup.lngLat, hoverLngLat);
+    assert.deepEqual(
+      calls.findLast((call) => call[0] === 'queryRenderedFeatures'),
+      ['queryRenderedFeatures', ['bus-lanes-lines-0', 'bus-lanes-lines-7']],
+    );
+
+    map.renderedFeatures = [{ properties: { name: 'Казань' } }];
+    map.handlers.get('mousemove')({ point: hoverPoint, lngLat: hoverLngLat });
+    assert.equal(popup.removed, true);
 
     controller.setLineTypeVisibility(7, false);
     assert.equal(map.getLayer('bus-lanes-lines-7').layout.visibility, 'none');
