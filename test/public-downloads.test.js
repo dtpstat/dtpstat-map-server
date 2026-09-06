@@ -12,7 +12,7 @@ import { createPublicDownloadRepository } from '../src/db/public-download-reposi
 
 const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
 
-test('public CSV uses stable columns and escapes values', () => {
+test('public CSV keeps the legacy default shape when no column config is supplied', () => {
   const csv = serializePublicCsv([
     {
       short_name: 'Город, "Тест"',
@@ -33,7 +33,38 @@ test('public CSV uses stable columns and escapes values', () => {
   );
 });
 
-test('public download service materializes GeoJSON and CSV as files', async () => {
+test('public CSV applies configured metrics, order, scale and precision', () => {
+  const csv = serializePublicCsv([
+    {
+      name: 'Тестоград',
+      rank: 2,
+      category: 'large',
+      metrics: {
+        separation_ratio: 0.6471,
+        network_length_m: 132482.71,
+        population: 512345,
+      },
+      minx: 30,
+      miny: 50,
+      maxx: 31,
+      maxy: 51,
+    },
+  ], [
+    { kind: 'rank', title: 'place' },
+    { kind: 'city', title: 'city' },
+    { kind: 'metric', metricKey: 'separation_ratio', title: 'separation_percent', scale: 100, decimals: 1 },
+    { kind: 'metric', metricKey: 'network_length_m', title: 'network_km', scale: 0.001, decimals: 2 },
+    { kind: 'category', title: 'category' },
+  ]);
+
+  assert.equal(
+    csv,
+    'place,city,separation_percent,network_km,category\n' +
+      '2,Тестоград,64.7,132.48,large\n',
+  );
+});
+
+test('public download service materializes GeoJSON and configured CSV as files', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'dtpstat-public-'));
   const repository = {
     async exportGeoJson() {
@@ -52,15 +83,21 @@ test('public download service materializes GeoJSON and CSV as files', async () =
     async exportCsvRows() {
       return [
         {
-          short_name: 'Тестоград',
-          lanes_length: 1000,
-          population: 200000,
-          lanes_per_1k: 5,
+          name: 'Тестоград',
+          rank: 1,
+          category: 'large',
+          metrics: { score: 5 },
           minx: 1,
           miny: 2,
           maxx: 3,
           maxy: 4,
         },
+      ];
+    },
+    async exportCsvColumns() {
+      return [
+        { kind: 'city', title: 'city' },
+        { kind: 'metric', metricKey: 'score', title: 'score', scale: 1, decimals: 1 },
       ];
     },
   };
@@ -75,9 +112,9 @@ test('public download service materializes GeoJSON and CSV as files', async () =
 
     assert.equal(result.featureCount, 1);
     assert.equal(result.cityCount, 1);
+    assert.equal(result.csvColumns, 2);
     assert.deepEqual(JSON.parse(geoJsonText), await repository.exportGeoJson());
-    assert.match(csvText, /^short_name,lanes_length,population,lanes_per_1K,/);
-    assert.match(csvText, /Тестоград,1000,200000,5,1,2,3,4/);
+    assert.equal(csvText, 'city,score\nТестоград,5.0\n');
     assert.equal(
       (await fs.readdir(directory)).some((name) => name.endsWith('.tmp')),
       false,
@@ -87,7 +124,7 @@ test('public download service materializes GeoJSON and CSV as files', async () =
   }
 });
 
-test('public GeoJSON query excludes portable dictionaries and style metadata', async () => {
+test('public GeoJSON excludes service metadata while CSV reads materialized report values', async () => {
   const queries = [];
   const database = {
     async query(sql) {
@@ -95,6 +132,7 @@ test('public GeoJSON query excludes portable dictionaries and style metadata', a
       if (sql.includes("'FeatureCollection'")) {
         return { rows: [{ payload: { type: 'FeatureCollection', features: [] } }] };
       }
+      if (sql.includes('csv_columns')) return { rows: [{ csvColumns: [] }] };
       return { rows: [] };
     },
   };
@@ -102,14 +140,18 @@ test('public GeoJSON query excludes portable dictionaries and style metadata', a
 
   await repository.exportGeoJson();
   await repository.exportCsvRows();
+  await repository.exportCsvColumns();
 
   assert.doesNotMatch(queries[0], /_dtpstat|lineTypes|line_style|line_type\.color|line_type\.title/);
   assert.match(queries[0], /'type', line_type\.name/);
   assert.match(queries[0], /'population', population\.population/);
-  assert.match(queries[1], /city\.lane_m_per_1000/);
+  assert.match(queries[1], /city_report_values AS report/);
+  assert.match(queries[1], /report\.values/);
+  assert.doesNotMatch(queries[1], /city\.lane_m_per_1000/);
+  assert.match(queries[2], /FROM report_config/);
 });
 
-test('successful data tasks can materialize public downloads after commit', async () => {
+test('successful data tasks can materialize derived public data after commit', async () => {
   const refreshed = [];
   const manager = createAdminTaskManager({
     randomUUID: () => 'task-1',
