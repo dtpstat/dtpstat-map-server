@@ -41,7 +41,7 @@ const SAVE_CONFIG_SQL = `
 
 const FIELD_SQL = Object.freeze({
   'city.population': 'population.population::double precision',
-  'city.area_m2': 'ST_Area(boundary.geom::geography)::double precision',
+  'city.area_m2': 'boundary.area_m2',
   'geometry.length_m': 'geometry.length_m::double precision',
   'geometry.lane_length_m': 'geometry.lane_length_m::double precision',
   'geometry.lanes': 'geometry.lanes::double precision',
@@ -83,11 +83,13 @@ function compileOperand(operand, parameters) {
   }
   if (operand.kind === 'metric') {
     const key = parameter(parameters, operand.metricKey);
-    return `(CASE
-      WHEN jsonb_typeof(report_source.values -> (${key}::text)) = 'number'
-        THEN (report_source.values ->> (${key}::text))::double precision
+    return `(SELECT CASE
+      WHEN jsonb_typeof(dependency_report.values -> (${key}::text)) = 'number'
+        THEN (dependency_report.values ->> (${key}::text))::double precision
       ELSE NULL
-    END)`;
+    END
+    FROM city_report_values AS dependency_report
+    WHERE dependency_report.city_id = city.id)`;
   }
   if (operand.kind === 'field') return FIELD_SQL[operand.field];
 
@@ -160,15 +162,18 @@ export function compileReportMetricQuery(metric) {
         FROM cities AS city
         LEFT JOIN city_populations AS population
           ON population.city_id = city.id
-        LEFT JOIN city_boundaries AS boundary
+        LEFT JOIN (
+          SELECT
+            city_id,
+            ST_Area(geom::geography)::double precision AS area_m2
+          FROM city_boundaries
+        ) AS boundary
           ON boundary.city_id = city.id
-        LEFT JOIN city_report_values AS report_source
-          ON report_source.city_id = city.id
         LEFT JOIN city_geometries AS geometry
           ON geometry.city_id = city.id
         LEFT JOIN line_types AS line_type
           ON line_type.id = geometry.line_type_id
-        GROUP BY city.id, population.population, boundary.geom, report_source.values
+        GROUP BY city.id, population.population, boundary.area_m2
       )
       UPDATE city_report_values AS report
       SET
