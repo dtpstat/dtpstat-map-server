@@ -2,6 +2,7 @@ import { CITY_MARKER_ICON_URL } from './city-marker-icon.js';
 
 const SOURCE_ID = 'bus-lanes';
 const LAYER_PREFIX = 'bus-lanes-lines-';
+const LABEL_LAYER_PREFIX = 'bus-lanes-labels-';
 const CITY_SOURCE_ID = 'ranked-cities';
 const CITY_LAYER_ID = 'ranked-cities-markers';
 const CITY_IMAGE_ID = 'ranked-city-bus';
@@ -18,23 +19,27 @@ const DEFAULT_LINE_TYPE = {
 
 export const ROAD_DATA_MIN_ZOOM = 8;
 
+function isApplicationLineLayer(layer) {
+  return layer.id.startsWith(LAYER_PREFIX) || layer.id.startsWith(LABEL_LAYER_PREFIX);
+}
+
 /** @param {Array<{ id: string, type: string }>} layers */
 export function findTopLabelLayerId(layers = []) {
   let lastNonSymbolIndex = -1;
   for (const [index, layer] of layers.entries()) {
-    if (!layer.id.startsWith(LAYER_PREFIX) && layer.type !== 'symbol') {
+    if (!isApplicationLineLayer(layer) && layer.type !== 'symbol') {
       lastNonSymbolIndex = index;
     }
   }
   return layers
     .slice(lastNonSymbolIndex + 1)
-    .find((layer) => !layer.id.startsWith(LAYER_PREFIX) && layer.type === 'symbol')?.id;
+    .find((layer) => !isApplicationLineLayer(layer) && layer.type === 'symbol')?.id;
 }
 
 /**
  * KML Placemark names are intentionally stored under placemarkName. The
  * generic GeoJSON property "name" is used by transfer formats for the city's
- * full name and must not become a line tooltip by accident.
+ * full name and must not become a line tooltip or persistent label by accident.
  *
  * @param {any} feature
  */
@@ -133,7 +138,15 @@ function readViewport(map) {
   };
 }
 
-/** @param {{ accessToken: string, styleUrl: string, initialCenter: [number, number], initialZoom: number }} config */
+/**
+ * @param {{
+ *   accessToken: string,
+ *   styleUrl: string,
+ *   initialCenter: [number, number],
+ *   initialZoom: number,
+ *   showLineLabels?: boolean
+ * }} config
+ */
 export async function createMapController(config) {
   if (!window.mapboxgl) throw new Error('Mapbox GL не загрузился');
   window.mapboxgl.accessToken = config.accessToken;
@@ -159,6 +172,7 @@ export async function createMapController(config) {
   let citySelectHandler = null;
   const disabledLineTypes = new Set();
   let lineLayerIds = new Map();
+  let lineLabelLayerIds = new Map();
 
   async function ensureCityMarkerLayer() {
     if (!map.hasImage(CITY_IMAGE_ID)) {
@@ -196,10 +210,11 @@ export async function createMapController(config) {
 
   function removeBusLaneLayers() {
     lineNamePopup.remove();
-    for (const layerId of lineLayerIds.values()) {
+    for (const layerId of [...lineLabelLayerIds.values(), ...lineLayerIds.values()]) {
       if (map.getLayer(layerId)) map.removeLayer(layerId);
     }
     lineLayerIds = new Map();
+    lineLabelLayerIds = new Map();
   }
 
   function ensureBusLaneLayers() {
@@ -208,6 +223,8 @@ export async function createMapController(config) {
 
     for (const lineType of currentLineTypes) {
       const layerId = `${LAYER_PREFIX}${lineType.code}`;
+      const labelId = `${LABEL_LAYER_PREFIX}${lineType.code}`;
+      const visible = disabledLineTypes.has(lineType.code) ? 'none' : 'visible';
       lineLayerIds.set(lineType.code, layerId);
       if (!map.getLayer(layerId)) {
         const paint = {
@@ -225,12 +242,45 @@ export async function createMapController(config) {
           layout: {
             'line-cap': 'round',
             'line-join': 'round',
-            visibility: disabledLineTypes.has(lineType.code) ? 'none' : 'visible',
+            visibility: visible,
           },
           paint,
         }, labelLayerId);
       }
       map.moveLayer(layerId, labelLayerId);
+
+      if (config.showLineLabels) {
+        lineLabelLayerIds.set(lineType.code, labelId);
+        if (!map.getLayer(labelId)) {
+          map.addLayer({
+            id: labelId,
+            type: 'symbol',
+            source: SOURCE_ID,
+            minzoom: ROAD_DATA_MIN_ZOOM,
+            filter: [
+              'all',
+              ['==', ['get', 'businessTypeCode'], lineType.code],
+              ['has', 'placemarkName'],
+            ],
+            layout: {
+              'symbol-placement': 'line',
+              'text-field': ['get', 'placemarkName'],
+              'text-size': 11,
+              'text-max-angle': 35,
+              'text-padding': 4,
+              'text-rotation-alignment': 'map',
+              'text-pitch-alignment': 'viewport',
+              visibility: visible,
+            },
+            paint: {
+              'text-color': '#17373b',
+              'text-halo-color': 'rgba(255, 255, 255, 0.96)',
+              'text-halo-width': 1.5,
+            },
+          }, labelLayerId);
+        }
+        map.moveLayer(labelId, labelLayerId);
+      }
     }
   }
 
@@ -243,6 +293,7 @@ export async function createMapController(config) {
   map.on('style.load', () => {
     lineNamePopup.remove();
     lineLayerIds = new Map();
+    lineLabelLayerIds = new Map();
     void ensureMapLayers()
       .then(() => {
         map.getSource(CITY_SOURCE_ID).setData(currentCities);
@@ -294,9 +345,10 @@ export async function createMapController(config) {
     setLineTypeVisibility(code, enabled) {
       if (enabled) disabledLineTypes.delete(code);
       else disabledLineTypes.add(code);
-      const layerId = lineLayerIds.get(code);
-      if (layerId && map.getLayer(layerId)) {
-        map.setLayoutProperty(layerId, 'visibility', enabled ? 'visible' : 'none');
+      for (const layerId of [lineLayerIds.get(code), lineLabelLayerIds.get(code)]) {
+        if (layerId && map.getLayer(layerId)) {
+          map.setLayoutProperty(layerId, 'visibility', enabled ? 'visible' : 'none');
+        }
       }
       if (!enabled) lineNamePopup.remove();
     },
