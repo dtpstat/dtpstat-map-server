@@ -143,8 +143,25 @@ export function createAdminAuthorization(securityService) {
       }
     };
 
+  const requireAdminEntry = async (request, response, next) => {
+    try {
+      const result = await authenticateRequest(request);
+      if (result.status !== 'success') {
+        response.redirect(302, '/admin/login.html');
+        return;
+      }
+      request.adminUser = result.user;
+      request.adminSessionId = result.sessionId ?? null;
+      request.adminAuthMethod = result.authMethod ?? 'basic';
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+
   return {
     requireAny: middleware('any'),
+    requireAdminEntry,
     requireProfile: middleware('profile', { allowPasswordChangePending: true }),
     requireData: middleware('data'),
     requireInterface: middleware('interface'),
