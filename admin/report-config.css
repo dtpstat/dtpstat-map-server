@@ -1,0 +1,230 @@
+.report-config-editor {
+  min-height: 0;
+}
+
+.report-config-sections {
+  display: grid;
+  gap: 1rem;
+}
+
+.report-builder-section {
+  display: grid;
+  gap: .75rem;
+  padding: .85rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0d171a;
+}
+
+.report-builder-section h5 {
+  margin: 0 0 .25rem;
+  color: var(--text);
+  font-size: .86rem;
+}
+
+.report-builder-section p {
+  margin: 0;
+  color: var(--muted);
+  font-size: .72rem;
+  line-height: 1.45;
+}
+
+.report-section-heading,
+.report-card-heading,
+.report-subheading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: .75rem;
+}
+
+.report-add-button,
+.report-small-button {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.report-add-button {
+  padding: .5rem .7rem;
+  font-size: .72rem;
+}
+
+.report-small-button {
+  padding: .42rem .58rem;
+  border-radius: 7px;
+  font-size: .7rem;
+}
+
+.report-metric-card {
+  display: grid;
+  gap: .8rem;
+  padding: .8rem;
+  border: 1px solid #294047;
+  border-radius: 9px;
+  background: #111c20;
+}
+
+.report-metric-card + .report-metric-card {
+  margin-top: .75rem;
+}
+
+.report-card-heading > div {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) auto;
+  align-items: end;
+  gap: .65rem;
+}
+
+.report-card-heading code {
+  padding: .42rem .5rem;
+  border-radius: 6px;
+  color: #a9c9c6;
+  background: #081013;
+  font: .67rem/1.3 ui-monospace, SFMono-Regular, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.report-operand-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .55rem;
+}
+
+.report-operation-list {
+  display: grid;
+  gap: .55rem;
+}
+
+.report-operation-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, .35fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: .55rem;
+  padding: .65rem;
+  border: 1px solid #22363d;
+  border-radius: 8px;
+  background: #0b1518;
+}
+
+.report-operation-operand {
+  min-width: 0;
+}
+
+.report-remove-operation {
+  margin-bottom: .02rem;
+}
+
+.report-empty {
+  padding: .65rem;
+  border: 1px dashed #294047;
+  border-radius: 8px;
+}
+
+.report-column-list {
+  display: grid;
+  gap: .55rem;
+}
+
+.report-column-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, .65fr) minmax(10rem, 1fr) minmax(0, 1.7fr) auto;
+  align-items: end;
+  gap: .55rem;
+  padding: .65rem;
+  border: 1px solid #22363d;
+  border-radius: 8px;
+  background: #111c20;
+}
+
+.report-column-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .45rem;
+}
+
+.report-row-actions {
+  display: flex;
+  gap: .3rem;
+}
+
+.report-rank-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .65rem;
+}
+
+.report-config-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 .8rem;
+  padding: .55rem .65rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0b1518;
+  color: var(--muted);
+  font-size: .72rem;
+}
+
+.report-config-meta time {
+  color: var(--success);
+  text-align: right;
+}
+
+.report-config-message {
+  min-height: 1.3rem;
+  margin: .7rem 0 0;
+  color: var(--warning);
+}
+
+.report-config-message.is-success {
+  color: var(--success);
+}
+
+.report-config-message.is-error {
+  color: var(--danger);
+}
+
+@media (max-width: 1250px) {
+  .report-operand-grid,
+  .report-column-details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .report-column-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .report-row-actions {
+    justify-content: end;
+  }
+}
+
+@media (max-width: 700px) {
+  .report-section-heading,
+  .report-card-heading,
+  .report-subheading,
+  .report-config-meta {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .report-card-heading > div,
+  .report-operand-grid,
+  .report-operation-row,
+  .report-column-row,
+  .report-column-details,
+  .report-rank-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .report-row-actions {
+    justify-content: start;
+  }
+
+  .report-config-meta time {
+    text-align: left;
+  }
+}
