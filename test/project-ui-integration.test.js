@@ -36,7 +36,7 @@ test('project settings migrations create singleton branding and version metric c
   assert.match(limitSql, /YANDEX_METRIKA_ID ~ '\^\[1-9\]\[0-9\]\{0,14\}\$'/i);
 });
 
-test('admin bootstraps a fourth Project tab with metadata metrics and restricted HTML editor', async () => {
+test('admin bootstraps Project settings alongside the report builder', async () => {
   const [notices, editor, css] = await Promise.all([
     source('admin/task-notices.js'),
     source('admin/project-settings-editor.js'),
@@ -44,6 +44,7 @@ test('admin bootstraps a fourth Project tab with metadata metrics and restricted
   ]);
 
   assert.match(notices, /import '\.\/project-settings-editor\.js'/);
+  assert.match(notices, /import '\.\/report-config-editor\.js'/);
   assert.match(editor, /dataset\.taskTab = 'project'/);
   assert.match(editor, /data-operation-tab="project-settings"/);
   assert.match(editor, /name="projectName"/);
@@ -54,7 +55,7 @@ test('admin bootstraps a fourth Project tab with metadata metrics and restricted
   assert.match(editor, /data-project-snippet="callout"/);
   assert.match(editor, /data-project-snippet="columns"/);
   assert.match(editor, /\/api\/admin\/project-settings/);
-  assert.match(css, /grid-template-columns: repeat\(4,/);
+  assert.match(css, /grid-template-columns: repeat\(5,/);
   assert.match(css, /\.project-metrics-grid/);
 });
 
