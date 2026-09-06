@@ -18,6 +18,12 @@ export const REPORT_FIELDS = Object.freeze([
     aggregates: [],
   }),
   Object.freeze({
+    key: 'city.area_m2',
+    label: 'Площадь города, м²',
+    sourceKinds: ['field'],
+    aggregates: [],
+  }),
+  Object.freeze({
     key: 'geometry.length_m',
     label: 'Длина геометрии, м',
     sourceKinds: ['aggregate'],
@@ -57,6 +63,13 @@ export const REPORT_OPERATORS = Object.freeze([
   Object.freeze({ key: 'multiply', label: '×' }),
   Object.freeze({ key: 'divide', label: '÷' }),
   Object.freeze({ key: 'percent', label: '% от' }),
+]);
+
+export const REPORT_OPERAND_KINDS = Object.freeze([
+  Object.freeze({ key: 'field', label: 'Поле города' }),
+  Object.freeze({ key: 'aggregate', label: 'Агрегат геометрий' }),
+  Object.freeze({ key: 'metric', label: 'Другая метрика' }),
+  Object.freeze({ key: 'constant', label: 'Константа' }),
 ]);
 
 export const REPORT_PRECEDENCE_LEVELS = Object.freeze(
@@ -276,6 +289,13 @@ function normalizeOperand(value, label, { allowConstant = true, allowedLineTypeN
     return { kind, value: normalizeConstant(source.value, `${label}.value`) };
   }
 
+  if (kind === 'metric') {
+    return {
+      kind,
+      metricKey: metricKey(source.metricKey, `${label}.metricKey`),
+    };
+  }
+
   const field = text(source.field, `${label}.field`, 64);
   const fieldDefinition = FIELD_MAP.get(field);
   if (!fieldDefinition || !fieldDefinition.sourceKinds.includes(kind)) {
@@ -346,6 +366,57 @@ function normalizeMetric(value, index, options) {
       };
     }),
   };
+}
+
+export function reportMetricDependencies(metric) {
+  const dependencies = new Set();
+  const collect = (operand) => {
+    if (operand?.kind === 'metric' && typeof operand.metricKey === 'string') {
+      dependencies.add(operand.metricKey);
+    }
+  };
+  collect(metric.source);
+  for (const operation of metric.operations ?? []) collect(operation.operand);
+  return [...dependencies];
+}
+
+/**
+ * Return metrics in dependency order. Independent metrics keep their original
+ * relative order. Missing references and cycles are configuration errors.
+ */
+export function orderReportMetricsByDependencies(metrics) {
+  const byKey = new Map(metrics.map((metric) => [metric.key, metric]));
+  const state = new Map();
+  const ordered = [];
+  const trail = [];
+
+  const visit = (metric) => {
+    const status = state.get(metric.key);
+    if (status === 'done') return;
+    if (status === 'visiting') {
+      const start = trail.indexOf(metric.key);
+      const cycle = [...trail.slice(Math.max(0, start)), metric.key];
+      throw new ReportConfigValidationError(`Metric dependency cycle: ${cycle.join(' -> ')}`);
+    }
+
+    state.set(metric.key, 'visiting');
+    trail.push(metric.key);
+    for (const dependencyKey of reportMetricDependencies(metric)) {
+      const dependency = byKey.get(dependencyKey);
+      if (!dependency) {
+        throw new ReportConfigValidationError(
+          `Metric ${metric.key} references unknown metric ${dependencyKey}`,
+        );
+      }
+      visit(dependency);
+    }
+    trail.pop();
+    state.set(metric.key, 'done');
+    ordered.push(metric);
+  };
+
+  for (const metric of metrics) visit(metric);
+  return ordered;
 }
 
 /**
@@ -436,6 +507,7 @@ export function validateReportConfig(payload, options = {}) {
     }
     metricKeys.add(metric.key);
   }
+  orderReportMetricsByDependencies(metrics);
 
   if (!Array.isArray(input.tableColumns) || input.tableColumns.length === 0 || input.tableColumns.length > MAX_TABLE_COLUMNS) {
     throw new ReportConfigValidationError(`tableColumns must contain 1-${MAX_TABLE_COLUMNS} items`);
@@ -492,6 +564,7 @@ export const REPORT_CONFIG_CATALOG = Object.freeze({
   fields: REPORT_FIELDS,
   aggregates: REPORT_AGGREGATES,
   operators: REPORT_OPERATORS,
+  operandKinds: REPORT_OPERAND_KINDS,
   precedenceLevels: REPORT_PRECEDENCE_LEVELS,
   groupings: REPORT_GROUPINGS,
   constants: REPORT_CONSTANTS,
