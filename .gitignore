@@ -7,5 +7,8 @@ coverage/
 certificates/
 .idea/
 
+# Generated runtime files.
+var/public-downloads/
+
 # Historical source snapshots are not part of the running application.
 archive/
