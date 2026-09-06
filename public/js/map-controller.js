@@ -272,7 +272,7 @@ export async function createMapController(config) {
       .setText(name)
       .addTo(map);
   });
-  map.getCanvas().addEventListener('mouseleave', () => lineNamePopup.remove());
+  map.getCanvas().addEventListener?.('mouseleave', () => lineNamePopup.remove());
   map.on('click', CITY_LAYER_ID, (event) => {
     const cityId = Number(event.features?.[0]?.properties?.cityId);
     if (Number.isSafeInteger(cityId) && citySelectHandler) citySelectHandler(cityId);
