@@ -102,8 +102,10 @@ test('admin report endpoint requires auth and returns fixed catalogs', async () 
 
     assert.equal(payload.config.metrics.length, 3);
     assert.ok(payload.catalog.fields.some((field) => field.key === 'geometry.length_m'));
+    assert.ok(payload.catalog.fields.some((field) => field.key === 'city.area_m2'));
     assert.ok(payload.catalog.aggregates.some((aggregate) => aggregate.key === 'sum'));
     assert.ok(payload.catalog.operators.some((operator) => operator.key === 'divide'));
+    assert.ok(payload.catalog.operandKinds.some((kind) => kind.key === 'metric'));
     assert.deepEqual(
       payload.catalog.precedenceLevels.map((level) => level.value),
       [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
