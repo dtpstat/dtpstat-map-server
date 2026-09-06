@@ -15,6 +15,7 @@ import {createOsmCityUpdateService} from './db/osm-city-update-service.js';
 import {createPopulationImportService} from './db/population-import-service.js';
 import {createProjectSettingsRepository} from './db/project-settings-repository.js';
 import {createPublicDownloadRepository} from './db/public-download-repository.js';
+import {createReportConfigService} from './db/report-config-service.js';
 import {createPool}                from './db/pool.js';
 import {closeServer, startServers} from './http/start-servers.js';
 import {createAdminWebSocketGateway} from './http/admin-websocket.js';
@@ -57,6 +58,7 @@ async function main(){
 	const repository = createCitiesRepository(pool);
 	const lineTypesRepository = createLineTypesRepository(pool);
 	const projectSettingsRepository = createProjectSettingsRepository(pool);
+	const reportConfigService = createReportConfigService(pool);
 	const exportRepository = createDataExportRepository(pool);
 	const publicDownloadRepository = createPublicDownloadRepository(pool);
 	const publicDownloadService = createPublicDownloadService({
@@ -73,6 +75,26 @@ async function main(){
 	);
 	const adminTaskSuccessRepository = createAdminTaskSuccessRepository(pool);
 
+	const refreshPublicDownloads = (details = {}) => runServiceOperation(
+		'public-downloads.refresh',
+		() => publicDownloadService.refresh(),
+		{
+			details: {
+				directory: publicDownloadService.directory,
+				...details,
+			},
+			successDetails: (result) => result,
+		},
+	);
+	const refreshReportValues = (details = {}) => runServiceOperation(
+		'city-report.refresh',
+		() => reportConfigService.refresh(),
+		{
+			details,
+			successDetails: (result) => result,
+		},
+	);
+
 	await runServiceOperation(
 		'database.health',
 		() => repository.health(),
@@ -87,17 +109,8 @@ async function main(){
 			}),
 		},
 	);
-	await runServiceOperation(
-		'public-downloads.refresh',
-		() => publicDownloadService.refresh(),
-		{
-			details: {
-				reason: 'startup',
-				directory: publicDownloadService.directory,
-			},
-			successDetails: (result) => result,
-		},
-	);
+	await refreshReportValues({reason: 'startup'});
+	await refreshPublicDownloads({reason: 'startup'});
 	const initialSuccessfulUpdates = await runServiceOperation(
 		'admin-success-state.load',
 		() => adminTaskSuccessRepository.list(),
@@ -109,20 +122,15 @@ async function main(){
 		initialSuccessfulUpdates,
 		recordSuccessfulUpdate: (update) =>
 			adminTaskSuccessRepository.record(update),
-		afterSuccessfulUpdate: (update) => {
+		afterSuccessfulUpdate: async(update) => {
 			if(!PUBLIC_DOWNLOAD_TASK_TYPES.has(update.taskType)) return undefined;
-			return runServiceOperation(
-				'public-downloads.refresh',
-				() => publicDownloadService.refresh(),
-				{
-					details: {
-						reason: 'admin-update',
-						taskType: update.taskType,
-						taskId: update.taskId,
-					},
-					successDetails: (result) => result,
-				},
-			);
+			const details = {
+				reason: 'admin-update',
+				taskType: update.taskType,
+				taskId: update.taskId,
+			};
+			await refreshReportValues(details);
+			return refreshPublicDownloads(details);
 		},
 	});
 	const adminWebSocket = createAdminWebSocketGateway({
@@ -134,6 +142,8 @@ async function main(){
 		repository,
 		lineTypesRepository,
 		projectSettingsRepository,
+		reportConfigService,
+		refreshPublicDownloads: () => refreshPublicDownloads({reason: 'report-config'}),
 		exportRepository,
 		importService,
 		cityBoundaryTransferService,
