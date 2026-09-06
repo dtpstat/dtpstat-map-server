@@ -38,10 +38,17 @@ function formatMetric(value, column) {
   return new Intl.NumberFormat('ru-RU', options).format(number);
 }
 
-/** @param {number} value @param {any} rule */
+/**
+ * Conditional formatting ranges are half-open: min <= value < max. Missing
+ * min/max represent -Infinity/+Infinity. This lets adjacent rules share the
+ * same boundary without gaps or overlap, for example: < 91, >= 91 && < 201,
+ * >= 201.
+ * @param {number} value
+ * @param {any} rule
+ */
 function valueMatchesRule(value, rule) {
   if (rule.min !== null && rule.min !== undefined && value < Number(rule.min)) return false;
-  if (rule.max !== null && rule.max !== undefined && value > Number(rule.max)) return false;
+  if (rule.max !== null && rule.max !== undefined && value >= Number(rule.max)) return false;
   return true;
 }
 
