@@ -18,6 +18,7 @@ function exportPool() {
             yandexMetrikaId: null,
             googleAnalyticsId: null,
             showLineLabels: true,
+            mapboxAccessToken: 'pk.test-public-token-value',
           }],
         };
       }
@@ -90,8 +91,9 @@ test('settings export contains project configuration but no users, password hash
   const payload = await service.exportSettings();
 
   assert.equal(payload._dtpstat.kind, 'project-settings');
-  assert.equal(payload._dtpstat.schemaVersion, 1);
+  assert.equal(payload._dtpstat.schemaVersion, 2);
   assert.equal(payload.projectSettings.showLineLabels, true);
+  assert.equal(payload.projectSettings.mapboxAccessToken, 'pk.test-public-token-value');
   assert.equal(payload.lineTypes[0].name, 'default');
   assert.equal(payload.reportConfig.rank.metricKey, 'population');
   assert.equal(payload.securitySettings.maxFailedAttempts, 5);
@@ -129,7 +131,7 @@ test('settings import rejects unsupported schema versions before touching the da
 
   await assert.rejects(
     service.importSettings({
-      _dtpstat: { kind: 'project-settings', schemaVersion: 2 },
+      _dtpstat: { kind: 'project-settings', schemaVersion: 3 },
     }),
     (error) => error instanceof ProjectSettingsTransferValidationError && /schemaVersion/.test(error.message),
   );
