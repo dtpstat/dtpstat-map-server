@@ -1,6 +1,6 @@
 # Переносимый KML линий
 
-Переносимый KML предназначен для полного round-trip линий между экземплярами `dtpstat-map-server`. Он отличается от импорта внешнего KML / Google My Maps: внешний источник передаёт только исходные слои, а переносимый KML содержит полный словарь бизнес-типов и служебные ссылки, необходимые для точного восстановления.
+Переносимый KML предназначен для полного round-trip линий между экземплярами `dtpstat-map-server`. Он отличается от импорта внешнего KML / Google My Maps: внешний источник передаёт исходные слои и их Placemark, а переносимый KML содержит полный словарь бизнес-типов и служебные ссылки, необходимые для точного восстановления.
 
 ## Геометрический и бизнес-тип
 
@@ -48,7 +48,7 @@ dtpstat.businessLineTypes
 
 Обычные KML `<Style>` также записываются для внешних viewers, но не являются источником истины. Стандартный KML не описывает полностью наши `dashed` / `dotted`, поэтому round-trip style восстанавливается из `dtpstat.businessLineTypes`.
 
-## Placemark metadata
+## Placemark metadata и имя линии
 
 Каждая линия может содержать:
 
@@ -68,6 +68,29 @@ dtpstat.properties
 `dtpstat.multiple` — статистический множитель `1`/`2`, а не визуальная толщина и не geometry type.
 
 Сама геометрия хранится обычным `LineString` или `MultiGeometry`.
+
+Имя исходной линии хранится как source property:
+
+```text
+placemarkName
+```
+
+Для **внешнего** KML / Google My Maps оно берётся непосредственно из:
+
+```xml
+<Placemark>
+  <name>Проспект Мира</name>
+  ...
+</Placemark>
+```
+
+и сохраняется в `CITY_GEOMETRIES.PROPERTIES.placemarkName`.
+
+При portable round-trip настоящее `placemarkName` входит в `dtpstat.properties`, поэтому сохраняется независимо от локальных ID. Это важно: видимый `<Placemark><name>` переносимого KML может быть сгенерирован как удобная подпись, если исходного имени линии нет. Поэтому для portable KML источником истины является `dtpstat.properties.placemarkName`, а не любой текст `<name>`.
+
+На публичной карте непустой `placemarkName` показывается в popup при наведении мыши на линию. Для popup используется текстовый API Mapbox (`setText`), поэтому содержимое KML name не интерпретируется как HTML.
+
+Не следует использовать обычное GeoJSON `properties.name` для имени линии: в канонических transfer-данных это поле уже используется для полного названия города.
 
 ## Почему CODE не является глобальным ID
 
@@ -125,5 +148,7 @@ Content-Type: application/vnd.google-earth.kml+xml
 ```
 
 Поле `type` там является `LINE_TYPES.NAME`, а не `businessTypeCode`. Если NAME отсутствует в target DB, он создаётся автоматически, БД генерирует CODE, начальный TITLE равен NAME.
+
+Для каждого выбранного линейного Placemark также сохраняется его стандартный KML `<name>` как `placemarkName`. Пустое или отсутствующее имя не создаёт popup.
 
 То есть `dtpstat.businessTypeCode` используется только в переносимом snapshot с собственным словарём; внешний KML работает по source NAME.
