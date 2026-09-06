@@ -20,7 +20,7 @@ DATABASE_SCHEMA=buslanes
 - таблицу истории `<schema>.schema_versions`;
 - default OSM User-Agent `<schema>/2.0 OSM city updater`.
 
-Название проекта, которое видит пользователь, к этому namespace не привязано. Оно хранится в `PROJECT_SETTINGS.PROJECT_NAME` и меняется через админку.
+Название проекта, которое видит пользователь, к этому namespace не привязано. Оно хранится в `PROJECT_SETTINGS.PROJECT_NAME` и меняется через админку. Расчётные метрики/колонки также хранятся отдельно в `REPORT_CONFIG` каждого экземпляра.
 
 ## Пример двух экземпляров
 
@@ -60,7 +60,9 @@ npm run db:migrate
 npm start
 ```
 
-После V013 чистая БД содержит системные настройки проекта и default business line type, но не содержит пользовательских городов, населения и линий. Сервер и `/admin/` при этом запускаются, а публичная страница показывает `Данные пока не загружены`.
+После V014 чистая БД содержит системные настройки проекта, default business line type и default-конфигурацию публичного отчёта, но не содержит пользовательских городов, населения и линий. Сервер и `/admin/` при этом запускаются, а публичная страница показывает `Данные пока не загружены`.
+
+Default `REPORT_CONFIG` воспроизводит старую таблицу выделенных полос. Для другого экземпляра, например `tramlanes`, её можно изменить во вкладке `/admin/` → **Расчёты** без изменения кода приложения. Подробнее: [report-config.md](report-config.md).
 
 ## Миграции
 
@@ -72,7 +74,9 @@ npm start
 
 Старые deployments могли использовать `public.buslanes_schema_versions`. Migration runner автоматически переносит найденную legacy-историю в schema-specific таблицу и не применяет уже выполненные миграции заново.
 
-Файлы `db/migrations/V001...V013` неизменяемы. В старых SQL встречается литерал `BUSLANES`; он является историческим source token. Перед выполнением migration runner подставляет выбранный `DATABASE_SCHEMA`, но checksum считает по исходному файлу.
+Файлы `db/migrations/V001...V014` после применения неизменяемы. В старых SQL встречается литерал `BUSLANES`; он является историческим source token. Перед выполнением migration runner подставляет выбранный `DATABASE_SCHEMA`, но checksum считает по исходному файлу.
+
+Следующее изменение схемы должно добавляться новой миграцией V015+.
 
 ## PM2
 
@@ -98,7 +102,14 @@ pm2 restart tramlanes --update-env
 pm2 logs tramlanes
 ```
 
-Служебные записи приложения имеют префикс `[service]`.
+Служебные записи приложения имеют префикс `[service]`. При старте после V014 дополнительно виден пересчёт подготовленного отчёта:
+
+```text
+[service] city-report.refresh:start
+[service] city-report.refresh:ok
+[service] public-downloads.refresh:start
+[service] public-downloads.refresh:ok
+```
 
 ## Публичные generated files
 
@@ -114,6 +125,8 @@ var/public-downloads/
 bus-lanes.geojson
 bus-lanes.csv
 ```
+
+Перед созданием CSV сервер пересчитывает `CITY_REPORT_VALUES` по текущему `REPORT_CONFIG`. Поэтому разные экземпляры одного приложения могут иметь разные бизнес-метрики и разные CSV-колонки.
 
 Каталог `var/` является runtime state и не должен попадать в git/deployment source bundle как заранее подготовленные данные.
 
