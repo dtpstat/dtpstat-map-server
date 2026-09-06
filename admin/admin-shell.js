@@ -60,17 +60,19 @@ function setupInterfaceTabs() {
   for (const tab of tabs) {
     tab.addEventListener('click', () => select(tab.dataset.interfaceTab));
   }
-  select(tabs.find((tab) => tab.dataset.interfaceTab === 'project')?.dataset.interfaceTab
-    ?? tabs[0].dataset.interfaceTab);
+  select(
+    tabs.find((tab) => tab.dataset.interfaceTab === 'project')?.dataset.interfaceTab
+      ?? tabs[0].dataset.interfaceTab,
+  );
 }
 
 async function loadInterfaceEditors() {
   await import('./project-settings-editor.js');
   await import('./line-types-editor.js');
 
-  // report-config-editor.js predates the top-level admin split. Load it after
-  // the data controller, temporarily exposing the interface hosts under its
-  // historical selectors, then normalize its generated tab/panel.
+  // report-config-editor.js predates the top-level admin split. At this point
+  // admin.js has already captured only the data-management controls. Expose the
+  // interface hosts under the old selectors just for module initialization.
   const interfaceTabs = document.querySelector('#interface-tabs');
   const interfaceCard = document.querySelector('#interface-card');
   interfaceTabs?.classList.add('task-tabs');
@@ -149,11 +151,12 @@ async function startAdminShell() {
 
     setupPrimarySections(user);
 
-    const loaders = [];
-    if (canManageData(user)) loaders.push(loadDataEditors());
-    if (canManageInterface(user)) loaders.push(loadInterfaceEditors());
-    if (user.isSuperuser) loaders.push(import('./security-editor.js'));
-    await Promise.all(loaders);
+    // Order is deliberate: the legacy data controller snapshots its controls
+    // first. Interface editors are loaded afterwards and therefore remain fully
+    // usable while a long-running data task is active.
+    if (canManageData(user)) await loadDataEditors();
+    if (canManageInterface(user)) await loadInterfaceEditors();
+    if (user.isSuperuser) await import('./security-editor.js');
   } catch (error) {
     if (userBadge) userBadge.textContent = 'Ошибка авторизации';
     const host = document.querySelector('#security-editor-host');
