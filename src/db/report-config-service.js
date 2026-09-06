@@ -41,7 +41,9 @@ const SAVE_CONFIG_SQL = `
 
 const FIELD_SQL = Object.freeze({
   'city.population': 'population.population::double precision',
-  'city.area_m2': 'boundary.area_m2',
+  'city.area_m2': `(SELECT ST_Area(city_boundary.geom::geography)::double precision
+    FROM city_boundaries AS city_boundary
+    WHERE city_boundary.city_id = city.id)`,
   'geometry.length_m': 'geometry.length_m::double precision',
   'geometry.lane_length_m': 'geometry.lane_length_m::double precision',
   'geometry.lanes': 'geometry.lanes::double precision',
@@ -162,18 +164,11 @@ export function compileReportMetricQuery(metric) {
         FROM cities AS city
         LEFT JOIN city_populations AS population
           ON population.city_id = city.id
-        LEFT JOIN (
-          SELECT
-            city_id,
-            ST_Area(geom::geography)::double precision AS area_m2
-          FROM city_boundaries
-        ) AS boundary
-          ON boundary.city_id = city.id
         LEFT JOIN city_geometries AS geometry
           ON geometry.city_id = city.id
         LEFT JOIN line_types AS line_type
           ON line_type.id = geometry.line_type_id
-        GROUP BY city.id, population.population, boundary.area_m2
+        GROUP BY city.id, population.population
       )
       UPDATE city_report_values AS report
       SET
