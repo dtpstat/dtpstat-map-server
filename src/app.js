@@ -20,6 +20,8 @@ const PUBLIC_ASSETS = new Map([
 	['/android-chrome-192x192.png', 'android-chrome-192x192.png'],
 	['/android-chrome-512x512.png', 'android-chrome-512x512.png'],
 	['/bus-lanes.jpeg', 'bus-lanes.jpeg'],
+]);
+const PUBLIC_DOWNLOADS = new Map([
 	['/bus-lanes.csv', 'bus-lanes.csv'],
 	['/bus-lanes.geojson', 'bus-lanes.geojson'],
 ]);
@@ -84,6 +86,11 @@ export function createApp({
 	}
 	const publicDirectory = path.join(config.projectRoot, 'public');
 	const adminDirectory  = path.join(config.projectRoot, 'admin');
+	const publicDownloadDirectory = path.join(
+		config.projectRoot,
+		'var',
+		'public-downloads',
+	);
 	const publicPageTemplate = readFileSync(
 		path.join(config.projectRoot, 'index.html'),
 		'utf8',
@@ -212,6 +219,19 @@ export function createApp({
 	for(const [route, fileName] of PUBLIC_ASSETS){
 		app.get(route, (_request, response) => {
 			response.sendFile(fileName, {root: config.projectRoot});
+		});
+	}
+	for(const [route, fileName] of PUBLIC_DOWNLOADS){
+		app.get(route, (_request, response, next) => {
+			response.set('Cache-Control', 'no-cache');
+			response.sendFile(fileName, {root: publicDownloadDirectory}, (error) => {
+				if(!error) return;
+				if(error.status === 404 || error.code === 'ENOENT'){
+					response.status(404).type('text').send('Not found');
+					return;
+				}
+				next(error);
+			});
 		});
 	}
 
