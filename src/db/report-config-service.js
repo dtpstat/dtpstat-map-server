@@ -1,4 +1,5 @@
 import {
+  orderReportMetricsByDependencies,
   reportMetricToRpn,
   ReportConfigValidationError,
   validateReportConfig,
@@ -40,6 +41,7 @@ const SAVE_CONFIG_SQL = `
 
 const FIELD_SQL = Object.freeze({
   'city.population': 'population.population::double precision',
+  'city.area_m2': 'ST_Area(boundary.geom::geography)::double precision',
   'geometry.length_m': 'geometry.length_m::double precision',
   'geometry.lane_length_m': 'geometry.lane_length_m::double precision',
   'geometry.lanes': 'geometry.lanes::double precision',
@@ -78,6 +80,14 @@ function parameter(parameters, value) {
 function compileOperand(operand, parameters) {
   if (operand.kind === 'constant') {
     return `${parameter(parameters, operand.value)}::double precision`;
+  }
+  if (operand.kind === 'metric') {
+    const key = parameter(parameters, operand.metricKey);
+    return `(CASE
+      WHEN jsonb_typeof(report_source.values -> (${key}::text)) = 'number'
+        THEN (report_source.values ->> (${key}::text))::double precision
+      ELSE NULL
+    END)`;
   }
   if (operand.kind === 'field') return FIELD_SQL[operand.field];
 
@@ -150,11 +160,15 @@ export function compileReportMetricQuery(metric) {
         FROM cities AS city
         LEFT JOIN city_populations AS population
           ON population.city_id = city.id
+        LEFT JOIN city_boundaries AS boundary
+          ON boundary.city_id = city.id
+        LEFT JOIN city_report_values AS report_source
+          ON report_source.city_id = city.id
         LEFT JOIN city_geometries AS geometry
           ON geometry.city_id = city.id
         LEFT JOIN line_types AS line_type
           ON line_type.id = geometry.line_type_id
-        GROUP BY city.id, population.population
+        GROUP BY city.id, population.population, boundary.geom, report_source.values
       )
       UPDATE city_report_values AS report
       SET
@@ -187,7 +201,8 @@ async function materialize(queryable, config) {
     RETURNING city_id
   `);
 
-  for (const metric of config.metrics) {
+  const orderedMetrics = orderReportMetricsByDependencies(config.metrics);
+  for (const metric of orderedMetrics) {
     const query = compileReportMetricQuery(metric);
     await queryable.query(query.text, query.values);
   }
