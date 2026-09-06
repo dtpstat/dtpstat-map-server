@@ -20,13 +20,23 @@ test('default bus-lane report configuration is valid', () => {
     config.metrics[2].operations.map((operation) => operation.priority),
     [1, 1],
   );
+  assert.deepEqual(config.tableColumns[2].formatRules, []);
 });
 
-test('city area in square metres is available as a catalog field', () => {
+test('city area and median geometry aggregation are available in the catalog', () => {
   const area = REPORT_CONFIG_CATALOG.fields.find((field) => field.key === 'city.area_m2');
   assert.deepEqual(area?.sourceKinds, ['field']);
   assert.match(area?.label ?? '', /м²/);
   assert.ok(REPORT_CONFIG_CATALOG.operandKinds.some((kind) => kind.key === 'metric'));
+  assert.ok(REPORT_CONFIG_CATALOG.aggregates.some((aggregate) => aggregate.key === 'median'));
+
+  for (const key of ['geometry.length_m', 'geometry.lane_length_m', 'geometry.lanes']) {
+    assert.ok(REPORT_CONFIG_CATALOG.fields.find((field) => field.key === key)?.aggregates.includes('median'));
+  }
+  assert.equal(
+    REPORT_CONFIG_CATALOG.fields.find((field) => field.key === 'geometry.id')?.aggregates.includes('median'),
+    false,
+  );
 });
 
 test('legacy report operations without explicit priority keep left-to-right semantics', () => {
@@ -177,6 +187,73 @@ test('tram report can calculate separation ratio with a selected line-type group
   assert.equal(config.metrics[2].operations[0].priority, 1);
   assert.equal(config.tableColumns[2].scale, 100);
   assert.equal(config.rank.direction, 'desc');
+});
+
+test('public numeric columns normalize safe conditional formatting rules', () => {
+  const config = structuredClone(DEFAULT_REPORT_CONFIG);
+  config.tableColumns[2].formatRules = [
+    {
+      min: 10,
+      max: 25.5,
+      bold: true,
+      italic: true,
+      underline: false,
+      strike: true,
+      color: '#A1B2C3',
+      fontSizeStep: 2,
+    },
+    {
+      min: null,
+      max: 9.999,
+      color: null,
+      fontSizeStep: -1,
+    },
+  ];
+  const normalized = validateReportConfig(config);
+
+  assert.deepEqual(normalized.tableColumns[2].formatRules[0], {
+    min: 10,
+    max: 25.5,
+    bold: true,
+    italic: true,
+    underline: false,
+    strike: true,
+    color: '#a1b2c3',
+    fontSizeStep: 2,
+  });
+  assert.equal(normalized.tableColumns[2].formatRules[1].bold, false);
+  assert.equal(normalized.tableColumns[2].formatRules[1].fontSizeStep, -1);
+  assert.deepEqual(REPORT_CONFIG_CATALOG.formatFontSizes.map((item) => item.value), [-2, -1, 0, 1, 2]);
+});
+
+test('conditional formatting rejects invalid ranges, colors, sizes and text columns', () => {
+  const cases = [
+    (config) => {
+      config.tableColumns[2].formatRules = [{ min: 20, max: 10, fontSizeStep: 0 }];
+    },
+    (config) => {
+      config.tableColumns[2].formatRules = [{ min: null, max: null, color: 'red', fontSizeStep: 0 }];
+    },
+    (config) => {
+      config.tableColumns[2].formatRules = [{ min: null, max: null, fontSizeStep: 3 }];
+    },
+    (config) => {
+      config.tableColumns[1].formatRules = [{ min: 1, max: 2, fontSizeStep: 0 }];
+    },
+    (config) => {
+      config.tableColumns[2].formatRules = Array.from({ length: 9 }, () => ({
+        min: null,
+        max: null,
+        fontSizeStep: 0,
+      }));
+    },
+  ];
+
+  for (const mutate of cases) {
+    const config = structuredClone(DEFAULT_REPORT_CONFIG);
+    mutate(config);
+    assert.throws(() => validateReportConfig(config), ReportConfigValidationError);
+  }
 });
 
 test('report DSL rejects values outside server-owned catalogs', () => {
