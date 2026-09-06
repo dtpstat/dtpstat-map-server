@@ -8,15 +8,17 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const source = (relativePath) => fs.readFile(path.join(projectRoot, relativePath), 'utf8');
 
 test('admin report builder is catalog-driven, four-tabbed and has no free-form expression editor', async () => {
-  const [notices, editor, css, migration, reportConfig] = await Promise.all([
+  const [notices, editor, rangeUi, css, migration, reportConfig] = await Promise.all([
     source('admin/task-notices.js'),
     source('admin/report-config-editor.js'),
+    source('admin/report-range-ui.js'),
     source('admin/report-config.css'),
     source('db/migrations/V014__configurable_city_reports.sql'),
     source('src/data/report-config.js'),
   ]);
 
   assert.match(notices, /report-config-editor\.js/);
+  assert.match(notices, /report-range-ui\.js/);
   assert.match(editor, /dataset\.taskTab = 'report'/);
   assert.match(editor, /\/api\/admin\/report-config/);
   assert.match(editor, /data-report-view-tab="metrics"/);
@@ -49,6 +51,9 @@ test('admin report builder is catalog-driven, four-tabbed and has no free-form e
   assert.match(editor, /input.*type = 'color'|color\.type = 'color'/s);
   assert.match(editor, /fontSizeStep/);
   assert.match(editor, /column\.formatRules/);
+  assert.match(rangeUi, /От \(≥\)/);
+  assert.match(rangeUi, /До \(<\)/);
+  assert.match(rangeUi, /< 91; ≥ 91 и < 201; ≥ 201/);
   assert.match(css, /report-view-tabs/);
   assert.match(css, /report-format-rule-row/);
   assert.doesNotMatch(editor, /<textarea/i);
@@ -76,6 +81,7 @@ test('public ranking headers, metric cells and conditional formats are generated
   assert.match(list, /city\.metrics\?\.\[column\.metricKey\]/);
   assert.match(list, /applyConditionalFormatting/);
   assert.match(list, /valueMatchesRule/);
+  assert.match(list, /value >= Number\(rule\.max\)/);
   assert.match(list, /column\.formatRules/);
   assert.match(list, /fontSizeStep/);
   assert.match(list, /textDecoration/);
