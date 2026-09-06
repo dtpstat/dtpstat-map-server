@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   DEFAULT_REPORT_CONFIG,
+  reportMetricToRpn,
   ReportConfigValidationError,
   validateReportConfig,
 } from '../src/data/report-config.js';
@@ -13,6 +14,56 @@ test('default bus-lane report configuration is valid', () => {
   assert.equal(config.tableColumns.length, 5);
   assert.equal(config.csvColumns.length, 8);
   assert.equal(config.metrics.length, 3);
+  assert.deepEqual(
+    config.metrics[2].operations.map((operation) => operation.priority),
+    [1, 1],
+  );
+});
+
+test('legacy report operations without explicit priority keep left-to-right semantics', () => {
+  const config = structuredClone(DEFAULT_REPORT_CONFIG);
+  delete config.metrics[2].operations[0].priority;
+  delete config.metrics[2].operations[1].priority;
+
+  const normalized = validateReportConfig(config);
+  assert.deepEqual(
+    normalized.metrics[2].operations.map((operation) => operation.priority),
+    [1, 1],
+  );
+
+  const operators = reportMetricToRpn(normalized.metrics[2])
+    .filter((token) => token.kind === 'operator')
+    .map((token) => token.operator);
+  assert.deepEqual(operators, ['divide', 'multiply']);
+});
+
+test('explicit priorities can express nested parentheses through RPN', () => {
+  const metric = {
+    source: { kind: 'field', field: 'city.population' },
+    operations: [
+      {
+        operator: 'add',
+        priority: 2,
+        operand: { kind: 'constant', value: 10 },
+      },
+      {
+        operator: 'multiply',
+        priority: 1,
+        operand: { kind: 'constant', value: 100 },
+      },
+      {
+        operator: 'subtract',
+        priority: 2,
+        operand: { kind: 'constant', value: 1 },
+      },
+    ],
+  };
+
+  const rpn = reportMetricToRpn(metric);
+  assert.deepEqual(
+    rpn.map((token) => token.kind === 'operator' ? token.operator : 'operand'),
+    ['operand', 'operand', 'add', 'operand', 'operand', 'subtract', 'multiply'],
+  );
 });
 
 test('tram report can calculate separation ratio with a selected line-type group', () => {
@@ -48,6 +99,7 @@ test('tram report can calculate separation ratio with a selected line-type group
         operations: [
           {
             operator: 'divide',
+            priority: 1,
             operand: {
               kind: 'aggregate',
               field: 'geometry.length_m',
@@ -76,6 +128,7 @@ test('tram report can calculate separation ratio with a selected line-type group
   });
 
   assert.equal(config.metrics[2].source.groupValue, 'Обособленные');
+  assert.equal(config.metrics[2].operations[0].priority, 1);
   assert.equal(config.tableColumns[2].scale, 100);
   assert.equal(config.rank.direction, 'desc');
 });
@@ -87,13 +140,22 @@ test('report DSL rejects values outside server-owned catalogs', () => {
     (config) => {
       config.metrics[0].operations.push({
         operator: 'execute',
+        priority: 1,
         operand: { kind: 'constant', value: 1 },
       });
     },
     (config) => {
       config.metrics[0].operations.push({
         operator: 'multiply',
+        priority: 1,
         operand: { kind: 'constant', value: 123.456 },
+      });
+    },
+    (config) => {
+      config.metrics[0].operations.push({
+        operator: 'multiply',
+        priority: 99,
+        operand: { kind: 'constant', value: 1 },
       });
     },
     (config) => { config.tableColumns[2].scale = 7; },
