@@ -2,6 +2,12 @@ import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
 import { buildCityBoundaryGeoJsonPlan } from '../data/city-boundary-geojson-plan.js';
 import { acquireDataImportLock } from './database-locks.js';
 
+// Keep each PostgreSQL jsonb/PostGIS conversion request bounded. The portable
+// city snapshot can contain thousands of detailed MultiPolygons; sending the
+// whole snapshot through one jsonb_to_recordset call creates an avoidable
+// backend memory spike.
+const STAGE_BATCH_SIZE = 50;
+
 const UPSERT_CITIES_SQL = `
   INSERT INTO cities (
     slug,
@@ -158,6 +164,15 @@ const RESTORE_GEOMETRY_LINKS_SQL = `
   WHERE geometry.id = old_link.geometry_id
 `;
 
+/** @param {unknown} error */
+function errorDetails(error) {
+  return {
+    name: error instanceof Error ? error.name : 'Error',
+    code: error?.code ?? null,
+    message: error instanceof Error ? error.message : String(error),
+  };
+}
+
 /**
  * Atomically replace the complete OSM city/town boundary snapshot from a
  * portable GeoJSON export. Existing line-to-boundary links survive when the
@@ -182,6 +197,7 @@ export function createCityBoundaryTransferService(pool) {
         cities: plan.cities.length,
       });
       const client = await pool.connect();
+      let discardClientError;
       try {
         await client.query('BEGIN');
         await acquireDataImportLock(client, pool);
@@ -195,14 +211,41 @@ export function createCityBoundaryTransferService(pool) {
             throw new Error('Not every linked city record was imported');
           }
         }
+        operation.onProgress?.({
+          phase: 'cities',
+          cities: plan.cities.length,
+        });
 
         await client.query(CREATE_STAGE_SQL);
-        const stageResult = await client.query(INSERT_STAGE_SQL, [
-          JSON.stringify(plan.boundaries),
-        ]);
-        if (stageResult.rowCount !== plan.boundaries.length) {
+        const batchCount = Math.ceil(plan.boundaries.length / STAGE_BATCH_SIZE);
+        let stagedPlaces = 0;
+        for (let offset = 0; offset < plan.boundaries.length; offset += STAGE_BATCH_SIZE) {
+          throwIfAdminTaskCancelled(operation.signal);
+          const batch = plan.boundaries.slice(offset, offset + STAGE_BATCH_SIZE);
+          const payload = JSON.stringify(batch);
+          const stageResult = await client.query(INSERT_STAGE_SQL, [payload]);
+          if (stageResult.rowCount !== batch.length) {
+            throw new Error('Not every city boundary was staged');
+          }
+          stagedPlaces += stageResult.rowCount;
+          operation.onProgress?.({
+            phase: 'stage',
+            batch: Math.floor(offset / STAGE_BATCH_SIZE) + 1,
+            batchCount,
+            batchPlaces: batch.length,
+            stagedPlaces,
+            places: plan.boundaries.length,
+            payloadBytes: Buffer.byteLength(payload),
+          });
+        }
+        if (stagedPlaces !== plan.boundaries.length) {
           throw new Error('Not every city boundary was staged');
         }
+
+        operation.onProgress?.({
+          phase: 'validate-stage',
+          places: stagedPlaces,
+        });
         const invalidResult = await client.query(INVALID_STAGE_SQL);
         if (invalidResult.rows.length > 0) {
           const names = invalidResult.rows
@@ -212,12 +255,18 @@ export function createCityBoundaryTransferService(pool) {
           throw new Error(`Imported city boundaries contain invalid polygons: ${names}`);
         }
 
+        operation.onProgress?.({ phase: 'preserve-links' });
         await client.query(PRESERVE_GEOMETRY_LINKS_SQL);
+        operation.onProgress?.({ phase: 'replace-boundaries' });
         await client.query('DELETE FROM city_boundaries');
         const inserted = await client.query(INSERT_BOUNDARIES_SQL);
         if (inserted.rowCount !== plan.boundaries.length) {
           throw new Error('Not every city boundary was imported');
         }
+        operation.onProgress?.({
+          phase: 'restore-links',
+          places: inserted.rowCount,
+        });
         const restored = await client.query(RESTORE_GEOMETRY_LINKS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
 
@@ -250,10 +299,18 @@ export function createCityBoundaryTransferService(pool) {
         await client.query('COMMIT');
         return result;
       } catch (error) {
-        await client.query('ROLLBACK');
+        try {
+          await client.query('ROLLBACK');
+        } catch (rollbackError) {
+          discardClientError = rollbackError;
+          operation.onProgress?.({
+            phase: 'rollback-failed',
+            error: errorDetails(rollbackError),
+          });
+        }
         throw error;
       } finally {
-        client.release();
+        client.release(discardClientError);
       }
     },
   };
