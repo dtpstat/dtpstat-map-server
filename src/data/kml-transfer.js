@@ -430,6 +430,10 @@ export function parseLinesKml(xml) {
       delete sourceProperties.businessTypeCode;
       delete sourceProperties._dtpstat;
     }
+    const placemarkName = textValue(placemark?.name);
+    if (placemarkName && !textValue(sourceProperties.placemarkName)) {
+      sourceProperties.placemarkName = placemarkName;
+    }
 
     const cityName = data.get('dtpstat.cityName') || null;
     const cityFullName = data.get('dtpstat.cityFullName') || cityName;
