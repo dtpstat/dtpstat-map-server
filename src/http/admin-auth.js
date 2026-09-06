@@ -1,80 +1,142 @@
+const SESSION_COOKIE = 'dtpstat_admin_session';
+
 function authorizationError(response, status, error, options = {}) {
   response.set('Cache-Control', 'no-store');
   if (options.challenge) {
     response.set('WWW-Authenticate', 'Basic realm="dtpstat-admin", charset="UTF-8"');
   }
-  if (options.retryAfterSeconds) {
-    response.set('Retry-After', String(options.retryAfterSeconds));
-  }
+  if (options.retryAfterSeconds) response.set('Retry-After', String(options.retryAfterSeconds));
   response.status(status).json({
     error,
-    ...(options.retryAfterSeconds
-      ? { retryAfterSeconds: options.retryAfterSeconds }
-      : {}),
+    ...(options.code ? { code: options.code } : {}),
+    ...(options.retryAfterSeconds ? { retryAfterSeconds: options.retryAfterSeconds } : {}),
   });
+}
+
+function parseCookies(header) {
+  const cookies = new Map();
+  for (const part of String(header ?? '').split(';')) {
+    const separator = part.indexOf('=');
+    if (separator <= 0) continue;
+    const name = part.slice(0, separator).trim();
+    const value = part.slice(separator + 1).trim();
+    if (!name) continue;
+    try { cookies.set(name, decodeURIComponent(value)); }
+    catch { cookies.set(name, value); }
+  }
+  return cookies;
+}
+
+export function adminSessionToken(request) {
+  return parseCookies(request.headers?.cookie).get(SESSION_COOKIE) ?? null;
+}
+
+export function adminSessionCookieName() {
+  return SESSION_COOKIE;
 }
 
 /** @param {import('express').Request | import('node:http').IncomingMessage} request */
 export function adminClientIp(request) {
-  const expressIp = 'ip' in request && typeof request.ip === 'string'
-    ? request.ip
-    : null;
+  const expressIp = 'ip' in request && typeof request.ip === 'string' ? request.ip : null;
   const socketIp = request.socket?.remoteAddress ?? null;
-  return (expressIp || socketIp || '').slice(0, 128) || null;
+  const value = (expressIp || socketIp || '').trim();
+  if (!value) return null;
+  return (value.startsWith('::ffff:') ? value.slice(7) : value).slice(0, 128);
+}
+
+function hasPermission(user, permission) {
+  if (!user) return false;
+  if (user.isSuperuser) return true;
+  if (permission === 'any' || permission === 'profile') return true;
+  if (permission === 'data') return Boolean(user.canManageData);
+  if (permission === 'interface') return Boolean(user.canManageInterface);
+  if (permission === 'users') return Boolean(user.canManageUsers);
+  if (permission === 'audit') return Boolean(user.canViewAudit);
+  if (permission === 'security') return Boolean(user.canManageSecurity);
+  if (permission === 'superuser') return false;
+  return false;
+}
+
+function csrfAllowed(request, authMethod) {
+  if (authMethod !== 'session' || ['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return true;
+  const fetchSite = request.get?.('sec-fetch-site');
+  if (fetchSite && !['same-origin', 'same-site', 'none'].includes(fetchSite)) return false;
+  const origin = request.get?.('origin');
+  if (!origin) return true;
+  try {
+    const expected = `${request.protocol}://${request.get('host')}`;
+    return new URL(origin).origin === expected;
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Central authorization policy for the admin HTML, API endpoints and WebSocket.
- * Authentication remains HTTP Basic for compatibility with existing scripts,
- * but credentials and roles are resolved from ADMIN_USERS instead of ENV.
- *
- * @param {ReturnType<import('../data/admin-security.js').createAdminSecurityService>} securityService
+ * Session cookies are preferred for the interactive web admin. DB-backed Basic
+ * Auth remains accepted for scripts and compatibility clients.
  */
 export function createAdminAuthorization(securityService) {
-  const middleware = (permission = 'any', { recordLogin = false } = {}) =>
+  const authenticateRequest = async (request) => securityService.authenticateRequest({
+    authorization: request.get?.('authorization') ?? request.headers?.authorization,
+    sessionToken: adminSessionToken(request),
+    ipAddress: adminClientIp(request),
+    userAgent: request.get?.('user-agent') ?? request.headers?.['user-agent'],
+  });
+
+  const middleware = (permission = 'any', options = {}) =>
     async (request, response, next) => {
       try {
-        const result = await securityService.authenticate(
-          request.get('authorization'),
-          {
-            ipAddress: adminClientIp(request),
-            recordLogin,
-          },
-        );
-        if (result.status === 'missing') {
-          authorizationError(response, 401, 'Authentication required', { challenge: true });
+        const result = await authenticateRequest(request);
+        if (result.status === 'missing' || result.status === 'invalid' || result.status === 'expired') {
+          authorizationError(response, 401, 'Authentication required', {
+            challenge: Boolean(request.get?.('authorization')),
+          });
           return;
         }
-        if (result.status === 'invalid') {
-          authorizationError(response, 401, 'Invalid username or password', { challenge: true });
+        if (result.status === 'ip-blocked') {
+          authorizationError(response, 403, 'This IP address is blocked by an administrator');
+          return;
+        }
+        if (result.status === 'ip-locked') {
+          authorizationError(response, 429, 'Too many failed login attempts from this IP address', {
+            retryAfterSeconds: result.retryAfterSeconds,
+          });
           return;
         }
         if (result.status === 'blocked') {
-          authorizationError(response, 403, 'Administrator account is blocked');
+          authorizationError(response, 403, 'Administrator account is blocked', {
+            retryAfterSeconds: result.retryAfterSeconds,
+          });
           return;
         }
         if (result.status === 'locked') {
-          authorizationError(
-            response,
-            423,
-            'Administrator account is temporarily locked',
-            { retryAfterSeconds: result.retryAfterSeconds },
-          );
+          authorizationError(response, 423, 'Administrator account is temporarily locked', {
+            retryAfterSeconds: result.retryAfterSeconds,
+          });
           return;
         }
-
+        if (result.status !== 'success') {
+          authorizationError(response, 401, 'Invalid username or password', { challenge: true });
+          return;
+        }
+        if (!csrfAllowed(request, result.authMethod)) {
+          authorizationError(response, 403, 'Cross-site administrative request rejected');
+          return;
+        }
         const user = result.user;
-        const allowed =
-          permission === 'any' ||
-          user.isSuperuser ||
-          (permission === 'data' && user.canManageData) ||
-          (permission === 'interface' && user.canManageInterface) ||
-          (permission === 'superuser' && user.isSuperuser);
-        if (!allowed) {
+        if (user.mustChangePassword && !options.allowPasswordChangePending) {
+          authorizationError(response, 428, 'Password change required', {
+            code: 'password_change_required',
+          });
+          return;
+        }
+        if (!hasPermission(user, permission)) {
           authorizationError(response, 403, 'Administrator permission is required');
           return;
         }
         request.adminUser = user;
+        request.adminSessionId = result.sessionId ?? null;
+        request.adminAuthMethod = result.authMethod ?? 'basic';
         next();
       } catch (error) {
         next(error);
@@ -83,37 +145,32 @@ export function createAdminAuthorization(securityService) {
 
   return {
     requireAny: middleware('any'),
-    requireAdminEntry: middleware('any', { recordLogin: true }),
+    requireProfile: middleware('profile', { allowPasswordChangePending: true }),
     requireData: middleware('data'),
     requireInterface: middleware('interface'),
+    requireUsers: middleware('users'),
+    requireAudit: middleware('audit'),
+    requireSecurity: middleware('security'),
     requireSuperuser: middleware('superuser'),
 
     async authenticateUpgrade(request, permission = 'data') {
-      const result = await securityService.authenticate(
-        request.headers.authorization,
-        { ipAddress: adminClientIp(request) },
-      );
+      const result = await securityService.authenticateRequest({
+        authorization: request.headers.authorization,
+        sessionToken: adminSessionToken(request),
+        ipAddress: adminClientIp(request),
+        userAgent: request.headers['user-agent'],
+      });
       if (result.status !== 'success') return result;
-      const user = result.user;
-      const allowed =
-        user.isSuperuser ||
-        permission === 'any' ||
-        (permission === 'data' && user.canManageData) ||
-        (permission === 'interface' && user.canManageInterface);
-      return allowed
+      if (result.user.mustChangePassword) {
+        return { status: 'password-change-required', user: result.user };
+      }
+      return hasPermission(result.user, permission)
         ? result
-        : { status: 'forbidden', user };
+        : { status: 'forbidden', user: result.user };
     },
   };
 }
 
-/**
- * Audit a synchronous HTTP admin operation. Long-running data tasks are audited
- * by the task manager when the actual background operation reaches a terminal state.
- *
- * @param {ReturnType<import('../data/admin-security.js').createAdminSecurityService>} securityService
- * @param {string} operationType
- */
 export function createAdminOperationAudit(securityService, operationType) {
   return function auditAdminOperation(request, response, next) {
     const startedAt = Date.now();
@@ -121,13 +178,9 @@ export function createAdminOperationAudit(securityService, operationType) {
     const record = () => {
       if (recorded || !request.adminUser) return;
       recorded = true;
-      const status = response.statusCode >= 200 && response.statusCode < 400
-        ? 'succeeded'
-        : 'failed';
+      const status = response.statusCode >= 200 && response.statusCode < 400 ? 'succeeded' : 'failed';
       void securityService.appendAudit({
-        eventType: 'operation',
-        operationType,
-        status,
+        eventType: 'operation', operationType, status,
         durationMs: Math.max(0, Date.now() - startedAt),
         ipAddress: adminClientIp(request),
         userId: request.adminUser.id,
@@ -137,9 +190,7 @@ export function createAdminOperationAudit(securityService, operationType) {
           path: request.originalUrl,
           statusCode: response.statusCode,
         },
-      }).catch((error) => {
-        console.error('Admin audit write failed', error);
-      });
+      }).catch((error) => console.error('Admin audit write failed', error));
     };
     response.once('finish', record);
     response.once('close', record);
