@@ -59,6 +59,16 @@ export const REPORT_OPERATORS = Object.freeze([
   Object.freeze({ key: 'percent', label: '% от' }),
 ]);
 
+export const REPORT_PRECEDENCE_LEVELS = Object.freeze(
+  Array.from({ length: MAX_OPERATIONS }, (_unused, index) => {
+    const value = index + 1;
+    let label = `Уровень ${value}`;
+    if (value === 1) label += ' — обычный';
+    if (value === MAX_OPERATIONS) label += ' — самый высокий';
+    return Object.freeze({ value, label });
+  }),
+);
+
 export const REPORT_GROUPINGS = Object.freeze([
   Object.freeze({ key: 'none', label: 'Без группировки' }),
   Object.freeze({ key: 'line_type.name', label: 'По бизнес-типу линии' }),
@@ -136,10 +146,12 @@ export const DEFAULT_REPORT_CONFIG = Object.freeze({
       operations: Object.freeze([
         Object.freeze({
           operator: 'divide',
+          priority: 1,
           operand: Object.freeze({ kind: 'field', field: 'city.population' }),
         }),
         Object.freeze({
           operator: 'multiply',
+          priority: 1,
           operand: Object.freeze({ kind: 'constant', value: 1000 }),
         }),
       ]),
@@ -204,6 +216,7 @@ export const DEFAULT_REPORT_CONFIG = Object.freeze({
 
 const FIELD_MAP = new Map(REPORT_FIELDS.map((field) => [field.key, field]));
 const OPERATOR_KEYS = new Set(REPORT_OPERATORS.map((operator) => operator.key));
+const PRECEDENCE_KEYS = new Set(REPORT_PRECEDENCE_LEVELS.map((level) => String(level.value)));
 const GROUPING_KEYS = new Set(REPORT_GROUPINGS.map((grouping) => grouping.key));
 const TABLE_KIND_KEYS = new Set(REPORT_TABLE_COLUMN_KINDS.map((kind) => kind.key));
 const CSV_KIND_KEYS = new Set(REPORT_CSV_COLUMN_KINDS.map((kind) => kind.key));
@@ -242,6 +255,14 @@ function normalizeConstant(value, label) {
     throw new ReportConfigValidationError(`${label} must be selected from the constant catalog`);
   }
   return value;
+}
+
+function normalizePriority(value, label) {
+  const priority = value === undefined ? 1 : value;
+  if (!Number.isInteger(priority) || !PRECEDENCE_KEYS.has(String(priority))) {
+    throw new ReportConfigValidationError(`${label} must be selected from the precedence catalog`);
+  }
+  return priority;
 }
 
 function normalizeOperand(value, label, { allowConstant = true, allowedLineTypeNames } = {}) {
@@ -313,6 +334,10 @@ function normalizeMetric(value, index, options) {
       }
       return {
         operator,
+        priority: normalizePriority(
+          operation.priority,
+          `metrics[${index}].operations[${operationIndex}].priority`,
+        ),
         operand: normalizeOperand(
           operation.operand,
           `metrics[${index}].operations[${operationIndex}].operand`,
@@ -321,6 +346,39 @@ function normalizeMetric(value, index, options) {
       };
     }),
   };
+}
+
+/**
+ * Convert the linear metric editor representation into Reverse Polish
+ * Notation. Higher numeric priority executes first; equal priorities are
+ * left-associative. Existing configurations without priority therefore keep
+ * their historic strict left-to-right semantics because every operation
+ * normalizes to priority 1.
+ *
+ * @param {{ source: object, operations?: Array<{ operator: string, priority?: number, operand: object }> }} metric
+ */
+export function reportMetricToRpn(metric) {
+  const output = [{ kind: 'operand', operand: metric.source }];
+  const operators = [];
+
+  for (const operation of metric.operations ?? []) {
+    const current = {
+      kind: 'operator',
+      operator: operation.operator,
+      priority: Number.isInteger(operation.priority) ? operation.priority : 1,
+    };
+    while (
+      operators.length > 0 &&
+      operators[operators.length - 1].priority >= current.priority
+    ) {
+      output.push(operators.pop());
+    }
+    operators.push(current);
+    output.push({ kind: 'operand', operand: operation.operand });
+  }
+
+  while (operators.length > 0) output.push(operators.pop());
+  return output;
 }
 
 function normalizeScale(value, label) {
@@ -434,6 +492,7 @@ export const REPORT_CONFIG_CATALOG = Object.freeze({
   fields: REPORT_FIELDS,
   aggregates: REPORT_AGGREGATES,
   operators: REPORT_OPERATORS,
+  precedenceLevels: REPORT_PRECEDENCE_LEVELS,
   groupings: REPORT_GROUPINGS,
   constants: REPORT_CONSTANTS,
   scales: REPORT_SCALES,
