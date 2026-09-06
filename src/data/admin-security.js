@@ -183,6 +183,7 @@ function publicUser(user) {
     canManageData: Boolean(user.canManageData),
     canManageInterface: Boolean(user.canManageInterface),
     isSuperuser: Boolean(user.isSuperuser),
+    isBootstrap: Boolean(user.isBootstrap),
     isBlocked: Boolean(user.isBlocked),
     lockedUntil: user.lockedUntil ?? null,
     lastLoginAt: user.lastLoginAt ?? null,
@@ -233,7 +234,7 @@ export function createAdminSecurityService(repository) {
     if (count > 0) return { created: false };
     if (!username || !password) {
       throw new Error(
-        'No administrator exists. Set IMPORT_API_USERNAME and IMPORT_API_PASSWORD for the first startup after V016.',
+        'No administrator exists. Set IMPORT_API_USERNAME and IMPORT_API_PASSWORD for the first startup after the admin-security migrations.',
       );
     }
     const normalizedUsername = normalizeAdminUsername(username);
@@ -246,6 +247,7 @@ export function createAdminSecurityService(repository) {
         canManageData: true,
         canManageInterface: true,
         isSuperuser: true,
+        isBootstrap: true,
       });
       await appendAudit({
         eventType: 'security',
@@ -417,6 +419,7 @@ export function createAdminSecurityService(repository) {
       canManageData: booleanField(payload.canManageData, 'canManageData'),
       canManageInterface: booleanField(payload.canManageInterface, 'canManageInterface'),
       isSuperuser: false,
+      isBootstrap: false,
     };
     try {
       return publicUser(await repository.createUser(user));
@@ -441,19 +444,34 @@ export function createAdminSecurityService(repository) {
     }
     const current = await repository.getUser(userId);
     if (!current) return null;
+
+    if (current.isBootstrap) {
+      if (payload.isBlocked === true) {
+        throw new AdminSecurityValidationError(
+          'Bootstrap administrator cannot be manually blocked',
+        );
+      }
+      if (payload.canManageData === false || payload.canManageInterface === false) {
+        throw new AdminSecurityValidationError(
+          'Bootstrap administrator must retain both administrative permissions',
+        );
+      }
+    }
+
+    const protectedUser = current.isBootstrap || current.isSuperuser;
     const next = {
       email: normalizeAdminEmail(payload.email),
-      canManageData: current.isSuperuser
+      canManageData: protectedUser
         ? true
         : booleanField(payload.canManageData, 'canManageData', current.canManageData),
-      canManageInterface: current.isSuperuser
+      canManageInterface: protectedUser
         ? true
         : booleanField(
           payload.canManageInterface,
           'canManageInterface',
           current.canManageInterface,
         ),
-      isBlocked: current.isSuperuser
+      isBlocked: protectedUser
         ? false
         : booleanField(payload.isBlocked, 'isBlocked', current.isBlocked),
     };
