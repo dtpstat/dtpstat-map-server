@@ -8,10 +8,11 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const source = (relativePath) => fs.readFile(path.join(projectRoot, relativePath), 'utf8');
 
 test('admin report builder is catalog-driven and has no free-form expression editor', async () => {
-  const [notices, editor, migration] = await Promise.all([
+  const [notices, editor, migration, reportConfig] = await Promise.all([
     source('admin/task-notices.js'),
     source('admin/report-config-editor.js'),
     source('db/migrations/V014__configurable_city_reports.sql'),
+    source('src/data/report-config.js'),
   ]);
 
   assert.match(notices, /report-config-editor\.js/);
@@ -20,16 +21,20 @@ test('admin report builder is catalog-driven and has no free-form expression edi
   assert.match(editor, /state\.catalog\.fields/);
   assert.match(editor, /state\.catalog\.aggregates/);
   assert.match(editor, /state\.catalog\.operators/);
+  assert.match(editor, /state\.catalog\.operandKinds/);
   assert.match(editor, /state\.catalog\.precedenceLevels/);
   assert.match(editor, /state\.catalog\.groupings/);
   assert.match(editor, /state\.catalog\.constants/);
   assert.match(editor, /state\.catalog\.scales/);
   assert.match(editor, /metricRpnTokens/);
+  assert.match(editor, /metricDependsOn/);
   assert.match(editor, /Фактический порядок вычисления/);
   assert.match(editor, /ОПЗ/);
   assert.match(editor, /generatedMetricKey/);
   assert.doesNotMatch(editor, /<textarea/i);
 
+  assert.match(reportConfig, /key: 'city\.area_m2'/);
+  assert.match(reportConfig, /key: 'metric', label: 'Другая метрика'/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS BUSLANES\.REPORT_CONFIG/i);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS BUSLANES\.CITY_REPORT_VALUES/i);
 });
