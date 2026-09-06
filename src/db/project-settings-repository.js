@@ -13,6 +13,9 @@ const SELECT_SETTINGS_SQL = `
     google_analytics_id AS "googleAnalyticsId",
     show_line_labels AS "showLineLabels",
     (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured",
+    (city_marker_icon IS NOT NULL) AS "cityMarkerIconConfigured",
+    city_marker_icon_width::integer AS "cityMarkerIconWidth",
+    city_marker_icon_height::integer AS "cityMarkerIconHeight",
     updated_at AS "updatedAt"
   FROM project_settings
   WHERE id = 1
@@ -20,6 +23,16 @@ const SELECT_SETTINGS_SQL = `
 
 const SELECT_MAPBOX_TOKEN_SQL = `
   SELECT mapbox_access_token AS "mapboxAccessToken"
+  FROM project_settings
+  WHERE id = 1
+`;
+
+const SELECT_CITY_MARKER_ICON_SQL = `
+  SELECT
+    city_marker_icon AS data,
+    city_marker_icon_mime AS mime,
+    city_marker_icon_width::integer AS width,
+    city_marker_icon_height::integer AS height
   FROM project_settings
   WHERE id = 1
 `;
@@ -59,6 +72,41 @@ const UPDATE_SETTINGS_SQL = `
     google_analytics_id AS "googleAnalyticsId",
     show_line_labels AS "showLineLabels",
     (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured",
+    (city_marker_icon IS NOT NULL) AS "cityMarkerIconConfigured",
+    city_marker_icon_width::integer AS "cityMarkerIconWidth",
+    city_marker_icon_height::integer AS "cityMarkerIconHeight",
+    updated_at AS "updatedAt"
+`;
+
+const UPDATE_CITY_MARKER_ICON_SQL = `
+  UPDATE project_settings
+  SET
+    city_marker_icon = $1,
+    city_marker_icon_mime = $2,
+    city_marker_icon_width = $3,
+    city_marker_icon_height = $4,
+    updated_at = now()
+  WHERE id = 1
+  RETURNING
+    TRUE AS "cityMarkerIconConfigured",
+    city_marker_icon_width::integer AS "cityMarkerIconWidth",
+    city_marker_icon_height::integer AS "cityMarkerIconHeight",
+    updated_at AS "updatedAt"
+`;
+
+const CLEAR_CITY_MARKER_ICON_SQL = `
+  UPDATE project_settings
+  SET
+    city_marker_icon = NULL,
+    city_marker_icon_mime = NULL,
+    city_marker_icon_width = NULL,
+    city_marker_icon_height = NULL,
+    updated_at = now()
+  WHERE id = 1
+  RETURNING
+    FALSE AS "cityMarkerIconConfigured",
+    NULL::integer AS "cityMarkerIconWidth",
+    NULL::integer AS "cityMarkerIconHeight",
     updated_at AS "updatedAt"
 `;
 
@@ -114,6 +162,21 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
     return result.rows[0].mapboxAccessToken ?? null;
   }
 
+  async function getCityMarkerIcon() {
+    const result = await database.query(SELECT_CITY_MARKER_ICON_SQL);
+    const row = result.rows[0];
+    if (!row) {
+      throw new Error('Project settings row is missing; run database migrations');
+    }
+    if (!row.data) return null;
+    return {
+      data: row.data,
+      mime: row.mime,
+      width: row.width,
+      height: row.height,
+    };
+  }
+
   async function getPublicMapConfig() {
     return {
       accessToken: await getMapboxAccessToken(),
@@ -161,11 +224,35 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
     return result.rows[0];
   }
 
+  async function saveCityMarkerIcon(icon) {
+    const result = await database.query(UPDATE_CITY_MARKER_ICON_SQL, [
+      icon.data,
+      icon.mime,
+      icon.width,
+      icon.height,
+    ]);
+    if (!result.rows[0]) {
+      throw new Error('Project settings row is missing; run database migrations');
+    }
+    return result.rows[0];
+  }
+
+  async function clearCityMarkerIcon() {
+    const result = await database.query(CLEAR_CITY_MARKER_ICON_SQL);
+    if (!result.rows[0]) {
+      throw new Error('Project settings row is missing; run database migrations');
+    }
+    return result.rows[0];
+  }
+
   return {
     get,
     save,
     getMapboxAccessToken,
+    getCityMarkerIcon,
     getPublicMapConfig,
     bootstrapMapboxAccessToken,
+    saveCityMarkerIcon,
+    clearCityMarkerIcon,
   };
 }
