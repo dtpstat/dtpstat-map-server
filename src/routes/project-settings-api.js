@@ -12,7 +12,7 @@ import { createAdminOperationAudit } from '../http/admin-auth.js';
  *   projectSettingsRepository: {
  *     get: () => Promise<any>,
  *     save: (payload: unknown) => Promise<any>,
- *     getPublicMapConfig: () => Promise<any>
+ *     getPublicMapConfig?: () => Promise<any>
  *   },
  *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
  *   securityService: ReturnType<import('../data/admin-security.js').createAdminSecurityService>,
@@ -33,18 +33,20 @@ export function createProjectSettingsRouter({
     type: 'application/json',
   });
 
-  // Registered before the general API router, so /api/config is now backed by
-  // PROJECT_SETTINGS. The Mapbox public token necessarily reaches the browser
-  // map here, but it is never returned by the admin settings endpoint.
-  router.get('/config', async (_request, response, next) => {
-    try {
-      const map = await projectSettingsRepository.getPublicMapConfig();
-      response.set('Cache-Control', 'no-cache');
-      response.json({ map });
-    } catch (error) {
-      next(error);
-    }
-  });
+  // In production this route is registered before the general API router, so
+  // /api/config is backed by PROJECT_SETTINGS. Small isolated test repositories
+  // may omit getPublicMapConfig and keep using the legacy test fallback route.
+  if (typeof projectSettingsRepository.getPublicMapConfig === 'function') {
+    router.get('/config', async (_request, response, next) => {
+      try {
+        const map = await projectSettingsRepository.getPublicMapConfig();
+        response.set('Cache-Control', 'no-cache');
+        response.json({ map });
+      } catch (error) {
+        next(error);
+      }
+    });
+  }
 
   router.get('/project', async (_request, response, next) => {
     try {
