@@ -1,5 +1,6 @@
 import './line-types-editor.js';
 import './project-settings-editor.js';
+import './report-config-editor.js';
 import './project-branding.js';
 import './kml-transfer-editor.js';
 
