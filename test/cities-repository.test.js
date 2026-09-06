@@ -6,7 +6,7 @@ import {
   VIEWPORT_EXPANSION_RATIO,
 } from '../src/db/cities-repository.js';
 
-test('city list qualifies ID and does not require a population row', async () => {
+test('city list does not require population but does require line geometries', async () => {
   let sql;
   const repository = createCitiesRepository({
     async query(text) {
@@ -22,6 +22,10 @@ test('city list qualifies ID and does not require a population row', async () =>
   assert.match(
     sql,
     /LEFT JOIN city_populations AS population ON population\.city_id = city\.id/,
+  );
+  assert.match(
+    sql,
+    /EXISTS \(\s*SELECT 1\s*FROM city_geometries AS geometry_presence\s*WHERE geometry_presence\.city_id = city\.id\s*\)/s,
   );
   assert.match(
     sql,
@@ -97,4 +101,8 @@ test('viewport query uses padded selector, returns complete intersecting lines a
   assert.match(sql, /line_type\.code AS business_type_code/);
   assert.match(sql, /'businessTypeCode', visible_geometries\.business_type_code/);
   assert.match(sql, /ST_Covers\(boundary\.geom, viewport\.center\)/);
+  assert.match(
+    sql,
+    /geometry_presence\.city_id = boundary\.city_id/,
+  );
 });
