@@ -81,3 +81,36 @@ test('metric compiler honors explicit precedence through RPN grouping', () => {
   );
   assert.deepEqual(query.values, ['grouped', 10, 100, 1]);
 });
+
+test('metric compiler can read previously materialized metric values', () => {
+  const query = compileReportMetricQuery({
+    key: 'per_capita',
+    source: { kind: 'metric', metricKey: 'network_length_m' },
+    operations: [
+      {
+        operator: 'divide',
+        priority: 1,
+        operand: { kind: 'metric', metricKey: 'population' },
+      },
+    ],
+  });
+
+  assert.match(query.text, /LEFT JOIN city_report_values AS report_source/);
+  assert.match(query.text, /jsonb_typeof\(report_source\.values/);
+  assert.deepEqual(query.values, ['per_capita', 'network_length_m', 'population']);
+  assert.doesNotMatch(query.text, /network_length_m/);
+  assert.doesNotMatch(query.text, /population'/);
+});
+
+test('city area field is calculated from the OSM boundary geography in square metres', () => {
+  const query = compileReportMetricQuery({
+    key: 'city_area_m2',
+    source: { kind: 'field', field: 'city.area_m2' },
+    operations: [],
+  });
+
+  assert.match(query.text, /LEFT JOIN city_boundaries AS boundary/);
+  assert.match(query.text, /ST_Area\(boundary\.geom::geography\)::double precision/);
+  assert.match(query.text, /GROUP BY city\.id, population\.population, boundary\.geom/);
+  assert.deepEqual(query.values, ['city_area_m2']);
+});
