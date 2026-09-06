@@ -87,12 +87,48 @@ async function loadInterfaceEditors() {
   setupInterfaceTabs();
 }
 
+function setupDataSectionLockExtensions() {
+  const status = document.querySelector('#task-status');
+  const dataSection = document.querySelector('#admin-section-data');
+  if (!status || !dataSection) return;
+
+  const exportLinks = () => [
+    ...dataSection.querySelectorAll('a[href^="/api/admin/export/"]'),
+  ];
+  const activeClasses = new Set([
+    'status-running',
+    'status-queued',
+    'status-cancelling',
+  ]);
+  const sync = () => {
+    const locked = [...activeClasses].some((className) => status.classList.contains(className));
+    for (const link of exportLinks()) {
+      link.classList.toggle('is-disabled', locked);
+      link.setAttribute('aria-disabled', String(locked));
+      link.tabIndex = locked ? -1 : 0;
+    }
+  };
+
+  dataSection.addEventListener('click', (event) => {
+    const link = event.target.closest('a[aria-disabled="true"]');
+    if (!link) return;
+    event.preventDefault();
+  });
+  new MutationObserver(sync).observe(status, {
+    attributes: true,
+    attributeFilter: ['class'],
+    childList: true,
+  });
+  sync();
+}
+
 async function loadDataEditors() {
   await import('./json-examples.js');
   // Insert portable-KML controls before admin.js snapshots all data forms so
   // the same single-task lock covers them as well.
   await import('./kml-transfer-editor.js');
   await import('./admin.js');
+  setupDataSectionLockExtensions();
 }
 
 function setupPrimarySections(user) {
