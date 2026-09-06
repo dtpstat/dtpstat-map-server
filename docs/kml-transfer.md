@@ -88,7 +88,9 @@ placemarkName
 
 При portable round-trip настоящее `placemarkName` входит в `dtpstat.properties`, поэтому сохраняется независимо от локальных ID. Это важно: видимый `<Placemark><name>` переносимого KML может быть сгенерирован как удобная подпись, если исходного имени линии нет. Поэтому для portable KML источником истины является `dtpstat.properties.placemarkName`, а не любой текст `<name>`.
 
-На публичной карте непустой `placemarkName` показывается в popup при наведении мыши на линию. Для popup используется текстовый API Mapbox (`setText`), поэтому содержимое KML name не интерпретируется как HTML.
+На публичной карте непустой `placemarkName` всегда может показываться в popup при наведении мыши на линию. Для popup используется текстовый API Mapbox (`setText`), поэтому содержимое KML name не интерпретируется как HTML.
+
+Дополнительно `PROJECT_SETTINGS.SHOW_LINE_LABELS` управляет постоянными symbol-подписями вдоль линии. Галочка находится в **Настройка интерфейса → Проект → «Отображать подписи линий на карте»**. Она не отключает hover-popup: это два независимых способа отображения одного `placemarkName`.
 
 Не следует использовать обычное GeoJSON `properties.name` для имени линии: в канонических transfer-данных это поле уже используется для полного названия города.
 
@@ -137,7 +139,9 @@ Content-Type: application/vnd.google-earth.kml+xml
 
 Также принимаются `application/xml` и `text/xml`.
 
-Оба endpoint защищены Basic Auth админки. Импорт участвует в общем single-task guard и выполняет замену линий в транзакции.
+Оба endpoint требуют DB-admin с `CAN_MANAGE_DATA` либо superadmin. HTTP Basic является транспортом credentials; после bootstrap проверка выполняется по `ADMIN_USERS`.
+
+Импорт участвует в общем single-task guard раздела **Управление данными** и выполняет замену линий в транзакции.
 
 ## Внешний KML — другое правило
 
@@ -149,6 +153,6 @@ Content-Type: application/vnd.google-earth.kml+xml
 
 Поле `type` там является `LINE_TYPES.NAME`, а не `businessTypeCode`. Если NAME отсутствует в target DB, он создаётся автоматически, БД генерирует CODE, начальный TITLE равен NAME.
 
-Для каждого выбранного линейного Placemark также сохраняется его стандартный KML `<name>` как `placemarkName`. Пустое или отсутствующее имя не создаёт popup.
+Для каждого выбранного линейного Placemark также сохраняется его стандартный KML `<name>` как `placemarkName`. Пустое или отсутствующее имя не создаёт hover-popup и постоянную line-label.
 
 То есть `dtpstat.businessTypeCode` используется только в переносимом snapshot с собственным словарём; внешний KML работает по source NAME.
