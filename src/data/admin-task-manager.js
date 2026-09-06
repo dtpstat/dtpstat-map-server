@@ -63,7 +63,8 @@ function activeStatus(status) {
  *     endpoint: string,
  *     completedAt: string
  *   }>,
- *   recordSuccessfulUpdate?: (update: object) => Promise<unknown>
+ *   recordSuccessfulUpdate?: (update: object) => Promise<unknown>,
+ *   afterSuccessfulUpdate?: (update: object) => Promise<object | void>
  * }} [dependencies]
  */
 export function createAdminTaskManager(dependencies = {}) {
@@ -71,6 +72,7 @@ export function createAdminTaskManager(dependencies = {}) {
   const schedule = dependencies.schedule ?? setImmediate;
   const now = dependencies.now ?? (() => new Date().toISOString());
   const recordSuccessfulUpdate = dependencies.recordSuccessfulUpdate;
+  const afterSuccessfulUpdate = dependencies.afterSuccessfulUpdate;
   const listeners = new Set();
   const successfulUpdates = new Map(
     (dependencies.initialSuccessfulUpdates ?? []).map((update) => [
@@ -160,6 +162,18 @@ export function createAdminTaskManager(dependencies = {}) {
             await recordSuccessfulUpdate(structuredClone(update));
           } catch (error) {
             appendLog(task, 'warning', 'Не удалось сохранить отметку успешного обновления', {
+              message: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+        if (afterSuccessfulUpdate) {
+          try {
+            const details = await afterSuccessfulUpdate(structuredClone(update));
+            if (details !== undefined) {
+              appendLog(task, 'info', 'Производные публичные данные обновлены', details);
+            }
+          } catch (error) {
+            appendLog(task, 'warning', 'Не удалось обновить производные публичные данные', {
               message: error instanceof Error ? error.message : String(error),
             });
           }
