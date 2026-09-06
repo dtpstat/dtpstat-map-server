@@ -1,5 +1,4 @@
 import { WebSocket, WebSocketServer } from 'ws';
-import { verifyBasicAuthorization } from './basic-auth.js';
 
 /** @param {import('ws').WebSocket} socket @param {object} payload */
 function send(socket, payload) {
@@ -8,16 +7,26 @@ function send(socket, payload) {
   }
 }
 
+function rejectUpgrade(socket, status, reason, headers = []) {
+  socket.write(
+    `HTTP/1.1 ${status} ${reason}\r\n` +
+    'Cache-Control: no-store\r\n' +
+    headers.map(([name, value]) => `${name}: ${value}\r\n`).join('') +
+    'Connection: close\r\n\r\n',
+  );
+  socket.destroy();
+}
+
 /**
  * @param {{
  *   adminTasks: ReturnType<import('../data/admin-task-manager.js').createAdminTaskManager>,
- *   importApi: { username: string, password: string },
+ *   adminAuth: ReturnType<import('./admin-auth.js').createAdminAuthorization>,
  *   path?: string
  * }} dependencies
  */
 export function createAdminWebSocketGateway({
   adminTasks,
-  importApi,
+  adminAuth,
   path = '/api/admin/ws',
 }) {
   const webSocketServer = new WebSocketServer({ noServer: true });
@@ -49,19 +58,32 @@ export function createAdminWebSocketGateway({
           return;
         }
         if (pathname !== path) return;
-        if (!verifyBasicAuthorization(request.headers.authorization, importApi)) {
-          socket.write(
-            'HTTP/1.1 401 Unauthorized\r\n' +
-            'WWW-Authenticate: Basic realm="data-import", charset="UTF-8"\r\n' +
-            'Cache-Control: no-store\r\n' +
-            'Connection: close\r\n\r\n',
-          );
-          socket.destroy();
-          return;
-        }
-        webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
-          webSocketServer.emit('connection', webSocket, request);
-        });
+        void adminAuth.authenticateUpgrade(request, 'data')
+          .then((result) => {
+            if (result.status === 'success') {
+              webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
+                webSocketServer.emit('connection', webSocket, request);
+              });
+              return;
+            }
+            if (result.status === 'locked') {
+              rejectUpgrade(socket, 423, 'Locked', [
+                ['Retry-After', String(result.retryAfterSeconds ?? 1)],
+              ]);
+              return;
+            }
+            if (result.status === 'blocked' || result.status === 'forbidden') {
+              rejectUpgrade(socket, 403, 'Forbidden');
+              return;
+            }
+            rejectUpgrade(socket, 401, 'Unauthorized', [
+              ['WWW-Authenticate', 'Basic realm="dtpstat-admin", charset="UTF-8"'],
+            ]);
+          })
+          .catch((error) => {
+            console.error('Admin WebSocket authentication failed', error);
+            rejectUpgrade(socket, 503, 'Service Unavailable');
+          });
       };
       attachedServers.set(server, upgrade);
       server.on('upgrade', upgrade);
