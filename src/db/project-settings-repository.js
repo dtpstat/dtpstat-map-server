@@ -24,6 +24,14 @@ const SELECT_MAPBOX_TOKEN_SQL = `
   WHERE id = 1
 `;
 
+const SELECT_MAPBOX_BOOTSTRAP_STATE_SQL = `
+  SELECT
+    mapbox_access_token_initialized AS initialized,
+    (mapbox_access_token IS NOT NULL) AS configured
+  FROM project_settings
+  WHERE id = 1
+`;
+
 const UPDATE_SETTINGS_SQL = `
   UPDATE project_settings
   SET
@@ -62,7 +70,6 @@ const BOOTSTRAP_MAPBOX_TOKEN_SQL = `
     updated_at = NOW()
   WHERE id = 1
     AND mapbox_access_token_initialized = FALSE
-    AND $1::text IS NOT NULL
   RETURNING
     (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured"
 `;
@@ -117,13 +124,23 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
   }
 
   async function bootstrapMapboxAccessToken(value) {
+    const stateResult = await database.query(SELECT_MAPBOX_BOOTSTRAP_STATE_SQL);
+    const state = stateResult.rows[0];
+    if (!state) {
+      throw new Error('Project settings row is missing; run database migrations');
+    }
+    if (state.initialized) {
+      return { initialized: false, configured: Boolean(state.configured) };
+    }
+
     const token = normalizeMapboxAccessToken(value, { optional: true });
+    if (!token) {
+      return { initialized: false, configured: false };
+    }
     const result = await database.query(BOOTSTRAP_MAPBOX_TOKEN_SQL, [token]);
     return {
       initialized: result.rows.length > 0,
-      configured: result.rows[0]?.mapboxAccessTokenConfigured ?? Boolean(
-        await getMapboxAccessToken()
-      ),
+      configured: Boolean(result.rows[0]?.mapboxAccessTokenConfigured),
     };
   }
 
