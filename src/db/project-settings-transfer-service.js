@@ -1,5 +1,6 @@
 import { normalizeAdminSecuritySettings } from '../data/admin-security.js';
 import { buildLineTypesPlan } from '../data/line-types.js';
+import { normalizeMapboxAccessToken } from '../data/mapbox-access-token.js';
 import { buildProjectSettingsPlan, ProjectSettingsValidationError } from '../data/project-settings.js';
 import {
   orderReportMetricsByDependencies,
@@ -59,11 +60,23 @@ function validateEnvelope(payload) {
 
 function normalizeProjectSettings(payload) {
   const input = object(payload, 'projectSettings');
-  const { showLineLabels = false, ...base } = input;
+  const hasMapboxAccessToken = Object.hasOwn(input, 'mapboxAccessToken');
+  const {
+    showLineLabels = false,
+    mapboxAccessToken: rawMapboxAccessToken,
+    ...base
+  } = input;
   if (typeof showLineLabels !== 'boolean') {
     throw new ProjectSettingsValidationError('showLineLabels must be boolean');
   }
-  return { ...buildProjectSettingsPlan(base), showLineLabels };
+  return {
+    ...buildProjectSettingsPlan(base),
+    showLineLabels,
+    hasMapboxAccessToken,
+    mapboxAccessToken: hasMapboxAccessToken
+      ? normalizeMapboxAccessToken(rawMapboxAccessToken, { optional: true })
+      : null,
+  };
 }
 
 function normalizeTransferredSecurity(payload, schemaVersion) {
@@ -77,7 +90,8 @@ const EXPORT_PROJECT_SETTINGS_SQL = `
   SELECT project_name AS "projectName", keywords, footer_html AS "footerHtml",
     yandex_metrika_id AS "yandexMetrikaId",
     google_analytics_id AS "googleAnalyticsId",
-    show_line_labels AS "showLineLabels"
+    show_line_labels AS "showLineLabels",
+    mapbox_access_token AS "mapboxAccessToken"
   FROM project_settings WHERE id = 1
 `;
 
@@ -111,7 +125,13 @@ const UPDATE_PROJECT_SETTINGS_SQL = `
   UPDATE project_settings SET
     project_name=$1, keywords=$2::text[], footer_html=$3,
     yandex_metrika_id=$4, google_analytics_id=$5,
-    show_line_labels=$6, updated_at=NOW()
+    show_line_labels=$6,
+    mapbox_access_token=CASE WHEN $7::boolean THEN $8::text ELSE mapbox_access_token END,
+    mapbox_access_token_initialized=CASE
+      WHEN $7::boolean THEN TRUE
+      ELSE mapbox_access_token_initialized
+    END,
+    updated_at=NOW()
   WHERE id=1
 `;
 
@@ -302,6 +322,8 @@ export function createProjectSettingsTransferService(pool) {
           projectSettings.yandexMetrikaId,
           projectSettings.googleAnalyticsId,
           projectSettings.showLineLabels,
+          projectSettings.hasMapboxAccessToken,
+          projectSettings.mapboxAccessToken,
         ]);
         await client.query(SAVE_REPORT_CONFIG_SQL, [
           JSON.stringify(reportConfig.metrics),
