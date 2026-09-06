@@ -226,10 +226,13 @@ test('public numeric columns normalize safe conditional formatting rules', () =>
   assert.deepEqual(REPORT_CONFIG_CATALOG.formatFontSizes.map((item) => item.value), [-2, -1, 0, 1, 2]);
 });
 
-test('conditional formatting rejects invalid ranges, colors, sizes and text columns', () => {
+test('conditional formatting rejects invalid or empty ranges, colors, sizes and text columns', () => {
   const cases = [
     (config) => {
       config.tableColumns[2].formatRules = [{ min: 20, max: 10, fontSizeStep: 0 }];
+    },
+    (config) => {
+      config.tableColumns[2].formatRules = [{ min: 10, max: 10, fontSizeStep: 0 }];
     },
     (config) => {
       config.tableColumns[2].formatRules = [{ min: null, max: null, color: 'red', fontSizeStep: 0 }];
