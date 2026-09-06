@@ -200,7 +200,20 @@ async function materializeReport(client, config) {
   await client.query('DELETE FROM city_report_values');
   const inserted = await client.query(`
     INSERT INTO city_report_values(city_id,values,updated_at)
-    SELECT id,'{}'::jsonb,NOW() FROM cities ORDER BY id RETURNING city_id
+    SELECT city.id,'{}'::jsonb,NOW()
+    FROM cities AS city
+    WHERE EXISTS (
+      SELECT 1
+      FROM city_boundaries AS boundary_presence
+      WHERE boundary_presence.city_id = city.id
+    )
+      AND EXISTS (
+        SELECT 1
+        FROM city_geometries AS geometry_presence
+        WHERE geometry_presence.city_id = city.id
+      )
+    ORDER BY city.id
+    RETURNING city_id
   `);
 
   for (const metric of orderReportMetricsByDependencies(config.metrics)) {
