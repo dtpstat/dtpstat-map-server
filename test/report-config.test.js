@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   DEFAULT_REPORT_CONFIG,
+  orderReportMetricsByDependencies,
+  REPORT_CONFIG_CATALOG,
   reportMetricToRpn,
   ReportConfigValidationError,
   validateReportConfig,
@@ -18,6 +20,13 @@ test('default bus-lane report configuration is valid', () => {
     config.metrics[2].operations.map((operation) => operation.priority),
     [1, 1],
   );
+});
+
+test('city area in square metres is available as a catalog field', () => {
+  const area = REPORT_CONFIG_CATALOG.fields.find((field) => field.key === 'city.area_m2');
+  assert.deepEqual(area?.sourceKinds, ['field']);
+  assert.match(area?.label ?? '', /м²/);
+  assert.ok(REPORT_CONFIG_CATALOG.operandKinds.some((kind) => kind.key === 'metric'));
 });
 
 test('legacy report operations without explicit priority keep left-to-right semantics', () => {
@@ -63,6 +72,43 @@ test('explicit priorities can express nested parentheses through RPN', () => {
   assert.deepEqual(
     rpn.map((token) => token.kind === 'operator' ? token.operator : 'operand'),
     ['operand', 'operand', 'add', 'operand', 'operand', 'subtract', 'multiply'],
+  );
+});
+
+test('metrics can reference other metrics and are ordered by dependencies', () => {
+  const config = structuredClone(DEFAULT_REPORT_CONFIG);
+  const laneLength = config.metrics[0];
+  const population = config.metrics[1];
+  const derived = config.metrics[2];
+  derived.source = { kind: 'metric', metricKey: 'lane_length_m' };
+  derived.operations[0].operand = { kind: 'metric', metricKey: 'population' };
+  config.metrics = [derived, population, laneLength];
+
+  const normalized = validateReportConfig(config);
+  assert.deepEqual(normalized.metrics[0].source, {
+    kind: 'metric',
+    metricKey: 'lane_length_m',
+  });
+  assert.deepEqual(
+    orderReportMetricsByDependencies(normalized.metrics).map((metric) => metric.key),
+    ['lane_length_m', 'population', 'lane_m_per_1000'],
+  );
+});
+
+test('metric references reject missing targets and dependency cycles', () => {
+  const missing = structuredClone(DEFAULT_REPORT_CONFIG);
+  missing.metrics[2].source = { kind: 'metric', metricKey: 'missing_metric' };
+  assert.throws(
+    () => validateReportConfig(missing),
+    /references unknown metric missing_metric/,
+  );
+
+  const cyclic = structuredClone(DEFAULT_REPORT_CONFIG);
+  cyclic.metrics[0].source = { kind: 'metric', metricKey: 'lane_m_per_1000' };
+  cyclic.metrics[2].source = { kind: 'metric', metricKey: 'lane_length_m' };
+  assert.throws(
+    () => validateReportConfig(cyclic),
+    /Metric dependency cycle/,
   );
 });
 
