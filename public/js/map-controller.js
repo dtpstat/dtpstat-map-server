@@ -31,6 +31,20 @@ export function findTopLabelLayerId(layers = []) {
     .find((layer) => !layer.id.startsWith(LAYER_PREFIX) && layer.type === 'symbol')?.id;
 }
 
+/**
+ * KML Placemark names are intentionally stored under placemarkName. The
+ * generic GeoJSON property "name" is used by transfer formats for the city's
+ * full name and must not become a line tooltip by accident.
+ *
+ * @param {any} feature
+ */
+export function lineFeatureName(feature) {
+  const value = feature?.properties?.placemarkName;
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  return normalized || null;
+}
+
 /** @param {string} style */
 function dashArray(style) {
   if (style === 'dashed') return [2.5, 1.5];
@@ -133,6 +147,11 @@ export async function createMapController(config) {
   map.addControl(new window.mapboxgl.NavigationControl(), 'top-right');
   await waitForMapLoad(map);
 
+  const lineNamePopup = new window.mapboxgl.Popup({
+    closeButton: false,
+    closeOnClick: false,
+    offset: 8,
+  });
   let currentGeoJson = EMPTY_COLLECTION;
   let currentCities = EMPTY_COLLECTION;
   let currentLineTypes = [DEFAULT_LINE_TYPE];
@@ -176,6 +195,7 @@ export async function createMapController(config) {
   }
 
   function removeBusLaneLayers() {
+    lineNamePopup.remove();
     for (const layerId of lineLayerIds.values()) {
       if (map.getLayer(layerId)) map.removeLayer(layerId);
     }
@@ -221,6 +241,7 @@ export async function createMapController(config) {
 
   await ensureMapLayers();
   map.on('style.load', () => {
+    lineNamePopup.remove();
     lineLayerIds = new Map();
     void ensureMapLayers()
       .then(() => {
@@ -232,6 +253,26 @@ export async function createMapController(config) {
   map.on('moveend', () => {
     if (viewportHandler) viewportHandler(readViewport(map));
   });
+  map.on('mousemove', (event) => {
+    const layers = [...lineLayerIds.values()].filter((layerId) => map.getLayer(layerId));
+    if (layers.length === 0) {
+      lineNamePopup.remove();
+      return;
+    }
+    const feature = map
+      .queryRenderedFeatures(event.point, { layers })
+      .find((candidate) => lineFeatureName(candidate));
+    const name = lineFeatureName(feature);
+    if (!name) {
+      lineNamePopup.remove();
+      return;
+    }
+    lineNamePopup
+      .setLngLat(event.lngLat)
+      .setText(name)
+      .addTo(map);
+  });
+  map.getCanvas().addEventListener('mouseleave', () => lineNamePopup.remove());
   map.on('click', CITY_LAYER_ID, (event) => {
     const cityId = Number(event.features?.[0]?.properties?.cityId);
     if (Number.isSafeInteger(cityId) && citySelectHandler) citySelectHandler(cityId);
@@ -257,6 +298,7 @@ export async function createMapController(config) {
       if (layerId && map.getLayer(layerId)) {
         map.setLayoutProperty(layerId, 'visibility', enabled ? 'visible' : 'none');
       }
+      if (!enabled) lineNamePopup.remove();
     },
     onViewportChange(handler) {
       viewportHandler = handler;
@@ -269,15 +311,18 @@ export async function createMapController(config) {
       citySelectHandler = handler;
     },
     setViewportData(geojson) {
+      lineNamePopup.remove();
       currentGeoJson = geojson;
       ensureBusLaneLayers();
       map.getSource(SOURCE_ID).setData(geojson);
     },
     clearViewportData() {
+      lineNamePopup.remove();
       currentGeoJson = EMPTY_COLLECTION;
       map.getSource(SOURCE_ID).setData(EMPTY_COLLECTION);
     },
     focusCity(bounds) {
+      lineNamePopup.remove();
       const compact = window.matchMedia('(max-width: 760px)').matches;
       map.fitBounds(
         [[bounds[0], bounds[1]], [bounds[2], bounds[3]]],
