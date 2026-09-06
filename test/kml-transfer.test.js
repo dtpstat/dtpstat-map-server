@@ -78,6 +78,7 @@ test('portable KML keeps geometry type separate from numeric business type code'
   assert.match(xml, new RegExp(KML_BUSINESS_TYPES_PROPERTY.replace('.', '\\.')));
   assert.ok(xml.indexOf(KML_BUSINESS_TYPES_PROPERTY) < xml.indexOf('<Placemark>'));
   assert.match(xml, /dtpstat\.businessTypeCode/);
+  assert.match(xml, /<name>Улица 1<\/name>/);
   assert.match(xml, /<LineString>/);
   assert.match(xml, /<MultiGeometry>/);
 
@@ -87,9 +88,44 @@ test('portable KML keeps geometry type separate from numeric business type code'
   assert.equal(parsed.features[0].geometry.type, 'LineString');
   assert.equal(parsed.features[0].properties._dtpstat.businessTypeCode, 7);
   assert.equal(parsed.features[0].properties.lanes, 1);
+  assert.equal(parsed.features[0].properties.placemarkName, 'Улица 1');
   assert.equal(parsed.features[1].geometry.type, 'MultiLineString');
   assert.equal(parsed.features[1].properties._dtpstat.businessTypeCode, 0);
   assert.equal(parsed.features[1].properties.lanes, 2);
+});
+
+test('portable KML imports Placemark name when source properties do not duplicate it', () => {
+  const dictionary = JSON.stringify({
+    schemaVersion: 2,
+    lineTypes: [
+      {
+        code: 0,
+        name: 'default',
+        title: 'Обычные',
+        color: '#045b69',
+        style: 'solid',
+        width: 4,
+      },
+    ],
+  });
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+<ExtendedData>
+<Data name="dtpstat.businessLineTypes"><value><![CDATA[${dictionary}]]></value></Data>
+</ExtendedData>
+<Placemark>
+<name>  Проспект Мира  </name>
+<ExtendedData>
+<Data name="dtpstat.businessTypeCode"><value><![CDATA[0]]></value></Data>
+<Data name="dtpstat.multiple"><value><![CDATA[1]]></value></Data>
+</ExtendedData>
+<LineString><coordinates>30,60 30.1,60.1</coordinates></LineString>
+</Placemark>
+</Document></kml>`;
+
+  const parsed = parseLinesKml(xml);
+  assert.equal(parsed.features[0].properties.placemarkName, 'Проспект Мира');
+  assert.equal('name' in parsed.features[0].properties, false);
 });
 
 test('portable KML validates the complete business type/style dictionary before geometry', () => {
