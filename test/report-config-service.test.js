@@ -110,9 +110,9 @@ test('city area field is calculated from the OSM boundary geography in square me
     operations: [],
   });
 
-  assert.match(query.text, /ST_Area\(geom::geography\)::double precision AS area_m2/);
-  assert.match(query.text, /FROM city_boundaries/);
-  assert.match(query.text, /boundary\.area_m2/);
-  assert.match(query.text, /GROUP BY city\.id, population\.population, boundary\.area_m2/);
+  assert.match(query.text, /ST_Area\(city_boundary\.geom::geography\)::double precision/);
+  assert.match(query.text, /FROM city_boundaries AS city_boundary/);
+  assert.match(query.text, /city_boundary\.city_id = city\.id/);
+  assert.match(query.text, /GROUP BY city\.id, population\.population/);
   assert.deepEqual(query.values, ['city_area_m2']);
 });
