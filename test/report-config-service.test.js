@@ -34,6 +34,27 @@ test('metric compiler uses server SQL fragments and parameters for selected grou
   assert.deepEqual(query.values, ['separation_ratio', 'Обособленные']);
 });
 
+test('metric compiler uses PostgreSQL percentile_cont for median geometry values', () => {
+  const query = compileReportMetricQuery({
+    key: 'median_length',
+    source: {
+      kind: 'aggregate',
+      field: 'geometry.length_m',
+      aggregate: 'median',
+      groupBy: 'line_type.name',
+      groupValue: 'Обособленные',
+    },
+    operations: [],
+  });
+
+  assert.match(
+    query.text,
+    /PERCENTILE_CONT\(0\.5\) WITHIN GROUP \(ORDER BY geometry\.length_m::double precision\)/,
+  );
+  assert.match(query.text, /FILTER \(\s*WHERE LOWER\(BTRIM\(line_type\.name\)\)/s);
+  assert.deepEqual(query.values, ['median_length', 'Обособленные']);
+});
+
 test('metric compiler parameterizes constants instead of interpolating them as expressions', () => {
   const query = compileReportMetricQuery({
     key: 'per_1000',
