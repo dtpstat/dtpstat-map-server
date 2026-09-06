@@ -68,6 +68,8 @@ LINE_TYPE_ID
 
 `BOUNDARY_ID` индексирован отдельно для связи геометрий с OSM polygon.
 
+`PROPERTIES JSONB` содержит source metadata, в том числе KML `placemarkName`. GIN/expression-индекс для него сейчас намеренно не создаётся: popup имени линии не ищет `placemarkName` в PostgreSQL, а получает property вместе с уже найденной по GiST viewport-геометрией. Если в будущем появится SQL-фильтр/поиск по source properties, индекс следует проектировать под конкретный предикат, а не добавлять общий GIN заранее.
+
 ## LINE_TYPES
 
 - `PRIMARY KEY (ID)`;
