@@ -57,7 +57,7 @@ if (taskTabs && controlCard && !document.querySelector('[data-task-tab="report"]
             <div class="report-section-heading">
               <div>
                 <h5>Расчётные метрики</h5>
-                <p>Метрика может использовать поля города, агрегаты геометрий и уже определённые расчётные метрики. Зависимости пересчитываются автоматически в правильном порядке; циклические ссылки запрещены. Арифметические операции имеют явный приоритет.</p>
+                <p>Метрика может использовать поля города, агрегаты геометрий и уже определённые расчётные метрики. Зависимости пересчитываются автоматически в правильном порядке; циклические ссылки запрещены. Арифметические операции имеют явный приоритет. Карточки метрик и операции внутри них можно переставлять вверх/вниз.</p>
               </div>
               <button class="secondary report-add-button" id="report-add-metric" type="button">Добавить метрику</button>
             </div>
@@ -474,16 +474,47 @@ if (form) {
       const key = document.createElement('code');
       key.textContent = metric.key;
       title.append(nameLabel, key);
+
+      const metricActions = document.createElement('span');
+      metricActions.className = 'report-row-actions';
+      const upMetric = document.createElement('button');
+      upMetric.type = 'button';
+      upMetric.className = 'secondary report-small-button';
+      upMetric.textContent = '↑';
+      upMetric.title = 'Поднять метрику';
+      upMetric.disabled = metricIndex === 0;
+      upMetric.addEventListener('click', () => {
+        [state.config.metrics[metricIndex - 1], state.config.metrics[metricIndex]] = [
+          state.config.metrics[metricIndex],
+          state.config.metrics[metricIndex - 1],
+        ];
+        renderAll();
+      });
+      const downMetric = document.createElement('button');
+      downMetric.type = 'button';
+      downMetric.className = 'secondary report-small-button';
+      downMetric.textContent = '↓';
+      downMetric.title = 'Опустить метрику';
+      downMetric.disabled = metricIndex === state.config.metrics.length - 1;
+      downMetric.addEventListener('click', () => {
+        [state.config.metrics[metricIndex + 1], state.config.metrics[metricIndex]] = [
+          state.config.metrics[metricIndex],
+          state.config.metrics[metricIndex + 1],
+        ];
+        renderAll();
+      });
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.className = 'danger report-small-button';
       remove.textContent = 'Удалить';
+      remove.title = 'Удалить метрику';
       const dependencyTarget = metricIsReferencedByMetric(metric.key);
       remove.disabled = state.config.metrics.length <= 1 || dependencyTarget;
       if (dependencyTarget) {
         remove.title = 'Сначала уберите ссылки на эту метрику из других метрик';
       }
-      header.append(title, remove);
+      metricActions.append(upMetric, downMetric, remove);
+      header.append(title, metricActions);
       card.append(header);
 
       name.addEventListener('change', () => {
@@ -519,7 +550,7 @@ if (form) {
 
       const priorityHelp = document.createElement('p');
       priorityHelp.className = 'report-priority-help';
-      priorityHelp.textContent = 'Больший уровень выполняется раньше. Одинаковый уровень — слева направо. Ссылки на другие метрики выбираются из списка; варианты, создающие уже очевидный цикл зависимостей, скрываются.';
+      priorityHelp.textContent = 'Больший уровень выполняется раньше. Одинаковый уровень — слева направо. Порядок строк операций также является частью формулы и меняется кнопками ↑/↓. Ссылки на другие метрики выбираются из списка; варианты, создающие уже очевидный цикл зависимостей, скрываются.';
       card.append(priorityHelp);
 
       addOperation.addEventListener('click', () => {
@@ -573,6 +604,35 @@ if (form) {
           (value) => { operation.operand = value; },
           { currentMetricKey: metric.key },
         );
+
+        const operationActions = document.createElement('span');
+        operationActions.className = 'report-row-actions';
+        const upOperation = document.createElement('button');
+        upOperation.type = 'button';
+        upOperation.className = 'secondary report-small-button';
+        upOperation.textContent = '↑';
+        upOperation.title = 'Поднять операцию';
+        upOperation.disabled = operationIndex === 0;
+        upOperation.addEventListener('click', () => {
+          [metric.operations[operationIndex - 1], metric.operations[operationIndex]] = [
+            metric.operations[operationIndex],
+            metric.operations[operationIndex - 1],
+          ];
+          renderAll();
+        });
+        const downOperation = document.createElement('button');
+        downOperation.type = 'button';
+        downOperation.className = 'secondary report-small-button';
+        downOperation.textContent = '↓';
+        downOperation.title = 'Опустить операцию';
+        downOperation.disabled = operationIndex === metric.operations.length - 1;
+        downOperation.addEventListener('click', () => {
+          [metric.operations[operationIndex + 1], metric.operations[operationIndex]] = [
+            metric.operations[operationIndex],
+            metric.operations[operationIndex + 1],
+          ];
+          renderAll();
+        });
         const removeOperation = document.createElement('button');
         removeOperation.type = 'button';
         removeOperation.className = 'danger report-small-button report-remove-operation';
@@ -582,7 +642,8 @@ if (form) {
           metric.operations.splice(operationIndex, 1);
           renderAll();
         });
-        row.append(operatorLabel, priorityLabel, operandHost, removeOperation);
+        operationActions.append(upOperation, downOperation, removeOperation);
+        row.append(operatorLabel, priorityLabel, operandHost, operationActions);
         operations.append(row);
       });
       if (!metric.operations.length) {
