@@ -14,8 +14,25 @@ async function loadAdminSession() {
   return payload;
 }
 
+function redirectToLogin() {
+  if (!window.location.pathname.endsWith('/login.html')) {
+    window.location.replace('/admin/login.html');
+  }
+}
+
 if (typeof window !== 'undefined') {
-  window.dtpstatAdminSession = loadAdminSession();
+  window.dtpstatAdminSession = loadAdminSession().catch((error) => {
+    if (error.status === 401 || error.status === 403 || error.status === 423 || error.status === 429) {
+      redirectToLogin();
+    }
+    throw error;
+  });
+  window.dtpstatReloadAdminSession = async () => {
+    const session = await loadAdminSession();
+    window.dtpstatAdminSession = Promise.resolve(session);
+    window.dispatchEvent(new CustomEvent('dtpstat:admin-session-changed', { detail: session }));
+    return session;
+  };
 }
 
 export { loadAdminSession };
