@@ -38,6 +38,7 @@ function snapshot(task) {
     cancellable: task.cancellable,
     log: task.log,
   };
+  if (task.actor) value.actor = task.actor;
   if (task.result !== undefined) value.result = task.result;
   if (task.error !== undefined) value.error = task.error;
   return structuredClone(value);
@@ -48,10 +49,18 @@ function activeStatus(status) {
   return status === 'queued' || status === 'running' || status === 'cancelling';
 }
 
+function elapsedMilliseconds(startedAt, completedAt) {
+  const start = Date.parse(startedAt);
+  const end = Date.parse(completedAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  return Math.max(0, end - start);
+}
+
 /**
- * Run every mutating /admin operation through one process-local single-task
- * guard. The last task and its complete log remain available after completion
- * and are discarded only when the next task is accepted.
+ * Run every mutating data-management operation through one process-local
+ * single-task guard. Interface settings are intentionally outside this lock.
+ * The last task and its complete log remain available after completion and are
+ * discarded only when the next data task is accepted.
  *
  * @param {{
  *   randomUUID?: () => string,
@@ -64,7 +73,8 @@ function activeStatus(status) {
  *     completedAt: string
  *   }>,
  *   recordSuccessfulUpdate?: (update: object) => Promise<unknown>,
- *   afterSuccessfulUpdate?: (update: object) => Promise<object | void>
+ *   afterSuccessfulUpdate?: (update: object) => Promise<object | void>,
+ *   recordTaskAudit?: (entry: object) => Promise<unknown>
  * }} [dependencies]
  */
 export function createAdminTaskManager(dependencies = {}) {
@@ -73,6 +83,7 @@ export function createAdminTaskManager(dependencies = {}) {
   const now = dependencies.now ?? (() => new Date().toISOString());
   const recordSuccessfulUpdate = dependencies.recordSuccessfulUpdate;
   const afterSuccessfulUpdate = dependencies.afterSuccessfulUpdate;
+  const recordTaskAudit = dependencies.recordTaskAudit;
   const listeners = new Set();
   const successfulUpdates = new Map(
     (dependencies.initialSuccessfulUpdates ?? []).map((update) => [
@@ -115,12 +126,40 @@ export function createAdminTaskManager(dependencies = {}) {
     emit({ type: 'log', taskId: task.id, entry });
   }
 
+  async function persistTaskAudit(task) {
+    if (!recordTaskAudit || !task.actor) return;
+    try {
+      await recordTaskAudit({
+        eventType: 'operation',
+        operationType: task.type,
+        status: task.status,
+        durationMs: elapsedMilliseconds(
+          task.startedAt ?? task.createdAt,
+          task.completedAt,
+        ),
+        ipAddress: task.actor.ipAddress ?? null,
+        userId: task.actor.userId ?? null,
+        username: task.actor.username ?? null,
+        details: {
+          taskId: task.id,
+          endpoint: task.endpoint,
+          parameters: task.parameters,
+        },
+      });
+    } catch (error) {
+      appendLog(task, 'warning', 'Не удалось записать аудит admin-операции', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   /** @param {any} task @param {(context: object) => Promise<object>} executor */
   async function run(task, executor) {
     if (task.controller.signal.aborted) {
       task.status = 'cancelled';
       task.completedAt = now();
       appendLog(task, 'warning', 'Задача отменена до запуска');
+      await persistTaskAudit(task);
       emit({ type: 'task', task: snapshot(task) });
       return;
     }
@@ -203,13 +242,20 @@ export function createAdminTaskManager(dependencies = {}) {
       }
     } finally {
       task.completedAt ??= now();
+      await persistTaskAudit(task);
       emit({ type: 'task', task: snapshot(task) });
     }
   }
 
   return {
     /**
-     * @param {{ type: string, endpoint: string, parameters?: object, recordsSuccessfulUpdate?: boolean }} definition
+     * @param {{
+     *   type: string,
+     *   endpoint: string,
+     *   parameters?: object,
+     *   recordsSuccessfulUpdate?: boolean,
+     *   actor?: { userId?: number, username?: string, ipAddress?: string | null }
+     * }} definition
      * @param {(context: { signal: AbortSignal, log: Function, beginCommit: Function }) => Promise<object>} executor
      */
     start(definition, executor) {
@@ -222,6 +268,7 @@ export function createAdminTaskManager(dependencies = {}) {
         type: definition.type,
         endpoint: definition.endpoint,
         parameters: structuredClone(definition.parameters ?? {}),
+        actor: definition.actor ? structuredClone(definition.actor) : null,
         status: 'queued',
         createdAt: now(),
         startedAt: null,
