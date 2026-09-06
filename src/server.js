@@ -61,7 +61,7 @@ async function main() {
   const pool = createPool(config.database);
   const repository = createCitiesRepository(pool);
   const lineTypesRepository = createLineTypesRepository(pool);
-  const projectSettingsRepository = createProjectSettingsRepository(pool);
+  const projectSettingsRepository = createProjectSettingsRepository(pool, config.publicMap);
   const settingsTransferService = createProjectSettingsTransferService(pool);
   const reportConfigService = createReportConfigService(pool);
   const exportRepository = createDataExportRepository(pool);
@@ -113,6 +113,18 @@ async function main() {
     }),
     {
       successDetails: (result) => ({created: result.created}),
+    },
+  );
+  await runServiceOperation(
+    'project-settings.mapbox.bootstrap',
+    () => projectSettingsRepository.bootstrapMapboxAccessToken(
+      config.publicMap.bootstrapAccessToken,
+    ),
+    {
+      successDetails: (result) => ({
+        initializedFromEnvironment: result.initialized,
+        configured: result.configured,
+      }),
     },
   );
   await runServiceOperation(
