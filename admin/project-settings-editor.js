@@ -70,10 +70,10 @@ if (typeof document !== 'undefined') {
                 <small>По одному на строку или через запятую. Используются в meta keywords; дубликаты удаляются.</small>
               </label>
 
-              <section class="project-settings-section" aria-labelledby="project-metrics-title">
+              <section class="project-settings-section" aria-labelledby="project-identifiers-title">
                 <div>
-                  <h5 id="project-metrics-title">Сбор метрик</h5>
-                  <p>Пустой ID отключает соответствующий счётчик и внешний скрипт не загружается.</p>
+                  <h5 id="project-identifiers-title">Идентификаторы и API</h5>
+                  <p>Идентификаторы аналитики можно оставить пустыми. Mapbox token хранится в БД и никогда не читается обратно в админку открытым текстом.</p>
                 </div>
                 <div class="project-metrics-grid">
                   <label>Yandex Metrica ID
@@ -87,6 +87,12 @@ if (typeof document !== 'undefined') {
                            pattern="[Gg]-[A-Za-z0-9]{4,32}"
                            placeholder="Например: G-XXXXXXXXXX">
                     <small>Measurement ID GA4 вида G-….</small>
+                  </label>
+                  <label>Mapbox public access token
+                    <input name="mapboxAccessToken" type="password" maxlength="2048"
+                           autocomplete="new-password" spellcheck="false"
+                           placeholder="pk.…">
+                    <small>Если ключ уже задан, показывается *****. Оставь поле без изменений, чтобы сохранить текущий ключ; введённый новый pk.* заменит его.</small>
                   </label>
                 </div>
               </section>
@@ -130,7 +136,9 @@ if (typeof document !== 'undefined') {
       const keywords = form.elements.namedItem('keywords');
       const yandexMetrikaId = form.elements.namedItem('yandexMetrikaId');
       const googleAnalyticsId = form.elements.namedItem('googleAnalyticsId');
+      const mapboxAccessToken = form.elements.namedItem('mapboxAccessToken');
       const footerHtml = form.elements.namedItem('footerHtml');
+      const saveButton = form.querySelector('button[type="submit"]');
       const message = document.querySelector('#project-settings-message');
       const updatedAt = document.querySelector('#project-settings-updated-at');
       const toolbar = document.querySelector('#project-html-toolbar');
@@ -154,6 +162,34 @@ if (typeof document !== 'undefined') {
           .map((item) => item.trim())
           .filter(Boolean);
       }
+
+      function setMapboxState(configured) {
+        mapboxAccessToken.dataset.configured = configured ? 'true' : 'false';
+        mapboxAccessToken.dataset.changed = 'false';
+        mapboxAccessToken.dataset.masked = configured ? 'true' : 'false';
+        mapboxAccessToken.value = configured ? '*****' : '';
+      }
+
+      mapboxAccessToken.addEventListener('focus', () => {
+        if (mapboxAccessToken.dataset.masked !== 'true') return;
+        mapboxAccessToken.value = '';
+        mapboxAccessToken.dataset.masked = 'false';
+        mapboxAccessToken.dataset.changed = 'false';
+      });
+      mapboxAccessToken.addEventListener('input', () => {
+        mapboxAccessToken.dataset.masked = 'false';
+        mapboxAccessToken.dataset.changed = 'true';
+      });
+      mapboxAccessToken.addEventListener('blur', () => {
+        if (
+          mapboxAccessToken.dataset.configured === 'true' &&
+          mapboxAccessToken.dataset.changed !== 'true' &&
+          mapboxAccessToken.value === ''
+        ) {
+          mapboxAccessToken.value = '*****';
+          mapboxAccessToken.dataset.masked = 'true';
+        }
+      });
 
       function insertSnippet(snippet) {
         const start = footerHtml.selectionStart ?? footerHtml.value.length;
@@ -190,6 +226,7 @@ if (typeof document !== 'undefined') {
         keywords.value = settings.keywords.join('\n');
         yandexMetrikaId.value = settings.yandexMetrikaId ?? '';
         googleAnalyticsId.value = settings.googleAnalyticsId ?? '';
+        setMapboxState(Boolean(settings.mapboxAccessTokenConfigured));
         footerHtml.value = settings.footerHtml;
         updatedAt.textContent = formatUpdatedAt(settings.updatedAt);
       }
@@ -215,8 +252,10 @@ if (typeof document !== 'undefined') {
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (!form.reportValidity()) return;
+        saveButton.disabled = true;
         setMessage('Проверяем и сохраняем…');
         try {
+          const mapboxChanged = mapboxAccessToken.dataset.changed === 'true';
           const response = await fetch('/api/admin/project-settings', {
             method: 'PUT',
             credentials: 'same-origin',
@@ -230,6 +269,9 @@ if (typeof document !== 'undefined') {
               keywords: splitKeywords(keywords.value),
               yandexMetrikaId: yandexMetrikaId.value.trim() || null,
               googleAnalyticsId: googleAnalyticsId.value.trim() || null,
+              mapboxAccessToken: mapboxChanged
+                ? mapboxAccessToken.value.trim() || null
+                : null,
               footerHtml: footerHtml.value,
             }),
           });
@@ -240,6 +282,8 @@ if (typeof document !== 'undefined') {
           window.dispatchEvent(new CustomEvent('dtpstat:project-settings-changed'));
         } catch (error) {
           setMessage(error.message, 'error');
+        } finally {
+          saveButton.disabled = false;
         }
       });
 
