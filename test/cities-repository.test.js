@@ -6,7 +6,7 @@ import {
   VIEWPORT_EXPANSION_RATIO,
 } from '../src/db/cities-repository.js';
 
-test('city list qualifies ID after joining OSM boundaries', async () => {
+test('city list qualifies ID and does not require a population row', async () => {
   let sql;
   const repository = createCitiesRepository({
     async query(text) {
@@ -19,6 +19,14 @@ test('city list qualifies ID after joining OSM boundaries', async () => {
 
   assert.match(sql, /city\.id::integer AS id/);
   assert.match(sql, /ST_PointOnSurface\(boundary\.geom\)/);
+  assert.match(
+    sql,
+    /LEFT JOIN city_populations AS population ON population\.city_id = city\.id/,
+  );
+  assert.match(
+    sql,
+    /CASE WHEN city\.is_large IS TRUE THEN 'large' ELSE 'small' END AS category/,
+  );
   assert.doesNotMatch(sql, /\n\s+id::integer AS id/);
 });
 
