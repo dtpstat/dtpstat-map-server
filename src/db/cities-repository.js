@@ -34,7 +34,7 @@ const LIST_CITIES_SQL = `
     population.population,
     city.lane_length_m AS "laneLengthMeters",
     city.lane_m_per_1000 AS "laneMetersPer1000",
-    CASE WHEN city.is_large THEN 'large' ELSE 'small' END AS category,
+    CASE WHEN city.is_large IS TRUE THEN 'large' ELSE 'small' END AS category,
     report.rank::integer AS rank,
     report.rank_value AS "rankValue",
     COALESCE(report.values, '{}'::jsonb) AS metrics,
@@ -49,10 +49,10 @@ const LIST_CITIES_SQL = `
       ST_Y(ST_PointOnSurface(boundary.geom))
     ) AS center
   FROM cities AS city
-  JOIN city_populations AS population ON population.city_id = city.id
+  LEFT JOIN city_populations AS population ON population.city_id = city.id
   JOIN city_boundaries AS boundary ON boundary.city_id = city.id
   LEFT JOIN city_report_values AS report ON report.city_id = city.id
-  ORDER BY city.is_large DESC, report.rank NULLS LAST, city.name ASC
+  ORDER BY city.is_large DESC NULLS LAST, report.rank NULLS LAST, city.name ASC
 `;
 
 const CITY_GEOMETRIES_SQL = `
