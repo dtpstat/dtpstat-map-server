@@ -1,5 +1,28 @@
+.report-interface-panel {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.report-interface-panel #report-config-form {
+  min-height: auto;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.report-interface-panel .report-config-sections {
+  min-width: 0;
+  min-height: auto;
+  flex: none;
+  padding-right: 0;
+  overflow: visible;
+}
+
 .report-config-editor {
+  width: 100%;
+  min-width: 0;
   min-height: 0;
+  overflow: visible;
 }
 
 .report-view-tabs {
@@ -39,6 +62,7 @@
 }
 
 .report-builder-section {
+  min-width: 0;
   display: grid;
   gap: .75rem;
   padding: .85rem;
@@ -87,6 +111,7 @@
 }
 
 .report-metric-card {
+  min-width: 0;
   display: grid;
   gap: .8rem;
   padding: .8rem;
@@ -118,17 +143,20 @@
 }
 
 .report-operand-grid {
+  min-width: 0;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: .55rem;
 }
 
 .report-operation-list {
+  min-width: 0;
   display: grid;
   gap: .55rem;
 }
 
 .report-operation-row {
+  min-width: 0;
   display: grid;
   grid-template-columns: minmax(7rem, .32fr) minmax(9rem, .42fr) minmax(0, 1fr) auto;
   align-items: end;
@@ -186,11 +214,13 @@
 }
 
 .report-column-list {
+  min-width: 0;
   display: grid;
   gap: .65rem;
 }
 
 .report-column-card {
+  min-width: 0;
   display: grid;
   gap: .6rem;
   padding: .65rem;
@@ -218,6 +248,7 @@
 }
 
 .report-formatting-box {
+  min-width: 0;
   display: grid;
   gap: .5rem;
   padding: .6rem;
@@ -232,6 +263,7 @@
 }
 
 .report-format-rule-row {
+  min-width: 0;
   display: grid;
   grid-template-columns: minmax(6rem, .35fr) minmax(6rem, .35fr) minmax(16rem, 1.25fr) minmax(8rem, .55fr) minmax(8rem, .65fr) auto;
   align-items: end;
