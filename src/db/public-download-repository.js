@@ -43,6 +43,11 @@ const EXPORT_PUBLIC_CSV_SQL = `
   FROM cities AS city
   JOIN city_boundaries AS boundary ON boundary.city_id = city.id
   LEFT JOIN city_report_values AS report ON report.city_id = city.id
+  WHERE EXISTS (
+    SELECT 1
+    FROM city_geometries AS geometry_presence
+    WHERE geometry_presence.city_id = city.id
+  )
   GROUP BY
     city.id,
     city.name,
