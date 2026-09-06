@@ -188,6 +188,10 @@ export function createApp({
   const publicPageTemplate = readFileSync(path.join(config.projectRoot, 'index.html'), 'utf8');
 
   app.disable('x-powered-by');
+  app.set(
+    'trust proxy',
+    config.http?.trustProxyHops > 0 ? config.http.trustProxyHops : false,
+  );
   app.use(
     helmet({
       crossOriginEmbedderPolicy: false,
