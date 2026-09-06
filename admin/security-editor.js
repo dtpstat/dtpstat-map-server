@@ -14,6 +14,8 @@ if (host) {
               data-security-tab="audit" aria-controls="security-panel-audit">Аудит</button>
       <button type="button" role="tab" aria-selected="false"
               data-security-tab="settings" aria-controls="security-panel-settings">Защита входа</button>
+      <button type="button" role="tab" aria-selected="false"
+              data-security-tab="transfer" aria-controls="security-panel-transfer">Настройки проекта</button>
     </nav>
 
     <section class="security-panel" id="security-panel-users" data-security-panel="users">
@@ -91,6 +93,24 @@ if (host) {
       </form>
       <p id="security-settings-message" class="security-message" role="status"></p>
     </section>
+
+    <section class="security-panel" id="security-panel-transfer" data-security-panel="transfer" hidden>
+      <h3>Экспорт / импорт всех настроек проекта</h3>
+      <p class="panel-description">Переносит оформление проекта, типы линий, расчётные метрики/таблицу/CSV/рейтинг и параметры защиты входа. Пользователи, пароли, журнал аудита, данные городов/линий/населения и инфраструктурные ENV-секреты в файл не входят.</p>
+      <div class="security-transfer-actions">
+        <a class="secondary-link" href="/api/admin/settings/export" download="project-settings.json">
+          Выгрузить настройки JSON
+        </a>
+        <form id="security-settings-import-form" class="security-transfer-form">
+          <label>Файл настроек проекта
+            <input name="file" type="file" accept=".json,application/json" required>
+          </label>
+          <p class="security-transfer-warning">Импорт заменяет PROJECT_SETTINGS, REPORT_CONFIG и параметры защиты входа; типы линий сопоставляются по NAME, их оформление обновляется, отсутствующие NAME создаются с новым локальным CODE. Лишние типы целевой БД не удаляются.</p>
+          <button type="submit">Импортировать настройки</button>
+        </form>
+      </div>
+      <p id="security-transfer-message" class="security-message" role="status"></p>
+    </section>
   `;
 
   const tabs = [...host.querySelectorAll('[data-security-tab]')];
@@ -100,8 +120,10 @@ if (host) {
   const auditBody = host.querySelector('#security-audit-body');
   const auditMessage = host.querySelector('#security-audit-message');
   const settingsMessage = host.querySelector('#security-settings-message');
+  const transferMessage = host.querySelector('#security-transfer-message');
   const createUserForm = host.querySelector('#security-create-user');
   const settingsForm = host.querySelector('#security-settings-form');
+  const settingsImportForm = host.querySelector('#security-settings-import-form');
 
   function selectTab(key) {
     for (const tab of tabs) {
@@ -171,8 +193,14 @@ if (host) {
 
     card.querySelector('.security-user-heading strong').textContent = user.username;
     const badge = card.querySelector('.security-user-badge');
-    badge.textContent = user.isSuperuser ? 'SUPERUSER' : 'USER';
+    badge.textContent = user.isBootstrap
+      ? 'BOOTSTRAP SUPERUSER'
+      : user.isSuperuser ? 'SUPERUSER' : 'USER';
     badge.classList.toggle('is-superuser', user.isSuperuser);
+    badge.classList.toggle('is-bootstrap', user.isBootstrap);
+    if (user.isBootstrap) {
+      badge.title = 'Первоначальная учётная запись: удаление, ручная блокировка и отзыв прав запрещены. Временная блокировка от перебора сохраняется.';
+    }
     const lastLogin = card.querySelector('.security-user-last-login');
     lastLogin.textContent = user.lastLoginAt
       ? `Вход: ${new Date(user.lastLoginAt).toLocaleString('ru-RU')}`
@@ -183,7 +211,7 @@ if (host) {
     form.elements.canManageData.checked = Boolean(user.canManageData);
     form.elements.canManageInterface.checked = Boolean(user.canManageInterface);
     form.elements.isBlocked.checked = Boolean(user.isBlocked);
-    if (user.isSuperuser) {
+    if (user.isSuperuser || user.isBootstrap) {
       form.elements.canManageData.checked = true;
       form.elements.canManageInterface.checked = true;
       form.elements.canManageData.disabled = true;
@@ -342,6 +370,41 @@ if (host) {
       setMessage(settingsMessage, 'Параметры защиты сохранены.', 'success');
     } catch (error) {
       setMessage(settingsMessage, error.message, 'error');
+    }
+  });
+
+  settingsImportForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!settingsImportForm.reportValidity()) return;
+    const file = new FormData(settingsImportForm).get('file');
+    if (!(file instanceof File) || file.size === 0) return;
+    setMessage(transferMessage, 'Проверяем и импортируем настройки…');
+    const submit = settingsImportForm.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    try {
+      let payload;
+      try {
+        payload = JSON.parse(await file.text());
+      } catch {
+        throw new Error('Файл не содержит корректный JSON');
+      }
+      const result = await api('/api/admin/settings/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      settingsImportForm.reset();
+      const imported = result.imported ?? {};
+      setMessage(
+        transferMessage,
+        `Настройки импортированы: проект «${imported.projectName ?? '—'}», типов ${imported.lineTypes ?? 0}, метрик ${imported.metrics ?? 0}, пересчитано городов ${imported.materializedCities ?? 0}.`,
+        'success',
+      );
+      await Promise.all([loadUsers(), loadSettings(), loadAudit()]);
+    } catch (error) {
+      setMessage(transferMessage, error.message, 'error');
+    } finally {
+      submit.disabled = false;
     }
   });
 
