@@ -1,4 +1,5 @@
 import express, { Router } from 'express';
+import { CITY_MARKER_ICON } from '../../public/js/city-marker-icon.js';
 import {
   CITY_MARKER_ICON_MAX_BYTES,
   CityMarkerIconValidationError,
@@ -12,12 +13,15 @@ import {
 } from '../data/project-settings.js';
 import { createAdminOperationAudit } from '../http/admin-auth.js';
 
+const DEFAULT_CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'base64');
+
 /**
  * @param {{
  *   projectSettingsRepository: {
  *     get: () => Promise<any>,
  *     save: (payload: unknown) => Promise<any>,
  *     getPublicMapConfig?: () => Promise<any>,
+ *     getCityMarkerIcon?: () => Promise<any>,
  *     saveCityMarkerIcon?: (icon: object) => Promise<any>,
  *     clearCityMarkerIcon?: () => Promise<any>
  *   },
@@ -59,6 +63,20 @@ export function createProjectSettingsRouter({
       }
     });
   }
+
+  router.get('/city-marker-icon', async (_request, response, next) => {
+    try {
+      const icon = typeof projectSettingsRepository.getCityMarkerIcon === 'function'
+        ? await projectSettingsRepository.getCityMarkerIcon()
+        : null;
+      response
+        .set('Cache-Control', 'no-cache')
+        .type(icon?.mime ?? 'image/png')
+        .send(icon?.data ?? DEFAULT_CITY_MARKER_PNG);
+    } catch (error) {
+      next(error);
+    }
+  });
 
   router.get('/project', async (_request, response, next) => {
     try {
