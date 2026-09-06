@@ -95,11 +95,12 @@ test('metric compiler can read previously materialized metric values', () => {
     ],
   });
 
-  assert.match(query.text, /LEFT JOIN city_report_values AS report_source/);
-  assert.match(query.text, /jsonb_typeof\(report_source\.values/);
+  assert.match(query.text, /FROM city_report_values AS dependency_report/);
+  assert.match(query.text, /jsonb_typeof\(dependency_report\.values/);
+  assert.match(query.text, /dependency_report\.city_id = city\.id/);
   assert.deepEqual(query.values, ['per_capita', 'network_length_m', 'population']);
   assert.doesNotMatch(query.text, /network_length_m/);
-  assert.doesNotMatch(query.text, /population'/);
+  assert.doesNotMatch(query.text, /'population'/);
 });
 
 test('city area field is calculated from the OSM boundary geography in square metres', () => {
@@ -109,8 +110,9 @@ test('city area field is calculated from the OSM boundary geography in square me
     operations: [],
   });
 
-  assert.match(query.text, /LEFT JOIN city_boundaries AS boundary/);
-  assert.match(query.text, /ST_Area\(boundary\.geom::geography\)::double precision/);
-  assert.match(query.text, /GROUP BY city\.id, population\.population, boundary\.geom/);
+  assert.match(query.text, /ST_Area\(geom::geography\)::double precision AS area_m2/);
+  assert.match(query.text, /FROM city_boundaries/);
+  assert.match(query.text, /boundary\.area_m2/);
+  assert.match(query.text, /GROUP BY city\.id, population\.population, boundary\.area_m2/);
   assert.deepEqual(query.values, ['city_area_m2']);
 });
