@@ -14,7 +14,11 @@ const REQUIRED_ENV = {
 test('loadConfig enables HTTP with safe defaults', () => {
   const config = loadConfig(REQUIRED_ENV, '/project');
 
-  assert.deepEqual(config.http, { enabled: true, port: 3000 });
+  assert.deepEqual(config.http, {
+    enabled: true,
+    port: 3000,
+    trustProxyHops: 0,
+  });
   assert.equal(config.https.enabled, false);
   assert.equal(config.host, '0.0.0.0');
   assert.equal(config.database.maxConnections, 10);
@@ -22,6 +26,8 @@ test('loadConfig enables HTTP with safe defaults', () => {
   assert.equal(config.database.port, 5432);
   assert.equal(config.database.user, 'example_app');
   assert.equal(config.database.schema, 'buslanes');
+  assert.equal(config.importApi.bootstrapUsername, 'importer');
+  assert.equal(config.importApi.bootstrapPassword, 'test-secret');
   assert.equal(config.importApi.maxBodyBytes, 25 * 1024 * 1024);
   assert.equal(config.kmlUpdate.sources.length, 0);
   assert.equal(config.kmlUpdate.timeoutMs, 30000);
@@ -63,6 +69,34 @@ test('loadConfig enables HTTP with safe defaults', () => {
       'https://overpass.kumi.systems/api/interpreter',
       'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
     ],
+  );
+});
+
+test('loadConfig allows removing bootstrap credentials after ADMIN_USERS exists', () => {
+  const config = loadConfig({
+    DATABASE_NAME: 'example',
+    DATABASE_ROLE: 'example_app',
+    DATABASE_ROLE_PASSWORD: 'database-secret',
+    MAPBOX_ACCESS_TOKEN: 'pk.test',
+  }, '/project');
+
+  assert.equal(config.importApi.bootstrapUsername, null);
+  assert.equal(config.importApi.bootstrapPassword, null);
+});
+
+test('loadConfig configures only explicit trusted reverse proxy hops', () => {
+  const config = loadConfig({
+    ...REQUIRED_ENV,
+    HTTP_TRUST_PROXY_HOPS: '1',
+  }, '/project');
+  assert.equal(config.http.trustProxyHops, 1);
+
+  assert.throws(
+    () => loadConfig({
+      ...REQUIRED_ENV,
+      HTTP_TRUST_PROXY_HOPS: '17',
+    }, '/project'),
+    /HTTP_TRUST_PROXY_HOPS must be an integer between 0 and 16/,
   );
 });
 
@@ -190,14 +224,12 @@ test('loadConfig rejects invalid protocol and port combinations', () => {
   );
 });
 
-test('loadConfig requires database, map, and import credentials', () => {
+test('loadConfig requires database and public map settings, not ongoing admin credentials', () => {
   assert.throws(
     () =>
       loadConfig(
         {
           MAPBOX_ACCESS_TOKEN: 'pk.test',
-          IMPORT_API_USERNAME: 'importer',
-          IMPORT_API_PASSWORD: 'secret',
         },
         '/project',
       ),
@@ -210,24 +242,9 @@ test('loadConfig requires database, map, and import credentials', () => {
           DATABASE_NAME: 'example',
           DATABASE_ROLE: 'example_app',
           DATABASE_ROLE_PASSWORD: 'database-secret',
-          IMPORT_API_USERNAME: 'importer',
-          IMPORT_API_PASSWORD: 'secret',
         },
         '/project',
       ),
     /MAPBOX_ACCESS_TOKEN is required/,
-  );
-  assert.throws(
-    () =>
-      loadConfig(
-        {
-          DATABASE_NAME: 'example',
-          DATABASE_ROLE: 'example_app',
-          DATABASE_ROLE_PASSWORD: 'database-secret',
-          MAPBOX_ACCESS_TOKEN: 'pk.test',
-        },
-        '/project',
-      ),
-    /IMPORT_API_USERNAME is required/,
   );
 });
