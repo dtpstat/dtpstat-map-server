@@ -20,9 +20,13 @@ test('admin report builder is catalog-driven and has no free-form expression edi
   assert.match(editor, /state\.catalog\.fields/);
   assert.match(editor, /state\.catalog\.aggregates/);
   assert.match(editor, /state\.catalog\.operators/);
+  assert.match(editor, /state\.catalog\.precedenceLevels/);
   assert.match(editor, /state\.catalog\.groupings/);
   assert.match(editor, /state\.catalog\.constants/);
   assert.match(editor, /state\.catalog\.scales/);
+  assert.match(editor, /metricRpnTokens/);
+  assert.match(editor, /Фактический порядок вычисления/);
+  assert.match(editor, /ОПЗ/);
   assert.match(editor, /generatedMetricKey/);
   assert.doesNotMatch(editor, /<textarea/i);
 
