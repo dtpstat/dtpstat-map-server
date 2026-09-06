@@ -23,6 +23,10 @@ export async function loadMapConfig() {
   return payload.map;
 }
 
+export function loadProjectSettings() {
+  return getJson('/api/project');
+}
+
 export async function loadCities() {
   const payload = await getJson('/api/cities');
   return payload.cities;
