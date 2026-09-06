@@ -35,6 +35,45 @@
   gap: .75rem;
 }
 
+.project-city-marker-editor {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(14rem, 1fr) auto;
+  gap: .8rem;
+  align-items: end;
+}
+
+.project-city-marker-preview {
+  display: grid;
+  grid-template-columns: 64px;
+  gap: .35rem;
+  justify-items: center;
+  color: var(--muted);
+  font-size: .68rem;
+  text-align: center;
+}
+
+.project-city-marker-preview img {
+  width: 64px;
+  height: 64px;
+  padding: 8px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f2f5f5;
+}
+
+.project-city-marker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+}
+
+.project-city-marker-actions button {
+  width: auto;
+  white-space: nowrap;
+}
+
 .project-settings-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -106,13 +145,33 @@
   color: var(--danger);
 }
 
+@media (max-width: 900px) {
+  .project-city-marker-editor {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .project-city-marker-actions {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 700px) {
   .task-tabs {
     grid-template-columns: 1fr;
   }
 
-  .project-metrics-grid {
+  .project-metrics-grid,
+  .project-city-marker-editor {
     grid-template-columns: 1fr;
+  }
+
+  .project-city-marker-preview {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .project-city-marker-actions {
+    grid-column: auto;
   }
 
   .project-settings-meta {
