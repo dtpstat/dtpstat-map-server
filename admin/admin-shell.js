@@ -6,6 +6,75 @@ function canManageInterface(user) {
   return Boolean(user?.isSuperuser || user?.canManageInterface);
 }
 
+function canAccessSecurity(user) {
+  return Boolean(
+    user?.isSuperuser || user?.canManageUsers || user?.canViewAudit || user?.canManageSecurity,
+  );
+}
+
+function ensureProfileSection() {
+  const tabsHost = document.querySelector('#admin-primary-tabs');
+  const sectionsHost = document.querySelector('.admin-sections');
+  if (!tabsHost || !sectionsHost) return;
+
+  if (!document.querySelector('[data-admin-section-tab="profile"]')) {
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.role = 'tab';
+    tab.dataset.adminSectionTab = 'profile';
+    tab.setAttribute('aria-selected', 'false');
+    tab.setAttribute('aria-controls', 'admin-section-profile');
+    tab.textContent = 'Профиль';
+    tabsHost.append(tab);
+  }
+
+  if (!document.querySelector('[data-admin-section-panel="profile"]')) {
+    const section = document.createElement('section');
+    section.className = 'admin-section-panel';
+    section.id = 'admin-section-profile';
+    section.dataset.adminSectionPanel = 'profile';
+    section.role = 'tabpanel';
+    section.hidden = true;
+    section.innerHTML = `
+      <div class="admin-layout admin-layout-single">
+        <section class="settings-card" aria-labelledby="profile-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">АКТИВНАЯ УЧЁТНАЯ ЗАПИСЬ</p>
+              <h2 id="profile-title">Профиль</h2>
+            </div>
+          </div>
+          <div id="profile-editor-host"><p class="empty-state">Загружаем профиль…</p></div>
+        </section>
+      </div>
+    `;
+    sectionsHost.append(section);
+  }
+}
+
+function ensureTopbarActions() {
+  const host = document.querySelector('.topbar-status');
+  if (!host || document.querySelector('#admin-logout')) return;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.id = 'admin-logout';
+  button.className = 'secondary';
+  button.textContent = 'Выйти';
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      await fetch('/api/admin/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      });
+    } finally {
+      window.location.replace('/admin/login.html');
+    }
+  });
+  host.append(button);
+}
+
 function normalizeInterfaceEditorNodes() {
   const reportTab = document.querySelector('[data-task-tab="report"]');
   const reportPanel = document.querySelector('[data-task-panel="report"]');
@@ -27,13 +96,15 @@ function normalizeInterfaceEditorNodes() {
   const projectPanel = document.querySelector('[data-interface-panel="project"]');
   const lineTypesTab = document.querySelector('[data-interface-tab="line-types"]');
   const lineTypesPanel = document.querySelector('[data-interface-panel="line-types"]');
+  const transferTab = document.querySelector('[data-interface-tab="project-transfer"]');
+  const transferPanel = document.querySelector('[data-interface-panel="project-transfer"]');
   const tabs = document.querySelector('#interface-tabs');
   const panels = document.querySelector('#interface-panels');
 
-  for (const node of [projectTab, reportTab, lineTypesTab]) {
+  for (const node of [projectTab, reportTab, lineTypesTab, transferTab]) {
     if (node) tabs?.append(node);
   }
-  for (const node of [projectPanel, reportPanel, lineTypesPanel]) {
+  for (const node of [projectPanel, reportPanel, lineTypesPanel, transferPanel]) {
     if (node) panels?.append(node);
   }
 }
@@ -49,30 +120,23 @@ function setupInterfaceTabs() {
       tab.setAttribute('aria-selected', String(active));
       tab.tabIndex = active ? 0 : -1;
     }
-    for (const panel of panels) {
-      panel.hidden = panel.dataset.interfacePanel !== key;
-    }
+    for (const panel of panels) panel.hidden = panel.dataset.interfacePanel !== key;
     if (key === 'line-types') {
       window.dispatchEvent(new CustomEvent('dtpstat:line-types-changed'));
     }
   };
 
-  for (const tab of tabs) {
-    tab.addEventListener('click', () => select(tab.dataset.interfaceTab));
-  }
+  for (const tab of tabs) tab.addEventListener('click', () => select(tab.dataset.interfaceTab));
   select(
     tabs.find((tab) => tab.dataset.interfaceTab === 'project')?.dataset.interfaceTab
       ?? tabs[0].dataset.interfaceTab,
   );
 }
 
-async function loadInterfaceEditors() {
+async function loadInterfaceEditors(user) {
   await import('./project-settings-editor.js');
   await import('./line-types-editor.js');
 
-  // report-config-editor.js predates the top-level admin split. At this point
-  // admin.js has already captured only the data-management controls. Expose the
-  // interface hosts under the old selectors just for module initialization.
   const interfaceTabs = document.querySelector('#interface-tabs');
   const interfaceCard = document.querySelector('#interface-card');
   interfaceTabs?.classList.add('task-tabs');
@@ -83,6 +147,7 @@ async function loadInterfaceEditors() {
     interfaceTabs?.classList.remove('task-tabs');
     interfaceCard?.classList.remove('control-card');
   }
+  if (user.isSuperuser) await import('./project-transfer-editor.js');
   normalizeInterfaceEditorNodes();
   setupInterfaceTabs();
 }
@@ -92,14 +157,8 @@ function setupDataSectionLockExtensions() {
   const dataSection = document.querySelector('#admin-section-data');
   if (!status || !dataSection) return;
 
-  const exportLinks = () => [
-    ...dataSection.querySelectorAll('a[href^="/api/admin/export/"]'),
-  ];
-  const activeClasses = new Set([
-    'status-running',
-    'status-queued',
-    'status-cancelling',
-  ]);
+  const exportLinks = () => [...dataSection.querySelectorAll('a[href^="/api/admin/export/"]')];
+  const activeClasses = new Set(['status-running', 'status-queued', 'status-cancelling']);
   const sync = () => {
     const locked = [...activeClasses].some((className) => status.classList.contains(className));
     for (const link of exportLinks()) {
@@ -124,18 +183,18 @@ function setupDataSectionLockExtensions() {
 
 async function loadDataEditors() {
   await import('./json-examples.js');
-  // Insert portable-KML controls before admin.js snapshots all data forms so
-  // the same single-task lock covers them as well.
   await import('./kml-transfer-editor.js');
   await import('./admin.js');
   setupDataSectionLockExtensions();
 }
 
 function setupPrimarySections(user) {
+  const mustChangePassword = Boolean(user.mustChangePassword);
   const permissions = {
-    data: canManageData(user),
-    interface: canManageInterface(user),
-    security: Boolean(user?.isSuperuser),
+    data: !mustChangePassword && canManageData(user),
+    interface: !mustChangePassword && canManageInterface(user),
+    security: !mustChangePassword && canAccessSecurity(user),
+    profile: true,
   };
   const tabs = [...document.querySelectorAll('[data-admin-section-tab]')];
   const panels = [...document.querySelectorAll('[data-admin-section-panel]')];
@@ -146,9 +205,7 @@ function setupPrimarySections(user) {
     tab.hidden = !permissions[key];
   }
 
-  const available = ['data', 'interface', 'security'].filter((key) => permissions[key]);
-  if (available.length === 0) return;
-
+  const available = ['data', 'interface', 'security', 'profile'].filter((key) => permissions[key]);
   const select = (key) => {
     if (!permissions[key]) return;
     for (const tab of tabs) {
@@ -156,19 +213,28 @@ function setupPrimarySections(user) {
       tab.setAttribute('aria-selected', String(active));
       tab.tabIndex = active ? 0 : -1;
     }
-    for (const panel of panels) {
-      panel.hidden = panel.dataset.adminSectionPanel !== key;
-    }
+    for (const panel of panels) panel.hidden = panel.dataset.adminSectionPanel !== key;
     if (connection) connection.hidden = key !== 'data' || !permissions.data;
-    if (key === 'security') {
-      window.dispatchEvent(new CustomEvent('dtpstat:security-refresh'));
-    }
+    if (key === 'security') window.dispatchEvent(new CustomEvent('dtpstat:security-refresh'));
   };
 
-  for (const tab of tabs) {
-    tab.addEventListener('click', () => select(tab.dataset.adminSectionTab));
-  }
-  select(available[0]);
+  for (const tab of tabs) tab.addEventListener('click', () => select(tab.dataset.adminSectionTab));
+  select(mustChangePassword ? 'profile' : available[0]);
+  return { select };
+}
+
+function updateUserBadge(user) {
+  const badge = document.querySelector('#admin-user');
+  if (!badge) return;
+  const roles = [
+    user.isSuperuser ? 'superuser' : null,
+    user.canManageData ? 'данные' : null,
+    user.canManageInterface ? 'интерфейс' : null,
+    user.canManageUsers ? 'пользователи' : null,
+    user.canViewAudit ? 'аудит' : null,
+    user.canManageSecurity ? 'безопасность' : null,
+  ].filter(Boolean).join(' · ');
+  badge.textContent = `${user.displayName ?? user.username}${roles ? ` — ${roles}` : ''}`;
 }
 
 async function startAdminShell() {
@@ -176,23 +242,20 @@ async function startAdminShell() {
   try {
     const session = await globalThis.dtpstatAdminSession;
     const user = session.user;
-    if (userBadge) {
-      const roles = [
-        user.isSuperuser ? 'superuser' : null,
-        user.canManageData ? 'данные' : null,
-        user.canManageInterface ? 'интерфейс' : null,
-      ].filter(Boolean).join(' · ');
-      userBadge.textContent = `${user.username}${roles ? ` — ${roles}` : ''}`;
-    }
-
+    ensureProfileSection();
+    ensureTopbarActions();
+    updateUserBadge(user);
     setupPrimarySections(user);
 
-    // Order is deliberate: the legacy data controller snapshots its controls
-    // first. Interface editors are loaded afterwards and therefore remain fully
-    // usable while a long-running data task is active.
-    if (canManageData(user)) await loadDataEditors();
-    if (canManageInterface(user)) await loadInterfaceEditors();
-    if (user.isSuperuser) await import('./security-editor.js');
+    await import('./profile-editor.js');
+    if (!user.mustChangePassword) {
+      if (canManageData(user)) await loadDataEditors();
+      if (canManageInterface(user)) await loadInterfaceEditors(user);
+      if (canAccessSecurity(user)) await import('./security-editor-v2.js');
+    }
+
+    window.addEventListener('dtpstat:admin-session-changed', (event) => updateUserBadge(event.detail.user));
+    window.addEventListener('dtpstat:password-changed', () => window.location.reload());
   } catch (error) {
     if (userBadge) userBadge.textContent = 'Ошибка авторизации';
     const host = document.querySelector('#security-editor-host');
