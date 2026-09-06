@@ -14,6 +14,10 @@ function isValidationError(error) {
     error instanceof AdminSecurityValidationError;
 }
 
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /**
  * @param {{
  *   settingsTransferService: { exportSettings: () => Promise<object>, importSettings: (payload: unknown) => Promise<object> },
@@ -69,9 +73,19 @@ export function createProjectSettingsTransferRouter({
       try {
         const imported = await settingsTransferService.importSettings(request.body);
         let derived = null;
-        if (afterImport) derived = await afterImport(imported) ?? null;
+        const warnings = [];
+        if (afterImport) {
+          try {
+            derived = await afterImport(imported) ?? null;
+          } catch (error) {
+            warnings.push({
+              phase: 'public-downloads',
+              message: errorMessage(error),
+            });
+          }
+        }
         response.set('Cache-Control', 'no-store');
-        response.json({ imported, derived });
+        response.json({ imported, derived, warnings });
       } catch (error) {
         if (isValidationError(error)) {
           response.status(400).json({ error: error.message });
