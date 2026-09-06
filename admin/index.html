@@ -6,293 +6,356 @@
   <title>Администрирование — карта данных</title>
   <link rel="stylesheet" href="/admin/admin.css">
   <link rel="stylesheet" href="/admin/line-types.css">
-  <script type="module" src="/admin/json-examples.js"></script>
-  <script type="module" src="/admin/admin.js"></script>
-  <script type="module" src="/admin/line-types-editor.js"></script>
+  <script type="module" src="/admin/admin-session.js"></script>
+  <script type="module" src="/admin/project-branding.js"></script>
+  <script type="module" src="/admin/admin-shell.js"></script>
 </head>
 <body>
   <header class="topbar">
     <div>
       <p class="eyebrow">MAP SERVER</p>
-      <h1>Администрирование данных</h1>
+      <h1>Администрирование</h1>
     </div>
-    <div class="connection connection-pending" id="connection-state">WebSocket: подключение…</div>
+    <div class="topbar-status">
+      <span class="admin-user" id="admin-user">Пользователь…</span>
+      <div class="connection connection-pending" id="connection-state">WebSocket: ожидание…</div>
+    </div>
   </header>
 
-  <main class="admin-layout">
-    <section class="control-card" aria-labelledby="operations-title">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">ЕДИНСТВЕННАЯ ADMIN-ЗАДАЧА</p>
-          <h2 id="operations-title">Операции обновления</h2>
-        </div>
-      </div>
+  <nav class="admin-primary-tabs" id="admin-primary-tabs" role="tablist" aria-label="Раздел администрирования">
+    <button type="button" role="tab" data-admin-section-tab="data"
+            aria-selected="false" aria-controls="admin-section-data">
+      Управление данными
+    </button>
+    <button type="button" role="tab" data-admin-section-tab="interface"
+            aria-selected="false" aria-controls="admin-section-interface">
+      Настройка интерфейса
+    </button>
+    <button type="button" role="tab" data-admin-section-tab="security"
+            aria-selected="false" aria-controls="admin-section-security">
+      Пользователи и аудит
+    </button>
+  </nav>
 
-      <nav class="task-tabs" role="tablist" aria-label="Тип данных">
-        <button class="task-tab" id="tab-osm" type="button" role="tab"
-                aria-selected="true" aria-controls="panel-osm" data-task-tab="osm">
-          Города
-        </button>
-        <button class="task-tab" id="tab-kml" type="button" role="tab"
-                aria-selected="false" aria-controls="panel-kml" data-task-tab="kml">
-          Линии данных
-        </button>
-        <button class="task-tab" id="tab-population" type="button" role="tab"
-                aria-selected="false" aria-controls="panel-population" data-task-tab="population">
-          Население
-        </button>
-      </nav>
-
-      <article class="task-panel" id="panel-osm" role="tabpanel"
-               aria-labelledby="tab-osm" data-task-panel="osm">
-        <h3>Города</h3>
-        <p class="panel-description">Границы OSM можно обновить напрямую из Overpass либо перенести готовым GeoJSON-снимком между серверами.</p>
-
-        <nav class="operation-tabs" role="tablist" aria-label="Операции с городами">
-          <button class="operation-tab" id="operation-tab-osm-update" type="button" role="tab"
-                  aria-selected="true" aria-controls="operation-osm-update"
-                  data-operation-tab="osm-update" data-operation-group="osm">
-            Обновить с OSM
-          </button>
-          <button class="operation-tab" id="operation-tab-osm-geojson" type="button" role="tab"
-                  aria-selected="false" aria-controls="operation-osm-geojson"
-                  data-operation-tab="osm-geojson" data-operation-group="osm">
-            Импорт / экспорт GeoJSON
-          </button>
-        </nav>
-
-        <section class="operation-panel transfer-mode" id="operation-osm-update" role="tabpanel"
-                 aria-labelledby="operation-tab-osm-update"
-                 data-operation-panel="osm-update" data-operation-group="osm">
-          <div class="mode-heading">
+  <main class="admin-sections">
+    <!-- Interface is intentionally first in DOM. The legacy report editor is
+         loaded only after the data controller and is attached here by the shell. -->
+    <section class="admin-section-panel" id="admin-section-interface"
+             data-admin-section-panel="interface" role="tabpanel" hidden>
+      <div class="admin-layout admin-layout-single">
+        <section class="settings-card" id="interface-card" aria-labelledby="interface-title">
+          <div class="section-heading">
             <div>
-              <h4>Обновить с OSM</h4>
-              <p>Индекс RU city/town, последовательные пакеты геометрий и атомарная замена.</p>
+              <p class="eyebrow">ПУБЛИЧНЫЙ ИНТЕРФЕЙС И АНАЛИТИКА</p>
+              <h2 id="interface-title">Настройка интерфейса</h2>
             </div>
           </div>
-          <p class="last-success" data-last-success="osm-city-update">
-            <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
-          </p>
-          <form id="osm-form" data-task-form="osm" data-task-type="osm-city-update">
-            <div class="form-fields">
-              <label>Overpass URL
-                <select name="URL" id="osm-url">
-                  <option value="">Загрузка настроек…</option>
-                </select>
-              </label>
-              <label>Размер пакета
-                <input name="batchSize" type="number" inputmode="numeric"
-                       min="1" step="1" placeholder="из ENV">
-              </label>
-              <label>Пауза между запросами, мс
-                <input name="minDelayMs" type="number" inputmode="numeric"
-                       min="0" step="1" placeholder="из ENV">
-              </label>
-              <label>Максимум повторов временной ошибки
-                <input name="maxRetries" type="number" inputmode="numeric"
-                       min="0" step="1" placeholder="из ENV">
-              </label>
-              <label>Начальная пауза повтора, мс
-                <input name="retryBaseDelayMs" type="number" inputmode="numeric"
-                       min="1000" step="1" placeholder="из ENV">
-              </label>
-              <label>Предел backoff, мс
-                <input name="retryMaxDelayMs" type="number" inputmode="numeric"
-                       min="1000" step="1" placeholder="из ENV">
-              </label>
-              <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
-            </div>
-            <button class="secondary defaults-button" id="osm-defaults" type="button">
-              Загрузить значения по умолчанию
+          <nav class="interface-tabs" id="interface-tabs" role="tablist" aria-label="Настройки интерфейса">
+            <button class="task-tab" id="interface-tab-line-types" type="button" role="tab"
+                    aria-selected="false" aria-controls="interface-panel-line-types"
+                    data-interface-tab="line-types">
+              Типы линий
             </button>
-            <button class="task-action" type="submit" data-task-action="osm"
-                    data-task-type="osm-city-update" data-start-label="Запустить OSM">Запустить OSM</button>
-          </form>
-        </section>
-
-        <section class="operation-panel transfer-mode" id="operation-osm-geojson" role="tabpanel"
-                 aria-labelledby="operation-tab-osm-geojson"
-                 data-operation-panel="osm-geojson" data-operation-group="osm" hidden>
-          <div class="mode-heading">
-            <div>
-              <h4>Импорт / экспорт GeoJSON</h4>
-              <p>Полный перенос place=city/town с OSM type/id, тегами, временем OSM и геометрией.</p>
-            </div>
-            <a class="secondary-link" href="/api/admin/export/cities" download>Выгрузить GeoJSON</a>
+          </nav>
+          <div class="interface-panels" id="interface-panels">
+            <article class="task-panel interface-task-panel" id="interface-panel-line-types"
+                     role="tabpanel" aria-labelledby="interface-tab-line-types"
+                     data-interface-panel="line-types" hidden>
+              <h3>Типы линий</h3>
+              <p class="panel-description">NAME и CODE задаются импортом/БД; здесь редактируются только подпись легенды и визуальный стиль.</p>
+              <section class="operation-panel transfer-mode line-types-editor">
+                <div id="line-types-editor-host"></div>
+              </section>
+            </article>
           </div>
-          <p class="last-success" data-last-success="city-geojson-import">
-            <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
-          </p>
-          <form id="city-geojson-form" data-task-form="osm" data-task-type="city-geojson-import">
-            <div class="form-fields">
-              <label>GeoJSON городов
-                <input name="file" type="file" accept=".json,.geojson,application/json,application/geo+json" required>
-                <small>Ожидается FeatureCollection с Polygon/MultiPolygon и свойствами placeType, osmType, osmId, osmName. Файл собственного экспорта принимается без преобразования.</small>
-              </label>
-              <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
-            </div>
-            <button class="task-action" type="submit" data-task-action="osm"
-                    data-task-type="city-geojson-import" data-start-label="Импортировать города">Импортировать города</button>
-          </form>
         </section>
-        <p class="notice" data-task-notice="osm" role="status"></p>
-      </article>
-
-      <article class="task-panel" id="panel-kml" role="tabpanel"
-               aria-labelledby="tab-kml" data-task-panel="kml" hidden>
-        <h3>Линии данных</h3>
-        <p class="panel-description">Импорт из внешнего источника и GeoJSON заменяют один и тот же набор линий; типы линий и стили хранятся отдельно.</p>
-
-        <nav class="operation-tabs" role="tablist" aria-label="Операции с линиями">
-          <button class="operation-tab" id="operation-tab-kml-external" type="button" role="tab"
-                  aria-selected="true" aria-controls="operation-kml-external"
-                  data-operation-tab="kml-external" data-operation-group="kml">
-            Импорт из внешнего источника
-          </button>
-          <button class="operation-tab" id="operation-tab-kml-geojson" type="button" role="tab"
-                  aria-selected="false" aria-controls="operation-kml-geojson"
-                  data-operation-tab="kml-geojson" data-operation-group="kml">
-            Импорт / экспорт GeoJSON
-          </button>
-          <button class="operation-tab" id="operation-tab-kml-types" type="button" role="tab"
-                  aria-selected="false" aria-controls="operation-kml-types"
-                  data-operation-tab="kml-types" data-operation-group="kml">
-            Типы линий
-          </button>
-        </nav>
-
-        <section class="operation-panel transfer-mode" id="operation-kml-external" role="tabpanel"
-                 aria-labelledby="operation-tab-kml-external"
-                 data-operation-panel="kml-external" data-operation-group="kml">
-          <div class="mode-heading">
-            <div>
-              <h4>Импорт из внешнего источника</h4>
-              <p>Сейчас используется KML / Google My Maps. Пустое поле берёт источники из ENV, JSON полностью заменяет список.</p>
-            </div>
-          </div>
-          <p class="last-success" data-last-success="kml-update">
-            <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
-          </p>
-          <form id="kml-form" data-task-form="kml" data-task-type="kml-update">
-            <div class="form-fields">
-              <label>Источники JSON
-                <textarea name="sources" rows="12" placeholder="Загрузка актуального примера…"></textarea>
-                <small>Каждый слой: name + multiple (1 или 2) + необязательный type. type — исходное LINE_TYPES.NAME; сопоставление без учёта регистра и внешних пробелов. Отсутствующий NAME создаётся автоматически, CODE назначает БД.</small>
-              </label>
-              <label>Буфер города, м
-                <input name="cityBufferMeters" type="number" inputmode="numeric"
-                       min="0" step="1" placeholder="из ENV">
-              </label>
-              <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
-            </div>
-            <button class="task-action" type="submit" data-task-action="kml"
-                    data-task-type="kml-update" data-start-label="Запустить импорт">Запустить импорт</button>
-          </form>
-        </section>
-
-        <section class="operation-panel transfer-mode" id="operation-kml-geojson" role="tabpanel"
-                 aria-labelledby="operation-tab-kml-geojson"
-                 data-operation-panel="kml-geojson" data-operation-group="kml" hidden>
-          <div class="mode-heading">
-            <div>
-              <h4>Импорт / экспорт GeoJSON</h4>
-              <p>Переносит свойства линий, типы и переносимые связи с городом/OSM-полигоном.</p>
-            </div>
-            <a class="secondary-link" href="/api/admin/export/lines" download>Выгрузить GeoJSON</a>
-          </div>
-          <p class="last-success" data-last-success="geojson-import">
-            <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
-          </p>
-          <form id="line-geojson-form" data-task-form="kml" data-task-type="geojson-import">
-            <div class="form-fields">
-              <label>GeoJSON линий
-                <input name="file" type="file" accept=".json,.geojson,application/json,application/geo+json" required>
-                <small>Канонический schemaVersion 3 переносит lineTypes и _dtpstat.businessTypeCode. Сопоставление на целевой БД идёт по NAME; локальные CODE могут отличаться. Legacy v2 тоже поддерживается.</small>
-              </label>
-            </div>
-            <button class="task-action" type="submit" data-task-action="kml"
-                    data-task-type="geojson-import" data-start-label="Импортировать GeoJSON">Импортировать GeoJSON</button>
-          </form>
-        </section>
-
-        <section class="operation-panel transfer-mode line-types-editor" id="operation-kml-types" role="tabpanel"
-                 aria-labelledby="operation-tab-kml-types"
-                 data-operation-panel="kml-types" data-operation-group="kml" hidden>
-          <div id="line-types-editor-host"></div>
-        </section>
-        <p class="notice" data-task-notice="kml" role="status"></p>
-      </article>
-
-      <article class="task-panel" id="panel-population" role="tabpanel"
-               aria-labelledby="tab-population" data-task-panel="population" hidden>
-        <h3>Население</h3>
-        <p class="panel-description">Отдельный JSON-снимок населения с source/asOf/attributes и последующим пересчётом рейтинга.</p>
-
-        <nav class="operation-tabs operation-tabs-single" role="tablist" aria-label="Операции с населением">
-          <button class="operation-tab" id="operation-tab-population-json" type="button" role="tab"
-                  aria-selected="true" aria-controls="operation-population-json"
-                  data-operation-tab="population-json" data-operation-group="population">
-            Импорт / экспорт JSON
-          </button>
-        </nav>
-
-        <section class="operation-panel transfer-mode" id="operation-population-json" role="tabpanel"
-                 aria-labelledby="operation-tab-population-json"
-                 data-operation-panel="population-json" data-operation-group="population">
-          <div class="mode-heading">
-            <div>
-              <h4>Импорт / экспорт JSON</h4>
-              <p>Экспорт можно без преобразования загрузить на другой сервер.</p>
-            </div>
-            <a class="secondary-link" href="/api/admin/export/populations" download>Выгрузить JSON</a>
-          </div>
-          <p class="last-success" data-last-success="population-update">
-            <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
-          </p>
-          <form id="population-form" data-task-form="population" data-task-type="population-update">
-            <div class="form-fields">
-              <label>JSON-файл
-                <input name="file" type="file" accept=".json,application/json">
-                <small>Файл собственного экспорта принимается без преобразования, включая schemaVersion/exportedAt и индивидуальные asOf/source.</small>
-              </label>
-              <label>Или данные JSON
-                <textarea name="payload" rows="16" placeholder="Загрузка актуального примера…"></textarea>
-                <small>Обязательны populations[].name и populations[].population. Общие asOf/source в корне используются как значения по умолчанию; их можно переопределить у отдельного города. attributes — произвольный JSON-объект.</small>
-              </label>
-            </div>
-            <button class="task-action" type="submit" data-task-action="population"
-                    data-task-type="population-update" data-start-label="Обновить население">Обновить население</button>
-          </form>
-        </section>
-        <p class="notice" data-task-notice="population" role="status"></p>
-      </article>
+      </div>
     </section>
 
-    <aside class="status-card" aria-labelledby="status-title">
-      <div class="section-heading status-heading">
-        <div>
-          <p class="eyebrow">СОСТОЯНИЕ И ЖУРНАЛ</p>
-          <h2 id="status-title">Текущая операция</h2>
-        </div>
-        <span class="status status-idle" id="task-status">нет задачи</span>
-      </div>
+    <section class="admin-section-panel" id="admin-section-data"
+             data-admin-section-panel="data" role="tabpanel" hidden>
+      <div class="admin-layout">
+        <section class="control-card" id="data-control-card" aria-labelledby="operations-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">ЕДИНСТВЕННАЯ ЗАДАЧА УПРАВЛЕНИЯ ДАННЫМИ</p>
+              <h2 id="operations-title">Импорт / экспорт и обновления</h2>
+            </div>
+          </div>
 
-      <dl class="task-meta" id="task-meta"></dl>
-      <button class="secondary refresh-button" id="refresh-task" type="button">Обновить статус</button>
+          <nav class="task-tabs" role="tablist" aria-label="Тип данных">
+            <button class="task-tab" id="tab-osm" type="button" role="tab"
+                    aria-selected="true" aria-controls="panel-osm" data-task-tab="osm">
+              Города
+            </button>
+            <button class="task-tab" id="tab-kml" type="button" role="tab"
+                    aria-selected="false" aria-controls="panel-kml" data-task-tab="kml">
+              Линии данных
+            </button>
+            <button class="task-tab" id="tab-population" type="button" role="tab"
+                    aria-selected="false" aria-controls="panel-population" data-task-tab="population">
+              Население
+            </button>
+          </nav>
 
-      <div class="log-heading">
-        <h3>Ход выполнения</h3>
-        <span id="log-count">0 записей</span>
-      </div>
-      <div class="task-log" id="task-log" role="log" aria-live="polite">
-        <p class="empty-state">Задача ещё не запускалась.</p>
-      </div>
+          <article class="task-panel" id="panel-osm" role="tabpanel"
+                   aria-labelledby="tab-osm" data-task-panel="osm">
+            <h3>Города</h3>
+            <p class="panel-description">Границы OSM можно обновить напрямую из Overpass либо перенести готовым GeoJSON-снимком между серверами.</p>
 
-      <details class="result-panel" id="result-panel">
-        <summary>Результат / ошибка</summary>
-        <pre id="task-result">—</pre>
-      </details>
-    </aside>
+            <nav class="operation-tabs" role="tablist" aria-label="Операции с городами">
+              <button class="operation-tab" id="operation-tab-osm-update" type="button" role="tab"
+                      aria-selected="true" aria-controls="operation-osm-update"
+                      data-operation-tab="osm-update" data-operation-group="osm">
+                Обновить с OSM
+              </button>
+              <button class="operation-tab" id="operation-tab-osm-geojson" type="button" role="tab"
+                      aria-selected="false" aria-controls="operation-osm-geojson"
+                      data-operation-tab="osm-geojson" data-operation-group="osm">
+                Импорт / экспорт GeoJSON
+              </button>
+            </nav>
+
+            <section class="operation-panel transfer-mode" id="operation-osm-update" role="tabpanel"
+                     aria-labelledby="operation-tab-osm-update"
+                     data-operation-panel="osm-update" data-operation-group="osm">
+              <div class="mode-heading">
+                <div>
+                  <h4>Обновить с OSM</h4>
+                  <p>Индекс RU city/town, последовательные пакеты геометрий и атомарная замена.</p>
+                </div>
+              </div>
+              <p class="last-success" data-last-success="osm-city-update">
+                <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
+              </p>
+              <form id="osm-form" data-task-form="osm" data-task-type="osm-city-update">
+                <div class="form-fields">
+                  <label>Overpass URL
+                    <select name="URL" id="osm-url">
+                      <option value="">Загрузка настроек…</option>
+                    </select>
+                  </label>
+                  <label>Размер пакета
+                    <input name="batchSize" type="number" inputmode="numeric"
+                           min="1" step="1" placeholder="из ENV">
+                  </label>
+                  <label>Пауза между запросами, мс
+                    <input name="minDelayMs" type="number" inputmode="numeric"
+                           min="0" step="1" placeholder="из ENV">
+                  </label>
+                  <label>Максимум повторов временной ошибки
+                    <input name="maxRetries" type="number" inputmode="numeric"
+                           min="0" step="1" placeholder="из ENV">
+                  </label>
+                  <label>Начальная пауза повтора, мс
+                    <input name="retryBaseDelayMs" type="number" inputmode="numeric"
+                           min="1000" step="1" placeholder="из ENV">
+                  </label>
+                  <label>Предел backoff, мс
+                    <input name="retryMaxDelayMs" type="number" inputmode="numeric"
+                           min="1000" step="1" placeholder="из ENV">
+                  </label>
+                  <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
+                </div>
+                <button class="secondary defaults-button" id="osm-defaults" type="button">
+                  Загрузить значения по умолчанию
+                </button>
+                <button class="task-action" type="submit" data-task-action="osm"
+                        data-task-type="osm-city-update" data-start-label="Запустить OSM">Запустить OSM</button>
+              </form>
+            </section>
+
+            <section class="operation-panel transfer-mode" id="operation-osm-geojson" role="tabpanel"
+                     aria-labelledby="operation-tab-osm-geojson"
+                     data-operation-panel="osm-geojson" data-operation-group="osm" hidden>
+              <div class="mode-heading">
+                <div>
+                  <h4>Импорт / экспорт GeoJSON</h4>
+                  <p>Полный перенос place=city/town с OSM type/id, тегами, временем OSM и геометрией.</p>
+                </div>
+                <a class="secondary-link" href="/api/admin/export/cities" download>Выгрузить GeoJSON</a>
+              </div>
+              <p class="last-success" data-last-success="city-geojson-import">
+                <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
+              </p>
+              <form id="city-geojson-form" data-task-form="osm" data-task-type="city-geojson-import">
+                <div class="form-fields">
+                  <label>GeoJSON городов
+                    <input name="file" type="file" accept=".json,.geojson,application/json,application/geo+json" required>
+                    <small>Ожидается FeatureCollection с Polygon/MultiPolygon и свойствами placeType, osmType, osmId, osmName. Файл собственного экспорта принимается без преобразования.</small>
+                  </label>
+                  <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
+                </div>
+                <button class="task-action" type="submit" data-task-action="osm"
+                        data-task-type="city-geojson-import" data-start-label="Импортировать города">Импортировать города</button>
+              </form>
+            </section>
+            <p class="notice" data-task-notice="osm" role="status"></p>
+          </article>
+
+          <article class="task-panel" id="panel-kml" role="tabpanel"
+                   aria-labelledby="tab-kml" data-task-panel="kml" hidden>
+            <h3>Линии данных</h3>
+            <p class="panel-description">Импорт из внешнего источника и GeoJSON заменяют один и тот же набор линий. Визуальные стили типов перенесены в «Настройку интерфейса».</p>
+
+            <nav class="operation-tabs" role="tablist" aria-label="Операции с линиями">
+              <button class="operation-tab" id="operation-tab-kml-external" type="button" role="tab"
+                      aria-selected="true" aria-controls="operation-kml-external"
+                      data-operation-tab="kml-external" data-operation-group="kml">
+                Импорт из внешнего источника
+              </button>
+              <button class="operation-tab" id="operation-tab-kml-geojson" type="button" role="tab"
+                      aria-selected="false" aria-controls="operation-kml-geojson"
+                      data-operation-tab="kml-geojson" data-operation-group="kml">
+                Импорт / экспорт GeoJSON
+              </button>
+            </nav>
+
+            <section class="operation-panel transfer-mode" id="operation-kml-external" role="tabpanel"
+                     aria-labelledby="operation-tab-kml-external"
+                     data-operation-panel="kml-external" data-operation-group="kml">
+              <div class="mode-heading">
+                <div>
+                  <h4>Импорт из внешнего источника</h4>
+                  <p>Сейчас используется KML / Google My Maps. Пустое поле берёт источники из ENV, JSON полностью заменяет список.</p>
+                </div>
+              </div>
+              <p class="last-success" data-last-success="kml-update">
+                <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
+              </p>
+              <form id="kml-form" data-task-form="kml" data-task-type="kml-update">
+                <div class="form-fields">
+                  <label>Источники JSON
+                    <textarea name="sources" rows="12" placeholder="Загрузка актуального примера…"></textarea>
+                    <small>Каждый слой: name + multiple (1 или 2) + необязательный type. type — исходное LINE_TYPES.NAME; сопоставление без учёта регистра и внешних пробелов. Отсутствующий NAME создаётся автоматически, CODE назначает БД.</small>
+                  </label>
+                  <label>Буфер города, м
+                    <input name="cityBufferMeters" type="number" inputmode="numeric"
+                           min="0" step="1" placeholder="из ENV">
+                  </label>
+                  <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
+                </div>
+                <button class="task-action" type="submit" data-task-action="kml"
+                        data-task-type="kml-update" data-start-label="Запустить импорт">Запустить импорт</button>
+              </form>
+            </section>
+
+            <section class="operation-panel transfer-mode" id="operation-kml-geojson" role="tabpanel"
+                     aria-labelledby="operation-tab-kml-geojson"
+                     data-operation-panel="kml-geojson" data-operation-group="kml" hidden>
+              <div class="mode-heading">
+                <div>
+                  <h4>Импорт / экспорт GeoJSON</h4>
+                  <p>Переносит свойства линий, типы, KML Placemark/name и переносимые связи с городом/OSM-полигоном.</p>
+                </div>
+                <a class="secondary-link" href="/api/admin/export/lines" download>Выгрузить GeoJSON</a>
+              </div>
+              <p class="last-success" data-last-success="geojson-import">
+                <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
+              </p>
+              <form id="line-geojson-form" data-task-form="kml" data-task-type="geojson-import">
+                <div class="form-fields">
+                  <label>GeoJSON линий
+                    <input name="file" type="file" accept=".json,.geojson,application/json,application/geo+json" required>
+                    <small>Канонический schemaVersion 3 переносит lineTypes и _dtpstat.businessTypeCode. Сопоставление на целевой БД идёт по NAME; локальные CODE могут отличаться.</small>
+                  </label>
+                </div>
+                <button class="task-action" type="submit" data-task-action="kml"
+                        data-task-type="geojson-import" data-start-label="Импортировать GeoJSON">Импортировать GeoJSON</button>
+              </form>
+            </section>
+            <p class="notice" data-task-notice="kml" role="status"></p>
+          </article>
+
+          <article class="task-panel" id="panel-population" role="tabpanel"
+                   aria-labelledby="tab-population" data-task-panel="population" hidden>
+            <h3>Население</h3>
+            <p class="panel-description">Отдельный JSON-снимок населения с source/asOf/attributes и последующим пересчётом рейтинга.</p>
+
+            <nav class="operation-tabs operation-tabs-single" role="tablist" aria-label="Операции с населением">
+              <button class="operation-tab" id="operation-tab-population-json" type="button" role="tab"
+                      aria-selected="true" aria-controls="operation-population-json"
+                      data-operation-tab="population-json" data-operation-group="population">
+                Импорт / экспорт JSON
+              </button>
+            </nav>
+
+            <section class="operation-panel transfer-mode" id="operation-population-json" role="tabpanel"
+                     aria-labelledby="operation-tab-population-json"
+                     data-operation-panel="population-json" data-operation-group="population">
+              <div class="mode-heading">
+                <div>
+                  <h4>Импорт / экспорт JSON</h4>
+                  <p>Экспорт можно без преобразования загрузить на другой сервер.</p>
+                </div>
+                <a class="secondary-link" href="/api/admin/export/populations" download>Выгрузить JSON</a>
+              </div>
+              <p class="last-success" data-last-success="population-update">
+                <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
+              </p>
+              <form id="population-form" data-task-form="population" data-task-type="population-update">
+                <div class="form-fields">
+                  <label>JSON-файл
+                    <input name="file" type="file" accept=".json,application/json">
+                    <small>Файл собственного экспорта принимается без преобразования, включая schemaVersion/exportedAt и индивидуальные asOf/source.</small>
+                  </label>
+                  <label>Или данные JSON
+                    <textarea name="payload" rows="16" placeholder="Загрузка актуального примера…"></textarea>
+                    <small>Обязательны populations[].name и populations[].population. Общие asOf/source в корне используются как значения по умолчанию.</small>
+                  </label>
+                </div>
+                <button class="task-action" type="submit" data-task-action="population"
+                        data-task-type="population-update" data-start-label="Обновить население">Обновить население</button>
+              </form>
+            </section>
+            <p class="notice" data-task-notice="population" role="status"></p>
+          </article>
+        </section>
+
+        <aside class="status-card" aria-labelledby="status-title">
+          <div class="section-heading status-heading">
+            <div>
+              <p class="eyebrow">СОСТОЯНИЕ И ЖУРНАЛ</p>
+              <h2 id="status-title">Текущая операция с данными</h2>
+            </div>
+            <span class="status status-idle" id="task-status">нет задачи</span>
+          </div>
+
+          <dl class="task-meta" id="task-meta"></dl>
+          <button class="secondary refresh-button" id="refresh-task" type="button">Обновить статус</button>
+
+          <div class="log-heading">
+            <h3>Ход выполнения</h3>
+            <span id="log-count">0 записей</span>
+          </div>
+          <div class="task-log" id="task-log" role="log" aria-live="polite">
+            <p class="empty-state">Задача ещё не запускалась.</p>
+          </div>
+
+          <details class="result-panel" id="result-panel">
+            <summary>Результат / ошибка</summary>
+            <pre id="task-result">—</pre>
+          </details>
+        </aside>
+      </div>
+    </section>
+
+    <section class="admin-section-panel" id="admin-section-security"
+             data-admin-section-panel="security" role="tabpanel" hidden>
+      <div class="admin-layout admin-layout-single">
+        <section class="settings-card security-card" aria-labelledby="security-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">ДОСТУП И АУДИТ</p>
+              <h2 id="security-title">Пользователи и безопасность</h2>
+            </div>
+          </div>
+          <div id="security-editor-host">
+            <p class="empty-state">Загружаем пользователей и журнал…</p>
+          </div>
+        </section>
+      </div>
+    </section>
   </main>
 </body>
 </html>
