@@ -64,6 +64,27 @@ if (typeof document !== 'undefined') {
                 <small>Для линий с KML Placemark/name рядом с геометрией постоянно показывается подпись. Hover-popup работает независимо от этой настройки.</small>
               </label>
 
+              <section class="project-settings-section" aria-labelledby="project-city-marker-title">
+                <div>
+                  <h5 id="project-city-marker-title">Маркер города на дальнем зуме</h5>
+                  <p>Маркер показывается до масштаба, на котором загружаются линии. Загруженное изображение хранится в БД; на карте его ширина нормализуется до 32 px.</p>
+                </div>
+                <div class="project-city-marker-editor">
+                  <div class="project-city-marker-preview">
+                    <img id="project-city-marker-preview" src="/api/city-marker-icon" alt="Текущий маркер города" width="64" height="64">
+                    <span id="project-city-marker-state">Загружаем состояние…</span>
+                  </div>
+                  <label>Новая иконка PNG
+                    <input name="cityMarkerIcon" type="file" accept="image/png">
+                    <small>Квадратный PNG 16×16…256×256 px, не более 256 КБ. Прозрачность поддерживается.</small>
+                  </label>
+                  <div class="project-city-marker-actions">
+                    <button type="button" id="project-city-marker-upload" disabled>Загрузить иконку</button>
+                    <button type="button" class="secondary" id="project-city-marker-reset">Стандартная</button>
+                  </div>
+                </div>
+              </section>
+
               <label>Ключевые слова
                 <textarea name="keywords" rows="5"
                           placeholder="выделенные полосы\nобщественный транспорт\nрейтинг городов"></textarea>
@@ -133,17 +154,27 @@ if (typeof document !== 'undefined') {
     if (form) {
       const projectName = form.elements.namedItem('projectName');
       const showLineLabels = form.elements.namedItem('showLineLabels');
+      const cityMarkerIcon = form.elements.namedItem('cityMarkerIcon');
       const keywords = form.elements.namedItem('keywords');
       const yandexMetrikaId = form.elements.namedItem('yandexMetrikaId');
       const googleAnalyticsId = form.elements.namedItem('googleAnalyticsId');
       const mapboxAccessToken = form.elements.namedItem('mapboxAccessToken');
       const footerHtml = form.elements.namedItem('footerHtml');
       const saveButton = form.querySelector('button[type="submit"]');
+      const cityMarkerUpload = document.querySelector('#project-city-marker-upload');
+      const cityMarkerReset = document.querySelector('#project-city-marker-reset');
+      const cityMarkerPreview = document.querySelector('#project-city-marker-preview');
+      const cityMarkerState = document.querySelector('#project-city-marker-state');
       const message = document.querySelector('#project-settings-message');
       const updatedAt = document.querySelector('#project-settings-updated-at');
       const toolbar = document.querySelector('#project-html-toolbar');
       const allowedTags = document.querySelector('#project-allowed-tags');
       const allowedClasses = document.querySelector('#project-allowed-classes');
+      let cityMarkerConstraints = {
+        maxBytes: 256 * 1024,
+        minSize: 16,
+        maxSize: 256,
+      };
 
       function setMessage(text, tone = '') {
         message.textContent = text;
@@ -170,6 +201,23 @@ if (typeof document !== 'undefined') {
         mapboxAccessToken.value = configured ? '*****' : '';
       }
 
+      function refreshCityMarkerPreview() {
+        cityMarkerPreview.src = `/api/city-marker-icon?v=${Date.now()}`;
+      }
+
+      function setCityMarkerState(settings) {
+        const configured = Boolean(settings.cityMarkerIconConfigured);
+        const width = Number(settings.cityMarkerIconWidth);
+        const height = Number(settings.cityMarkerIconHeight);
+        cityMarkerState.textContent = configured && Number.isFinite(width) && Number.isFinite(height)
+          ? `Пользовательская иконка ${width}×${height} px`
+          : 'Стандартная иконка 32×32 px';
+        cityMarkerReset.disabled = !configured;
+        cityMarkerIcon.value = '';
+        cityMarkerUpload.disabled = true;
+        refreshCityMarkerPreview();
+      }
+
       mapboxAccessToken.addEventListener('focus', () => {
         if (mapboxAccessToken.dataset.masked !== 'true') return;
         mapboxAccessToken.value = '';
@@ -189,6 +237,10 @@ if (typeof document !== 'undefined') {
           mapboxAccessToken.value = '*****';
           mapboxAccessToken.dataset.masked = 'true';
         }
+      });
+
+      cityMarkerIcon.addEventListener('change', () => {
+        cityMarkerUpload.disabled = !cityMarkerIcon.files?.[0];
       });
 
       function insertSnippet(snippet) {
@@ -227,6 +279,7 @@ if (typeof document !== 'undefined') {
         yandexMetrikaId.value = settings.yandexMetrikaId ?? '';
         googleAnalyticsId.value = settings.googleAnalyticsId ?? '';
         setMapboxState(Boolean(settings.mapboxAccessTokenConfigured));
+        setCityMarkerState(settings);
         footerHtml.value = settings.footerHtml;
         updatedAt.textContent = formatUpdatedAt(settings.updatedAt);
       }
@@ -240,6 +293,10 @@ if (typeof document !== 'undefined') {
           });
           const payload = await response.json();
           if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
+          cityMarkerConstraints = {
+            ...cityMarkerConstraints,
+            ...(payload.editor.cityMarkerIcon ?? {}),
+          };
           applySettings(payload.settings);
           allowedTags.textContent = payload.editor.tags.map((tag) => `<${tag}>`).join(' · ');
           allowedClasses.textContent = payload.editor.classes.map((name) => `.${name}`).join(' · ');
@@ -248,6 +305,68 @@ if (typeof document !== 'undefined') {
           setMessage(error.message, 'error');
         }
       }
+
+      cityMarkerUpload.addEventListener('click', async () => {
+        const file = cityMarkerIcon.files?.[0];
+        if (!file) return;
+        if (file.type !== 'image/png') {
+          setMessage('Иконка города должна быть PNG-файлом.', 'error');
+          return;
+        }
+        if (file.size > cityMarkerConstraints.maxBytes) {
+          setMessage(`Иконка города не должна превышать ${cityMarkerConstraints.maxBytes} байт.`, 'error');
+          return;
+        }
+
+        cityMarkerUpload.disabled = true;
+        cityMarkerReset.disabled = true;
+        setMessage('Загружаем иконку города…');
+        try {
+          const response = await fetch('/api/admin/project-settings/city-marker-icon', {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: {
+              Accept: 'application/json',
+              'Content-Type': 'image/png',
+            },
+            body: file,
+          });
+          const payload = await response.json();
+          if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
+          setCityMarkerState(payload.settings);
+          updatedAt.textContent = formatUpdatedAt(payload.settings.updatedAt);
+          setMessage('Иконка города сохранена.', 'success');
+          window.dispatchEvent(new CustomEvent('dtpstat:project-settings-changed'));
+        } catch (error) {
+          setMessage(error.message, 'error');
+          cityMarkerUpload.disabled = !cityMarkerIcon.files?.[0];
+          cityMarkerReset.disabled = false;
+        }
+      });
+
+      cityMarkerReset.addEventListener('click', async () => {
+        if (cityMarkerReset.disabled) return;
+        if (!window.confirm('Вернуть стандартную иконку города?')) return;
+        cityMarkerUpload.disabled = true;
+        cityMarkerReset.disabled = true;
+        setMessage('Возвращаем стандартную иконку…');
+        try {
+          const response = await fetch('/api/admin/project-settings/city-marker-icon', {
+            method: 'DELETE',
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+          });
+          const payload = await response.json();
+          if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
+          setCityMarkerState(payload.settings);
+          updatedAt.textContent = formatUpdatedAt(payload.settings.updatedAt);
+          setMessage('Стандартная иконка города восстановлена.', 'success');
+          window.dispatchEvent(new CustomEvent('dtpstat:project-settings-changed'));
+        } catch (error) {
+          setMessage(error.message, 'error');
+          cityMarkerReset.disabled = false;
+        }
+      });
 
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
