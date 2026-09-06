@@ -99,7 +99,7 @@
 
 .report-operation-row {
   display: grid;
-  grid-template-columns: minmax(7rem, .35fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(7rem, .32fr) minmax(9rem, .42fr) minmax(0, 1fr) auto;
   align-items: end;
   gap: .55rem;
   padding: .65rem;
@@ -114,6 +114,38 @@
 
 .report-remove-operation {
   margin-bottom: .02rem;
+}
+
+.report-priority-help {
+  padding: .55rem .65rem;
+  border-left: 3px solid #355d66;
+  background: #0b1518;
+}
+
+.report-expression-preview {
+  display: grid;
+  gap: .4rem;
+  padding: .65rem;
+  border: 1px solid #294047;
+  border-radius: 8px;
+  background: #081013;
+}
+
+.report-expression-preview strong,
+.report-expression-preview span {
+  color: var(--muted);
+  font-size: .7rem;
+}
+
+.report-expression-preview code {
+  display: block;
+  padding: .45rem .55rem;
+  border-radius: 6px;
+  color: #c8e3e1;
+  background: #101d21;
+  font: .68rem/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .report-empty {
@@ -193,8 +225,14 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .report-operation-row,
   .report-column-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .report-remove-operation,
+  .report-row-actions {
+    justify-self: end;
   }
 
   .report-row-actions {
@@ -218,6 +256,11 @@
   .report-column-details,
   .report-rank-grid {
     grid-template-columns: 1fr;
+  }
+
+  .report-remove-operation,
+  .report-row-actions {
+    justify-self: start;
   }
 
   .report-row-actions {
