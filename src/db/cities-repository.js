@@ -2,6 +2,29 @@
  * @typedef {{ query: (text: string, values?: unknown[]) => Promise<{ rows: any[] }> }} Queryable
  */
 
+export const VIEWPORT_PADDING_RATIO = 0.2;
+
+/**
+ * Expand a visible WGS84 viewport by 20% of its width/height on every side.
+ * API validation is intentionally performed against the actual visible window;
+ * only the database selector is padded. The returned line geometries are never
+ * clipped, so any complete line touching the padded selector remains visible.
+ *
+ * @param {{ west: number, south: number, east: number, north: number }} viewport
+ */
+export function expandViewportBounds(viewport) {
+  const width = viewport.east - viewport.west;
+  const height = viewport.north - viewport.south;
+  const horizontalPadding = width * VIEWPORT_PADDING_RATIO;
+  const verticalPadding = height * VIEWPORT_PADDING_RATIO;
+  return {
+    west: Math.max(-180, viewport.west - horizontalPadding),
+    south: Math.max(-90, viewport.south - verticalPadding),
+    east: Math.min(180, viewport.east + horizontalPadding),
+    north: Math.min(90, viewport.north + verticalPadding),
+  };
+}
+
 const LIST_CITIES_SQL = `
   SELECT
     city.id::integer AS id,
@@ -142,17 +165,19 @@ export function createCitiesRepository(database) {
     },
 
     /**
-     * Return complete line geometries that intersect the current viewport.
-     * The viewport is only a selector; geometries are never clipped to it.
+     * Return complete line geometries that intersect a selector padded by 20%
+     * on every side of the current viewport. The original center remains the
+     * city-selection point; only the line selector is expanded.
      *
      * @param {{ west: number, south: number, east: number, north: number, centerLng: number, centerLat: number }} viewport
      */
     async getViewportGeometries(viewport) {
+      const selector = expandViewportBounds(viewport);
       const result = await database.query(VIEWPORT_GEOMETRIES_SQL, [
-        viewport.west,
-        viewport.south,
-        viewport.east,
-        viewport.north,
+        selector.west,
+        selector.south,
+        selector.east,
+        selector.north,
         viewport.centerLng,
         viewport.centerLat,
       ]);
