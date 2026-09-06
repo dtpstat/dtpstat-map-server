@@ -90,9 +90,7 @@ function listValue(env, name, fallback) {
   const values = (env[name] === undefined ? fallback : env[name].split(','))
     .map((value) => value.trim().toLocaleLowerCase('en-US'))
     .filter(Boolean);
-  if (values.length === 0) {
-    throw new Error(`${name} must contain at least one value`);
-  }
+  if (values.length === 0) throw new Error(`${name} must contain at least one value`);
   return [...new Set(values)];
 }
 
@@ -105,10 +103,18 @@ function stringListValue(env, name, fallback) {
   const values = (env[name] === undefined ? fallback : env[name].split(','))
     .map((value) => value.trim())
     .filter(Boolean);
-  if (values.length === 0) {
-    throw new Error(`${name} must contain at least one value`);
-  }
+  if (values.length === 0) throw new Error(`${name} must contain at least one value`);
   return [...new Set(values)];
+}
+
+function optionalBootstrapUsername(env) {
+  const value = env.IMPORT_API_USERNAME?.trim();
+  return value || null;
+}
+
+function optionalBootstrapPassword(env) {
+  const value = env.IMPORT_API_PASSWORD;
+  return value === undefined || value === '' ? null : value;
 }
 
 /**
@@ -132,11 +138,7 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     3000,
     { min: 1, max: 65535 },
   );
-  const httpsPort = integerValue(env, 'HTTPS_PORT', 3443, {
-    min: 1,
-    max: 65535,
-  });
-
+  const httpsPort = integerValue(env, 'HTTPS_PORT', 3443, { min: 1, max: 65535 });
   if (httpEnabled && httpsEnabled && httpPort === httpsPort) {
     throw new Error('HTTP_PORT and HTTPS_PORT must be different');
   }
@@ -155,10 +157,7 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     min: 1,
     max: 100,
   });
-  const kmlConstraints = {
-    allowedHosts: kmlAllowedHosts,
-    maxSources: kmlMaxSources,
-  };
+  const kmlConstraints = { allowedHosts: kmlAllowedHosts, maxSources: kmlMaxSources };
   const kmlCityBufferMaxMeters = integerValue(
     env,
     'KML_UPDATE_CITY_BUFFER_MAX_METERS',
@@ -204,8 +203,7 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     { min: osmCityRetryBaseDelayMs, max: 3600000 },
   );
   const osmCityUrl = normalizeOsmUpdateUrl(
-    env.OSM_CITY_UPDATE_URL?.trim() ||
-      'https://overpass-api.de/api/interpreter',
+    env.OSM_CITY_UPDATE_URL?.trim() || 'https://overpass-api.de/api/interpreter',
     osmAllowedHosts,
   );
   const knownOsmCityUrls = [
@@ -214,47 +212,32 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     'https://overpass.kumi.systems/api/interpreter',
     'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
   ].filter((value) => osmAllowedHosts.has(new URL(value).hostname));
-  if (!knownOsmCityUrls.includes(osmCityUrl)) {
-    knownOsmCityUrls.unshift(osmCityUrl);
-  }
+  if (!knownOsmCityUrls.includes(osmCityUrl)) knownOsmCityUrls.unshift(osmCityUrl);
   const osmAllowedUrls = new Set(
-    stringListValue(
-      env,
-      'OSM_CITY_UPDATE_ALLOWED_URLS',
-      knownOsmCityUrls,
-    ).map((value) => normalizeOsmUpdateUrl(value, osmAllowedHosts)),
+    stringListValue(env, 'OSM_CITY_UPDATE_ALLOWED_URLS', knownOsmCityUrls)
+      .map((value) => normalizeOsmUpdateUrl(value, osmAllowedHosts)),
   );
   if (!osmAllowedUrls.has(osmCityUrl)) {
-    throw new Error(
-      'OSM_CITY_UPDATE_URL must be included in OSM_CITY_UPDATE_ALLOWED_URLS',
-    );
+    throw new Error('OSM_CITY_UPDATE_URL must be included in OSM_CITY_UPDATE_ALLOWED_URLS');
   }
 
   return {
     environment: env.NODE_ENV?.trim() || 'development',
     host: env.HOST?.trim() || '0.0.0.0',
     projectRoot,
-    http: {
-      enabled: httpEnabled,
-      port: httpPort,
-    },
-    https: {
-      enabled: httpsEnabled,
-      port: httpsPort,
-      keyPath,
-      certPath,
-    },
+    http: { enabled: httpEnabled, port: httpPort },
+    https: { enabled: httpsEnabled, port: httpsPort, keyPath, certPath },
     database: {
       ...loadApplicationDatabaseConnection(env),
       schema: databaseSchema,
-      maxConnections: integerValue(env, 'DATABASE_POOL_MAX', 10, {
-        min: 1,
-        max: 100,
-      }),
+      maxConnections: integerValue(env, 'DATABASE_POOL_MAX', 10, { min: 1, max: 100 }),
     },
     importApi: {
-      username: requiredValue(env, 'IMPORT_API_USERNAME'),
-      password: requiredValue(env, 'IMPORT_API_PASSWORD'),
+      // Compatibility names kept for deployment continuity. These credentials
+      // are consumed only when ADMIN_USERS is empty, then DB users become the
+      // sole online authentication source and the variables may be removed.
+      bootstrapUsername: optionalBootstrapUsername(env),
+      bootstrapPassword: optionalBootstrapPassword(env),
       maxBodyBytes: integerValue(
         env,
         'IMPORT_API_MAX_BODY_BYTES',
@@ -319,18 +302,14 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
       ),
       batchSize: osmCityBatchSize,
       maxBatchSize: osmCityMaxBatchSize,
-      minDelayMs: integerValue(
-        env,
-        'OSM_CITY_UPDATE_MIN_DELAY_MS',
-        5000,
-        { min: 0, max: 300000 },
-      ),
-      maxRetries: integerValue(
-        env,
-        'OSM_CITY_UPDATE_MAX_RETRIES',
-        6,
-        { min: 0, max: 20 },
-      ),
+      minDelayMs: integerValue(env, 'OSM_CITY_UPDATE_MIN_DELAY_MS', 5000, {
+        min: 0,
+        max: 300000,
+      }),
+      maxRetries: integerValue(env, 'OSM_CITY_UPDATE_MAX_RETRIES', 6, {
+        min: 0,
+        max: 20,
+      }),
       retryBaseDelayMs: osmCityRetryBaseDelayMs,
       retryMaxDelayMs: osmCityRetryMaxDelayMs,
       userAgent: headerValue(
