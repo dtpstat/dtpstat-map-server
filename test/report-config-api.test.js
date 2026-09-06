@@ -104,12 +104,18 @@ test('admin report endpoint requires auth and returns fixed catalogs', async () 
     assert.ok(payload.catalog.fields.some((field) => field.key === 'geometry.length_m'));
     assert.ok(payload.catalog.fields.some((field) => field.key === 'city.area_m2'));
     assert.ok(payload.catalog.aggregates.some((aggregate) => aggregate.key === 'sum'));
+    assert.ok(payload.catalog.aggregates.some((aggregate) => aggregate.key === 'median'));
     assert.ok(payload.catalog.operators.some((operator) => operator.key === 'divide'));
     assert.ok(payload.catalog.operandKinds.some((kind) => kind.key === 'metric'));
     assert.deepEqual(
       payload.catalog.precedenceLevels.map((level) => level.value),
       [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
     );
+    assert.deepEqual(
+      payload.catalog.formatFontSizes.map((item) => item.value),
+      [-2, -1, 0, 1, 2],
+    );
+    assert.equal(payload.catalog.maxFormatRules, 8);
     assert.deepEqual(payload.lineTypes.map((item) => item.name), [
       'Обособленные',
       'Совмещённые',
@@ -121,6 +127,16 @@ test('saving report materializes values and rebuilds public snapshots', async ()
   await withServer(async (baseUrl, state) => {
     const config = structuredClone(DEFAULT_REPORT_CONFIG);
     config.tableColumns[2].title = 'длина сети (км)';
+    config.tableColumns[2].formatRules = [{
+      min: 10,
+      max: null,
+      bold: true,
+      italic: false,
+      underline: false,
+      strike: false,
+      color: '#112233',
+      fontSizeStep: 1,
+    }];
 
     const response = await fetch(`${baseUrl}/api/admin/report-config`, {
       method: 'PUT',
@@ -134,6 +150,7 @@ test('saving report materializes values and rebuilds public snapshots', async ()
     const payload = await response.json();
 
     assert.equal(payload.config.tableColumns[2].title, 'длина сети (км)');
+    assert.equal(payload.config.tableColumns[2].formatRules[0].color, '#112233');
     assert.equal(payload.materialized.cities, 12);
     assert.equal(payload.snapshots.csvBytes, 123);
     assert.equal(state.afterSaveCalls(), 1);
