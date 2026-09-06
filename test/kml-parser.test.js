@@ -52,10 +52,12 @@ test('KML parser keeps geometry type separate from imported business type name',
   assert.equal(result.features.length, 2);
   assert.equal(result.features[0].multiple, 2);
   assert.equal(result.features[0].businessTypeName, 'Двусторонние');
+  assert.equal(result.features[0].properties.placemarkName, 'Проспект');
   assert.equal('businessTypeName' in result.features[0].properties, false);
   assert.equal(result.features[0].geometry.type, 'LineString');
   assert.equal(result.features[1].multiple, 1);
   assert.equal(result.features[1].businessTypeName, 'Односторонние');
+  assert.equal(result.features[1].properties.placemarkName, 'Две части');
   assert.equal(result.features[1].geometry.type, 'MultiLineString');
   assert.equal(result.features[1].geometry.coordinates.length, 2);
   assert.equal(result.features[0].fingerprint.length, 64);
