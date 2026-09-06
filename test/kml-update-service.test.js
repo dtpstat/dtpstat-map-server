@@ -68,9 +68,10 @@ function createPool({
   let connections = 0;
   let loadCount = 0;
   let insertCount = 0;
+  let insertedGeometryPayload = null;
 
   const client = {
-    async query(text) {
+    async query(text, values = []) {
       const normalized = text.trim();
       queries.push(normalized);
       if (
@@ -104,6 +105,7 @@ function createPool({
         normalized.startsWith('WITH payload_rows AS') &&
         normalized.includes('INSERT INTO city_geometries')
       ) {
+        insertedGeometryPayload = JSON.parse(values[0]);
         return { rows: [], rowCount: 2 };
       }
       if (normalized.startsWith('WITH geometry_statistics AS')) {
@@ -125,6 +127,7 @@ function createPool({
     get released() { return released; },
     get connections() { return connections; },
     get insertCount() { return insertCount; },
+    get insertedGeometryPayload() { return insertedGeometryPayload; },
     async connect() {
       connections += 1;
       return client;
@@ -175,6 +178,10 @@ test('KML update resolves imported NAME to local numeric type and atomically rep
   assert.equal(result.updateRunId, 7);
   assert.equal(pool.queries.some((query) => query === 'DELETE FROM city_geometries'), true);
   assert.equal(pool.queries.some((query) => query.includes('"lineTypeId" bigint')), true);
+  assert.deepEqual(
+    pool.insertedGeometryPayload.map((row) => row.properties.placemarkName),
+    ['Первая', 'Вторая'],
+  );
   assert.equal(pool.queries.at(-1), 'COMMIT');
   assert.equal(pool.released, true);
 });
