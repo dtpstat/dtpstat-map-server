@@ -1,10 +1,10 @@
 const DEFAULT_REPORT_CONFIG = Object.freeze({
   tableColumns: Object.freeze([
-    Object.freeze({ kind: 'rank', title: '№' }),
+    Object.freeze({ kind: 'rank', title: '№', formatRules: Object.freeze([]) }),
     Object.freeze({ kind: 'city', title: 'город' }),
-    Object.freeze({ kind: 'metric', metricKey: 'lane_length_m', title: 'длина ВП (км)', scale: 0.001, decimals: 1 }),
-    Object.freeze({ kind: 'metric', metricKey: 'population', title: 'жители (тыс.)', scale: 0.001, decimals: 0 }),
-    Object.freeze({ kind: 'metric', metricKey: 'lane_m_per_1000', title: 'ВП (м/1000 чел.)', scale: 1, decimals: 1 }),
+    Object.freeze({ kind: 'metric', metricKey: 'lane_length_m', title: 'длина ВП (км)', scale: 0.001, decimals: 1, formatRules: Object.freeze([]) }),
+    Object.freeze({ kind: 'metric', metricKey: 'population', title: 'жители (тыс.)', scale: 0.001, decimals: 0, formatRules: Object.freeze([]) }),
+    Object.freeze({ kind: 'metric', metricKey: 'lane_m_per_1000', title: 'ВП (м/1000 чел.)', scale: 1, decimals: 1, formatRules: Object.freeze([]) }),
   ]),
   rank: Object.freeze({ metricKey: 'lane_m_per_1000', direction: 'desc' }),
 });
@@ -19,18 +19,57 @@ function missing(value) {
   return value === null || value === undefined || Number.isNaN(value);
 }
 
+/** @param {unknown} value @param {{ scale?: number }} column */
+function displayMetricNumber(value, column) {
+  if (missing(value)) return null;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return number * (column.scale ?? 1);
+}
+
 /** @param {unknown} value @param {{ scale?: number, decimals?: number | null }} column */
 function formatMetric(value, column) {
-  if (missing(value)) return '—';
-  const number = Number(value);
-  if (!Number.isFinite(number)) return '—';
+  const number = displayMetricNumber(value, column);
+  if (number === null) return '—';
   const decimals = column.decimals;
   const options = decimals === null || decimals === undefined
     ? { maximumFractionDigits: 6 }
     : { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
-  return new Intl.NumberFormat('ru-RU', options).format(
-    number * (column.scale ?? 1),
-  );
+  return new Intl.NumberFormat('ru-RU', options).format(number);
+}
+
+/** @param {number} value @param {any} rule */
+function valueMatchesRule(value, rule) {
+  if (rule.min !== null && rule.min !== undefined && value < Number(rule.min)) return false;
+  if (rule.max !== null && rule.max !== undefined && value > Number(rule.max)) return false;
+  return true;
+}
+
+/**
+ * Conditional ranges are evaluated against the number as displayed in this
+ * column (after scale, before decimal string formatting). First matching rule
+ * wins so overlapping ranges remain deterministic.
+ * @param {HTMLTableCellElement} cell
+ * @param {number | null} numericValue
+ * @param {any[]} rules
+ */
+function applyConditionalFormatting(cell, numericValue, rules = []) {
+  if (numericValue === null || !Number.isFinite(numericValue)) return;
+  const rule = rules.find((candidate) => valueMatchesRule(numericValue, candidate));
+  if (!rule) return;
+
+  if (rule.bold) cell.style.fontWeight = '700';
+  if (rule.italic) cell.style.fontStyle = 'italic';
+  const decorations = [];
+  if (rule.underline) decorations.push('underline');
+  if (rule.strike) decorations.push('line-through');
+  if (decorations.length > 0) cell.style.textDecoration = decorations.join(' ');
+  if (rule.color) cell.style.color = rule.color;
+  const fontSizeStep = Number(rule.fontSizeStep ?? 0);
+  if (fontSizeStep !== 0 && Number.isInteger(fontSizeStep)) {
+    const sign = fontSizeStep > 0 ? '+' : '-';
+    cell.style.fontSize = `calc(1em ${sign} ${Math.abs(fontSizeStep)}pt)`;
+  }
 }
 
 /** @param {any} city @param {string} field */
@@ -94,8 +133,7 @@ export function createCityList(elements) {
       button.dataset.sortDirection = direction;
       if (isActive) {
         const nextDirection = direction === 'asc' ? 'убыванию' : 'возрастанию';
-        const currentDirection =
-          direction === 'asc' ? 'по возрастанию' : 'по убыванию';
+        const currentDirection = direction === 'asc' ? 'по возрастанию' : 'по убыванию';
         header?.setAttribute(
           'aria-sort',
           direction === 'asc' ? 'ascending' : 'descending',
@@ -155,7 +193,9 @@ export function createCityList(elements) {
     cell.dataset.label = column.title;
 
     if (column.kind === 'rank') {
-      cell.textContent = missing(city.rank) ? '—' : String(city.rank);
+      const numericRank = missing(city.rank) ? null : Number(city.rank);
+      cell.textContent = numericRank === null ? '—' : String(city.rank);
+      applyConditionalFormatting(cell, numericRank, column.formatRules);
       return cell;
     }
     if (column.kind === 'city') {
@@ -169,7 +209,10 @@ export function createCityList(elements) {
       return cell;
     }
     if (column.kind === 'metric') {
-      cell.textContent = formatMetric(city.metrics?.[column.metricKey], column);
+      const rawValue = city.metrics?.[column.metricKey];
+      const numericValue = displayMetricNumber(rawValue, column);
+      cell.textContent = formatMetric(rawValue, column);
+      applyConditionalFormatting(cell, numericValue, column.formatRules);
       return cell;
     }
     cell.textContent = '—';
