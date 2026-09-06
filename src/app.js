@@ -1,86 +1,128 @@
-import compression       from 'compression';
-import express           from 'express';
-import helmet            from 'helmet';
-import {readFileSync}     from 'node:fs';
-import path               from 'node:path';
-import {CITY_MARKER_ICON} from '../public/js/city-marker-icon.js';
-import {createAdminTaskManager} from './data/admin-task-manager.js';
+import compression from 'compression';
+import express from 'express';
+import helmet from 'helmet';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { CITY_MARKER_ICON } from '../public/js/city-marker-icon.js';
+import { createAdminTaskManager } from './data/admin-task-manager.js';
 import {
-	DEFAULT_REPORT_CONFIG,
-	validateReportConfig,
+  DEFAULT_REPORT_CONFIG,
+  validateReportConfig,
 } from './data/report-config.js';
-import {createBasicAuth} from './http/basic-auth.js';
-import {projectManifest, renderProjectPage} from './http/project-page.js';
-import {createApiRouter} from './routes/api.js';
-import {createKmlTransferRouter} from './routes/kml-transfer-api.js';
-import {createLineTypesRouter} from './routes/line-types-api.js';
-import {createProjectSettingsRouter} from './routes/project-settings-api.js';
-import {createReportConfigRouter} from './routes/report-config-api.js';
+import { createBasicAuth } from './http/basic-auth.js';
+import { projectManifest, renderProjectPage } from './http/project-page.js';
+import { createAdminSecurityRouter } from './routes/admin-security-api.js';
+import { createApiRouter } from './routes/api.js';
+import { createKmlTransferRouter } from './routes/kml-transfer-api.js';
+import { createLineTypesRouter } from './routes/line-types-api.js';
+import { createProjectSettingsRouter } from './routes/project-settings-api.js';
+import { createReportConfigRouter } from './routes/report-config-api.js';
 
 const PUBLIC_ASSETS = new Map([
-	['/favicon.ico', 'favicon.ico'],
-	['/favicon-16x16.png', 'favicon-16x16.png'],
-	['/favicon-32x32.png', 'favicon-32x32.png'],
-	['/apple-touch-icon.png', 'apple-touch-icon.png'],
-	['/android-chrome-192x192.png', 'android-chrome-192x192.png'],
-	['/android-chrome-512x512.png', 'android-chrome-512x512.png'],
-	['/bus-lanes.jpeg', 'bus-lanes.jpeg'],
+  ['/favicon.ico', 'favicon.ico'],
+  ['/favicon-16x16.png', 'favicon-16x16.png'],
+  ['/favicon-32x32.png', 'favicon-32x32.png'],
+  ['/apple-touch-icon.png', 'apple-touch-icon.png'],
+  ['/android-chrome-192x192.png', 'android-chrome-192x192.png'],
+  ['/android-chrome-512x512.png', 'android-chrome-512x512.png'],
+  ['/bus-lanes.jpeg', 'bus-lanes.jpeg'],
 ]);
 const PUBLIC_DOWNLOADS = new Map([
-	['/bus-lanes.csv', 'bus-lanes.csv'],
-	['/bus-lanes.geojson', 'bus-lanes.geojson'],
+  ['/bus-lanes.csv', 'bus-lanes.csv'],
+  ['/bus-lanes.geojson', 'bus-lanes.geojson'],
 ]);
 const CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'base64');
 const TEST_PROJECT_SETTINGS = Object.freeze({
-	projectName: 'Выделенные полосы в России',
-	keywords: ['выделенные полосы', 'общественный транспорт'],
-	footerHtml: '<h2>О проекте</h2><p>Тестовые настройки проекта.</p>',
-	yandexMetrikaId: null,
-	googleAnalyticsId: null,
-	updatedAt: '2026-01-01T00:00:00.000Z',
+  projectName: 'Выделенные полосы в России',
+  keywords: ['выделенные полосы', 'общественный транспорт'],
+  footerHtml: '<h2>О проекте</h2><p>Тестовые настройки проекта.</p>',
+  yandexMetrikaId: null,
+  googleAnalyticsId: null,
+  showLineLabels: false,
+  updatedAt: '2026-01-01T00:00:00.000Z',
 });
 
-function testProjectSettingsRepository(){
-	let settings = {...TEST_PROJECT_SETTINGS};
-	return {
-		async get(){ return settings; },
-		async save(payload){
-			settings = {
-				...payload,
-				updatedAt: new Date().toISOString(),
-			};
-			return settings;
-		},
-	};
+function testProjectSettingsRepository() {
+  let settings = { ...TEST_PROJECT_SETTINGS };
+  return {
+    async get() { return settings; },
+    async save(payload) {
+      settings = { ...payload, updatedAt: new Date().toISOString() };
+      return settings;
+    },
+  };
 }
 
-function testLineTypesRepository(){
-	return {
-		async list(){ return []; },
-		async save(){ return []; },
-	};
+function testLineTypesRepository() {
+  return {
+    async list() { return []; },
+    async save() { return []; },
+  };
 }
 
-function testReportConfigService(){
-	let config = structuredClone(DEFAULT_REPORT_CONFIG);
-	return {
-		async get(){ return structuredClone(config); },
-		async save(payload){
-			config = {
-				...validateReportConfig(payload),
-				updatedAt: new Date().toISOString(),
-			};
-			return {
-				config: structuredClone(config),
-				materialized: {
-					cities: 0,
-					metrics: config.metrics.length,
-					rankMetricKey: config.rank.metricKey,
-					rankDirection: config.rank.direction,
-				},
-			};
-		},
-	};
+function testReportConfigService() {
+  let config = structuredClone(DEFAULT_REPORT_CONFIG);
+  return {
+    async get() { return structuredClone(config); },
+    async save(payload) {
+      config = {
+        ...validateReportConfig(payload),
+        updatedAt: new Date().toISOString(),
+      };
+      return {
+        config: structuredClone(config),
+        materialized: {
+          cities: 0,
+          metrics: config.metrics.length,
+          rankMetricKey: config.rank.metricKey,
+          rankDirection: config.rank.direction,
+        },
+      };
+    },
+  };
+}
+
+function testSecurity(config) {
+  const username = config.importApi.username ?? config.importApi.bootstrapUsername ?? 'importer';
+  const password = config.importApi.password ?? config.importApi.bootstrapPassword ?? 'test-secret';
+  const basic = createBasicAuth({ username, password, realm: 'dtpstat-admin' });
+  const testUser = {
+    id: 1,
+    username,
+    email: null,
+    canManageData: true,
+    canManageInterface: true,
+    isSuperuser: true,
+    isBlocked: false,
+  };
+  const requireAuth = (request, response, next) => basic(request, response, () => {
+    request.adminUser = testUser;
+    next();
+  });
+  const adminAuth = {
+    requireAny: requireAuth,
+    requireAdminEntry: requireAuth,
+    requireData: requireAuth,
+    requireInterface: requireAuth,
+    requireSuperuser: requireAuth,
+  };
+  const securityService = {
+    async appendAudit() {},
+    async listUsers() { return [testUser]; },
+    async createUser() { return testUser; },
+    async updateUser() { return testUser; },
+    async changePassword() { return testUser; },
+    async getSecuritySettings() {
+      return {
+        maxFailedAttempts: 5,
+        failureWindowSeconds: 900,
+        lockoutSeconds: 900,
+      };
+    },
+    async saveSecuritySettings(payload) { return payload; },
+    async listAudit() { return []; },
+  };
+  return { adminAuth, securityService };
 }
 
 /**
@@ -97,255 +139,242 @@ function testReportConfigService(){
  *   kmlUpdateService: import('./routes/api.js').KmlUpdateService,
  *   osmCityUpdateService: import('./routes/api.js').OsmCityUpdateService,
  *   adminTasks?: ReturnType<typeof createAdminTaskManager>,
+ *   adminAuth?: ReturnType<import('./http/admin-auth.js').createAdminAuthorization>,
+ *   securityService?: ReturnType<import('./data/admin-security.js').createAdminSecurityService>,
  *   config: any
  * }} dependencies
  */
 export function createApp({
-	repository,
-	lineTypesRepository,
-	projectSettingsRepository,
-	reportConfigService,
-	refreshPublicDownloads,
-	exportRepository,
-	importService,
-	cityBoundaryTransferService,
-	populationService,
-	kmlUpdateService,
-	osmCityUpdateService,
-	adminTasks = createAdminTaskManager(),
-	config,
-}){
-	const app             = express();
-	const isProduction    = config.environment === 'production';
-	const effectiveLineTypesRepository = lineTypesRepository ??
-		(config.environment === 'test' ? testLineTypesRepository() : null);
-	const effectiveProjectSettingsRepository = projectSettingsRepository ??
-		(config.environment === 'test' ? testProjectSettingsRepository() : null);
-	const effectiveReportConfigService = reportConfigService ??
-		(config.environment === 'test' ? testReportConfigService() : null);
-	if(!effectiveLineTypesRepository){
-		throw new Error('lineTypesRepository is required');
-	}
-	if(!effectiveProjectSettingsRepository){
-		throw new Error('projectSettingsRepository is required');
-	}
-	if(!effectiveReportConfigService){
-		throw new Error('reportConfigService is required');
-	}
-	const publicDirectory = path.join(config.projectRoot, 'public');
-	const adminDirectory  = path.join(config.projectRoot, 'admin');
-	const publicDownloadDirectory = path.join(
-		config.projectRoot,
-		'var',
-		'public-downloads',
-	);
-	const publicPageTemplate = readFileSync(
-		path.join(config.projectRoot, 'index.html'),
-		'utf8',
-	);
-	const requireAdminAuth = createBasicAuth({
-		username: config.importApi.username,
-		password: config.importApi.password,
-		realm: 'data-import',
-	});
+  repository,
+  lineTypesRepository,
+  projectSettingsRepository,
+  reportConfigService,
+  refreshPublicDownloads,
+  exportRepository,
+  importService,
+  cityBoundaryTransferService,
+  populationService,
+  kmlUpdateService,
+  osmCityUpdateService,
+  adminTasks = createAdminTaskManager(),
+  adminAuth,
+  securityService,
+  config,
+}) {
+  const app = express();
+  const isProduction = config.environment === 'production';
+  const effectiveLineTypesRepository = lineTypesRepository ??
+    (config.environment === 'test' ? testLineTypesRepository() : null);
+  const effectiveProjectSettingsRepository = projectSettingsRepository ??
+    (config.environment === 'test' ? testProjectSettingsRepository() : null);
+  const effectiveReportConfigService = reportConfigService ??
+    (config.environment === 'test' ? testReportConfigService() : null);
+  const testAuth = config.environment === 'test' && (!adminAuth || !securityService)
+    ? testSecurity(config)
+    : null;
+  const effectiveAdminAuth = adminAuth ?? testAuth?.adminAuth;
+  const effectiveSecurityService = securityService ?? testAuth?.securityService;
 
-	app.disable('x-powered-by');
-	app.use(
-		helmet({
-			crossOriginEmbedderPolicy: false,
-			contentSecurityPolicy:     {
-				directives: {
-					defaultSrc: ["'self'"],
-					scriptSrc:  [
-						"'self'",
-						"'wasm-unsafe-eval'",
-						'https://mc.yandex.ru',
-						'https://yastatic.net',
-						'https://*.googletagmanager.com',
-					],
-					styleSrc:   ["'self'", "'unsafe-inline'"],
-					imgSrc:     [
-						"'self'",
-						'data:',
-						'blob:',
-						'https://*.mapbox.com',
-						'https://mc.yandex.ru',
-						'https://*.google-analytics.com',
-						'https://*.googletagmanager.com',
-					],
-					connectSrc: [
-						"'self'",
-						'ws:',
-						'wss:',
-						'https://*.mapbox.com',
-						'https://mc.yandex.ru',
-						'wss://mc.yandex.ru',
-						'https://*.google-analytics.com',
-						'https://*.analytics.google.com',
-						'https://*.googletagmanager.com',
-					],
-					workerSrc:  ["'self'", 'blob:'],
-					childSrc:   ["'self'", 'blob:', 'https://mc.yandex.ru'],
-					frameSrc:   ["'self'", 'blob:', 'https://mc.yandex.ru'],
-				},
-			},
-		}),
-	);
-	app.use(compression());
-	app.get('/images/city-marker.png', (_request, response) => {
-		response
-			.set('Cache-Control', isProduction ? 'public, max-age=86400' : 'no-cache')
-			.type('image/png')
-			.send(CITY_MARKER_PNG);
-	});
-	app.use(
-		'/admin',
-		requireAdminAuth,
-		express.static(adminDirectory, {
-			index: 'index.html',
-			maxAge: isProduction ? '5m' : 0,
-		}),
-	);
+  if (!effectiveLineTypesRepository) throw new Error('lineTypesRepository is required');
+  if (!effectiveProjectSettingsRepository) throw new Error('projectSettingsRepository is required');
+  if (!effectiveReportConfigService) throw new Error('reportConfigService is required');
+  if (!effectiveAdminAuth || !effectiveSecurityService) {
+    throw new Error('adminAuth and securityService are required');
+  }
 
-	app.use(
-		'/vendor/mapbox-gl',
-		express.static(path.join(config.projectRoot, 'node_modules/mapbox-gl/dist'), {
-			immutable: isProduction,
-			maxAge:    isProduction ? '30d' : 0,
-		}),
-	);
-	app.use(
-		express.static(publicDirectory, {
-			index:  false,
-			maxAge: isProduction ? '1h' : 0,
-		}),
-	);
+  const publicDirectory = path.join(config.projectRoot, 'public');
+  const adminDirectory = path.join(config.projectRoot, 'admin');
+  const publicDownloadDirectory = path.join(config.projectRoot, 'var', 'public-downloads');
+  const publicPageTemplate = readFileSync(path.join(config.projectRoot, 'index.html'), 'utf8');
 
-	app.use(
-		'/api',
-		createLineTypesRouter({
-			lineTypesRepository: effectiveLineTypesRepository,
-			adminTasks,
-			importApi: config.importApi,
-		}),
-	);
-	app.use(
-		'/api',
-		createProjectSettingsRouter({
-			projectSettingsRepository: effectiveProjectSettingsRepository,
-			adminTasks,
-			importApi: config.importApi,
-		}),
-	);
-	app.use(
-		'/api',
-		createReportConfigRouter({
-			reportConfigService: effectiveReportConfigService,
-			lineTypesRepository: effectiveLineTypesRepository,
-			adminTasks,
-			importApi: config.importApi,
-			afterSave: async () => refreshPublicDownloads?.(),
-		}),
-	);
-	app.use(
-		'/api',
-		createKmlTransferRouter({
-			exportRepository,
-			importService,
-			adminTasks,
-			importApi: config.importApi,
-		}),
-	);
-	app.use(
-		'/api',
-		createApiRouter({
-			repository,
-			exportRepository,
-			importService,
-			cityBoundaryTransferService,
-			populationService,
-			kmlUpdateService,
-			osmCityUpdateService,
-			adminTasks,
-			publicMap: config.publicMap,
-			importApi: config.importApi,
-			kmlUpdate: config.kmlUpdate,
-			osmCityUpdate: config.osmCityUpdate,
-		}),
-	);
+  app.disable('x-powered-by');
+  app.use(
+    helmet({
+      crossOriginEmbedderPolicy: false,
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: [
+            "'self'",
+            "'wasm-unsafe-eval'",
+            'https://mc.yandex.ru',
+            'https://yastatic.net',
+            'https://*.googletagmanager.com',
+          ],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: [
+            "'self'", 'data:', 'blob:', 'https://*.mapbox.com',
+            'https://mc.yandex.ru', 'https://*.google-analytics.com',
+            'https://*.googletagmanager.com',
+          ],
+          connectSrc: [
+            "'self'", 'ws:', 'wss:', 'https://*.mapbox.com',
+            'https://mc.yandex.ru', 'wss://mc.yandex.ru',
+            'https://*.google-analytics.com', 'https://*.analytics.google.com',
+            'https://*.googletagmanager.com',
+          ],
+          workerSrc: ["'self'", 'blob:'],
+          childSrc: ["'self'", 'blob:', 'https://mc.yandex.ru'],
+          frameSrc: ["'self'", 'blob:', 'https://mc.yandex.ru'],
+        },
+      },
+    }),
+  );
+  app.use(compression());
 
-	for(const [route, fileName] of PUBLIC_ASSETS){
-		app.get(route, (_request, response) => {
-			response.sendFile(fileName, {root: config.projectRoot});
-		});
-	}
-	for(const [route, fileName] of PUBLIC_DOWNLOADS){
-		app.get(route, (_request, response, next) => {
-			response.set('Cache-Control', 'no-cache');
-			response.sendFile(fileName, {root: publicDownloadDirectory}, (error) => {
-				if(!error) return;
-				if(error.status === 404 || error.code === 'ENOENT'){
-					response.status(404).type('text').send('Not found');
-					return;
-				}
-				next(error);
-			});
-		});
-	}
+  app.get('/images/city-marker.png', (_request, response) => {
+    response
+      .set('Cache-Control', isProduction ? 'public, max-age=86400' : 'no-cache')
+      .type('image/png')
+      .send(CITY_MARKER_PNG);
+  });
 
-	app.get('/site.webmanifest', async (_request, response, next) => {
-		try {
-			const settings = await effectiveProjectSettingsRepository.get();
-			response
-				.set('Cache-Control', 'no-cache')
-				.type('application/manifest+json')
-				.send(JSON.stringify(projectManifest(settings)));
-		} catch (error) {
-			next(error);
-		}
-	});
+  // Only entry HTML is authenticated here. Static admin CSS/JS contain no
+  // secrets and stay readable so one bad Basic credential counts as one login
+  // attempt rather than a separate failure for every asset request.
+  for (const route of ['/admin', '/admin/', '/admin/index.html']) {
+    app.get(route, effectiveAdminAuth.requireAdminEntry, (_request, response) => {
+      response.set('Cache-Control', 'no-store');
+      response.sendFile('index.html', { root: adminDirectory });
+    });
+  }
+  app.use(
+    '/admin',
+    express.static(adminDirectory, {
+      index: false,
+      maxAge: isProduction ? '5m' : 0,
+    }),
+  );
 
-	app.get('/', async (_request, response, next) => {
-		try {
-			const settings = await effectiveProjectSettingsRepository.get();
-			response
-				.set('Cache-Control', 'no-cache')
-				.type('html')
-				.send(renderProjectPage(publicPageTemplate, settings));
-		} catch (error) {
-			next(error);
-		}
-	});
+  app.use(
+    '/vendor/mapbox-gl',
+    express.static(path.join(config.projectRoot, 'node_modules/mapbox-gl/dist'), {
+      immutable: isProduction,
+      maxAge: isProduction ? '30d' : 0,
+    }),
+  );
+  app.use(
+    express.static(publicDirectory, {
+      index: false,
+      maxAge: isProduction ? '1h' : 0,
+    }),
+  );
 
-	app.use((request, response) => {
-		if(request.path.startsWith('/api/')){
-			response.status(404).json({error: 'API endpoint not found'});
-			return;
-		}
-		response.status(404).type('text').send('Not found');
-	});
+  const commonAdmin = {
+    adminAuth: effectiveAdminAuth,
+    securityService: effectiveSecurityService,
+    maxBodyBytes: config.importApi.maxBodyBytes,
+  };
+  app.use('/api', createAdminSecurityRouter(commonAdmin));
+  app.use('/api', createLineTypesRouter({
+    lineTypesRepository: effectiveLineTypesRepository,
+    ...commonAdmin,
+  }));
+  app.use('/api', createProjectSettingsRouter({
+    projectSettingsRepository: effectiveProjectSettingsRepository,
+    ...commonAdmin,
+  }));
+  app.use('/api', createReportConfigRouter({
+    reportConfigService: effectiveReportConfigService,
+    lineTypesRepository: effectiveLineTypesRepository,
+    ...commonAdmin,
+    afterSave: async () => refreshPublicDownloads?.(),
+  }));
+  app.use('/api', createKmlTransferRouter({
+    exportRepository,
+    importService,
+    adminTasks,
+    ...commonAdmin,
+  }));
+  app.use('/api', createApiRouter({
+    repository,
+    exportRepository,
+    importService,
+    cityBoundaryTransferService,
+    populationService,
+    kmlUpdateService,
+    osmCityUpdateService,
+    adminTasks,
+    adminAuth: effectiveAdminAuth,
+    securityService: effectiveSecurityService,
+    publicMap: config.publicMap,
+    importApi: config.importApi,
+    kmlUpdate: config.kmlUpdate,
+    osmCityUpdate: config.osmCityUpdate,
+  }));
 
-	app.use((error, request, response, _next) => {
-		if(error?.type === 'entity.too.large'){
-			response.status(413).json({error: 'Request body is too large'});
-			return;
-		}
-		if(error?.type === 'entity.parse.failed'){
-			response.status(400).json({error: 'Request body is not valid JSON'});
-			return;
-		}
-		if(error?.status === 415 || error?.type === 'encoding.unsupported'){
-			response.status(415).json({error: error.message || 'Unsupported content encoding'});
-			return;
-		}
+  for (const [route, fileName] of PUBLIC_ASSETS) {
+    app.get(route, (_request, response) => {
+      response.sendFile(fileName, { root: config.projectRoot });
+    });
+  }
+  for (const [route, fileName] of PUBLIC_DOWNLOADS) {
+    app.get(route, (_request, response, next) => {
+      response.set('Cache-Control', 'no-cache');
+      response.sendFile(fileName, { root: publicDownloadDirectory }, (error) => {
+        if (!error) return;
+        if (error.status === 404 || error.code === 'ENOENT') {
+          response.status(404).type('text').send('Not found');
+          return;
+        }
+        next(error);
+      });
+    });
+  }
 
-		console.error('Request failed', {
-			method: request.method,
-			path:   request.path,
-			error:  error instanceof Error ? error.message : String(error),
-		});
-		response.status(503).json({error: 'Service temporarily unavailable'});
-	});
+  app.get('/site.webmanifest', async (_request, response, next) => {
+    try {
+      const settings = await effectiveProjectSettingsRepository.get();
+      response
+        .set('Cache-Control', 'no-cache')
+        .type('application/manifest+json')
+        .send(JSON.stringify(projectManifest(settings)));
+    } catch (error) {
+      next(error);
+    }
+  });
 
-	return app;
+  app.get('/', async (_request, response, next) => {
+    try {
+      const settings = await effectiveProjectSettingsRepository.get();
+      response
+        .set('Cache-Control', 'no-cache')
+        .type('html')
+        .send(renderProjectPage(publicPageTemplate, settings));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.use((request, response) => {
+    if (request.path.startsWith('/api/')) {
+      response.status(404).json({ error: 'API endpoint not found' });
+      return;
+    }
+    response.status(404).type('text').send('Not found');
+  });
+
+  app.use((error, request, response, _next) => {
+    if (error?.type === 'entity.too.large') {
+      response.status(413).json({ error: 'Request body is too large' });
+      return;
+    }
+    if (error?.type === 'entity.parse.failed') {
+      response.status(400).json({ error: 'Request body is not valid JSON' });
+      return;
+    }
+    if (error?.status === 415 || error?.type === 'encoding.unsupported') {
+      response.status(415).json({ error: error.message || 'Unsupported content encoding' });
+      return;
+    }
+
+    console.error('Request failed', {
+      method: request.method,
+      path: request.path,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    response.status(503).json({ error: 'Service temporarily unavailable' });
+  });
+
+  return app;
 }
