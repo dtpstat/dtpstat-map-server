@@ -16,6 +16,7 @@ test('metric compiler uses server SQL fragments and parameters for selected grou
     operations: [
       {
         operator: 'divide',
+        priority: 1,
         operand: {
           kind: 'aggregate',
           field: 'geometry.length_m',
@@ -40,6 +41,7 @@ test('metric compiler parameterizes constants instead of interpolating them as e
     operations: [
       {
         operator: 'multiply',
+        priority: 1,
         operand: { kind: 'constant', value: 1000 },
       },
     ],
@@ -48,4 +50,34 @@ test('metric compiler parameterizes constants instead of interpolating them as e
   assert.match(query.text, /population\.population::double precision/);
   assert.match(query.text, /\$2::double precision/);
   assert.deepEqual(query.values, ['per_1000', 1000]);
+});
+
+test('metric compiler honors explicit precedence through RPN grouping', () => {
+  const query = compileReportMetricQuery({
+    key: 'grouped',
+    source: { kind: 'field', field: 'city.population' },
+    operations: [
+      {
+        operator: 'add',
+        priority: 2,
+        operand: { kind: 'constant', value: 10 },
+      },
+      {
+        operator: 'multiply',
+        priority: 1,
+        operand: { kind: 'constant', value: 100 },
+      },
+      {
+        operator: 'subtract',
+        priority: 2,
+        operand: { kind: 'constant', value: 1 },
+      },
+    ],
+  });
+
+  assert.match(
+    query.text,
+    /\(\(population\.population::double precision \+ \$2::double precision\) \* \(\$3::double precision - \$4::double precision\)\)/,
+  );
+  assert.deepEqual(query.values, ['grouped', 10, 100, 1]);
 });
