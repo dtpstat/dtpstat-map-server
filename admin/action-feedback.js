@@ -1,3 +1,8 @@
+const stylesheet = document.createElement('link');
+stylesheet.rel = 'stylesheet';
+stylesheet.href = '/admin/action-feedback.css';
+document.head.append(stylesheet);
+
 const host = document.createElement('div');
 host.className = 'admin-feedback-host';
 host.setAttribute('aria-live', 'polite');
