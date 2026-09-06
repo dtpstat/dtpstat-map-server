@@ -16,6 +16,7 @@ import { createApiRouter } from './routes/api.js';
 import { createKmlTransferRouter } from './routes/kml-transfer-api.js';
 import { createLineTypesRouter } from './routes/line-types-api.js';
 import { createProjectSettingsRouter } from './routes/project-settings-api.js';
+import { createProjectSettingsTransferRouter } from './routes/project-settings-transfer-api.js';
 import { createReportConfigRouter } from './routes/report-config-api.js';
 
 const PUBLIC_ASSETS = new Map([
@@ -82,6 +83,36 @@ function testReportConfigService() {
   };
 }
 
+function testSettingsTransferService() {
+  return {
+    async exportSettings() {
+      return {
+        _dtpstat: {
+          kind: 'project-settings',
+          schemaVersion: 1,
+          exportedAt: '2026-01-01T00:00:00.000Z',
+        },
+        projectSettings: TEST_PROJECT_SETTINGS,
+        lineTypes: [],
+        reportConfig: structuredClone(DEFAULT_REPORT_CONFIG),
+        securitySettings: {
+          maxFailedAttempts: 5,
+          failureWindowSeconds: 900,
+          lockoutSeconds: 900,
+        },
+      };
+    },
+    async importSettings() {
+      return {
+        projectName: TEST_PROJECT_SETTINGS.projectName,
+        lineTypes: 0,
+        metrics: DEFAULT_REPORT_CONFIG.metrics.length,
+        materializedCities: 0,
+      };
+    },
+  };
+}
+
 function testSecurity(config) {
   const username = config.importApi.username ?? config.importApi.bootstrapUsername ?? 'importer';
   const password = config.importApi.password ?? config.importApi.bootstrapPassword ?? 'test-secret';
@@ -93,6 +124,7 @@ function testSecurity(config) {
     canManageData: true,
     canManageInterface: true,
     isSuperuser: true,
+    isBootstrap: true,
     isBlocked: false,
   };
   const requireAuth = (request, response, next) => basic(request, response, () => {
@@ -130,8 +162,10 @@ function testSecurity(config) {
  *   repository: import('./routes/api.js').CitiesRepository,
  *   lineTypesRepository?: { list: () => Promise<any[]>, save: (payload: unknown) => Promise<any[]> },
  *   projectSettingsRepository?: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
+ *   settingsTransferService?: { exportSettings: () => Promise<object>, importSettings: (payload: unknown) => Promise<object> },
  *   reportConfigService?: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
  *   refreshPublicDownloads?: () => Promise<any>,
+ *   refreshPublicDownloadsAfterSettingsImport?: () => Promise<any>,
  *   exportRepository: import('./routes/api.js').DataExportRepository,
  *   importService: import('./routes/api.js').DataImportService,
  *   cityBoundaryTransferService: import('./routes/api.js').CityBoundaryTransferService,
@@ -148,8 +182,10 @@ export function createApp({
   repository,
   lineTypesRepository,
   projectSettingsRepository,
+  settingsTransferService,
   reportConfigService,
   refreshPublicDownloads,
+  refreshPublicDownloadsAfterSettingsImport,
   exportRepository,
   importService,
   cityBoundaryTransferService,
@@ -167,6 +203,8 @@ export function createApp({
     (config.environment === 'test' ? testLineTypesRepository() : null);
   const effectiveProjectSettingsRepository = projectSettingsRepository ??
     (config.environment === 'test' ? testProjectSettingsRepository() : null);
+  const effectiveSettingsTransferService = settingsTransferService ??
+    (config.environment === 'test' ? testSettingsTransferService() : null);
   const effectiveReportConfigService = reportConfigService ??
     (config.environment === 'test' ? testReportConfigService() : null);
   const testAuth = config.environment === 'test' && (!adminAuth || !securityService)
@@ -177,6 +215,7 @@ export function createApp({
 
   if (!effectiveLineTypesRepository) throw new Error('lineTypesRepository is required');
   if (!effectiveProjectSettingsRepository) throw new Error('projectSettingsRepository is required');
+  if (!effectiveSettingsTransferService) throw new Error('settingsTransferService is required');
   if (!effectiveReportConfigService) throw new Error('reportConfigService is required');
   if (!effectiveAdminAuth || !effectiveSecurityService) {
     throw new Error('adminAuth and securityService are required');
@@ -270,6 +309,11 @@ export function createApp({
     maxBodyBytes: config.importApi.maxBodyBytes,
   };
   app.use('/api', createAdminSecurityRouter(commonAdmin));
+  app.use('/api', createProjectSettingsTransferRouter({
+    settingsTransferService: effectiveSettingsTransferService,
+    ...commonAdmin,
+    afterImport: async () => refreshPublicDownloadsAfterSettingsImport?.(),
+  }));
   app.use('/api', createLineTypesRouter({
     lineTypesRepository: effectiveLineTypesRepository,
     ...commonAdmin,
