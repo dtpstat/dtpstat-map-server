@@ -1,4 +1,9 @@
 import express, { Router } from 'express';
+import {
+  CITY_MARKER_ICON_MAX_BYTES,
+  CityMarkerIconValidationError,
+  validateCityMarkerIcon,
+} from '../data/city-marker-icon.js';
 import { MapboxAccessTokenValidationError } from '../data/mapbox-access-token.js';
 import {
   PROJECT_CONTENT_CLASSES,
@@ -12,7 +17,9 @@ import { createAdminOperationAudit } from '../http/admin-auth.js';
  *   projectSettingsRepository: {
  *     get: () => Promise<any>,
  *     save: (payload: unknown) => Promise<any>,
- *     getPublicMapConfig?: () => Promise<any>
+ *     getPublicMapConfig?: () => Promise<any>,
+ *     saveCityMarkerIcon?: (icon: object) => Promise<any>,
+ *     clearCityMarkerIcon?: () => Promise<any>
  *   },
  *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
  *   securityService: ReturnType<import('../data/admin-security.js').createAdminSecurityService>,
@@ -31,6 +38,11 @@ export function createProjectSettingsRouter({
     strict: true,
     inflate: true,
     type: 'application/json',
+  });
+  const cityMarkerBody = express.raw({
+    limit: CITY_MARKER_ICON_MAX_BYTES,
+    inflate: false,
+    type: 'image/png',
   });
 
   // In production this route is registered before the general API router, so
@@ -70,6 +82,13 @@ export function createProjectSettingsRouter({
           editor: {
             tags: PROJECT_CONTENT_TAGS,
             classes: PROJECT_CONTENT_CLASSES,
+            cityMarkerIcon: {
+              mime: 'image/png',
+              maxBytes: CITY_MARKER_ICON_MAX_BYTES,
+              minSize: 16,
+              maxSize: 256,
+              square: true,
+            },
           },
         });
       } catch (error) {
@@ -100,6 +119,47 @@ export function createProjectSettingsRouter({
       }
     },
   );
+
+  if (typeof projectSettingsRepository.saveCityMarkerIcon === 'function') {
+    router.put(
+      '/admin/project-settings/city-marker-icon',
+      adminAuth.requireInterface,
+      createAdminOperationAudit(securityService, 'interface.project.city-marker-icon.update'),
+      cityMarkerBody,
+      async (request, response, next) => {
+        try {
+          const icon = validateCityMarkerIcon(
+            request.body,
+            request.get('content-type'),
+          );
+          const settings = await projectSettingsRepository.saveCityMarkerIcon(icon);
+          response.set('Cache-Control', 'no-store').json({ settings });
+        } catch (error) {
+          if (error instanceof CityMarkerIconValidationError) {
+            response.status(400).json({ error: error.message });
+            return;
+          }
+          next(error);
+        }
+      },
+    );
+  }
+
+  if (typeof projectSettingsRepository.clearCityMarkerIcon === 'function') {
+    router.delete(
+      '/admin/project-settings/city-marker-icon',
+      adminAuth.requireInterface,
+      createAdminOperationAudit(securityService, 'interface.project.city-marker-icon.reset'),
+      async (_request, response, next) => {
+        try {
+          const settings = await projectSettingsRepository.clearCityMarkerIcon();
+          response.set('Cache-Control', 'no-store').json({ settings });
+        } catch (error) {
+          next(error);
+        }
+      },
+    );
+  }
 
   return router;
 }
