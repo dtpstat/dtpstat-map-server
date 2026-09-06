@@ -2,6 +2,7 @@ import {
   loadCities,
   loadLineTypes,
   loadMapConfig,
+  loadProjectSettings,
   loadReportConfig,
   loadViewportGeometries,
 } from './api.js';
@@ -191,14 +192,17 @@ cityList.onSelect(selectCity);
 
 async function start() {
   try {
-    const mapConfig = await loadMapConfig();
-    mapController = await createMapController(mapConfig);
-
-    const [cities, lineTypes, reportConfig] = await Promise.all([
+    const [mapConfig, projectSettings, cities, lineTypes, reportConfig] = await Promise.all([
+      loadMapConfig(),
+      loadProjectSettings(),
       loadCities(),
       loadLineTypes(),
       loadReportConfig(),
     ]);
+    mapController = await createMapController({
+      ...mapConfig,
+      showLineLabels: Boolean(projectSettings.showLineLabels),
+    });
     if (!lineTypes.length) throw new Error('Справочник типов линий пуст');
 
     applyLineTypes(lineTypes);
