@@ -159,7 +159,7 @@ const RECORD_FAILED_LOGIN_SQL = `
     WHERE id = $1
     FOR UPDATE
   ), next_state AS (
-    SELECT id,
+    SELECT id AS user_id,
       CASE WHEN reset_window THEN 1 ELSE failed_login_count + 1 END AS next_count,
       CASE WHEN reset_window THEN $2::timestamptz ELSE failed_login_window_started_at END AS next_window_started_at
     FROM locked_user
@@ -175,7 +175,7 @@ const RECORD_FAILED_LOGIN_SQL = `
     END,
     updated_at = NOW()
   FROM next_state
-  WHERE users.id = next_state.id
+  WHERE users.id = next_state.user_id
   RETURNING ${USER_FIELDS_SQL}
 `;
 
