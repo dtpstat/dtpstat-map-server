@@ -13,6 +13,7 @@
     "db:init": "node scripts/init-database.js",
     "db:migrate": "node scripts/migrate.js",
     "db:import": "node scripts/import-data.js",
+    "admin:unblock": "node scripts/unblock-admin.js",
     "lint": "eslint .",
     "test": "node --test",
     "check": "npm run lint && npm test"
