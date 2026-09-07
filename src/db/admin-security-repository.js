@@ -176,7 +176,9 @@ const RECORD_FAILED_LOGIN_SQL = `
     updated_at = NOW()
   FROM next_state
   WHERE users.id = next_state.user_id
-  RETURNING ${USER_FIELDS_SQL}
+  RETURNING
+    users.failed_login_count AS "failedLoginCount",
+    users.locked_until AS "lockedUntil"
 `;
 
 const SECURITY_FIELDS_SQL = `
