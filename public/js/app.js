@@ -151,7 +151,7 @@ async function updateViewport(viewport) {
   if (viewport.zoom < ROAD_DATA_MIN_ZOOM) {
     focusedCityId = null;
     mapController.clearViewportData();
-    cityList.setStatus('Выберите город или увеличьте карту для показа линий');
+    cityList.setStatus('');
     setMapMessage('');
     return;
   }

@@ -178,8 +178,16 @@ th button:focus-visible {
   transition: none;
 }
 
+.city-table tbody tr:nth-child(odd) {
+  background: #fff;
+}
+
+.city-table tbody tr:nth-child(even) {
+  background: #f3f3f3;
+}
+
 .city-table tbody tr:hover {
-  background: #e8e8e8;
+  background: #e4e4e4;
 }
 
 .city-table tbody tr.is-active {

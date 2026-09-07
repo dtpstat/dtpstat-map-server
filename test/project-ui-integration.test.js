@@ -112,3 +112,18 @@ test('public page derives metadata, theme stylesheet and analytics loaders from 
   assert.match(classicCss, /--selected:\s*#ffdf75/i);
   assert.match(modernCss, /--selected:\s*#e5eee3/i);
 });
+
+test('retro table hides the low-zoom hint and uses zebra striping', async () => {
+  const [publicApp, cityList, retroCss] = await Promise.all([
+    source('public/js/app.js'),
+    source('public/js/city-list.js'),
+    source('public/css/themes/retro.css'),
+  ]);
+
+  assert.doesNotMatch(publicApp, /Выберите город или увеличьте карту для показа линий/);
+  assert.match(publicApp, /cityList\.setStatus\(''\)/);
+  assert.match(cityList, /elements\.status\.hidden = !message/);
+  assert.match(retroCss, /tbody tr:nth-child\(odd\)/);
+  assert.match(retroCss, /tbody tr:nth-child\(even\)/);
+  assert.match(retroCss, /tbody tr\.is-active/);
+});

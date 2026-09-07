@@ -345,6 +345,7 @@ export function createCityList(elements) {
     },
     setStatus(message, isError = false) {
       elements.status.textContent = message;
+      elements.status.hidden = !message;
       elements.status.classList.toggle('is-error', isError);
     },
   };
