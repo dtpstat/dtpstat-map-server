@@ -116,7 +116,7 @@ MAPBOX_ACCESS_TOKEN=pk....
 
 ## Миграции
 
-Текущий набор: `V001…V021`.
+Текущий набор: `V001…V022`.
 
 Последние migrations:
 
@@ -127,18 +127,20 @@ V018__admin_sessions_roles_profile_and_ip_security.sql
 V019__mapbox_project_setting.sql
 V020__city_marker_icon.sql
 V021__public_theme_preset.sql
+V022__line_popup_setting.sql
 ```
 
 Назначение:
 
-- `V016` — DB users/security/audit и line labels;
+- `V016` — DB users/security/audit и постоянные line labels;
 - `V017` — bootstrap DB invariant;
 - `V018` — sessions, дополнительные roles, profile/avatar, IP security и audit indexes;
 - `V019` — DB-backed Mapbox token;
 - `V020` — custom city marker PNG;
-- `V021` — `retro/classic/modern` public theme.
+- `V021` — `retro/classic/modern` public theme;
+- `V022` — независимый `SHOW_LINE_POPUPS` для hover-popup `placemarkName`.
 
-Следующая migration должна быть **V022+**. Уже опубликованные migration-файлы не меняются задним числом.
+Следующая migration должна быть **V023+**. Уже опубликованные migration-файлы не меняются задним числом.
 
 История хранится в:
 
@@ -335,10 +337,13 @@ DB-backed `PROJECT_SETTINGS` включает:
 
 - project name/keywords/footer;
 - analytics IDs;
-- line labels;
+- `SHOW_LINE_LABELS` — постоянные подписи вдоль линий;
+- `SHOW_LINE_POPUPS` — popup имени при наведении;
 - Mapbox public token;
 - theme preset;
 - custom city marker icon.
+
+`SHOW_LINE_LABELS` и `SHOW_LINE_POPUPS` независимы. На старых установках после `V022` popup остаётся включённым по default, поэтому миграция не меняет прежнее hover-поведение.
 
 Встроенные theme values:
 
@@ -359,9 +364,11 @@ GET  /api/admin/settings/export
 POST /api/admin/settings/import
 ```
 
-Текущий формат — schemaVersion 3, импорт совместим с v1/v2.
+Текущий формат — schemaVersion 4, импорт совместим с v1/v2/v3.
 
-Пакет переносит project settings, line types, report config, security settings и public Mapbox token. Custom city marker binary сейчас в пакет не входит.
+Пакет переносит project settings, включая оба line-name переключателя, line types, report config, security settings и public Mapbox token. Custom city marker binary сейчас в пакет не входит.
+
+Для legacy v1-v3 без `showLinePopups` используется compatibility default `true`.
 
 Подробнее: [project-settings-transfer.md](project-settings-transfer.md).
 
