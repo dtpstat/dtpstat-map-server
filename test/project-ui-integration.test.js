@@ -13,11 +13,12 @@ async function source(relativePath) {
   return fs.readFile(path.join(projectRoot, relativePath), 'utf8');
 }
 
-test('project settings migrations create singleton branding and version metric constraint changes', async () => {
-  const [baseSql, metricsSql, limitSql] = await Promise.all([
+test('project settings migrations create branding, metrics and public theme preset', async () => {
+  const [baseSql, metricsSql, limitSql, themeSql] = await Promise.all([
     source('db/migrations/V009__project_settings.sql'),
     source('db/migrations/V010__project_metrics.sql'),
     source('db/migrations/V011__limit_yandex_metrika_id.sql'),
+    source('db/migrations/V021__public_theme_preset.sql'),
   ]);
 
   assert.match(baseSql, /CREATE TABLE IF NOT EXISTS BUSLANES\.PROJECT_SETTINGS/i);
@@ -34,20 +35,27 @@ test('project settings migrations create singleton branding and version metric c
 
   assert.match(limitSql, /DROP CONSTRAINT IF EXISTS PROJECT_SETTINGS_YANDEX_METRIKA_ID_CHECK/i);
   assert.match(limitSql, /YANDEX_METRIKA_ID ~ '\^\[1-9\]\[0-9\]\{0,14\}\$'/i);
+
+  assert.match(themeSql, /THEME_PRESET TEXT NOT NULL DEFAULT 'classic'/i);
+  assert.match(themeSql, /THEME_PRESET IN \('retro', 'classic', 'modern'\)/i);
 });
 
-test('admin bootstraps Project settings alongside the report builder', async () => {
-  const [notices, editor, css] = await Promise.all([
-    source('admin/task-notices.js'),
+test('admin interface exposes project settings and the three built-in theme choices', async () => {
+  const [shell, editor, css] = await Promise.all([
+    source('admin/admin-shell.js'),
     source('admin/project-settings-editor.js'),
     source('admin/project-settings.css'),
   ]);
 
-  assert.match(notices, /import '\.\/project-settings-editor\.js'/);
-  assert.match(notices, /import '\.\/report-config-editor\.js'/);
-  assert.match(editor, /dataset\.taskTab = 'project'/);
-  assert.match(editor, /data-operation-tab="project-settings"/);
+  assert.match(shell, /import\('\.\/project-settings-editor\.js'\)/);
+  assert.match(shell, /import\('\.\/report-config-editor\.js'\)/);
+  assert.match(editor, /dataset\.interfaceTab = 'project'/);
+  assert.match(editor, /dataset\.interfacePanel = 'project'/);
   assert.match(editor, /name="projectName"/);
+  assert.match(editor, /name="themePreset" type="radio" value="retro"/);
+  assert.match(editor, /name="themePreset" type="radio" value="classic"/);
+  assert.match(editor, /name="themePreset" type="radio" value="modern"/);
+  assert.match(editor, /themePreset: themePreset\.value/);
   assert.match(editor, /name="keywords"/);
   assert.match(editor, /name="yandexMetrikaId"/);
   assert.match(editor, /name="googleAnalyticsId"/);
@@ -55,16 +63,19 @@ test('admin bootstraps Project settings alongside the report builder', async () 
   assert.match(editor, /data-project-snippet="callout"/);
   assert.match(editor, /data-project-snippet="columns"/);
   assert.match(editor, /\/api\/admin\/project-settings/);
-  assert.match(css, /grid-template-columns: repeat\(5,/);
-  assert.match(css, /\.project-metrics-grid/);
+  assert.match(css, /\.project-theme-grid/);
+  assert.match(css, /data-theme-preview/);
 });
 
-test('public page derives title metadata and analytics loaders from project settings', async () => {
-  const [html, app, metrics, css] = await Promise.all([
+test('public page derives metadata, theme stylesheet and analytics loaders from project settings', async () => {
+  const [html, app, metrics, contentCss, retroCss, classicCss, modernCss] = await Promise.all([
     source('index.html'),
     source('src/app.js'),
     source('public/js/metrics.js'),
     source('public/css/project-content.css'),
+    source('public/css/themes/retro.css'),
+    source('public/css/themes/classic.css'),
+    source('public/css/themes/modern.css'),
   ]);
 
   for (const marker of [
@@ -78,6 +89,8 @@ test('public page derives title metadata and analytics loaders from project sett
   ]) {
     assert.ok(html.includes(marker), marker);
   }
+  assert.match(html, /data-theme="\{\{PROJECT_THEME_NAME\}\}"/);
+  assert.match(html, /\{\{PROJECT_THEME_STYLESHEET\}\}/);
   assert.match(html, /name="keywords" content="\{\{PROJECT_KEYWORDS\}\}"/);
   assert.match(html, /\{\{PROJECT_METRICS_META\}\}/);
   assert.match(html, /\{\{PROJECT_METRICS_SCRIPT\}\}/);
@@ -92,7 +105,10 @@ test('public page derives title metadata and analytics loaders from project sett
   assert.match(metrics, /https:\/\/www\.googletagmanager\.com\/gtag\/js/);
   assert.match(metrics, /metaContent\('yandex-metrika-id'\)/);
   assert.match(metrics, /metaContent\('google-analytics-id'\)/);
-  assert.match(css, /\.project-callout/);
-  assert.match(css, /\.project-columns/);
-  assert.match(css, /\.project-link-button/);
+  assert.match(contentCss, /\.project-callout/);
+  assert.match(contentCss, /\.project-columns/);
+  assert.match(contentCss, /\.project-link-button/);
+  assert.match(retroCss, /--selected:\s*#fff400/i);
+  assert.match(classicCss, /--selected:\s*#ffdf75/i);
+  assert.match(modernCss, /--selected:\s*#e5eee3/i);
 });

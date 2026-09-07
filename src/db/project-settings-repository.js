@@ -1,5 +1,6 @@
 import {
   buildProjectSettingsPlan,
+  normalizePublicThemePreset,
   ProjectSettingsValidationError,
 } from '../data/project-settings.js';
 import { normalizeMapboxAccessToken } from '../data/mapbox-access-token.js';
@@ -11,6 +12,7 @@ const SELECT_SETTINGS_SQL = `
     footer_html AS "footerHtml",
     yandex_metrika_id AS "yandexMetrikaId",
     google_analytics_id AS "googleAnalyticsId",
+    theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
     (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured",
     (city_marker_icon IS NOT NULL) AS "cityMarkerIconConfigured",
@@ -53,13 +55,14 @@ const UPDATE_SETTINGS_SQL = `
     footer_html = $3,
     yandex_metrika_id = $4,
     google_analytics_id = $5,
-    show_line_labels = $6,
+    theme_preset = COALESCE($6::text, theme_preset),
+    show_line_labels = $7,
     mapbox_access_token = CASE
-      WHEN $7::text IS NULL THEN mapbox_access_token
-      ELSE $7::text
+      WHEN $8::text IS NULL THEN mapbox_access_token
+      ELSE $8::text
     END,
     mapbox_access_token_initialized = CASE
-      WHEN $7::text IS NULL THEN mapbox_access_token_initialized
+      WHEN $8::text IS NULL THEN mapbox_access_token_initialized
       ELSE TRUE
     END,
     updated_at = now()
@@ -70,6 +73,7 @@ const UPDATE_SETTINGS_SQL = `
     footer_html AS "footerHtml",
     yandex_metrika_id AS "yandexMetrikaId",
     google_analytics_id AS "googleAnalyticsId",
+    theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
     (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured",
     (city_marker_icon IS NOT NULL) AS "cityMarkerIconConfigured",
@@ -127,6 +131,7 @@ function splitProjectSettingsPayload(payload) {
     throw new ProjectSettingsValidationError('Request body must be a JSON object');
   }
   const {
+    themePreset: rawThemePreset,
     showLineLabels = false,
     mapboxAccessToken = null,
     ...base
@@ -136,6 +141,9 @@ function splitProjectSettingsPayload(payload) {
   }
   return {
     plan: buildProjectSettingsPlan(base),
+    themePreset: rawThemePreset === undefined
+      ? null
+      : normalizePublicThemePreset(rawThemePreset),
     showLineLabels,
     mapboxAccessToken: normalizeMapboxAccessToken(mapboxAccessToken, { optional: true }),
   };
@@ -208,13 +216,19 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
   }
 
   async function save(payload) {
-    const { plan, showLineLabels, mapboxAccessToken } = splitProjectSettingsPayload(payload);
+    const {
+      plan,
+      themePreset,
+      showLineLabels,
+      mapboxAccessToken,
+    } = splitProjectSettingsPayload(payload);
     const result = await database.query(UPDATE_SETTINGS_SQL, [
       plan.projectName,
       plan.keywords,
       plan.footerHtml,
       plan.yandexMetrikaId,
       plan.googleAnalyticsId,
+      themePreset,
       showLineLabels,
       mapboxAccessToken,
     ]);

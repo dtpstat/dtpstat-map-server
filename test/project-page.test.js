@@ -3,11 +3,13 @@ import test from 'node:test';
 import { projectManifest, renderProjectPage } from '../src/http/project-page.js';
 
 const template = `
+  <html data-theme="{{PROJECT_THEME_NAME}}">
   <head>
     <title>{{PROJECT_NAME}}</title>
     <meta name="keywords" content="{{PROJECT_KEYWORDS}}">
     <meta property="og:title" content="{{PROJECT_NAME}}">
     {{PROJECT_METRICS_META}}
+    {{PROJECT_THEME_STYLESHEET}}
   </head>
   <body>
     <h1>{{PROJECT_NAME}}</h1>
@@ -15,9 +17,10 @@ const template = `
     <noscript>{{YANDEX_METRIKA_NOSCRIPT}}</noscript>
     {{PROJECT_METRICS_SCRIPT}}
   </body>
+  </html>
 `;
 
-test('project page renders title keywords and footer without leaking markup into metadata', () => {
+test('project page renders title keywords footer and classic theme fallback', () => {
   const html = renderProjectPage(template, {
     projectName: 'Трамваи & <метро>',
     keywords: ['трамвай', 'A&B'],
@@ -29,11 +32,40 @@ test('project page renders title keywords and footer without leaking markup into
   assert.equal((html.match(/Трамваи &amp; &lt;метро&gt;/g) ?? []).length, 3);
   assert.match(html, /content="трамвай, A&amp;B"/);
   assert.match(html, /<section><h2>О проекте<\/h2><p>Готово<\/p><\/section>/);
+  assert.match(html, /data-theme="classic"/);
+  assert.match(html, /href="\/css\/themes\/classic\.css"/);
   assert.doesNotMatch(html, /yandex-metrika-id/);
   assert.doesNotMatch(html, /google-analytics-id/);
   assert.doesNotMatch(html, /\/js\/metrics\.js/);
   assert.doesNotMatch(html, /\{\{PROJECT_/);
   assert.doesNotMatch(html, /\{\{YANDEX_/);
+});
+
+test('project page loads exactly the selected built-in theme stylesheet', () => {
+  for (const themePreset of ['retro', 'classic', 'modern']) {
+    const html = renderProjectPage(template, {
+      projectName: 'Проект',
+      keywords: [],
+      footerHtml: '<p>Текст</p>',
+      themePreset,
+      yandexMetrikaId: null,
+      googleAnalyticsId: null,
+    });
+    assert.match(html, new RegExp(`data-theme="${themePreset}"`));
+    assert.match(html, new RegExp(`href="/css/themes/${themePreset}\\.css"`));
+    assert.equal((html.match(/\/css\/themes\//g) ?? []).length, 1);
+  }
+
+  const fallback = renderProjectPage(template, {
+    projectName: 'Проект',
+    keywords: [],
+    footerHtml: '<p>Текст</p>',
+    themePreset: '../../custom',
+    yandexMetrikaId: null,
+    googleAnalyticsId: null,
+  });
+  assert.match(fallback, /data-theme="classic"/);
+  assert.match(fallback, /href="\/css\/themes\/classic\.css"/);
 });
 
 test('project page enables only configured analytics collectors', () => {

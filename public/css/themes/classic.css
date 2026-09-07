@@ -1,0 +1,66 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  --accent: #0b6570;
+  --accent-dark: #084850;
+  --accent-soft: #dceff0;
+  --ink-muted: #637477;
+  --line: #d6dfde;
+  --panel: #fff;
+  --selected: #ffdf75;
+}
+
+/*
+ * The classic preset intentionally tracks the original public UI. The base
+ * stylesheet remains the structural fallback; these rules pin the visual
+ * details that distinguish the preset from the retro and modern variants.
+ */
+.ranking-panel {
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: 8px 0 24px rgb(19 54 59 / 14%);
+}
+
+.ranking-header {
+  background: transparent;
+}
+
+.category-switch {
+  border-radius: 11px;
+  background: #edf1f0;
+}
+
+.category-button {
+  border-radius: 8px;
+}
+
+.category-button.is-active {
+  color: #fff;
+  background: var(--accent);
+  box-shadow: 0 2px 7px rgb(11 101 112 / 22%);
+}
+
+.city-table tbody tr.is-active {
+  background: var(--selected);
+}
+
+.project-callout {
+  border-radius: 9px;
+  background: #f2f8f7;
+}
+
+.project-link-button {
+  border-radius: 7px;
+}
+
+.map-message,
+.mapboxgl-ctrl-group {
+  border-radius: 9px;
+}
+
+@media (max-width: 760px) {
+  .ranking-panel {
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -10px 28px rgb(18 49 53 / 18%);
+  }
+}

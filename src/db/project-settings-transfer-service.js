@@ -9,7 +9,7 @@ import {
 import { acquireDataImportLock } from './database-locks.js';
 import { compileReportMetricQuery } from './report-config-service.js';
 
-const SETTINGS_TRANSFER_SCHEMA_VERSION = 2;
+const SETTINGS_TRANSFER_SCHEMA_VERSION = 3;
 const SETTINGS_TRANSFER_KIND = 'project-settings';
 const LEGACY_SECURITY_DEFAULTS = Object.freeze({
   ipMaxFailedAttempts: 20,
@@ -50,9 +50,9 @@ function validateEnvelope(payload) {
   if (metadata.kind !== SETTINGS_TRANSFER_KIND) {
     throw new ProjectSettingsTransferValidationError(`_dtpstat.kind must be ${SETTINGS_TRANSFER_KIND}`);
   }
-  if (![1, SETTINGS_TRANSFER_SCHEMA_VERSION].includes(metadata.schemaVersion)) {
+  if (![1, 2, SETTINGS_TRANSFER_SCHEMA_VERSION].includes(metadata.schemaVersion)) {
     throw new ProjectSettingsTransferValidationError(
-      `_dtpstat.schemaVersion must be 1 or ${SETTINGS_TRANSFER_SCHEMA_VERSION}`,
+      `_dtpstat.schemaVersion must be 1, 2 or ${SETTINGS_TRANSFER_SCHEMA_VERSION}`,
     );
   }
   return { input, schemaVersion: metadata.schemaVersion };
@@ -90,6 +90,7 @@ const EXPORT_PROJECT_SETTINGS_SQL = `
   SELECT project_name AS "projectName", keywords, footer_html AS "footerHtml",
     yandex_metrika_id AS "yandexMetrikaId",
     google_analytics_id AS "googleAnalyticsId",
+    theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
     mapbox_access_token AS "mapboxAccessToken"
   FROM project_settings WHERE id = 1
@@ -125,10 +126,11 @@ const UPDATE_PROJECT_SETTINGS_SQL = `
   UPDATE project_settings SET
     project_name=$1, keywords=$2::text[], footer_html=$3,
     yandex_metrika_id=$4, google_analytics_id=$5,
-    show_line_labels=$6,
-    mapbox_access_token=CASE WHEN $7::boolean THEN $8::text ELSE mapbox_access_token END,
+    theme_preset=$6,
+    show_line_labels=$7,
+    mapbox_access_token=CASE WHEN $8::boolean THEN $9::text ELSE mapbox_access_token END,
     mapbox_access_token_initialized=CASE
-      WHEN $7::boolean THEN TRUE
+      WHEN $8::boolean THEN TRUE
       ELSE mapbox_access_token_initialized
     END,
     updated_at=NOW()
@@ -337,6 +339,7 @@ export function createProjectSettingsTransferService(pool) {
           projectSettings.footerHtml,
           projectSettings.yandexMetrikaId,
           projectSettings.googleAnalyticsId,
+          projectSettings.themePreset,
           projectSettings.showLineLabels,
           projectSettings.hasMapboxAccessToken,
           projectSettings.mapboxAccessToken,

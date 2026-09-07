@@ -14,13 +14,23 @@ function createRepository() {
     footerHtml: '<h2>О проекте</h2><p>Текст</p>',
     yandexMetrikaId: null,
     googleAnalyticsId: null,
+    themePreset: 'classic',
+    showLineLabels: false,
+    mapboxAccessTokenConfigured: false,
     updatedAt: '2026-09-05T12:00:00.000Z',
   };
   return {
     async get() { return settings; },
     async save(payload) {
+      const {
+        showLineLabels = false,
+        mapboxAccessToken = null,
+        ...base
+      } = payload;
       settings = {
-        ...buildProjectSettingsPlan(payload),
+        ...buildProjectSettingsPlan(base),
+        showLineLabels,
+        mapboxAccessTokenConfigured: Boolean(mapboxAccessToken),
         updatedAt: '2026-09-05T13:00:00.000Z',
       };
       return settings;
@@ -28,16 +38,27 @@ function createRepository() {
   };
 }
 
-async function withServer(callback, { activeTask = null } = {}) {
+function adminAuth() {
+  return {
+    requireInterface(request, response, next) {
+      if (request.get('authorization') !== authorization) {
+        response.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+      request.adminUser = { id: 1, username: 'importer' };
+      request.adminAuthMethod = 'basic';
+      next();
+    },
+  };
+}
+
+async function withServer(callback) {
   const app = express();
   app.use('/api', createProjectSettingsRouter({
     projectSettingsRepository: createRepository(),
-    adminTasks: { active: () => activeTask },
-    importApi: {
-      username: 'importer',
-      password: 'test:secret',
-      maxBodyBytes: 1024 * 1024,
-    },
+    adminAuth: adminAuth(),
+    securityService: { async appendAudit() {} },
+    maxBodyBytes: 1024 * 1024,
   }));
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -57,6 +78,7 @@ test('public project settings are readable while admin editor remains protected'
     assert.equal(publicResponse.status, 200);
     const publicSettings = await publicResponse.json();
     assert.equal(publicSettings.projectName, 'Выделенные полосы в России');
+    assert.equal(publicSettings.themePreset, 'classic');
     assert.equal(publicSettings.yandexMetrikaId, null);
     assert.equal(publicSettings.googleAnalyticsId, null);
 
@@ -71,10 +93,14 @@ test('public project settings are readable while admin editor remains protected'
     assert.equal(payload.settings.projectName, 'Выделенные полосы в России');
     assert.ok(payload.editor.tags.includes('h2'));
     assert.ok(payload.editor.classes.includes('project-callout'));
+    assert.deepEqual(
+      payload.editor.themes.map(({ value }) => value),
+      ['retro', 'classic', 'modern'],
+    );
   });
 });
 
-test('admin can update project settings including analytics IDs', async () => {
+test('admin can update project settings including public theme and analytics IDs', async () => {
   await withServer(async (baseUrl) => {
     const valid = await fetch(`${baseUrl}/api/admin/project-settings`, {
       method: 'PUT',
@@ -84,6 +110,8 @@ test('admin can update project settings including analytics IDs', async () => {
       },
       body: JSON.stringify({
         projectName: 'Трамвайные пути России',
+        themePreset: 'modern',
+        showLineLabels: true,
         keywords: ['трамвай', 'обособление'],
         yandexMetrikaId: '12345678',
         googleAnalyticsId: 'g-ab12cd34ef',
@@ -93,10 +121,32 @@ test('admin can update project settings including analytics IDs', async () => {
     assert.equal(valid.status, 200);
     const payload = await valid.json();
     assert.equal(payload.settings.projectName, 'Трамвайные пути России');
+    assert.equal(payload.settings.themePreset, 'modern');
+    assert.equal(payload.settings.showLineLabels, true);
     assert.equal(payload.settings.yandexMetrikaId, '12345678');
     assert.equal(payload.settings.googleAnalyticsId, 'G-AB12CD34EF');
 
-    const invalid = await fetch(`${baseUrl}/api/admin/project-settings`, {
+    const invalidTheme = await fetch(`${baseUrl}/api/admin/project-settings`, {
+      method: 'PUT',
+      headers: {
+        Authorization: authorization,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        projectName: 'Трамвайные пути России',
+        themePreset: 'external.css',
+        keywords: [],
+        footerHtml: '<p>Текст</p>',
+      }),
+    });
+    assert.equal(invalidTheme.status, 400);
+    assert.match((await invalidTheme.json()).error, /themePreset/);
+  });
+});
+
+test('admin still rejects invalid analytics and unsafe footer HTML', async () => {
+  await withServer(async (baseUrl) => {
+    const invalidAnalytics = await fetch(`${baseUrl}/api/admin/project-settings`, {
       method: 'PUT',
       headers: {
         Authorization: authorization,
@@ -110,14 +160,10 @@ test('admin can update project settings including analytics IDs', async () => {
         footerHtml: '<p>Текст</p>',
       }),
     });
-    assert.equal(invalid.status, 400);
-    assert.match((await invalid.json()).error, /Metrika|Analytics|counter|G-/i);
-  });
-});
+    assert.equal(invalidAnalytics.status, 400);
+    assert.match((await invalidAnalytics.json()).error, /Metrika|Analytics|counter|G-/i);
 
-test('admin still rejects unsafe footer HTML', async () => {
-  await withServer(async (baseUrl) => {
-    const invalid = await fetch(`${baseUrl}/api/admin/project-settings`, {
+    const invalidHtml = await fetch(`${baseUrl}/api/admin/project-settings`, {
       method: 'PUT',
       headers: {
         Authorization: authorization,
@@ -129,33 +175,7 @@ test('admin still rejects unsafe footer HTML', async () => {
         footerHtml: '<script>alert(1)</script>',
       }),
     });
-    assert.equal(invalid.status, 400);
-    assert.match((await invalid.json()).error, /not allowed/);
-  });
-});
-
-test('project settings update is blocked while a data task is active', async () => {
-  await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/admin/project-settings`, {
-      method: 'PUT',
-      headers: {
-        Authorization: authorization,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        projectName: 'Проект',
-        keywords: [],
-        footerHtml: '<p>Текст</p>',
-      }),
-    });
-    assert.equal(response.status, 409);
-    const payload = await response.json();
-    assert.equal(payload.taskId, 'active-task');
-  }, {
-    activeTask: {
-      id: 'active-task',
-      type: 'kml-update',
-      status: 'running',
-    },
+    assert.equal(invalidHtml.status, 400);
+    assert.match((await invalidHtml.json()).error, /not allowed/);
   });
 });

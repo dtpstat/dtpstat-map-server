@@ -7,6 +7,22 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+const THEME_STYLESHEETS = Object.freeze({
+  retro: '/css/themes/retro.css',
+  classic: '/css/themes/classic.css',
+  modern: '/css/themes/modern.css',
+});
+
+function themeMarkup(settings) {
+  const themePreset = Object.hasOwn(THEME_STYLESHEETS, settings.themePreset)
+    ? settings.themePreset
+    : 'classic';
+  return {
+    name: themePreset,
+    stylesheet: `<link rel="stylesheet" href="${THEME_STYLESHEETS[themePreset]}">`,
+  };
+}
+
 function metricsMarkup(settings) {
   const yandexMetrikaId = settings.yandexMetrikaId
     ? escapeHtml(settings.yandexMetrikaId)
@@ -36,9 +52,12 @@ export function renderProjectPage(template, settings) {
   const projectName = escapeHtml(settings.projectName);
   const keywords = escapeHtml((settings.keywords ?? []).join(', '));
   const metrics = metricsMarkup(settings);
+  const theme = themeMarkup(settings);
   return template
     .replaceAll('{{PROJECT_NAME}}', projectName)
     .replaceAll('{{PROJECT_KEYWORDS}}', keywords)
+    .replaceAll('{{PROJECT_THEME_NAME}}', theme.name)
+    .replace('{{PROJECT_THEME_STYLESHEET}}', theme.stylesheet)
     .replace('{{PROJECT_METRICS_META}}', metrics.meta)
     .replace('{{PROJECT_FOOTER_HTML}}', settings.footerHtml)
     .replace('{{YANDEX_METRIKA_NOSCRIPT}}', metrics.yandexNoScript)
