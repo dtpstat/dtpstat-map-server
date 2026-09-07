@@ -9,7 +9,7 @@ export function createAdminTaskSuccessRepository(pool) {
                task_id::text AS "taskId",
                endpoint,
                completed_at AS "completedAt"
-        FROM buslanes.admin_task_successes
+        FROM admin_task_successes
         ORDER BY task_type
       `);
       return result.rows.map((row) => ({
@@ -21,7 +21,7 @@ export function createAdminTaskSuccessRepository(pool) {
     /** @param {{ taskType: string, taskId: string, endpoint: string, completedAt: string }} update */
     async record(update) {
       const result = await pool.query(`
-        INSERT INTO buslanes.admin_task_successes (
+        INSERT INTO admin_task_successes (
           task_type,
           task_id,
           endpoint,
