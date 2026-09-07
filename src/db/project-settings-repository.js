@@ -14,6 +14,7 @@ const SELECT_SETTINGS_SQL = `
     google_analytics_id AS "googleAnalyticsId",
     theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
+    show_line_popups AS "showLinePopups",
     (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured",
     (city_marker_icon IS NOT NULL) AS "cityMarkerIconConfigured",
     city_marker_icon_width::integer AS "cityMarkerIconWidth",
@@ -57,12 +58,13 @@ const UPDATE_SETTINGS_SQL = `
     google_analytics_id = $5,
     theme_preset = COALESCE($6::text, theme_preset),
     show_line_labels = $7,
+    show_line_popups = COALESCE($8::boolean, show_line_popups),
     mapbox_access_token = CASE
-      WHEN $8::text IS NULL THEN mapbox_access_token
-      ELSE $8::text
+      WHEN $9::text IS NULL THEN mapbox_access_token
+      ELSE $9::text
     END,
     mapbox_access_token_initialized = CASE
-      WHEN $8::text IS NULL THEN mapbox_access_token_initialized
+      WHEN $9::text IS NULL THEN mapbox_access_token_initialized
       ELSE TRUE
     END,
     updated_at = now()
@@ -75,6 +77,7 @@ const UPDATE_SETTINGS_SQL = `
     google_analytics_id AS "googleAnalyticsId",
     theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
+    show_line_popups AS "showLinePopups",
     (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured",
     (city_marker_icon IS NOT NULL) AS "cityMarkerIconConfigured",
     city_marker_icon_width::integer AS "cityMarkerIconWidth",
@@ -130,14 +133,19 @@ function splitProjectSettingsPayload(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new ProjectSettingsValidationError('Request body must be a JSON object');
   }
+  const hasShowLinePopups = Object.hasOwn(payload, 'showLinePopups');
   const {
     themePreset: rawThemePreset,
     showLineLabels = false,
+    showLinePopups: rawShowLinePopups,
     mapboxAccessToken = null,
     ...base
   } = payload;
   if (typeof showLineLabels !== 'boolean') {
     throw new ProjectSettingsValidationError('showLineLabels must be boolean');
+  }
+  if (hasShowLinePopups && typeof rawShowLinePopups !== 'boolean') {
+    throw new ProjectSettingsValidationError('showLinePopups must be boolean');
   }
   return {
     plan: buildProjectSettingsPlan(base),
@@ -145,6 +153,7 @@ function splitProjectSettingsPayload(payload) {
       ? null
       : normalizePublicThemePreset(rawThemePreset),
     showLineLabels,
+    showLinePopups: hasShowLinePopups ? rawShowLinePopups : null,
     mapboxAccessToken: normalizeMapboxAccessToken(mapboxAccessToken, { optional: true }),
   };
 }
@@ -220,6 +229,7 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
       plan,
       themePreset,
       showLineLabels,
+      showLinePopups,
       mapboxAccessToken,
     } = splitProjectSettingsPayload(payload);
     const result = await database.query(UPDATE_SETTINGS_SQL, [
@@ -230,6 +240,7 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
       plan.googleAnalyticsId,
       themePreset,
       showLineLabels,
+      showLinePopups,
       mapboxAccessToken,
     ]);
     if (!result.rows[0]) {
