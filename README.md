@@ -9,7 +9,7 @@ Node.js/Express + PostgreSQL/PostGIS сервер интерактивной к�
 - публичная Mapbox-карта с viewport-загрузкой линейных геометрий;
 - загрузка и обновление городов/границ из OSM Overpass;
 - импорт внешнего KML / Google My Maps с сохранением `<Placemark><name>` как `placemarkName`;
-- hover-popup и опциональные постоянные подписи имён линий;
+- независимо настраиваемые hover-popup и постоянные подписи имён линий;
 - настраиваемый справочник бизнес-типов линий: `CODE`, `NAME`, `TITLE`, цвет, стиль и толщина;
 - декларативные метрики городов без произвольного SQL, ссылки между метриками, агрегаты, приоритеты и ОПЗ;
 - материализованный `CITY_REPORT_VALUES` для быстрого публичного рейтинга;
@@ -43,7 +43,7 @@ npm run db:migrate
 npm start
 ```
 
-`db:init` создаёт/настраивает прикладную роль и database и включает PostGIS. `db:migrate` применяет последовательность миграций `V001…V021`.
+`db:init` создаёт/настраивает прикладную роль и database и включает PostGIS. `db:migrate` применяет последовательность миграций `V001…V022`.
 
 На первом старте, если `ADMIN_USERS` пуст, сервер создаёт bootstrap-superuser из:
 
@@ -98,7 +98,7 @@ Runtime SQL должен работать через настроенный `sea
 
 ## Миграции
 
-Текущая последовательность заканчивается `V021`:
+Текущая последовательность заканчивается `V022`:
 
 - `V014` — configurable report;
 - `V015` — аудит индексов;
@@ -107,9 +107,10 @@ Runtime SQL должен работать через настроенный `sea
 - `V018` — web sessions, расширенные роли, profile/avatar, IP security и дополнительные audit indexes;
 - `V019` — DB-backed Mapbox access token;
 - `V020` — custom city marker PNG;
-- `V021` — public theme preset `retro/classic/modern`.
+- `V021` — public theme preset `retro/classic/modern`;
+- `V022` — независимый переключатель hover-popup наименований линий.
 
-Следующее изменение DB schema должно добавляться новой миграцией **V022+**. Уже опубликованные migration-файлы задним числом не изменяются.
+Следующее изменение DB schema должно добавляться новой миграцией **V023+**. Уже опубликованные migration-файлы задним числом не изменяются.
 
 История миграций:
 
@@ -229,10 +230,13 @@ sudo systemctl reload nginx
 - keywords;
 - безопасно валидируемый footer HTML;
 - Yandex Metrica / Google Analytics IDs;
-- `SHOW_LINE_LABELS`;
+- `SHOW_LINE_LABELS` — постоянные подписи `placemarkName` вдоль линий;
+- `SHOW_LINE_POPUPS` — popup `placemarkName` при наведении;
 - `MAPBOX_ACCESS_TOKEN`;
 - `THEME_PRESET`;
 - custom city marker PNG и его метаданные.
+
+Два line-name переключателя независимы. По умолчанию постоянные подписи выключены, а hover-popup включён для совместимости с прежним поведением.
 
 Встроенные темы:
 
@@ -251,14 +255,16 @@ GET  /api/admin/settings/export
 POST /api/admin/settings/import
 ```
 
-Актуальный формат — `project-settings` **schemaVersion 3**; импорт также принимает v1/v2.
+Актуальный формат — `project-settings` **schemaVersion 4**; импорт также принимает v1/v2/v3.
 
 Пакет переносит:
 
-- основные `PROJECT_SETTINGS`, включая `themePreset`, `showLineLabels` и public Mapbox token;
+- основные `PROJECT_SETTINGS`, включая `themePreset`, `showLineLabels`, `showLinePopups` и public Mapbox token;
 - `LINE_TYPES`;
 - `REPORT_CONFIG`;
 - полный набор `ADMIN_SECURITY_SETTINGS`.
+
+Для legacy v1-v3 без `showLinePopups` применяется `true`, потому что до разделения настроек hover-popup всегда был включён.
 
 Не переносятся:
 
