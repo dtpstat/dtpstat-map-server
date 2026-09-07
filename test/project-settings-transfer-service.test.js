@@ -19,6 +19,7 @@ function exportPool() {
             googleAnalyticsId: null,
             themePreset: 'modern',
             showLineLabels: true,
+            showLinePopups: false,
             mapboxAccessToken: 'pk.test-public-token-value',
           }],
         };
@@ -87,14 +88,15 @@ function exportPool() {
   return { async connect() { return client; } };
 }
 
-test('settings export contains theme and project configuration but no users, password hashes or audit log', async () => {
+test('settings export contains line display settings but no users, password hashes or audit log', async () => {
   const service = createProjectSettingsTransferService(exportPool());
   const payload = await service.exportSettings();
 
   assert.equal(payload._dtpstat.kind, 'project-settings');
-  assert.equal(payload._dtpstat.schemaVersion, 3);
+  assert.equal(payload._dtpstat.schemaVersion, 4);
   assert.equal(payload.projectSettings.themePreset, 'modern');
   assert.equal(payload.projectSettings.showLineLabels, true);
+  assert.equal(payload.projectSettings.showLinePopups, false);
   assert.equal(payload.projectSettings.mapboxAccessToken, 'pk.test-public-token-value');
   assert.equal(payload.lineTypes[0].name, 'default');
   assert.equal(payload.reportConfig.rank.metricKey, 'population');
@@ -133,7 +135,7 @@ test('settings import rejects unsupported schema versions before touching the da
 
   await assert.rejects(
     service.importSettings({
-      _dtpstat: { kind: 'project-settings', schemaVersion: 4 },
+      _dtpstat: { kind: 'project-settings', schemaVersion: 5 },
     }),
     (error) => error instanceof ProjectSettingsTransferValidationError && /schemaVersion/.test(error.message),
   );
