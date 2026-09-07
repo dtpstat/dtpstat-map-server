@@ -1,4 +1,6 @@
 .report-interface-panel {
+  min-height: 0;
+  flex: 1 1 0;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable;
@@ -378,6 +380,14 @@
 
   .report-row-actions {
     justify-content: end;
+  }
+}
+
+@media (max-width: 1050px) {
+  .report-interface-panel {
+    flex: none;
+    overflow: visible;
+    scrollbar-gutter: auto;
   }
 }
 
