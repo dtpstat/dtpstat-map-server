@@ -140,7 +140,7 @@ function selectCity(city) {
   activeRequest = null;
   focusedCityId = city.id;
   cityList.select(city.id, { scrollIntoView: true });
-  cityList.setStatus(`Позиционируем карту: ${city.name}…`);
+  cityList.setStatus('');
   mapController.focusCity(city.bounds);
 }
 
@@ -158,7 +158,7 @@ async function updateViewport(viewport) {
 
   const request = new AbortController();
   activeRequest = request;
-  cityList.setStatus('Загружаем данные видимого окна…');
+  cityList.setStatus('');
   setMapMessage('Загружаем данные видимого окна…');
 
   try {
@@ -172,10 +172,7 @@ async function updateViewport(viewport) {
     cityList.select(centerCity?.id ?? null, {
       scrollIntoView: Boolean(centerCity),
     });
-    const cityMessage = centerCity ? `; город — ${centerCity.name}` : '';
-    cityList.setStatus(
-      `В видимом окне: ${geojson.features.length} участков${cityMessage}`,
-    );
+    cityList.setStatus('');
     setMapMessage('');
   } catch (error) {
     if (error.name === 'AbortError') return;
@@ -224,7 +221,7 @@ async function start() {
       return;
     }
 
-    cityList.setStatus(`Доступно городов: ${cities.length}`);
+    cityList.setStatus('');
     const firstCity = cities.find((city) => city.category === 'large') ?? cities[0];
     selectCity(firstCity);
   } catch (error) {
