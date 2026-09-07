@@ -20,6 +20,7 @@ document.head.append(legendStylesheet);
 const mapMessage = document.querySelector('#map-message');
 const mapPanel = document.querySelector('.map-panel');
 const tableStatus = document.querySelector('#status');
+const tableStatusBody = tableStatus.closest('.city-table-status');
 const cityList = createCityList({
   list: document.querySelector('#city-list'),
   status: tableStatus,
@@ -38,6 +39,11 @@ function setMapMessage(message, isError = false) {
   mapMessage.hidden = !message;
   mapMessage.textContent = message;
   mapMessage.classList.toggle('is-error', isError);
+}
+
+function setCityStatus(message, isError = false) {
+  tableStatusBody.hidden = !message;
+  cityList.setStatus(message, isError);
 }
 
 /** @param {any[]} lineTypes */
@@ -141,7 +147,7 @@ function selectCity(city) {
   activeRequest = null;
   focusedCityId = city.id;
   cityList.select(city.id, { scrollIntoView: true });
-  cityList.setStatus('');
+  setCityStatus('');
   mapController.focusCity(city.bounds);
 }
 
@@ -152,14 +158,14 @@ async function updateViewport(viewport) {
   if (viewport.zoom < ROAD_DATA_MIN_ZOOM) {
     focusedCityId = null;
     mapController.clearViewportData();
-    cityList.setStatus('');
+    setCityStatus('');
     setMapMessage('');
     return;
   }
 
   const request = new AbortController();
   activeRequest = request;
-  cityList.setStatus('');
+  setCityStatus('');
   setMapMessage('Загружаем данные видимого окна…');
 
   try {
@@ -173,12 +179,12 @@ async function updateViewport(viewport) {
     cityList.select(centerCity?.id ?? null, {
       scrollIntoView: Boolean(centerCity),
     });
-    cityList.setStatus('');
+    setCityStatus('');
     setMapMessage('');
   } catch (error) {
     if (error.name === 'AbortError') return;
     focusedCityId = null;
-    cityList.setStatus('Не удалось загрузить данные видимого окна', true);
+    setCityStatus('Не удалось загрузить данные видимого окна', true);
     setMapMessage('Не удалось загрузить данные видимого окна', true);
     console.error(error);
   } finally {
@@ -193,11 +199,11 @@ async function start() {
     const reportConfig = await loadReportConfig();
     cityList.setReportConfig(reportConfig);
     tableStatus.colSpan = Math.max(1, reportConfig.tableColumns.length);
-    cityList.setStatus('Загружаем список городов…');
+    setCityStatus('Загружаем список городов…');
 
     const cities = await loadCities();
     cityList.setCities(cities);
-    cityList.setStatus(cities.length ? '' : 'Данные пока не загружены');
+    setCityStatus(cities.length ? '' : 'Данные пока не загружены');
 
     const [mapConfig, projectSettings, lineTypes] = await Promise.all([
       loadMapConfig(),
@@ -226,11 +232,11 @@ async function start() {
       return;
     }
 
-    cityList.setStatus('');
+    setCityStatus('');
     const firstCity = cities.find((city) => city.category === 'large') ?? cities[0];
     selectCity(firstCity);
   } catch (error) {
-    cityList.setStatus('Приложение не удалось загрузить', true);
+    setCityStatus('Приложение не удалось загрузить', true);
     setMapMessage(error.message || 'Ошибка запуска приложения', true);
     console.error(error);
   }
