@@ -1,109 +1,144 @@
 # Перенос и синхронизация данных
 
-Admin API поддерживает перенос трёх независимых наборов без повторного обращения к исходным источникам:
+Admin API переносит три независимых набора данных:
 
-1. OSM city/town и их границы — GeoJSON;
-2. линии вместе со словарём бизнес-типов — GeoJSON или KML;
+1. OSM city/town и их boundaries — GeoJSON;
+2. линии вместе со словарём business line types — GeoJSON или KML;
 3. население — JSON.
 
-Data-transfer endpoint требуют DB-пользователя с `CAN_MANAGE_DATA` либо superadmin. HTTP Basic передаёт credentials, но проверка выполняется по `ADMIN_USERS`; bootstrap ENV credentials после создания DB-user не являются отдельным fallback.
+Для data-transfer нужен `CAN_MANAGE_DATA` или superuser.
 
-Публичные `/bus-lanes.geojson` и `/bus-lanes.csv` **не являются transfer/backup форматом**. Это упрощённые статические snapshots для пользователей страницы. Для round-trip используйте `/api/admin/export/*`.
+Interactive web-admin использует session cookie; HTTP Basic остаётся удобным способом аутентификации для `curl`/automation. В обоих случаях credentials проверяются по `ADMIN_USERS`.
 
-## Что не переносится вместе с данными
+Публичные `/bus-lanes.geojson` и `/bus-lanes.csv` **не являются backup/round-trip форматом**. Для переноса используются `/api/admin/export/*` и соответствующие import endpoints.
 
-Настройки конкретного экземпляра намеренно не входят в transfer-файлы городов, линий и населения. В частности отдельно настраиваются:
+## Что переносится отдельно
 
-- `PROJECT_SETTINGS` — название, footer, keywords, analytics IDs и подписи линий;
-- `REPORT_CONFIG` — расчётные метрики, публичная таблица, CSV и ranking;
+Data transfer не включает project/UI/security configuration:
+
+- project name/footer/analytics/theme;
+- Mapbox token;
+- custom city marker;
+- `REPORT_CONFIG`;
 - `ADMIN_SECURITY_SETTINGS`;
-- deployment `.env`, включая `DATABASE_SCHEMA`, порты и секреты.
+- users/sessions/audit;
+- deployment `.env`.
 
-Это позволяет импортировать один и тот же набор исходных геометрий в проекты с разной бизнес-интерпретацией.
-
-Если нужно перенести и DB-backed конфигурацию, superadmin использует отдельный `project-settings` package:
+Для DB-backed настроек есть отдельный package:
 
 ```text
 GET  /api/admin/settings/export
 POST /api/admin/settings/import
 ```
 
-Он описан в [project-settings-transfer.md](project-settings-transfer.md). Пользователи, пароли и audit log в этот пакет не входят.
+Актуальный settings format — schemaVersion 3. Подробнее: [project-settings-transfer.md](project-settings-transfer.md).
 
-## Рекомендуемый порядок переноса данных
+## Рекомендуемый порядок на чистом экземпляре
 
-Для полного переноса данных на чистый экземпляр:
+```text
+1. cities
+2. lines
+3. populations
+```
 
-1. города;
-2. линии;
-3. население.
+`CITY_REPORT_VALUES` как source of truth не переносится: после изменений он пересчитывается на target DB по текущему `REPORT_CONFIG`.
 
-При необходимости после/до этого отдельно импортируется пакет настроек проекта. `CITY_REPORT_VALUES` не переносится как источник истины — он пересчитывается по данным целевого экземпляра и текущему `REPORT_CONFIG`.
+Локальные surrogate IDs между серверами совпадать не обязаны:
 
-Линии содержат переносимую ссылку на OSM boundary (`osmType` + `osmId`). Если нужной границы нет на принимающем сервере, импорт линий не должен молча привязывать геометрию к другому объекту.
+```text
+cities.id
+city_boundaries.id
+city_geometries.id
+line_types.id
+```
 
-Локальные surrogate ID (`cities.id`, `city_boundaries.id`, `line_types.id`) между серверами переноситься и совпадать не должны.
+Для переносимых связей используются natural/business keys: OSM identity, city slug и business type `NAME`.
 
-## Города
+# Города
 
-### Экспорт
+## Экспорт
 
 ```text
 GET /api/admin/export/cities
 ```
 
-Имя скачиваемого файла:
+Файл:
 
 ```text
 cities.geojson
 ```
 
-Формат — GeoJSON `FeatureCollection`, `schemaVersion: 1`. Для каждого Feature передаются:
+Формат — GeoJSON `FeatureCollection`, `schemaVersion: 1`.
 
-- `placeType`: `city` или `town`;
-- `osmType`: `way` или `relation`;
+Для boundary передаются:
+
+- `placeType`: `city`/`town`;
+- `osmType`: `way`/`relation`;
 - `osmId`;
 - `osmName`;
-- OSM `tags`;
-- `osmTimestamp`;
-- `updatedAt`;
-- переносимые данные связанного рейтингового города;
-- `Polygon` / `MultiPolygon` geometry.
+- OSM tags;
+- OSM timestamp;
+- update metadata;
+- данные связанного ranked city;
+- `Polygon`/`MultiPolygon`.
 
-### Импорт
+## Импорт
 
 ```text
 POST /api/admin/import/cities
 Content-Type: application/geo+json
 ```
 
-Опционально:
+Опционально поддерживается dry-run.
+
+Импорт:
+
+1. валидирует весь FeatureCollection до изменения target data;
+2. загружает staging geometry пакетами;
+3. проверяет PostGIS validity;
+4. сохраняет существующие line-to-boundary relationships по OSM identity;
+5. атомарно заменяет `city_boundaries`;
+6. пересчитывает report/snapshots после успешной real operation.
+
+Связи восстанавливаются по:
 
 ```text
-dryRun=true
+osmType + osmId
 ```
 
-Импорт сначала валидирует весь FeatureCollection, затем в одной транзакции staging-геометрии загружаются пакетами по 50 Feature. Это ограничивает размер одного PostgreSQL JSONB-параметра и memory spike на больших snapshots. После staging проверяется PostGIS validity, сохраняются существующие связи линий с OSM-объектами и выполняется атомарная замена `city_boundaries`.
+а не по local `boundary.id`.
 
-Существующие line-to-boundary связи восстанавливаются по естественному ключу `osmType/osmId`.
+## Большой GeoJSON и 413
 
-## Линии и словарь типов
+Node limit крупных protected imports задаётся:
 
-### Актуальный GeoJSON экспорт
+```dotenv
+IMPORT_API_MAX_BODY_BYTES=26214400
+```
+
+При reverse proxy nginx может вернуть `413 Request Entity Too Large` ещё до Node. Его `client_max_body_size` должен быть не меньше application limit, например:
+
+```nginx
+client_max_body_size 30m;
+```
+
+# Линии и business types
+
+## GeoJSON export
 
 ```text
 GET /api/admin/export/lines
 ```
 
-Имя файла:
+Файл:
 
 ```text
 lines.geojson
 ```
 
-Канонический формат — `schemaVersion: 3`.
+Канонический format — `schemaVersion: 3`.
 
-В корне передаётся словарь:
+В корне находится dictionary типов:
 
 ```json
 {
@@ -112,7 +147,7 @@ lines.geojson
     {
       "code": 7,
       "name": "Односторонние",
-      "title": "Односторонние полосы",
+      "title": "Односторонние линии",
       "color": "#cc4400",
       "style": "dashed",
       "width": 5.5
@@ -123,25 +158,25 @@ lines.geojson
 
 Семантика:
 
-- `code` — числовой **source CODE**;
-- `name` — стабильная source/import identity;
-- `title` — подпись легенды;
-- `color`, `style`, `width` — оформление.
+- `code` — numeric source CODE внутри snapshot;
+- `name` — business/import identity;
+- `title` — display title;
+- `color/style/width` — оформление.
 
-Каждая геометрия содержит служебную ссылку:
+Каждая geometry содержит `_dtpstat`, например:
 
 ```json
 {
   "_dtpstat": {
     "businessTypeCode": 7,
-    "citySlug": "...",
+    "citySlug": "example",
     "boundaryOsmType": "relation",
     "boundaryOsmId": 123456
   }
 }
 ```
 
-Исходные свойства `CITY_GEOMETRIES.PROPERTIES` также входят в admin GeoJSON. Поэтому, если линия пришла из KML с непустым `<Placemark><name>`, переносится дополнительное свойство:
+Source properties также переносятся. Для KML line name используется:
 
 ```json
 {
@@ -149,49 +184,69 @@ lines.geojson
 }
 ```
 
-`placemarkName` — именно имя линии. Обычный `properties.name` в каноническом transfer GeoJSON используется для полного имени города и не должен трактоваться как подпись линии.
+`properties.name` не следует трактовать как line label: в canonical transfer оно может использоваться для полного имени города.
 
-### Главное правило CODE/NAME
+## Главное правило CODE/NAME
 
-Числовой CODE переносим как компактную ссылку **внутри конкретного snapshot**, но source CODE не считается глобальным ID и не обязан совпадать с CODE в целевой БД.
+Numeric CODE **не является глобальным ID** между deployments.
 
-Импорт выполняется так:
+Импорт:
 
-1. полностью разбирается и валидируется `lineTypes`;
-2. source `businessTypeCode` разрешается в source dictionary;
-3. из dictionary получается source `NAME`;
-4. целевой `LINE_TYPES` ищется по нормализованному `NAME` — без учёта регистра и внешних пробелов;
-5. если `NAME` уже существует, обновляются `TITLE` и style-поля, а локальный target `CODE` сохраняется;
-6. если `NAME` отсутствует, он создаётся, target `CODE` генерирует БД;
-7. геометрия получает локальный target `LINE_TYPE_ID`.
+```text
+source businessTypeCode
+        ↓
+source lineTypes[].code
+        ↓
+source NAME
+        ↓
+target lookup by normalized NAME
+        ↓
+target local LINE_TYPE_ID/CODE
+```
 
-`TITLE` никогда не участвует в identity/matching.
+Matching `NAME` выполняется без учёта регистра и внешних пробелов.
 
-### Импорт линий
+Если target `NAME` существует:
+
+- локальный target CODE сохраняется;
+- `TITLE`, color/style/width обновляются.
+
+Если `NAME` отсутствует:
+
+- создаётся новый target type;
+- CODE генерирует target DB.
+
+`TITLE` в identity не участвует.
+
+## Импорт линий
 
 ```text
 POST /api/admin/import/lines
 Content-Type: application/geo+json
 ```
 
-Старый `/api/admin/import` остаётся compatibility alias.
+Legacy alias:
 
-Полный versioned snapshot атомарно синхронизирует словарь и заменяет `city_geometries`, затем PostGIS пересчитывает длины и рейтинг. Source properties, включая `placemarkName`, сохраняются вместе с геометрией.
+```text
+POST /api/admin/import
+```
 
-Поддерживается legacy GeoJSON v2: старый строковый `type` интерпретируется как imported `NAME`, а старое display `name` — как `TITLE`. Unversioned legacy geometry без business type получает `default`.
+Полный versioned snapshot синхронизирует dictionary типов и заменяет `city_geometries` в transaction, затем пересчитываются report values и public snapshots.
 
-## Внешний KML / Google My Maps
+Поддерживается legacy GeoJSON v2. Старый строковый `type` интерпретируется как imported `NAME`; unversioned geometry без business type использует `default`.
 
-Это **не** тот же формат, что переносимый KML.
+# Внешний KML / Google My Maps
 
-Конфигурация источника может задавать:
+Это отдельный import path, а не portable KML format.
+
+Пример source configuration:
 
 ```json
 [
   {
     "URL": "https://www.google.com/maps/d/viewer?mid=...",
     "layers": [
-      { "name": "Автобусные", "multiple": 2, "type": "Двусторонние" },
+      { "name": "Двусторонние", "multiple": 2, "type": "Двусторонние" },
       { "name": "Односторонние", "multiple": 1, "type": "Односторонние" }
     ]
   }
@@ -200,29 +255,28 @@ Content-Type: application/geo+json
 
 Здесь:
 
-- `multiple` — статистический множитель `1` или `2`;
-- `type` — **source/import `LINE_TYPES.NAME`**, не numeric CODE;
-- NAME сопоставляется без учёта регистра и внешних пробелов;
+- `multiple` — статистический множитель;
+- `type` — `LINE_TYPES.NAME`, не numeric CODE;
 - отсутствующий NAME создаётся автоматически;
-- новый `CODE` назначает БД;
-- начальный `TITLE = NAME`.
+- target DB генерирует CODE;
+- initial TITLE нового type равен NAME.
 
-Если `type` не указан, используется source NAME `default`.
-
-Для каждого импортируемого линейного Placemark стандартный KML элемент:
+Стандартный:
 
 ```xml
 <Placemark>
   <name>Проспект Мира</name>
-  ...
 </Placemark>
 ```
 
-сохраняется как `CITY_GEOMETRIES.PROPERTIES.placemarkName`. Пустое/отсутствующее имя сохранять нечего. Публичный viewport API отдаёт source properties вместе с линией; frontend показывает непустой `placemarkName` в hover-popup и, если `PROJECT_SETTINGS.SHOW_LINE_LABELS=true`, постоянной подписью вдоль линии.
+сохраняется как `CITY_GEOMETRIES.PROPERTIES.placemarkName`.
 
-Popup использует Mapbox `setText`, без HTML-интерпретации.
+Public map может:
 
-## Переносимый KML
+- показывать его в hover-popup;
+- показывать постоянной подписью при `PROJECT_SETTINGS.SHOW_LINE_LABELS=true`.
+
+# Portable KML
 
 Экспорт:
 
@@ -237,75 +291,96 @@ POST /api/admin/import/lines.kml
 Content-Type: application/vnd.google-earth.kml+xml
 ```
 
-Имя файла:
+Portable KML использует тот же source CODE → source NAME → target NAME matching.
 
-```text
-lines.kml
-```
+Подробнее: [kml-transfer.md](kml-transfer.md).
 
-Переносимый KML использует тот же принцип numeric source CODE → dictionary NAME → target local type. Настоящее имя исходной линии переносится внутри `dtpstat.properties.placemarkName`; видимый `<Placemark><name>` может быть сгенерирован для удобства внешних viewers и сам по себе не является источником истины для line popup/label. Подробности: [kml-transfer.md](kml-transfer.md).
+# Население
 
-## Население
-
-Экспорт:
+## Экспорт
 
 ```text
 GET /api/admin/export/populations
 ```
 
-Имя файла:
+Файл:
 
 ```text
 populations.json
 ```
 
-Импорт:
+Для города переносятся:
+
+- `name`;
+- `citySlug`;
+- `population`;
+- `asOf`;
+- `source`;
+- `attributes`.
+
+Legacy format с общими `asOf`/`source` в корне также поддерживается.
+
+## Импорт
 
 ```text
 POST /api/admin/populations
 Content-Type: application/json
 ```
 
-Для каждого города переносятся `name`, `citySlug`, `population`, `asOf`, `source`, `attributes`. Формат с общими `asOf`/`source` в корне также поддерживается как legacy input.
+### Поведение для отсутствующих target cities
 
-## Compression
+Population snapshot может содержать больше городов, чем текущий target deployment.
 
-### Ответы
+Импорт **не падает** из-за таких строк. Он:
 
-Admin exports проходят через Express compression/content negotiation. Клиент может использовать:
+1. валидирует сам population payload;
+2. сопоставляет entries с текущими `cities`;
+3. обновляет только найденные target cities;
+4. пропускает неизвестные города;
+5. пересчитывает report по успешно применённым данным.
+
+Result задачи содержит диагностические поля:
+
+```json
+{
+  "cities": 71,
+  "requestedCities": 72,
+  "skippedCount": 1,
+  "skippedCities": ["Киров"]
+}
+```
+
+То есть ситуация «population file содержит Киров, а target cities не содержит Киров» больше не является fatal validation error.
+
+При этом настоящие ошибки payload — invalid population, duplicate/conflicting entries, некорректные даты/структура — по-прежнему должны отклоняться.
+
+# Compression
+
+Admin exports проходят через HTTP compression/content negotiation. Клиент может использовать:
 
 ```text
 Accept-Encoding: gzip
 ```
 
-Для shell-примеров ниже `ADMIN_USERNAME/ADMIN_PASSWORD` — credentials **DB-пользователя**, а не обязательные runtime ENV-переменные приложения:
+JSON/GeoJSON import body parser принимает поддерживаемое Express сжатие, включая gzip.
+
+Пример:
 
 ```bash
 AUTH="$ADMIN_USERNAME:$ADMIN_PASSWORD"
 
-curl --fail-with-body --compressed \
-  --user "$AUTH" \
-  --output cities.geojson \
-  "https://source.example/api/admin/export/cities"
-```
-
-### Сжатые запросы
-
-JSON/GeoJSON import-endpoint принимают gzip/deflate/br через Express body parser. Пример gzip:
-
-```bash
 gzip -c cities.geojson | curl --fail-with-body \
   --user "$AUTH" \
-  --request POST \
-  --header "Content-Type: application/geo+json" \
-  --header "Content-Encoding: gzip" \
+  -X POST \
+  -H 'Content-Type: application/geo+json' \
+  -H 'Content-Encoding: gzip' \
   --data-binary @- \
-  "https://target.example/api/admin/import/cities"
+  https://target.example/api/admin/import/cities
 ```
 
-Web-admin при наличии `CompressionStream('gzip')` может сжимать крупные JSON/GeoJSON uploads в браузере.
+Web-admin при доступном `CompressionStream('gzip')` может сжимать крупные JSON/GeoJSON uploads в браузере.
 
-## Пример полного переноса данных
+# Полный пример переноса
 
 ```bash
 AUTH="$ADMIN_USERNAME:$ADMIN_PASSWORD"
@@ -330,12 +405,51 @@ gzip -c populations.json | curl --fail-with-body --user "$AUTH" \
   --data-binary @- https://target.example/api/admin/populations
 ```
 
-Для этих операций пользователь должен иметь `CAN_MANAGE_DATA`.
+# Single-task guard
 
-## Single-task и производные публичные файлы
+Длительные mutating операции раздела **Управление данными** проходят через общий single-task guard: одновременно выполняется одна такая задача.
 
-Все длительные mutating операции **управления данными** проходят через общий single-task guard: одновременно выполняется только одна такая задача. Это блокирует data-management UI, но не глобально весь интерфейс настроек.
+Это блокирует data-management controls, но не обязано блокировать settings/profile UI.
 
-После успешного реального изменения городов, линий или населения сервер сначала пересчитывает `CITY_REPORT_VALUES`, затем пересобирает статические public snapshots в `var/public-downloads/`. `dryRun` этого не делает.
+Progress/errors доступны в admin task log/WebSocket.
 
-Ошибки и прогресс data-операции доступны в её admin log/WebSocket. Завершение задачи также записывается в `ADMIN_AUDIT_LOG` с пользователем, IP, status и duration.
+После успешной real operation:
+
+```text
+source data commit
+→ CITY_REPORT_VALUES refresh
+→ var/public-downloads snapshots refresh
+```
+
+`dryRun` не фиксирует source data и не должен обновлять производные public files.
+
+# Public snapshots
+
+Файлы:
+
+```text
+var/public-downloads/bus-lanes.geojson
+var/public-downloads/bus-lanes.csv
+```
+
+создаются для публичного download/read path. Они не содержат всей служебной transfer metadata и не заменяют admin export.
+
+# Аутентификация за reverse proxy
+
+При browser session за HTTPS nginx требуется корректный proxy protocol/IP setup. Иначе mutating admin request может получить `Cross-site administrative request rejected`.
+
+Для одного nginx:
+
+```dotenv
+HTTP_TRUST_PROXY_HOPS=1
+```
+
+и:
+
+```nginx
+proxy_set_header Host $host;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+```
+
+Подробнее: [deployment.md](deployment.md) и [admin-security.md](admin-security.md).
