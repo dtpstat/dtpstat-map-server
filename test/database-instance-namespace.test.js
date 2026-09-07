@@ -18,6 +18,7 @@ test('runtime database namespace is not tied to the repository name', async () =
     'src/config.js',
     'src/db/pool.js',
     'src/db/database-locks.js',
+    'src/db/admin-task-success-repository.js',
     'src/db/data-import-service.js',
     'src/db/city-boundary-transfer-service.js',
     'src/db/population-import-service.js',
@@ -36,6 +37,7 @@ test('runtime database namespace is not tied to the repository name', async () =
   assert.doesNotMatch(runtime, /dtpstat-buslines\/2\.0 OSM city updater/);
   assert.doesNotMatch(runtime, /-c search_path=buslanes,public/);
   assert.doesNotMatch(runtime, /application_name:\s*['"]dtpstat-buslines/);
+  assert.doesNotMatch(runtime, /\bbuslanes\.[a-z_][a-z0-9_]*\b/);
 });
 
 test('schema setting drives search path, migration rendering and lock namespace', async () => {
