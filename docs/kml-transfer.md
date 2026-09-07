@@ -1,27 +1,31 @@
 # Переносимый KML линий
 
-Переносимый KML предназначен для полного round-trip линий между экземплярами `dtpstat-map-server`. Он отличается от импорта внешнего KML / Google My Maps: внешний источник передаёт исходные слои и их Placemark, а переносимый KML содержит полный словарь бизнес-типов и служебные ссылки, необходимые для точного восстановления.
+Portable KML предназначен для round-trip линий между экземплярами `dtpstat-map-server`. Он отличается от импорта внешнего KML / Google My Maps: внешний KML описывает исходные layers/Placemark, а portable format дополнительно содержит словарь business line types и служебные ссылки для точного восстановления.
 
-## Геометрический и бизнес-тип
+## Геометрический и business type
 
 Это независимые понятия:
 
-- геометрический тип: KML `LineString` / `MultiGeometry`;
-- бизнес-тип: запись `LINE_TYPES`, на которую `CITY_GEOMETRIES` ссылается через локальный `LINE_TYPE_ID`.
+- geometry type: `LineString` / `MultiGeometry`;
+- business type: запись `LINE_TYPES`, на которую target geometry ссылается через local `LINE_TYPE_ID`.
 
-PostGIS/KML geometry type никогда не используется как business type.
+KML/PostGIS geometry type никогда не используется как business type.
 
-## Актуальный формат
+## Актуальный portable format
 
-Канонический переносимый KML имеет `schemaVersion: 2`.
+Канонический KML имеет:
 
-В `Document/ExtendedData` находится:
+```text
+schemaVersion: 2
+```
+
+В `Document/ExtendedData` хранится:
 
 ```text
 dtpstat.businessLineTypes
 ```
 
-Его значение — JSON-словарь, например:
+Значение — JSON dictionary, например:
 
 ```json
 {
@@ -30,7 +34,7 @@ dtpstat.businessLineTypes
     {
       "code": 7,
       "name": "Односторонние",
-      "title": "Односторонние полосы",
+      "title": "Односторонние линии",
       "color": "#cc4400",
       "style": "dashed",
       "width": 5.5
@@ -41,16 +45,16 @@ dtpstat.businessLineTypes
 
 Поля:
 
-- `code` — числовой source CODE;
-- `name` — source/import identity;
-- `title` — подпись легенды;
-- `color`, `style`, `width` — оформление приложения.
+- `code` — source numeric CODE внутри snapshot;
+- `name` — переносимая business identity;
+- `title` — display title;
+- `color/style/width` — application style.
 
-Обычные KML `<Style>` также записываются для внешних viewers, но не являются источником истины. Стандартный KML не описывает полностью наши `dashed` / `dotted`, поэтому round-trip style восстанавливается из `dtpstat.businessLineTypes`.
+Обычные KML `<Style>` могут записываться для внешних viewers, но не являются полным source of truth: стандартный KML не выражает всю внутреннюю семантику `dashed/dotted`.
 
-## Placemark metadata и имя линии
+## Placemark metadata
 
-Каждая линия может содержать:
+Для линии могут передаваться:
 
 ```text
 dtpstat.businessTypeCode
@@ -63,19 +67,19 @@ dtpstat.boundaryOsmId
 dtpstat.properties
 ```
 
-`dtpstat.businessTypeCode` — numeric source reference на `lineTypes[].code` внутри этого KML.
+`businessTypeCode` указывает на source `lineTypes[].code` из того же document.
 
-`dtpstat.multiple` — статистический множитель `1`/`2`, а не визуальная толщина и не geometry type.
+`multiple` — статистический множитель, а не visual width и не geometry type.
 
-Сама геометрия хранится обычным `LineString` или `MultiGeometry`.
+## Имя линии
 
-Имя исходной линии хранится как source property:
+Source line name хранится как:
 
 ```text
 placemarkName
 ```
 
-Для **внешнего** KML / Google My Maps оно берётся непосредственно из:
+Для внешнего KML он берётся из:
 
 ```xml
 <Placemark>
@@ -84,75 +88,141 @@ placemarkName
 </Placemark>
 ```
 
-и сохраняется в `CITY_GEOMETRIES.PROPERTIES.placemarkName`.
+и сохраняется в:
 
-При portable round-trip настоящее `placemarkName` входит в `dtpstat.properties`, поэтому сохраняется независимо от локальных ID. Это важно: видимый `<Placemark><name>` переносимого KML может быть сгенерирован как удобная подпись, если исходного имени линии нет. Поэтому для portable KML источником истины является `dtpstat.properties.placemarkName`, а не любой текст `<name>`.
+```text
+CITY_GEOMETRIES.PROPERTIES.placemarkName
+```
 
-На публичной карте непустой `placemarkName` всегда может показываться в popup при наведении мыши на линию. Для popup используется текстовый API Mapbox (`setText`), поэтому содержимое KML name не интерпретируется как HTML.
+Для portable round-trip property находится внутри `dtpstat.properties`. Именно оно является source of truth.
 
-Дополнительно `PROJECT_SETTINGS.SHOW_LINE_LABELS` управляет постоянными symbol-подписями вдоль линии. Галочка находится в **Настройка интерфейса → Проект → «Отображать подписи линий на карте»**. Она не отключает hover-popup: это два независимых способа отображения одного `placemarkName`.
+Видимый `<Placemark><name>` portable KML может быть сгенерирован для удобства viewer и не должен автоматически считаться исходным line label.
 
-Не следует использовать обычное GeoJSON `properties.name` для имени линии: в канонических transfer-данных это поле уже используется для полного названия города.
+Public map использует `placemarkName`:
 
-## Почему CODE не является глобальным ID
+- в hover-popup;
+- как постоянную подпись вдоль линии при `PROJECT_SETTINGS.SHOW_LINE_LABELS=true`.
 
-Два экземпляра могут иметь разные локальные числовые CODE для одного и того же бизнес-типа. Поэтому импорт **не** выполняет `source CODE == target CODE`.
+Popup выводит текст без HTML interpretation.
 
-Порядок:
+## Почему CODE не глобальный
 
-1. XML и `Document/ExtendedData` проверяются до изменения БД;
-2. полностью валидируется `dtpstat.businessLineTypes`;
-3. проверяются source CODE, NAME, TITLE, цвет, стиль и ширина;
-4. каждый Placemark `businessTypeCode` разрешается в source dictionary;
-5. source CODE преобразуется в source `NAME`;
-6. target type ищется по нормализованному NAME без учёта регистра и внешних пробелов;
-7. для существующего NAME сохраняется локальный target CODE, обновляются TITLE/style-поля;
-8. для нового NAME запись создаётся без ручного CODE — CODE назначает target DB;
-9. геометрия получает локальный target `LINE_TYPE_ID`.
+Два deployments могут иметь разные numeric CODE для одного business type. Поэтому import не делает:
 
-`TITLE` в matching не участвует.
+```text
+source CODE == target CODE
+```
+
+Алгоритм:
+
+```text
+source businessTypeCode
+        ↓
+source dictionary CODE
+        ↓
+source NAME
+        ↓
+target lookup by normalized NAME
+        ↓
+target local LINE_TYPE_ID/CODE
+```
+
+Matching NAME выполняется без учёта регистра и внешних пробелов.
+
+Для existing target NAME:
+
+- target CODE сохраняется;
+- TITLE/color/style/width обновляются.
+
+Для missing target NAME:
+
+- создаётся новая row;
+- target DB генерирует CODE.
+
+`TITLE` в identity не участвует.
 
 ## Legacy compatibility
 
-Поддерживается старый portable KML `schemaVersion: 1`, где code был строковым source identifier. При чтении такой словарь переводится в актуальную модель: старый code трактуется как imported `NAME`, после чего используется обычное NAME-based сопоставление.
+Поддерживается portable KML `schemaVersion: 1`, где source code мог быть строковым identifier. Legacy parser переводит его в актуальную NAME-based model перед target matching.
 
 ## API
 
-Экспорт:
+Export:
 
 ```text
 GET /api/admin/export/lines.kml
 ```
 
-Скачиваемое имя:
+Файл:
 
 ```text
 lines.kml
 ```
 
-Импорт:
+Import:
 
 ```text
 POST /api/admin/import/lines.kml
 Content-Type: application/vnd.google-earth.kml+xml
 ```
 
-Также принимаются `application/xml` и `text/xml`.
+Также принимаются совместимые XML content types.
 
-Оба endpoint требуют DB-admin с `CAN_MANAGE_DATA` либо superadmin. HTTP Basic является транспортом credentials; после bootstrap проверка выполняется по `ADMIN_USERS`.
+Нужен `CAN_MANAGE_DATA` или superuser.
 
-Импорт участвует в общем single-task guard раздела **Управление данными** и выполняет замену линий в транзакции.
+Interactive web-admin использует session cookie. Для scripted API можно использовать DB-backed HTTP Basic. Bootstrap ENV credentials после создания DB-user не являются login fallback.
 
-## Внешний KML — другое правило
+Import участвует в общем single-task guard раздела **Управление данными** и заменяет line data транзакционно.
 
-Для обычного KML / Google My Maps конфигурация слоя выглядит, например, так:
+## Внешний KML / Google My Maps
+
+Внешний source configuration, например:
 
 ```json
-{ "name": "Односторонние", "multiple": 1, "type": "Односторонние" }
+{
+  "name": "Односторонние",
+  "multiple": 1,
+  "type": "Односторонние"
+}
 ```
 
-Поле `type` там является `LINE_TYPES.NAME`, а не `businessTypeCode`. Если NAME отсутствует в target DB, он создаётся автоматически, БД генерирует CODE, начальный TITLE равен NAME.
+имеет другую семантику:
 
-Для каждого выбранного линейного Placemark также сохраняется его стандартный KML `<name>` как `placemarkName`. Пустое или отсутствующее имя не создаёт hover-popup и постоянную line-label.
+- `type` — `LINE_TYPES.NAME`;
+- это не portable `businessTypeCode`;
+- missing target NAME создаётся автоматически;
+- DB генерирует CODE;
+- initial TITLE равен NAME.
 
-То есть `dtpstat.businessTypeCode` используется только в переносимом snapshot с собственным словарём; внешний KML работает по source NAME.
+Стандартный `<Placemark><name>` внешнего KML сохраняется как `placemarkName`.
+
+## Связь с GeoJSON transfer
+
+GeoJSON lines snapshot использует тот же принцип:
+
+```text
+source numeric CODE
+→ source dictionary NAME
+→ target NAME matching
+→ target local CODE/ID
+```
+
+Поэтому GeoJSON и portable KML взаимно согласованы по business semantics, хотя container format различается.
+
+Подробнее: [data-transfer.md](data-transfer.md).
+
+## Reverse proxy
+
+Если import выполняется через browser session за HTTPS nginx, proxy должен корректно передавать protocol/IP. Для одного доверенного nginx:
+
+```dotenv
+HTTP_TRUST_PROXY_HOPS=1
+```
+
+```nginx
+proxy_set_header Host $host;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+```
+
+KML size limits приложения и reverse proxy также должны быть согласованы. Общая production-конфигурация описана в [deployment.md](deployment.md).
