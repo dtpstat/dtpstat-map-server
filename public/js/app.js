@@ -19,9 +19,10 @@ document.head.append(legendStylesheet);
 
 const mapMessage = document.querySelector('#map-message');
 const mapPanel = document.querySelector('.map-panel');
+const tableStatus = document.querySelector('#status');
 const cityList = createCityList({
   list: document.querySelector('#city-list'),
-  status: document.querySelector('#status'),
+  status: tableStatus,
   categoryButtons: document.querySelectorAll('[data-category]'),
 });
 
@@ -189,12 +190,19 @@ cityList.onSelect(selectCity);
 
 async function start() {
   try {
-    const [mapConfig, projectSettings, cities, lineTypes, reportConfig] = await Promise.all([
+    const reportConfig = await loadReportConfig();
+    cityList.setReportConfig(reportConfig);
+    tableStatus.colSpan = Math.max(1, reportConfig.tableColumns.length);
+    cityList.setStatus('Загружаем список городов…');
+
+    const cities = await loadCities();
+    cityList.setCities(cities);
+    cityList.setStatus(cities.length ? '' : 'Данные пока не загружены');
+
+    const [mapConfig, projectSettings, lineTypes] = await Promise.all([
       loadMapConfig(),
       loadProjectSettings(),
-      loadCities(),
       loadLineTypes(),
-      loadReportConfig(),
     ]);
     mapController = await createMapController({
       ...mapConfig,
@@ -203,8 +211,6 @@ async function start() {
     if (!lineTypes.length) throw new Error('Справочник типов линий пуст');
 
     applyLineTypes(lineTypes);
-    cityList.setReportConfig(reportConfig);
-    cityList.setCities(cities);
     citiesById = new Map(cities.map((city) => [city.id, city]));
     mapController.setCities(cities);
     mapController.onCitySelect((cityId) => {
@@ -216,7 +222,6 @@ async function start() {
     });
 
     if (!cities.length) {
-      cityList.setStatus('Данные пока не загружены');
       setMapMessage('Данные пока не загружены');
       return;
     }
