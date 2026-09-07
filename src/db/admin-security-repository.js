@@ -148,7 +148,7 @@ const RECORD_SUCCESSFUL_LOGIN_SQL = `
 `;
 
 const RECORD_FAILED_LOGIN_SQL = `
-  WITH current_user AS (
+  WITH locked_user AS (
     SELECT id, failed_login_count, failed_login_window_started_at, locked_until,
       (
         failed_login_window_started_at IS NULL
@@ -162,7 +162,7 @@ const RECORD_FAILED_LOGIN_SQL = `
     SELECT id,
       CASE WHEN reset_window THEN 1 ELSE failed_login_count + 1 END AS next_count,
       CASE WHEN reset_window THEN $2::timestamptz ELSE failed_login_window_started_at END AS next_window_started_at
-    FROM current_user
+    FROM locked_user
   )
   UPDATE admin_users AS users
   SET
