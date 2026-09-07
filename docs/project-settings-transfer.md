@@ -1,10 +1,6 @@
 # Экспорт и импорт настроек проекта
 
-Superadmin может переносить DB-backed настройки экземпляра отдельным JSON-пакетом через окно:
-
-```text
-Пользователи и аудит → Настройки проекта
-```
+Для переноса DB-backed конфигурации между экземплярами используется отдельный JSON package.
 
 API:
 
@@ -13,70 +9,131 @@ GET  /api/admin/settings/export
 POST /api/admin/settings/import
 ```
 
-Оба endpoint доступны только `IS_SUPERUSER`.
+Endpoint доступны только `IS_SUPERUSER`.
 
-## Что входит в пакет
+Это **не** backup всей database: города/линии/население переносятся отдельными data-transfer formats.
 
-Текущая `schemaVersion = 1` переносит:
+## Актуальная версия
 
-1. `PROJECT_SETTINGS`:
-   - название проекта;
-   - keywords;
-   - HTML информационного блока;
-   - Yandex Metrica ID;
-   - Google Analytics ID;
-   - `SHOW_LINE_LABELS`;
-2. `LINE_TYPES`:
-   - source/import `NAME`;
-   - `TITLE`;
-   - цвет;
-   - стиль;
-   - толщина;
-   - source numeric `CODE` только как часть переносимого словаря;
-3. `REPORT_CONFIG`:
-   - метрики;
-   - ссылки между метриками;
-   - арифметика/приоритеты;
-   - публичная таблица;
-   - conditional formatting;
-   - CSV;
-   - ranking;
-4. `ADMIN_SECURITY_SETTINGS`:
-   - порог ошибок входа;
-   - окно подсчёта;
-   - длительность временной блокировки.
+Текущий export создаёт:
 
-## Что намеренно НЕ входит
+```text
+_dtpstat.kind = project-settings
+_dtpstat.schemaVersion = 3
+```
 
-Пакет настроек не является backup всей БД. В него не включаются:
+Import принимает:
+
+```text
+schemaVersion 1
+schemaVersion 2
+schemaVersion 3
+```
+
+Legacy packages нормализуются к текущей модели. Для отсутствующих в старых форматах security fields используются совместимые defaults; отсутствующий theme normalizes to `classic`.
+
+## Что входит в v3
+
+### PROJECT_SETTINGS
+
+Переносятся:
+
+- `projectName`;
+- `keywords`;
+- `footerHtml`;
+- `yandexMetrikaId`;
+- `googleAnalyticsId`;
+- `themePreset`;
+- `showLineLabels`;
+- public `mapboxAccessToken`.
+
+Допустимые `themePreset`:
+
+```text
+retro
+classic
+modern
+```
+
+Mapbox token — browser/public `pk.*` token. В settings transfer он является частью project configuration.
+
+### LINE_TYPES
+
+Для каждого business type:
+
+- source numeric `code`;
+- `name`;
+- `title`;
+- `color`;
+- `style`;
+- `width`.
+
+`NAME` является переносимой identity. Numeric CODE нужен как часть source dictionary и не считается глобальным target ID.
+
+### REPORT_CONFIG
+
+Переносятся:
+
+- metrics;
+- metric dependencies;
+- arithmetic operations/priorities;
+- table columns;
+- conditional formatting;
+- CSV columns;
+- ranking metric/direction.
+
+`CITY_REPORT_VALUES` не копируется: target materialized report строится заново.
+
+### ADMIN_SECURITY_SETTINGS
+
+Текущая версия переносит полный policy set:
+
+```text
+maxFailedAttempts
+failureWindowSeconds
+lockoutSeconds
+ipMaxFailedAttempts
+ipFailureWindowSeconds
+ipLockoutSeconds
+sessionIdleSeconds
+sessionAbsoluteSeconds
+auditRetentionDays
+```
+
+## Что НЕ входит
+
+Package намеренно не переносит:
 
 - `ADMIN_USERS`;
-- логины/пароли/password hashes;
+- username/password/password hash;
+- avatars пользователей;
+- `ADMIN_SESSIONS`;
 - `ADMIN_AUDIT_LOG`;
-- текущие `FAILED_LOGIN_COUNT` / `LOCKED_UNTIL`;
-- города и OSM-границы;
-- геометрии линий;
-- население;
-- materialized `CITY_REPORT_VALUES` как источник истины;
+- account `FAILED_LOGIN_COUNT/LOCKED_UNTIL`;
+- `ADMIN_LOGIN_IP_STATE`;
+- `ADMIN_BLOCKED_IPS`;
 - `ADMIN_TASK_SUCCESSES`;
-- инфраструктурные `.env` параметры;
-- PostgreSQL credentials;
-- Mapbox token;
-- TLS private key/certificate;
-- KML/Overpass network allowlists и другие deployment secrets.
+- города и boundaries;
+- line geometries;
+- population;
+- materialized `CITY_REPORT_VALUES` как source snapshot;
+- `.env`;
+- database credentials;
+- TLS keys/certificates;
+- OSM/KML deployment allowlists;
+- `MAPBOX_STYLE_URL`;
+- custom city marker PNG binary и его image metadata.
 
-Данные городов/линий/населения переносятся существующими data-transfer endpoint, а не этим форматом.
+Последний пункт важен: city marker хранится в `PROJECT_SETTINGS`, но текущий v3 transfer package его **не экспортирует**.
 
-## Формат v1
-
-Пример структуры:
+## Пример v3
 
 ```json
 {
   "_dtpstat": {
     "kind": "project-settings",
-    "schemaVersion": 1,
-    "exportedAt": "2026-09-06T12:00:00.000Z"
+    "schemaVersion": 3,
+    "exportedAt": "2026-09-07T20:00:00.000Z"
   },
   "projectSettings": {
     "projectName": "Трамвайные системы России",
@@ -84,7 +141,9 @@ POST /api/admin/settings/import
     "footerHtml": "<p>...</p>",
     "yandexMetrikaId": null,
     "googleAnalyticsId": null,
-    "showLineLabels": true
+    "themePreset": "classic",
+    "showLineLabels": true,
+    "mapboxAccessToken": "pk...."
   },
   "lineTypes": [
     {
@@ -108,81 +167,116 @@ POST /api/admin/settings/import
   "securitySettings": {
     "maxFailedAttempts": 5,
     "failureWindowSeconds": 900,
-    "lockoutSeconds": 900
+    "lockoutSeconds": 900,
+    "ipMaxFailedAttempts": 20,
+    "ipFailureWindowSeconds": 900,
+    "ipLockoutSeconds": 3600,
+    "sessionIdleSeconds": 1800,
+    "sessionAbsoluteSeconds": 43200,
+    "auditRetentionDays": 365
   }
 }
 ```
 
-Фактический `reportConfig` должен удовлетворять обычному validator и содержать допустимые метрики/колонки.
+Фактический `reportConfig` должен пройти обычный server validator.
 
-## Семантика LINE_TYPES
+## Семантика Mapbox token при import
 
-Как и в data-transfer форматах, numeric `CODE` между экземплярами **не является локальным идентификатором**.
+Если `projectSettings` содержит `mapboxAccessToken`, target token обновляется и считается initialized.
 
-При импорте:
+Если legacy package не содержит это поле, текущий target token сохраняется: import не должен обнулять уже настроенный deployment только потому, что старый format не знал о Mapbox setting.
 
-```text
-source entry
-  CODE + NAME
-       ↓
-target lookup by normalized NAME
-       ↓
-existing target type → обновить TITLE/color/style/width
-missing target NAME  → создать, target DB генерирует новый CODE
+После DB initialization переменная `MAPBOX_ACCESS_TOKEN` из `.env` используется только для одноразового bootstrap `V019`; settings package работает уже с DB value.
+
+## Семантика theme
+
+В v3 экспортируется явный:
+
+```json
+"themePreset": "retro | classic | modern"
 ```
 
-Сопоставление `NAME` выполняется без учёта регистра и внешних пробелов.
+Для legacy package без theme применяется compatibility normalization `classic`.
 
-Типы, которые существуют только в целевой БД и отсутствуют в импортируемом файле, **не удаляются**. Это необходимо, чтобы импорт настроек не разрушал существующие ссылки `CITY_GEOMETRIES.LINE_TYPE_ID`.
+## LINE_TYPES matching
 
-## Атомарность импорта
+Source CODE не переносится в target как обязательный numeric identifier.
 
-Перед фиксацией сервер:
+Алгоритм:
 
-- проверяет envelope `_dtpstat.kind/schemaVersion`;
-- валидирует `PROJECT_SETTINGS` существующим HTML/meta validator;
-- валидирует словарь `LINE_TYPES`;
-- валидирует security thresholds;
-- внутри транзакции сопоставляет/создаёт line types;
-- валидирует `REPORT_CONFIG` уже относительно итогового набора `LINE_TYPES.NAME`;
-- пересчитывает `CITY_REPORT_VALUES`.
+```text
+source CODE + NAME
+        ↓
+normalize NAME
+        ↓
+target lookup by NAME
+        ↓
+existing NAME → update TITLE/color/style/width, keep target CODE
+missing NAME  → create row, target DB generates CODE
+```
 
-`PROJECT_SETTINGS`, оформление типов, `REPORT_CONFIG`, security policy и materialized report фиксируются одной PostgreSQL transaction. Ошибка до `COMMIT` приводит к rollback.
+Сравнение `NAME` выполняется без учёта регистра и внешних пробелов.
 
-После commit сервер пересобирает статические public-download snapshots. Это производный post-processing: если он завершился ошибкой, импорт настроек остаётся успешным, а API возвращает warning о неудачной пересборке вместо ложного rollback-status.
+Target-only types, отсутствующие в package, **не удаляются**. Это защищает существующие `CITY_GEOMETRIES.LINE_TYPE_ID` от разрушения.
+
+## Validation и transaction
+
+До commit сервер:
+
+1. проверяет `_dtpstat.kind/schemaVersion`;
+2. валидирует project settings;
+3. валидирует footer HTML/analytics/theme/Mapbox token;
+4. валидирует line type dictionary;
+5. нормализует security policy;
+6. открывает DB transaction/import lock;
+7. сопоставляет и создаёт target line types;
+8. валидирует `REPORT_CONFIG` уже против итогового набора target `LINE_TYPES.NAME`;
+9. сохраняет settings/security/report config;
+10. пересчитывает `CITY_REPORT_VALUES`.
+
+До `COMMIT` операция атомарна: ошибка приводит к rollback.
+
+## Post-commit snapshots
+
+После успешного DB commit сервер пересобирает public downloads.
+
+Если этот производный post-processing завершился ошибкой, уже зафиксированный settings import не откатывается. API может вернуть warning вместо ложного сообщения о DB rollback.
 
 ## Materialized report
 
-`CITY_REPORT_VALUES` не переносится как snapshot. После импорта он строится заново на основании:
+`CITY_REPORT_VALUES` строится из:
 
 ```text
-текущие данные целевой БД
+target cities/boundaries/geometries/population
 +
-импортированный REPORT_CONFIG
+imported REPORT_CONFIG
++
+target line types после matching
 ```
 
-Поэтому один и тот же пакет настроек можно применять к разным наборам городов/геометрий, если используемые `LINE_TYPES.NAME` совместимы.
+Поэтому один settings package можно применять к разным data deployments при совместимой семантике line type NAME.
 
 ## Audit
 
-Экспорт и импорт записываются в `ADMIN_AUDIT_LOG` как:
+Settings operations записываются в `ADMIN_AUDIT_LOG`, в частности как:
 
 ```text
 settings.export
 settings.import
 ```
 
-с пользователем, IP, status и duration.
+Package не содержит audit log, session credentials или password hashes.
 
-Сам экспорт не содержит audit log или credentials.
+## Отличие от data transfer
 
-## Версионирование
+Project settings package — конфигурация поведения/интерфейса.
 
-Формат использует отдельную версию:
+Исходные данные переносятся отдельно:
 
 ```text
-_dtpstat.kind = project-settings
-_dtpstat.schemaVersion = 1
+GET /api/admin/export/cities
+GET /api/admin/export/lines
+GET /api/admin/export/populations
 ```
 
-Неизвестный `kind` или неподдерживаемый `schemaVersion` отклоняется до изменения БД.
+Подробнее: [data-transfer.md](data-transfer.md).
