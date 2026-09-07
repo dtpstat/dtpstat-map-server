@@ -13,12 +13,13 @@ async function source(relativePath) {
   return fs.readFile(path.join(projectRoot, relativePath), 'utf8');
 }
 
-test('project settings migrations create branding, metrics and public theme preset', async () => {
-  const [baseSql, metricsSql, limitSql, themeSql] = await Promise.all([
+test('project settings migrations create branding, metrics, theme and line popup settings', async () => {
+  const [baseSql, metricsSql, limitSql, themeSql, popupSql] = await Promise.all([
     source('db/migrations/V009__project_settings.sql'),
     source('db/migrations/V010__project_metrics.sql'),
     source('db/migrations/V011__limit_yandex_metrika_id.sql'),
     source('db/migrations/V021__public_theme_preset.sql'),
+    source('db/migrations/V022__line_popup_setting.sql'),
   ]);
 
   assert.match(baseSql, /CREATE TABLE IF NOT EXISTS BUSLANES\.PROJECT_SETTINGS/i);
@@ -38,9 +39,10 @@ test('project settings migrations create branding, metrics and public theme pres
 
   assert.match(themeSql, /THEME_PRESET TEXT NOT NULL DEFAULT 'classic'/i);
   assert.match(themeSql, /THEME_PRESET IN \('retro', 'classic', 'modern'\)/i);
+  assert.match(popupSql, /SHOW_LINE_POPUPS BOOLEAN NOT NULL DEFAULT TRUE/i);
 });
 
-test('admin interface exposes project settings and the three built-in theme choices', async () => {
+test('admin interface exposes project settings and independent line display switches', async () => {
   const [shell, editor, css] = await Promise.all([
     source('admin/admin-shell.js'),
     source('admin/project-settings-editor.js'),
@@ -56,6 +58,10 @@ test('admin interface exposes project settings and the three built-in theme choi
   assert.match(editor, /name="themePreset" type="radio" value="classic"/);
   assert.match(editor, /name="themePreset" type="radio" value="modern"/);
   assert.match(editor, /themePreset: themePreset\.value/);
+  assert.match(editor, /name="showLineLabels" type="checkbox"/);
+  assert.match(editor, /name="showLinePopups" type="checkbox"/);
+  assert.match(editor, /showLineLabels: showLineLabels\.checked/);
+  assert.match(editor, /showLinePopups: showLinePopups\.checked/);
   assert.match(editor, /name="keywords"/);
   assert.match(editor, /name="yandexMetrikaId"/);
   assert.match(editor, /name="googleAnalyticsId"/);
@@ -111,6 +117,22 @@ test('public page derives metadata, theme stylesheet and analytics loaders from 
   assert.match(retroCss, /--selected:\s*#fff400/i);
   assert.match(classicCss, /--selected:\s*#ffdf75/i);
   assert.match(modernCss, /--selected:\s*#e5eee3/i);
+});
+
+test('public map reloads independent line display settings without a page refresh', async () => {
+  const [publicApp, mapController] = await Promise.all([
+    source('public/js/app.js'),
+    source('public/js/map-controller.js'),
+  ]);
+
+  assert.match(publicApp, /showLineLabels: Boolean\(projectSettings\.showLineLabels\)/);
+  assert.match(publicApp, /showLinePopups: projectSettings\.showLinePopups !== false/);
+  assert.match(publicApp, /refreshLineDisplayOptions/);
+  assert.match(publicApp, /mapController\.setLineDisplayOptions/);
+  assert.match(mapController, /let showLineLabels = Boolean\(config\.showLineLabels\)/);
+  assert.match(mapController, /let showLinePopups = config\.showLinePopups !== false/);
+  assert.match(mapController, /if \(!showLinePopups\)/);
+  assert.match(mapController, /setLineDisplayOptions\(options = \{\}\)/);
 });
 
 test('retro table hides the low-zoom hint and uses zebra striping', async () => {
