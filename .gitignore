@@ -1,14 +1,18 @@
-node_modules/
 .env
 *.log
+node_modules/
 coverage/
 
 # Local certificates and editor state
 certificates/
 .idea/
+/.run/
 
 # Generated runtime files.
 var/public-downloads/
 
 # Historical source snapshots are not part of the running application.
 archive/
+
+logs/
+tmp/
