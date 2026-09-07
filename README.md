@@ -1,32 +1,32 @@
 # dtpstat-map-server
 
-Node.js/Express + PostgreSQL/PostGIS сервер интерактивной карты линейных объектов. Код не привязан к конкретному транспортному проекту: один репозиторий можно разворачивать несколькими независимыми экземплярами с разными БД, схемами, портами, исходными данными, расчётами и публичным названием.
+Node.js/Express + PostgreSQL/PostGIS сервер интерактивной карты линейных объектов. Репозиторий не привязан к одному транспортному проекту: один и тот же код можно разворачивать несколькими независимыми экземплярами с разными БД, SQL-схемами, портами, данными, расчётами, оформлением и публичным названием.
+
+Требуются Node.js `20.19+` и PostgreSQL с PostGIS.
 
 ## Основные возможности
 
-- публичная Mapbox-карта с viewport-загрузкой полных линий;
-- selector линий увеличивается до 120% ширины и высоты видимого окна, поэтому объекты не исчезают прямо у края карты;
-- импорт внешнего KML / Google My Maps с сохранением `<Placemark><name>` и hover-popup имени линии;
-- опциональные постоянные подписи `placemarkName` вдоль линий;
-- справочник бизнес-типов линий с независимыми `CODE`, `NAME`, `TITLE`, цветом, стилем и толщиной;
-- настраиваемые scalar-метрики городов, ссылки между метриками, арифметика, приоритеты/ОПЗ и группировка по бизнес-типу;
-- агрегаты геометрий `SUM`, `AVG`, `MEDIAN`, `MIN`, `MAX`, `COUNT` там, где они допустимы;
-- поля уровня города, включая население и геодезическую площадь OSM-границы в м²;
-- подготовленная таблица `CITY_REPORT_VALUES` вместо тяжёлого расчёта при каждом публичном запросе;
-- отдельная настройка публичной HTML-таблицы, CSV и рейтинга;
-- условное форматирование числовых ячеек по диапазонам;
-- загрузка городов/границ из OSM Overpass;
-- перенос городов, линий, типов и населения между экземплярами через admin API;
+- публичная Mapbox-карта с viewport-загрузкой линейных геометрий;
+- загрузка и обновление городов/границ из OSM Overpass;
+- импорт внешнего KML / Google My Maps с сохранением `<Placemark><name>` как `placemarkName`;
+- hover-popup и опциональные постоянные подписи имён линий;
+- настраиваемый справочник бизнес-типов линий: `CODE`, `NAME`, `TITLE`, цвет, стиль и толщина;
+- декларативные метрики городов без произвольного SQL, ссылки между метриками, агрегаты, приоритеты и ОПЗ;
+- материализованный `CITY_REPORT_VALUES` для быстрого публичного рейтинга;
+- независимая настройка публичной HTML-таблицы, CSV и ranking;
+- условное форматирование числовых значений;
+- три встроенных публичных theme preset: `retro`, `classic`, `modern`;
+- настраиваемый PNG-маркер городов;
+- DB-backed Mapbox public access token с одноразовым bootstrap из `.env`;
+- перенос городов, линий, типов и населения между экземплярами;
 - переносимый GeoJSON/KML с полным словарём бизнес-типов;
-- DB-backed административные пользователи, независимые роли, anti-bruteforce lockout и аудит;
-- три семантических окна админки: управление данными, настройка интерфейса, пользователи/аудит;
-- superadmin-only экспорт/импорт всех DB-backed настроек проекта;
-- single-task guard, dry-run и WebSocket-журнал только для операций управления данными;
-- статические публичные GeoJSON/CSV snapshots и динамические admin-export endpoint;
-- HTTP и/или HTTPS;
+- отдельный versioned пакет переноса настроек проекта;
+- DB-backed admin users, web sessions, роли, profile/avatar, anti-bruteforce по учётке и IP, manual IP blocks и audit;
+- session-cookie для web-admin и HTTP Basic для скриптов/compatibility clients;
+- single-task guard, dry-run и WebSocket-журнал для длительных операций управления данными;
+- статические публичные GeoJSON/CSV snapshots;
+- HTTP и/или HTTPS, reverse-proxy-aware deployment;
 - структурированные service logs и graceful shutdown.
-
-Требуются Node.js `20.19+` и PostgreSQL с PostGIS.
 
 ## Быстрый запуск
 
@@ -35,7 +35,7 @@ npm install
 cp .env.example .env
 ```
 
-Заполните параметры PostgreSQL, `MAPBOX_ACCESS_TOKEN` и первоначальные admin credentials, затем:
+Заполните параметры PostgreSQL, первоначальные admin credentials и Mapbox token, затем:
 
 ```bash
 npm run db:init
@@ -43,20 +43,22 @@ npm run db:migrate
 npm start
 ```
 
-`db:init` создаёт/настраивает прикладную роль и БД и включает PostGIS. `db:migrate` применяет последовательность миграций `V001…V017`.
+`db:init` создаёт/настраивает прикладную роль и database и включает PostGIS. `db:migrate` применяет последовательность миграций `V001…V021`.
 
-На первом старте после security migrations, если `ADMIN_USERS` пуст, сервер один раз создаёт bootstrap-superadmin из:
+На первом старте, если `ADMIN_USERS` пуст, сервер создаёт bootstrap-superuser из:
 
 ```dotenv
 IMPORT_API_USERNAME=admin
 IMPORT_API_PASSWORD=replace-with-a-long-random-password
 ```
 
-После создания DB-пользователя эти значения больше не участвуют в online-аутентификации и могут быть удалены из `.env`.
+После создания хотя бы одного DB-пользователя эти ENV credentials больше не используются для online login. Их можно удалить из `.env`, если они не нужны для аварийного `admin:set-superuser`.
 
-На полностью пустой БД сервер и админка запускаются нормально. Публичная страница показывает `Данные пока не загружены`, а наполнение выполняется через `/admin/`.
+`MAPBOX_ACCESS_TOKEN` начиная с `V019` также является bootstrap-параметром: он копируется в `PROJECT_SETTINGS` только пока `MAPBOX_ACCESS_TOKEN_INITIALIZED=false`. После этого DB-значение является authoritative и меняется через админку.
 
-Для локальной PostgreSQL можно использовать:
+На пустой БД приложение запускается нормально; данные затем загружаются через `/admin/`.
+
+Для локальной PostgreSQL:
 
 ```bash
 docker compose up -d database
@@ -69,45 +71,45 @@ npm start
 
 Рекомендуемая модель: **один экземпляр приложения — одна PostgreSQL database**.
 
-`DATABASE_SCHEMA` одновременно является SQL schema и техническим namespace экземпляра. По умолчанию для совместимости используется `buslanes`. Значение участвует в:
+`DATABASE_SCHEMA` является SQL schema и техническим namespace экземпляра. По умолчанию для старых установок используется `buslanes`.
+
+Значение участвует в:
 
 - `search_path`;
 - PostgreSQL `application_name`;
 - advisory locks;
-- таблице истории миграций;
+- `<DATABASE_SCHEMA>.schema_versions`;
 - service namespace;
 - default OSM User-Agent.
 
-Например второй экземпляр:
+Пример отдельного экземпляра:
 
 ```dotenv
 DATABASE_NAME=tramlanes
-DATABASE_ROLE=tramlanes_app
+DATABASE_ROLE=tramlanes
 DATABASE_SCHEMA=tramlanes
-HTTPS_ENABLED=true
-HTTPS_PORT=3002
+HTTP_ENABLED=true
+HTTP_PORT=3001
 ```
 
-Node-приложения должны слушать разные HTTP/HTTPS-порты. Несколько БД в одном PostgreSQL server могут использовать один `DATABASE_PORT`.
+Runtime SQL должен работать через настроенный `search_path` и не должен жёстко ссылаться на `buslanes.<table>`. Исторические migration-файлы могут содержать source token `BUSLANES`: migration runner подставляет фактический `DATABASE_SCHEMA` перед исполнением.
 
 Подробнее: [docs/deployment.md](docs/deployment.md).
 
-## Схема, миграции и индексы
+## Миграции
 
-Основные таблицы `<DATABASE_SCHEMA>`:
+Текущая последовательность заканчивается `V021`:
 
-- `cities` — города и legacy/cache статистика;
-- `city_populations` — население;
-- `city_boundaries` — OSM city/town Polygon/MultiPolygon;
-- `city_geometries` — линейные объекты и их source properties;
-- `line_types` — словарь бизнес-типов;
-- `project_settings` — публичные настройки проекта, включая показ подписей линий;
-- `report_config` — декларативные метрики, таблица, CSV и ranking;
-- `city_report_values` — материализованные scalar-значения и места городов;
-- `admin_users` — административные пользователи и роли;
-- `admin_security_settings` — anti-bruteforce policy;
-- `admin_audit_log` — журнал входов и admin-операций;
-- audit/update tables и `admin_task_successes`.
+- `V014` — configurable report;
+- `V015` — аудит индексов;
+- `V016` — DB-backed admin security и line labels;
+- `V017` — DB-level защита bootstrap-admin;
+- `V018` — web sessions, расширенные роли, profile/avatar, IP security и дополнительные audit indexes;
+- `V019` — DB-backed Mapbox access token;
+- `V020` — custom city marker PNG;
+- `V021` — public theme preset `retro/classic/modern`.
+
+Следующее изменение DB schema должно добавляться новой миграцией **V022+**. Уже опубликованные migration-файлы задним числом не изменяются.
 
 История миграций:
 
@@ -115,467 +117,283 @@ Node-приложения должны слушать разные HTTP/HTTPS-п
 <DATABASE_SCHEMA>.schema_versions
 ```
 
-Старые deployment могли использовать `public.buslanes_schema_versions`; migration runner переносит найденную legacy-историю в schema-specific таблицу.
-
-Файлы уже опубликованных/применённых миграций не должны переписываться задним числом. В исторических SQL литерал `BUSLANES` является source token: runner подставляет текущий `DATABASE_SCHEMA` перед исполнением, а checksum считает по исходному файлу.
-
-`V015__index_audit.sql` фиксирует отдельный аудит индексов. `V016` добавляет DB-backed security и настройку подписей линий. `V017` защищает первоначальную bootstrap-учётку на уровне БД.
-
-Следующее изменение схемы должно быть новой миграцией **V018+**.
+Legacy `public.buslanes_schema_versions` автоматически переносится migration runner в schema-specific историю.
 
 Подробнее: [docs/database-indexes.md](docs/database-indexes.md).
 
-## Админка, роли и безопасность
+## Основные таблицы
 
-В `/admin/` три верхнеуровневых окна.
+В `<DATABASE_SCHEMA>` используются, в частности:
 
-### Управление данными
+- `cities`;
+- `city_populations`;
+- `city_boundaries`;
+- `city_geometries`;
+- `line_types`;
+- `project_settings`;
+- `report_config`;
+- `city_report_values`;
+- `admin_users`;
+- `admin_sessions`;
+- `admin_security_settings`;
+- `admin_login_ip_state`;
+- `admin_blocked_ips`;
+- `admin_audit_log`;
+- `admin_task_successes`;
+- журналы OSM/KML update runs.
 
-Содержит импорт/экспорт городов, линий и населения, OSM/KML, текущую фоновую операцию и live-журнал.
+## Админка и роли
 
-Одна длительная mutating data-задача выполняется одновременно. Пока она активна, блокируются только элементы управления этим разделом. Настройки интерфейса не входят в этот клиентский global lock.
+Web-admin находится в `/admin/`. Интерактивный вход выполняется через `/admin/login.html`; успешный login создаёт HttpOnly session cookie `dtpstat_admin_session`. HTTP Basic остаётся доступен для API-скриптов и compatibility clients.
 
-### Настройка интерфейса
-
-Содержит:
-
-- **Проект**;
-- **Расчёты**;
-- **Типы линий**.
-
-Раздел использует всю доступную ширину вместо постоянной правой колонки журнала data-задачи.
-
-### Пользователи и аудит
-
-Доступен только superadmin. Здесь находятся:
-
-- пользователи и роли;
-- audit log;
-- параметры защиты от перебора;
-- экспорт/импорт всех DB-backed настроек проекта.
-
-У обычного пользователя два независимых права:
+Обычной административной учётке могут независимо выдаваться права:
 
 ```text
 CAN_MANAGE_DATA
 CAN_MANAGE_INTERFACE
+CAN_MANAGE_USERS
+CAN_VIEW_AUDIT
+CAN_MANAGE_SECURITY
 ```
 
-Bootstrap-superadmin всегда имеет оба права.
+`IS_SUPERUSER` даёт все разрешения. `IS_BOOTSTRAP` отмечает первоначальную защищённую учётку.
 
-Первоначальную учётку нельзя удалить, вручную заблокировать, лишить superuser или одного из двух прав. Этот инвариант дополнительно защищён DB trigger. При этом временный `LOCKED_UNTIL` от anti-bruteforce действует и на bootstrap-user.
+Разделы админки:
 
-HTTP Basic используется только как транспорт credentials; логин, salted scrypt password hash, роли, manual block и temporary lockout хранятся в PostgreSQL.
+- **Управление данными** — импорт/экспорт, OSM/KML, фоновые data tasks и live-журнал;
+- **Настройка интерфейса** — проект, тема, Mapbox, marker icon, расчёты и типы линий;
+- **Пользователи и аудит** — пользователи, security policy, sessions/IP blocks, audit и перенос настроек согласно выданным permissions.
 
-Основные auth-ответы:
+`MUST_CHANGE_PASSWORD` ограничивает interactive session страницей профиля/смены пароля до установки нового пароля.
+
+Подробнее: [docs/admin-security.md](docs/admin-security.md).
+
+## Защита входа
+
+Защита ведётся отдельно по учётке и IP. Основные ответы:
 
 ```text
-401  отсутствуют/неверны credentials
-403  manual block или недостаточно прав
-423  временная anti-bruteforce блокировка
+401  credentials отсутствуют/неверны
+403  manual block, IP block или недостаточно прав
+423  временный account lockout
+429  временный IP lockout
+428  требуется смена пароля
 ```
 
-Для `423` возвращается `Retry-After`.
+Для временных блокировок возвращается `Retry-After`.
 
-Если приложение стоит за доверенным reverse proxy, для корректного audit IP задаётся число доверенных hops:
+Session-auth mutating requests проходят same-origin/CSRF-проверку. При HTTPS termination на nginx Express должен видеть исходный protocol через trusted proxy, иначе корректный браузерный `Origin: https://...` может быть отклонён как cross-site.
+
+## Reverse proxy / nginx
+
+Для одного доверенного nginx перед Node:
 
 ```dotenv
 HTTP_TRUST_PROXY_HOPS=1
 ```
 
-По умолчанию `0`, forwarded IP не доверяется.
+Рекомендуемые proxy headers:
 
-Подробнее: [docs/admin-security.md](docs/admin-security.md).
+```nginx
+proxy_set_header Host $host;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+```
 
-## Экспорт/импорт настроек проекта
+Если крупные GeoJSON imports проходят через nginx, proxy body limit должен быть не меньше Node limit. При стандартном:
 
-Superadmin-only endpoints:
+```dotenv
+IMPORT_API_MAX_BODY_BYTES=26214400
+```
+
+разумная настройка nginx:
+
+```nginx
+client_max_body_size 30m;
+```
+
+После изменения nginx:
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Не включайте `trust proxy` для произвольной цепочки, если Node доступен клиенту напрямую.
+
+## Project settings
+
+`PROJECT_SETTINGS` содержит публичную конфигурацию проекта, включая:
+
+- название;
+- keywords;
+- безопасно валидируемый footer HTML;
+- Yandex Metrica / Google Analytics IDs;
+- `SHOW_LINE_LABELS`;
+- `MAPBOX_ACCESS_TOKEN`;
+- `THEME_PRESET`;
+- custom city marker PNG и его метаданные.
+
+Встроенные темы:
+
+```text
+retro   — строгая табличная подача в стиле 90-х
+classic — базовый сдержанный стиль
+modern  — скруглённые блоки и мягкие акценты
+```
+
+## Перенос настроек проекта
+
+Superuser endpoints:
 
 ```text
 GET  /api/admin/settings/export
 POST /api/admin/settings/import
 ```
 
-Пакет `project-settings` v1 включает:
+Актуальный формат — `project-settings` **schemaVersion 3**; импорт также принимает v1/v2.
 
-- `PROJECT_SETTINGS`;
+Пакет переносит:
+
+- основные `PROJECT_SETTINGS`, включая `themePreset`, `showLineLabels` и public Mapbox token;
 - `LINE_TYPES`;
 - `REPORT_CONFIG`;
-- `ADMIN_SECURITY_SETTINGS`.
+- полный набор `ADMIN_SECURITY_SETTINGS`.
 
-Не включаются пользователи, password hashes, audit log, города/линии/население, `.env`, DB credentials, Mapbox token, TLS secrets и другие infrastructure settings.
+Не переносятся:
 
-Типы линий при импорте сопоставляются по `NAME`; target-only типы не удаляются, отсутствующие source NAME создаются с новым локальным DB-generated CODE. `CITY_REPORT_VALUES` после импорта пересчитывается заново на данных целевого экземпляра.
+- admin users, password hashes и sessions;
+- audit log и текущие lockout states;
+- города, линии и население;
+- deployment `.env`, DB/TLS secrets;
+- custom city marker binary.
 
-DB-часть импорта атомарна. После commit пересобираются public snapshots; ошибка этого производного post-processing возвращается warning и не превращает уже зафиксированный импорт в ложный rollback.
+Типы линий сопоставляются по normalized `NAME`; target-only типы не удаляются. `CITY_REPORT_VALUES` после импорта пересчитывается заново на данных целевой БД.
 
 Подробнее: [docs/project-settings-transfer.md](docs/project-settings-transfer.md).
 
+## Перенос данных
+
+Admin API разделяет три набора:
+
+1. города/OSM boundaries — GeoJSON;
+2. линии + dictionary business types — GeoJSON/KML;
+3. население — JSON.
+
+Рекомендуемый порядок на новом экземпляре:
+
+```text
+города → линии → население
+```
+
+Импорт населения обновляет только города, которые существуют в target `cities`. Строки для отсутствующих городов пропускаются без падения всей операции; результат содержит `requestedCities`, `cities`, `skippedCount` и `skippedCities`.
+
+Подробнее: [docs/data-transfer.md](docs/data-transfer.md) и [docs/kml-transfer.md](docs/kml-transfer.md).
+
 ## Конструктор расчётов
 
-В **Настройка интерфейса → Расчёты** есть четыре внутренние вкладки:
+В **Настройка интерфейса → Расчёты** настраиваются:
 
-1. **Метрики**;
-2. **Публичная таблица**;
-3. **CSV**;
-4. **Рейтинг**.
+- scalar metrics;
+- публичная таблица;
+- CSV;
+- ranking.
 
-Конфигурация сохраняется целиком. После валидации сервер пересчитывает `CITY_REPORT_VALUES`, а затем обновляет публичные snapshots.
-
-### Без произвольного SQL
-
-Администратор не вводит SQL, имена таблиц или колонок. Поля, агрегаты, другие метрики, группировки, операции, приоритеты, константы, масштабы и точность выбираются только из server-owned каталогов/dropdown.
-
-Текущие источники включают:
-
-- `city.population`;
-- `city.area_m2`;
-- `geometry.length_m`;
-- `geometry.lane_length_m`;
-- `geometry.lanes`;
-- `geometry.id` для `COUNT`.
-
-Площадь города:
-
-```text
-ST_Area(CITY_BOUNDARIES.GEOM::geography)
-```
-
-и задаётся в м².
-
-### Агрегаты
-
-Для числовых geometry-полей доступны:
-
-```text
-SUM
-AVG
-MEDIAN
-MIN
-MAX
-```
-
-Для `geometry.id` — `COUNT`.
-
-Медиана реализована PostgreSQL ordered-set aggregate:
-
-```text
-PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ...)
-```
-
-### Ссылки между метриками
-
-Например:
-
-```text
-network_length_m   = SUM(geometry.length_m)
-separated_length_m = SUM(geometry.length_m WHERE LINE_TYPES.NAME = «Обособленные»)
-separation_ratio   = metric(separated_length_m) / metric(network_length_m)
-```
-
-Backend строит dependency graph и считает метрики топологически. Порядок карточек в админке можно менять `↑/↓`, но он не определяет execution order.
-
-Запрещены ссылки на отсутствующую метрику, self-reference и косвенные циклы.
-
-### Арифметика, приоритеты и ОПЗ
-
-Поддерживаются:
-
-```text
-+
-−
-×
-÷
-% от
-```
-
-Каждая операция имеет приоритет `1…12`: большее значение выполняется раньше; одинаковое — слева направо. Операции можно переставлять `↑/↓`.
-
-Перед SQL-компиляцией выражение переводится в обратную польскую запись. Админка показывает read-only фактические скобки и ОПЗ.
-
-Например:
-
-```text
-A +[1] B ×[2] C
-```
-
-означает:
-
-```text
-A + (B × C)
-```
-
-а:
-
-```text
-A +[2] B ×[1] C
-```
-
-означает:
-
-```text
-(A + B) × C
-```
-
-### Форматирование чисел
-
-Расчётные значения рекомендуется хранить в канонических единицах, а представление задавать у колонки:
-
-- длина — метры;
-- площадь — м²;
-- население — люди;
-- доля — `0..1`.
-
-Для каждой metric-колонки публичной таблицы и CSV независимо задаются `scale` и количество знаков после запятой.
-
-### Условное форматирование
-
-Для числовых колонок `rank` и `metric` публичной таблицы можно создать до восьми правил.
-
-Диапазон имеет полуоткрытую семантику:
-
-```text
-min <= value < max
-```
-
-То есть:
-
-- нижняя граница — `>= min`;
-- верхняя — `< max`;
-- пустой `min` означает `−∞`;
-- пустой `max` означает `+∞`.
-
-Смежные диапазоны задаются одной общей границей:
-
-```text
-min=null, max=91    -> x < 91
-min=91, max=201     -> x >= 91 && x < 201
-min=201, max=null   -> x >= 201
-```
-
-Так дробные значения вроде `90.5` и `200.9` не выпадают между правилами.
-
-Для metric-колонки проверяется число **после `scale`**, но до форматирования строки.
-
-Правило может задавать:
-
-- жирный;
-- курсив;
-- подчёркивание;
-- зачёркивание;
-- цвет текста;
-- размер `−2`, `−1`, обычный, `+1`, `+2` пункта.
-
-Если правила перекрываются, применяется первое сверху. Их порядок меняется `↑/↓`. Conditional formatting не меняет исходное значение, ranking, сортировку или CSV.
+Backend не принимает произвольный SQL. Выражения строятся из server-owned fields/aggregates/metric references/constants. Поддерживаются dependency graph, циклическая валидация, `SUM/AVG/MEDIAN/MIN/MAX/COUNT`, арифметика, priorities `1…12`, ОПЗ и conditional formatting.
 
 Подробнее: [docs/report-config.md](docs/report-config.md).
 
-## Viewport линий
+## Public snapshots
 
-Клиент отправляет фактический bbox видимого окна. Сервер увеличивает selector до **120%** ширины и высоты — по 10% исходного размера на каждую сторону.
-
-SQL использует:
-
-```text
-GEOM && padded_bbox
-ST_Intersects(GEOM, padded_bbox)
-```
-
-Первое условие использует GiST bbox-index, второе подтверждает реальное пересечение.
-
-`ST_Intersection` для ответа не применяется: если геометрия хоть частично пересекает расширенное окно, клиент получает **полную линию**. Это устраняет эффект исчезновения объектов на границе скользящего viewport.
-
-## Имена и подписи KML-линий
-
-При импорте внешнего KML / Google My Maps стандартное имя Placemark:
-
-```xml
-<Placemark>
-  <name>Проспект Мира</name>
-  <LineString>...</LineString>
-</Placemark>
-```
-
-сохраняется как:
-
-```text
-CITY_GEOMETRIES.PROPERTIES.placemarkName
-```
-
-Если `placemarkName` непустой, публичная карта показывает его в popup при наведении мыши на линию.
-
-В **Настройка интерфейса → Проект** есть отдельная галочка **«Отображать подписи линий на карте»**. Она управляет `PROJECT_SETTINGS.SHOW_LINE_LABELS`. При включении Mapbox создаёт symbol-layer с `text-field = placemarkName` вдоль линии. Hover-popup от этой галочки не зависит.
-
-Popup использует Mapbox `setText`, а не HTML, поэтому содержимое KML name не интерпретируется браузером как разметка.
-
-Важно различать:
-
-```text
-properties.placemarkName  = имя линии из KML
-properties.name           = полное название города в canonical transfer GeoJSON
-LINE_TYPES.NAME            = identity бизнес-типа
-LINE_TYPES.TITLE           = подпись легенды
-```
-
-Portable KML переносит настоящий `placemarkName` внутри `dtpstat.properties`. Видимый `<Placemark><name>` portable-файла может быть сгенерирован для внешнего viewer, поэтому сам по себе не считается источником истины для line popup/label.
-
-Подробнее: [docs/kml-transfer.md](docs/kml-transfer.md) и [docs/data-transfer.md](docs/data-transfer.md).
-
-## Модель типов линий
-
-`LINE_TYPES`:
-
-| Поле | Назначение |
-| --- | --- |
-| `ID` | локальный PK |
-| `CODE` | числовой DB-generated code; пользователь не создаёт и не редактирует |
-| `NAME` | source/import identity, уникален без учёта регистра и внешних пробелов |
-| `TITLE` | человекочитаемая подпись легенды |
-| `COLOR` | цвет |
-| `LINE_STYLE` | `solid`, `dashed`, `dotted` |
-| `WIDTH` | толщина |
-
-`CITY_GEOMETRIES.LINE_TYPE_ID` хранит локальный FK на `LINE_TYPES.ID`.
-
-При переносе numeric source CODE разрешается через source dictionary до `NAME`, затем target type ищется по нормализованному `NAME`. Локальный CODE между двумя БД совпадать не обязан. `TITLE` в matching не участвует.
-
-Публичная легенда показывает только типы, у которых реально есть геометрии; при одном типе отдельная легенда не нужна.
-
-## Обновление данных
-
-Основные mutating-операции находятся в **Управление данными** и `/api/admin/*`.
-
-### Города
-
-OSM city/town и границы можно обновлять через Overpass или переносить готовым GeoJSON. Большой city GeoJSON после полной валидации staging-загружается пакетами по 50 объектов, чтобы не отправлять десятки мегабайт одним JSONB-параметром PostgreSQL.
-
-### Линии
-
-Поддерживаются:
-
-- внешний KML / Google My Maps;
-- portable GeoJSON;
-- portable KML.
-
-Во внешнем KML конфигурационное поле `type` означает **`LINE_TYPES.NAME`**, не CODE. Неизвестный NAME создаётся автоматически, CODE назначает БД, начальный `TITLE = NAME`.
-
-Исходные properties линии сохраняются в JSONB; KML Placemark name хранится как `placemarkName`.
-
-### Население
-
-Население импортируется отдельным snapshot. После успешного изменения исходных данных пересчитываются зависимые метрики и публичные snapshots.
-
-Все длительные mutating data-операции используют single-task guard. `dryRun` проверяет данные без commit и без обновления last-success/public snapshots.
-
-Форматы переноса: [docs/data-transfer.md](docs/data-transfer.md) и [docs/kml-transfer.md](docs/kml-transfer.md).
-
-## Публичные downloads и admin exports
-
-Публичные URL:
-
-```text
-/bus-lanes.geojson
-/bus-lanes.csv
-```
-
-не выполняют тяжёлые DB-запросы при каждом скачивании. Сервер материализует файлы в:
+Runtime directory:
 
 ```text
 var/public-downloads/
 ```
 
-Они пересобираются при старте и после успешных real-update операций. Замена каждого файла атомарная; `dryRun` snapshots не обновляет.
-
-Публичный GeoJSON намеренно не является полным round-trip форматом. Для backup/transfer данных используются:
-
-```text
-GET /api/admin/export/cities
-GET /api/admin/export/lines
-GET /api/admin/export/lines.kml
-GET /api/admin/export/populations
-```
-
-Отдельно superadmin может перенести конфигурацию проекта:
-
-```text
-GET  /api/admin/settings/export
-POST /api/admin/settings/import
-```
-
-CSV строится из `CITY_REPORT_VALUES` и собственного `REPORT_CONFIG.CSV_COLUMNS`.
-
-## Служебные логи и audit
-
-Ключевые runtime-события имеют префикс `[service]`, например:
-
-```text
-[service] startup
-[service] database.health:start
-[service] database.health:ok
-[service] city-report.refresh:start
-[service] city-report.refresh:ok
-[service] public-downloads.refresh:start
-[service] public-downloads.refresh:ok
-[service] postgres.connection:error
-[service] shutdown:start
-[service] shutdown:ok
-```
-
-Отдельно `ADMIN_AUDIT_LOG` хранит входы и admin-операции с timestamp, status, duration, IP и пользователем.
-
-Ошибки PostgreSQL connection обрабатываются через `Pool#error` / `Client#error`, чтобы неожиданное закрытие одного соединения не превращалось в необработанный EventEmitter error всего Node-процесса. Ошибка конкретного SQL по-прежнему возвращается вызывающей операции.
-
-## Production / PM2
-
-Предпочтительно запускать Node entry point напрямую:
-
-```bash
-pm2 start src/server.js --name tramlanes
-pm2 save
-```
-
-После изменения `.env`:
-
-```bash
-pm2 restart tramlanes --update-env
-```
-
-Для production используйте HTTPS, длинный первоначальный admin password и непривилегированную PostgreSQL runtime-role. После bootstrap управление пользователями выполняется через БД/админку, а `IMPORT_API_USERNAME/PASSWORD` можно убрать. `POSTGRES_ADMIN_*` нужны только `npm run db:init`.
-
-## Проверка
-
-```bash
-npm run check
-```
-
-Команда запускает ESLint и Node test suite.
-
-## Bootstrap из исторического snapshot
-
-Корневые:
+После старта и успешных real-update операций пересобираются:
 
 ```text
 bus-lanes.geojson
 bus-lanes.csv
 ```
 
-оставлены как bootstrap source для:
+`var/` является runtime state и не должен использоваться как source bundle/backup. Для round-trip применяйте admin export endpoints.
+
+## Maintenance npm tasks
+
+### Разблокировать учётку/IP
 
 ```bash
-npm run db:import
+npm run admin:unblock -- --user admin1
+npm run admin:unblock -- --ip 203.0.113.10
+npm run admin:unblock -- --user admin1 --ip 203.0.113.10
 ```
 
-Они не обслуживают публичные `/bus-lanes.geojson` и `/bus-lanes.csv`.
+Команда использует тот же `.env`, application DB role и `DATABASE_SCHEMA`. Для user очищаются manual/automatic account blocks; для IP — automatic throttle state и активные manual blocks.
 
-## Структура репозитория
+### Восстановить credentials единственного superuser
+
+По умолчанию используются `IMPORT_API_USERNAME` и `IMPORT_API_PASSWORD` из `.env`:
+
+```bash
+npm run admin:set-superuser
+```
+
+Или явно:
+
+```bash
+npm run admin:set-superuser -- --username admin1 --password 'new-password'
+```
+
+Явный пароль попадает в shell history, поэтому production предпочтительно использовать `.env`.
+
+Задача требует **ровно одну** строку `IS_SUPERUSER=TRUE`; при 0 или >1 superusers она прекращает работу без изменений. При успехе она:
+
+- меняет login/password hash;
+- восстанавливает все admin permissions;
+- сбрасывает manual/account lockout state;
+- снимает `MUST_CHANGE_PASSWORD`;
+- отзывает существующие sessions superuser.
+
+Подробнее: [docs/admin-security.md](docs/admin-security.md).
+
+## NPM команды
 
 ```text
-admin/                 web-admin
-public/                публичный JS/CSS
-src/                   runtime server/API/data/db
-scripts/               db:init, db:migrate, optional db:import
-db/migrations/         versioned migrations
-docs/                  deployment, security, transfer, reports and index docs
-var/                    generated runtime state, не хранится в git
-test/                   Node test suite
+npm start                 запуск сервера
+npm run dev               запуск с node --watch
+npm run db:init           bootstrap database/application role/PostGIS
+npm run db:migrate        применить migrations
+npm run db:import         CLI import исходных данных
+npm run admin:unblock     аварийно снять account/IP blocks
+npm run admin:set-superuser восстановить login/password единственного superuser
+npm run lint              ESLint
+npm test                  node --test
+npm run check             lint + tests
 ```
+
+## Документация
+
+- [Развёртывание нескольких экземпляров](docs/deployment.md)
+- [Администраторы, роли, sessions, IP security и recovery](docs/admin-security.md)
+- [Перенос и синхронизация данных](docs/data-transfer.md)
+- [Переносимый KML](docs/kml-transfer.md)
+- [Экспорт/импорт настроек проекта](docs/project-settings-transfer.md)
+- [Конструктор расчётов и публичного отчёта](docs/report-config.md)
+- [Аудит индексов PostgreSQL/PostGIS](docs/database-indexes.md)
+
+## Проверка перед deployment
+
+```bash
+npm run check
+npm run db:migrate
+```
+
+После обновления server code перезапустите process manager. Для PM2, если менялся `.env`:
+
+```bash
+pm2 restart <instance-name> --update-env
+```
+
+Изменение только DB-данных через maintenance task перезапуска Node обычно не требует.
