@@ -19,8 +19,48 @@ document.head.append(legendStylesheet);
 
 const mapMessage = document.querySelector('#map-message');
 const mapPanel = document.querySelector('.map-panel');
-const tableStatus = document.querySelector('#status');
-const tableStatusBody = tableStatus.closest('.city-table-status');
+const cityTable = document.querySelector('.city-table');
+const cityTableHead = cityTable?.querySelector('thead');
+
+function ensureTableStatus() {
+  const existingStatus = document.querySelector('#status');
+  const existingBody = existingStatus?.closest('tbody.city-table-status');
+
+  if (existingStatus?.tagName === 'TD' && existingBody) {
+    existingBody.hidden = true;
+    existingStatus.hidden = true;
+    if (cityTableHead && existingBody.previousElementSibling !== cityTableHead) {
+      cityTableHead.after(existingBody);
+    }
+    return { status: existingStatus, body: existingBody };
+  }
+
+  // Compatibility with a server process that still has the previous index.html
+  // template cached in memory: remove the old status paragraph from the header
+  // and create the status row in the table without requiring a server restart.
+  existingStatus?.remove();
+
+  const body = document.createElement('tbody');
+  body.className = 'city-table-status';
+  body.hidden = true;
+
+  const row = document.createElement('tr');
+  const status = document.createElement('td');
+  status.id = 'status';
+  status.className = 'status column-city';
+  status.setAttribute('role', 'status');
+  status.setAttribute('aria-live', 'polite');
+  status.colSpan = 1;
+  status.hidden = true;
+
+  row.append(status);
+  body.append(row);
+  cityTableHead?.after(body);
+
+  return { status, body };
+}
+
+const { status: tableStatus, body: tableStatusBody } = ensureTableStatus();
 const cityList = createCityList({
   list: document.querySelector('#city-list'),
   status: tableStatus,
