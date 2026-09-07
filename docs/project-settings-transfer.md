@@ -19,7 +19,7 @@ Endpoint доступны только `IS_SUPERUSER`.
 
 ```text
 _dtpstat.kind = project-settings
-_dtpstat.schemaVersion = 3
+_dtpstat.schemaVersion = 4
 ```
 
 Import принимает:
@@ -28,11 +28,12 @@ Import принимает:
 schemaVersion 1
 schemaVersion 2
 schemaVersion 3
+schemaVersion 4
 ```
 
-Legacy packages нормализуются к текущей модели. Для отсутствующих в старых форматах security fields используются совместимые defaults; отсутствующий theme normalizes to `classic`.
+Legacy packages нормализуются к текущей модели. Для отсутствующих в старых форматах security fields используются совместимые defaults; отсутствующий theme normalizes to `classic`. До v4 hover-popup имени линии был всегда включён, поэтому для v1-v3 без `showLinePopups` используется compatibility default `true`.
 
-## Что входит в v3
+## Что входит в v4
 
 ### PROJECT_SETTINGS
 
@@ -44,8 +45,11 @@ Legacy packages нормализуются к текущей модели. Дл�
 - `yandexMetrikaId`;
 - `googleAnalyticsId`;
 - `themePreset`;
-- `showLineLabels`;
+- `showLineLabels` — постоянные подписи `placemarkName` вдоль линий;
+- `showLinePopups` — popup `placemarkName` при наведении указателя;
 - public `mapboxAccessToken`.
+
+`showLineLabels` и `showLinePopups` независимы: можно включить любой из режимов отдельно, оба одновременно или отключить оба.
 
 Допустимые `themePreset`:
 
@@ -124,16 +128,16 @@ Package намеренно не переносит:
 - `MAPBOX_STYLE_URL`;
 - custom city marker PNG binary и его image metadata.
 
-Последний пункт важен: city marker хранится в `PROJECT_SETTINGS`, но текущий v3 transfer package его **не экспортирует**.
+Последний пункт важен: city marker хранится в `PROJECT_SETTINGS`, но текущий v4 transfer package его **не экспортирует**.
 
-## Пример v3
+## Пример v4
 
 ```json
 {
   "_dtpstat": {
     "kind": "project-settings",
-    "schemaVersion": 3,
-    "exportedAt": "2026-09-07T20:00:00.000Z"
+    "schemaVersion": 4,
+    "exportedAt": "2026-09-07T21:30:00.000Z"
   },
   "projectSettings": {
     "projectName": "Трамвайные системы России",
@@ -142,7 +146,8 @@ Package намеренно не переносит:
     "yandexMetrikaId": null,
     "googleAnalyticsId": null,
     "themePreset": "classic",
-    "showLineLabels": true,
+    "showLineLabels": false,
+    "showLinePopups": true,
     "mapboxAccessToken": "pk...."
   },
   "lineTypes": [
@@ -190,13 +195,31 @@ Package намеренно не переносит:
 
 ## Семантика theme
 
-В v3 экспортируется явный:
+В v4 экспортируется явный:
 
 ```json
 "themePreset": "retro | classic | modern"
 ```
 
 Для legacy package без theme применяется compatibility normalization `classic`.
+
+## Семантика отображения наименований линий
+
+В v4 это два независимых boolean-параметра:
+
+```json
+{
+  "showLineLabels": true,
+  "showLinePopups": false
+}
+```
+
+- `showLineLabels=true` создаёт постоянные Mapbox symbol layers с `text-field=placemarkName`;
+- `showLinePopups=true` разрешает hover-query линейных слоёв и popup с `placemarkName`;
+- выключение popup не влияет на постоянные подписи;
+- выключение постоянных подписей не влияет на popup.
+
+Для v1-v3 отсутствующий `showLinePopups` трактуется как `true`, поскольку именно так работал публичный frontend до разделения настроек.
 
 ## LINE_TYPES matching
 
@@ -225,7 +248,7 @@ Target-only types, отсутствующие в package, **не удаляют�
 
 1. проверяет `_dtpstat.kind/schemaVersion`;
 2. валидирует project settings;
-3. валидирует footer HTML/analytics/theme/Mapbox token;
+3. валидирует footer HTML/analytics/theme/line display settings/Mapbox token;
 4. валидирует line type dictionary;
 5. нормализует security policy;
 6. открывает DB transaction/import lock;
