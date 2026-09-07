@@ -66,16 +66,24 @@
               Малые города
             </button>
           </div>
-
-          <p id="status" class="status" role="status" aria-live="polite">
-            Загружаем список городов…
-          </p>
         </header>
 
         <div class="ranking-scroll">
           <table class="city-table">
             <caption class="visually-hidden">Рейтинг городов</caption>
             <thead></thead>
+            <tbody class="city-table-status">
+              <tr>
+                <td
+                  id="status"
+                  class="status column-city"
+                  role="status"
+                  aria-live="polite"
+                  colspan="1"
+                  hidden
+                ></td>
+              </tr>
+            </tbody>
             <tbody id="city-list"></tbody>
           </table>
 
