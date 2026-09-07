@@ -73,6 +73,7 @@ let citiesById = new Map();
 let focusedCityId = null;
 let lineTypesSignature = '';
 let lineTypesRefresh = null;
+let lineDisplayRefresh = null;
 let openMapRefresh = null;
 
 function setMapMessage(message, isError = false) {
@@ -168,11 +169,31 @@ async function refreshLineTypes() {
   return lineTypesRefresh;
 }
 
+async function refreshLineDisplayOptions() {
+  if (!mapController) return;
+  if (lineDisplayRefresh) return lineDisplayRefresh;
+  lineDisplayRefresh = (async () => {
+    try {
+      const projectSettings = await loadProjectSettings();
+      mapController.setLineDisplayOptions({
+        showLineLabels: Boolean(projectSettings.showLineLabels),
+        showLinePopups: projectSettings.showLinePopups !== false,
+      });
+    } catch (error) {
+      console.error('Не удалось обновить настройки отображения линий', error);
+    } finally {
+      lineDisplayRefresh = null;
+    }
+  })();
+  return lineDisplayRefresh;
+}
+
 async function refreshOpenMap() {
   if (!mapController) return;
   if (openMapRefresh) return openMapRefresh;
   openMapRefresh = (async () => {
     try {
+      await refreshLineDisplayOptions();
       await refreshLineTypes();
       mapController.refreshViewport();
     } finally {
@@ -253,6 +274,7 @@ async function start() {
     mapController = await createMapController({
       ...mapConfig,
       showLineLabels: Boolean(projectSettings.showLineLabels),
+      showLinePopups: projectSettings.showLinePopups !== false,
     });
     if (!lineTypes.length) throw new Error('Справочник типов линий пуст');
 
