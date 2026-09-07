@@ -1,0 +1,230 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  color: #183033;
+  background: #e8efed;
+  --accent: #356f70;
+  --accent-dark: #285657;
+  --accent-soft: #e0efec;
+  --ink-muted: #687b7d;
+  --line: #d3e0dd;
+  --panel: #f9fbfa;
+  --selected: #e5eee3;
+}
+
+body {
+  background: #e8efed;
+}
+
+.app-shell {
+  gap: 10px;
+  padding: 10px;
+  background: linear-gradient(135deg, #eaf0ef 0%, #e2ebe8 100%);
+}
+
+.ranking-panel {
+  overflow: hidden;
+  border: 1px solid #ccdcd8;
+  border-radius: 18px;
+  background: rgb(249 251 250 / 97%);
+  box-shadow: 0 12px 34px rgb(38 68 69 / 14%);
+}
+
+.ranking-header {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid #d7e4e1;
+  background: linear-gradient(145deg, #fbfdfc 0%, #eef6f4 100%);
+}
+
+.eyebrow {
+  color: #477f7c;
+}
+
+.ranking-header .about-link {
+  color: #496e70;
+}
+
+h1 {
+  color: #183234;
+}
+
+.subtitle {
+  color: #758486;
+}
+
+.category-switch {
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid #d9e5e2;
+  border-radius: 14px;
+  background: #edf4f2;
+}
+
+.category-button {
+  border-radius: 10px;
+  color: #607174;
+}
+
+.category-button:hover {
+  color: #294f51;
+  background: #f8fbfa;
+}
+
+.category-button.is-active {
+  color: #203f41;
+  background: #d8eae6;
+  box-shadow: inset 0 0 0 1px #bdd6d1, 0 2px 8px rgb(55 97 94 / 10%);
+}
+
+.category-button:focus-visible,
+.city-link:focus-visible,
+th button:focus-visible {
+  outline-color: #8bb9b5;
+}
+
+.ranking-scroll {
+  scrollbar-color: #afc5c1 transparent;
+}
+
+.city-table thead {
+  color: #657779;
+  background: rgb(241 246 244 / 97%);
+  box-shadow: 0 1px #d3dfdc;
+  backdrop-filter: blur(8px);
+}
+
+.city-table th,
+.city-table td {
+  border-bottom-color: #e1e9e7;
+}
+
+.city-table tbody tr:hover {
+  background: #edf6f3;
+}
+
+.city-table tbody tr.is-active {
+  background: var(--selected);
+}
+
+.city-table tbody tr.is-active td:first-child {
+  box-shadow: inset 3px 0 #739b76;
+}
+
+.city-table th button.is-active {
+  color: #315f61;
+  background: #deece9;
+}
+
+.city-link {
+  border-bottom-color: #9bb5b3;
+  color: #294f52;
+}
+
+.city-link:hover {
+  color: #1d6666;
+}
+
+.about {
+  color: #4f6264;
+}
+
+.about h2,
+.project-footer h3,
+.project-footer h4 {
+  color: #274144;
+}
+
+.project-lead {
+  color: #3b5558;
+}
+
+.project-callout {
+  padding: .95rem 1.05rem;
+  border: 1px solid #c8ddda;
+  border-left: 4px solid #6c9691;
+  border-radius: 14px;
+  background: #edf6f3;
+  box-shadow: 0 4px 14px rgb(47 82 80 / 6%);
+}
+
+.project-link-button {
+  padding: .5rem .8rem;
+  border-radius: 10px;
+  color: #244649;
+  background: #d9ebe7;
+  box-shadow: inset 0 0 0 1px #bdd7d2;
+}
+
+.project-link-button:hover {
+  color: #193b3d;
+  background: #cae3de;
+}
+
+.map-panel {
+  overflow: hidden;
+  border: 1px solid #cad9d6;
+  border-radius: 18px;
+  background: #dce7e4;
+  box-shadow: 0 12px 34px rgb(38 68 69 / 10%);
+}
+
+.map-message {
+  border: 1px solid #c9dcda;
+  border-radius: 14px;
+  color: #315b5c;
+  background: rgb(249 252 251 / 94%);
+  box-shadow: 0 8px 24px rgb(45 78 77 / 13%);
+  backdrop-filter: blur(8px);
+}
+
+.mapboxgl-ctrl-group {
+  border-radius: 12px;
+  box-shadow: 0 5px 18px rgb(35 64 63 / 14%);
+}
+
+.noscript-message {
+  border: 1px solid #cbdad7;
+  border-radius: 12px;
+  background: #fafcfb;
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    gap: 0;
+    padding: 0;
+    background: var(--panel);
+  }
+
+  .map-panel {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .ranking-panel {
+    border: 0;
+    border-radius: 24px 24px 0 0;
+    box-shadow: 0 -12px 34px rgb(34 67 67 / 16%);
+  }
+
+  .ranking-header {
+    border-radius: 24px 24px 0 0;
+  }
+
+  .city-table tbody tr {
+    margin: 7px 10px;
+    padding: 11px 12px;
+    border: 1px solid #dbe7e4;
+    border-radius: 12px;
+    background: #fbfcfc;
+  }
+
+  .city-table tbody tr.is-active {
+    border-color: #c9d9c6;
+    background: #e6eee4;
+  }
+
+  .city-table tbody tr.is-active td:first-child {
+    box-shadow: none;
+  }
+}

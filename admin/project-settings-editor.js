@@ -58,6 +58,39 @@ if (typeof document !== 'undefined') {
                 <small>Одно значение используется в видимом заголовке и служебных title/meta/PWA-тегах.</small>
               </label>
 
+              <section class="project-settings-section" aria-labelledby="project-theme-title">
+                <div>
+                  <h5 id="project-theme-title">Стиль публичного сайта</h5>
+                  <p>Три встроенных адаптивных оформления используют одну и ту же разметку и данные. Меняется только CSS публичной страницы.</p>
+                </div>
+                <div class="project-theme-grid">
+                  <label class="project-theme-option" data-theme-preview="retro">
+                    <input name="themePreset" type="radio" value="retro" required>
+                    <span class="project-theme-copy">
+                      <strong>Стиль 90-х</strong>
+                      <small>Строгая плотная таблица, квадратные элементы, обычные ссылки и минимум декоративного оформления.</small>
+                      <span class="project-theme-swatch" aria-hidden="true"></span>
+                    </span>
+                  </label>
+                  <label class="project-theme-option" data-theme-preview="classic">
+                    <input name="themePreset" type="radio" value="classic" required checked>
+                    <span class="project-theme-copy">
+                      <strong>Классический</strong>
+                      <small>Текущее оформление: простое, компактное и современное ровно настолько, чтобы не мешать данным.</small>
+                      <span class="project-theme-swatch" aria-hidden="true"></span>
+                    </span>
+                  </label>
+                  <label class="project-theme-option" data-theme-preview="modern">
+                    <input name="themePreset" type="radio" value="modern" required>
+                    <span class="project-theme-copy">
+                      <strong>Современный</strong>
+                      <small>Мягкие блоки, заметные скругления и спокойные цветовые акценты без яркой декоративности.</small>
+                      <span class="project-theme-swatch" aria-hidden="true"></span>
+                    </span>
+                  </label>
+                </div>
+              </section>
+
               <label class="check project-setting-check">
                 <input name="showLineLabels" type="checkbox">
                 Отображать подписи линий на карте
@@ -153,6 +186,7 @@ if (typeof document !== 'undefined') {
 
     if (form) {
       const projectName = form.elements.namedItem('projectName');
+      const themePreset = form.elements.namedItem('themePreset');
       const showLineLabels = form.elements.namedItem('showLineLabels');
       const cityMarkerIcon = form.elements.namedItem('cityMarkerIcon');
       const keywords = form.elements.namedItem('keywords');
@@ -274,6 +308,7 @@ if (typeof document !== 'undefined') {
 
       function applySettings(settings) {
         projectName.value = settings.projectName;
+        themePreset.value = settings.themePreset ?? 'classic';
         showLineLabels.checked = Boolean(settings.showLineLabels);
         keywords.value = settings.keywords.join('\n');
         yandexMetrikaId.value = settings.yandexMetrikaId ?? '';
@@ -384,6 +419,7 @@ if (typeof document !== 'undefined') {
             },
             body: JSON.stringify({
               projectName: projectName.value.trim(),
+              themePreset: themePreset.value,
               showLineLabels: showLineLabels.checked,
               keywords: splitKeywords(keywords.value),
               yandexMetrikaId: yandexMetrikaId.value.trim() || null,

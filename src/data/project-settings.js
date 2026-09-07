@@ -5,6 +5,26 @@ export class ProjectSettingsValidationError extends Error {
   }
 }
 
+export const PUBLIC_THEME_PRESETS = Object.freeze([
+  Object.freeze({
+    value: 'retro',
+    label: 'Стиль 90-х',
+    description: 'Плотная строгая таблица, квадратные элементы и минимум декоративного оформления.',
+  }),
+  Object.freeze({
+    value: 'classic',
+    label: 'Классический',
+    description: 'Текущий сдержанный стиль проекта: простой, читаемый и без лишних визуальных эффектов.',
+  }),
+  Object.freeze({
+    value: 'modern',
+    label: 'Современный',
+    description: 'Мягкие блоки, скругления и спокойные цветовые акценты без избыточной яркости.',
+  }),
+]);
+
+const PUBLIC_THEME_VALUES = new Set(PUBLIC_THEME_PRESETS.map(({ value }) => value));
+
 export const PROJECT_CONTENT_TAGS = Object.freeze([
   'p',
   'h2',
@@ -109,6 +129,18 @@ function normalizeKeywords(value) {
     result.push(keyword);
   }
   return result;
+}
+
+export function normalizePublicThemePreset(value) {
+  const normalized = value === undefined || value === null || value === ''
+    ? 'classic'
+    : String(value).trim().toLocaleLowerCase('en-US');
+  if (!PUBLIC_THEME_VALUES.has(normalized)) {
+    throw new ProjectSettingsValidationError(
+      `themePreset must be one of: ${[...PUBLIC_THEME_VALUES].join(', ')}`,
+    );
+  }
+  return normalized;
 }
 
 function normalizeOptionalIdentifier(value, fieldName, pattern, format) {
@@ -322,6 +354,7 @@ export function buildProjectSettingsPlan(payload) {
     'footerHtml',
     'yandexMetrikaId',
     'googleAnalyticsId',
+    'themePreset',
   ]);
   const unknown = Object.keys(payload).filter((key) => !allowed.has(key));
   if (unknown.length > 0) {
@@ -335,5 +368,6 @@ export function buildProjectSettingsPlan(payload) {
     footerHtml: normalizeProjectFooterHtml(payload.footerHtml),
     yandexMetrikaId: normalizeYandexMetrikaId(payload.yandexMetrikaId),
     googleAnalyticsId: normalizeGoogleAnalyticsId(payload.googleAnalyticsId),
+    themePreset: normalizePublicThemePreset(payload.themePreset),
   };
 }

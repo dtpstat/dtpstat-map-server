@@ -9,6 +9,7 @@ import { MapboxAccessTokenValidationError } from '../data/mapbox-access-token.js
 import {
   PROJECT_CONTENT_CLASSES,
   PROJECT_CONTENT_TAGS,
+  PUBLIC_THEME_PRESETS,
   ProjectSettingsValidationError,
 } from '../data/project-settings.js';
 import { createAdminOperationAudit } from '../http/admin-auth.js';
@@ -100,6 +101,7 @@ export function createProjectSettingsRouter({
           editor: {
             tags: PROJECT_CONTENT_TAGS,
             classes: PROJECT_CONTENT_CLASSES,
+            themes: PUBLIC_THEME_PRESETS,
             cityMarkerIcon: {
               mime: 'image/png',
               maxBytes: CITY_MARKER_ICON_MAX_BYTES,
