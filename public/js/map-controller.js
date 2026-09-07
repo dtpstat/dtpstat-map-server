@@ -154,7 +154,8 @@ function readViewport(map) {
  *   styleUrl: string,
  *   initialCenter: [number, number],
  *   initialZoom: number,
- *   showLineLabels?: boolean
+ *   showLineLabels?: boolean,
+ *   showLinePopups?: boolean
  * }} config
  */
 export async function createMapController(config) {
@@ -181,6 +182,8 @@ export async function createMapController(config) {
   let viewportHandler = null;
   let citySelectHandler = null;
   let cityMarkerIconSize = 1;
+  let showLineLabels = Boolean(config.showLineLabels);
+  let showLinePopups = config.showLinePopups !== false;
   const disabledLineTypes = new Set();
   let lineLayerIds = new Map();
   let lineLabelLayerIds = new Map();
@@ -265,7 +268,7 @@ export async function createMapController(config) {
       }
       map.moveLayer(layerId, labelLayerId);
 
-      if (config.showLineLabels) {
+      if (showLineLabels) {
         lineLabelLayerIds.set(lineType.code, labelId);
         if (!map.getLayer(labelId)) {
           map.addLayer({
@@ -321,6 +324,10 @@ export async function createMapController(config) {
     if (viewportHandler) viewportHandler(readViewport(map));
   });
   map.on('mousemove', (event) => {
+    if (!showLinePopups) {
+      lineNamePopup.remove();
+      return;
+    }
     const layers = [...lineLayerIds.values()].filter((layerId) => map.getLayer(layerId));
     if (layers.length === 0) {
       lineNamePopup.remove();
@@ -357,6 +364,18 @@ export async function createMapController(config) {
       removeBusLaneLayers();
       currentLineTypes = normalized;
       ensureBusLaneLayers();
+    },
+    setLineDisplayOptions(options = {}) {
+      const nextShowLineLabels = Boolean(options.showLineLabels);
+      const nextShowLinePopups = options.showLinePopups !== false;
+      const labelsChanged = nextShowLineLabels !== showLineLabels;
+      showLineLabels = nextShowLineLabels;
+      showLinePopups = nextShowLinePopups;
+      if (!showLinePopups) lineNamePopup.remove();
+      if (labelsChanged) {
+        removeBusLaneLayers();
+        ensureBusLaneLayers();
+      }
     },
     setLineTypeVisibility(code, enabled) {
       if (enabled) disabledLineTypes.delete(code);
