@@ -93,8 +93,14 @@ if (typeof document !== 'undefined') {
 
               <label class="check project-setting-check">
                 <input name="showLineLabels" type="checkbox">
-                Отображать подписи линий на карте
-                <small>Для линий с KML Placemark/name рядом с геометрией постоянно показывается подпись. Hover-popup работает независимо от этой настройки.</small>
+                Постоянно отображать наименования линий
+                <small>Для линий с KML Placemark/name подпись размещается вдоль геометрии и остаётся видимой без наведения.</small>
+              </label>
+
+              <label class="check project-setting-check">
+                <input name="showLinePopups" type="checkbox" checked>
+                Показывать наименование линии при наведении
+                <small>При наведении указателя на линию показывается popup с KML Placemark/name. Эта настройка независима от постоянных подписей.</small>
               </label>
 
               <section class="project-settings-section" aria-labelledby="project-city-marker-title">
@@ -188,6 +194,7 @@ if (typeof document !== 'undefined') {
       const projectName = form.elements.namedItem('projectName');
       const themePreset = form.elements.namedItem('themePreset');
       const showLineLabels = form.elements.namedItem('showLineLabels');
+      const showLinePopups = form.elements.namedItem('showLinePopups');
       const cityMarkerIcon = form.elements.namedItem('cityMarkerIcon');
       const keywords = form.elements.namedItem('keywords');
       const yandexMetrikaId = form.elements.namedItem('yandexMetrikaId');
@@ -310,6 +317,7 @@ if (typeof document !== 'undefined') {
         projectName.value = settings.projectName;
         themePreset.value = settings.themePreset ?? 'classic';
         showLineLabels.checked = Boolean(settings.showLineLabels);
+        showLinePopups.checked = settings.showLinePopups !== false;
         keywords.value = settings.keywords.join('\n');
         yandexMetrikaId.value = settings.yandexMetrikaId ?? '';
         googleAnalyticsId.value = settings.googleAnalyticsId ?? '';
@@ -421,6 +429,7 @@ if (typeof document !== 'undefined') {
               projectName: projectName.value.trim(),
               themePreset: themePreset.value,
               showLineLabels: showLineLabels.checked,
+              showLinePopups: showLinePopups.checked,
               keywords: splitKeywords(keywords.value),
               yandexMetrikaId: yandexMetrikaId.value.trim() || null,
               googleAnalyticsId: googleAnalyticsId.value.trim() || null,
