@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createAdminSecurityRepository } from '../src/db/admin-security-repository.js';
 
-test('failed-login SQL avoids PostgreSQL CURRENT_USER keyword as a CTE name', async () => {
+test('failed-login SQL avoids PostgreSQL keyword and RETURNING ambiguities', async () => {
   let queryText = '';
   let queryValues = null;
   const database = {
@@ -24,5 +24,8 @@ test('failed-login SQL avoids PostgreSQL CURRENT_USER keyword as a CTE name', as
   assert.match(queryText, /WITH\s+locked_user\s+AS\s*\(/i);
   assert.match(queryText, /FROM\s+locked_user\b/i);
   assert.doesNotMatch(queryText, /WITH\s+current_user\s+AS\s*\(/i);
+  assert.match(queryText, /SELECT\s+id\s+AS\s+user_id\s*,/i);
+  assert.match(queryText, /WHERE\s+users\.id\s*=\s*next_state\.user_id/i);
+  assert.doesNotMatch(queryText, /WHERE\s+users\.id\s*=\s*next_state\.id/i);
   assert.deepEqual(queryValues, [7, timestamp, 900, 5, 1800]);
 });
