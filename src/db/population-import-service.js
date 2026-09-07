@@ -1,7 +1,4 @@
-import {
-  buildPopulationPlan,
-  PopulationValidationError,
-} from '../data/population-plan.js';
+import { buildPopulationPlan } from '../data/population-plan.js';
 import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
 import { acquireDataImportLock } from './database-locks.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
@@ -45,9 +42,11 @@ const UPSERT_POPULATIONS_SQL = `
 `;
 
 /**
- * Update one or more population records and then recalculate all city ratings.
- * Top-level asOf/source remain supported as defaults; portable exports may
- * preserve different values per city.
+ * Update population records only for cities that currently exist in the
+ * database, then recalculate all city ratings. Population entries for cities
+ * absent from the database are reported as skipped rather than aborting the
+ * whole import. Top-level asOf/source remain supported as defaults; portable
+ * exports may preserve different values per city.
  *
  * @param {{ connect: () => Promise<import('./data-import-service.js').DatabaseClient>, databaseSchema?: string }} pool
  */
@@ -78,28 +77,30 @@ export function createPopulationImportService(pool) {
         const unknownResult = await client.query(FIND_UNKNOWN_CITIES_SQL, [
           serialized,
         ]);
-        if (unknownResult.rows.length > 0) {
-          const names = unknownResult.rows.map((row) => row.name).join(', ');
-          throw new PopulationValidationError(`Unknown cities: ${names}`);
-        }
+        const skippedCities = unknownResult.rows.map((row) => row.name);
 
         const populationResult = await client.query(UPSERT_POPULATIONS_SQL, [
           serialized,
         ]);
-        if (populationResult.rowCount !== plan.populations.length) {
-          throw new Error('Not every population record was updated');
+        const updatedCities = populationResult.rowCount ?? 0;
+        if (updatedCities + skippedCities.length !== plan.populations.length) {
+          throw new Error('Population import did not account for every record');
         }
 
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         operation.onProgress?.({
           phase: 'database',
-          cities: plan.populations.length,
+          cities: updatedCities,
+          skippedCities: skippedCities.length,
         });
         throwIfAdminTaskCancelled(operation.signal);
         operation.onCommit?.();
         await client.query('COMMIT');
         return {
-          cities: plan.populations.length,
+          cities: updatedCities,
+          requestedCities: plan.populations.length,
+          skippedCount: skippedCities.length,
+          skippedCities,
           asOf: plan.asOf,
           source: plan.source,
           updatedAt: new Date().toISOString(),

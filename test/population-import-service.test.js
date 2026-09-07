@@ -8,7 +8,7 @@ const upload = {
   populations: [{ name: 'Тестоград', population: 2000 }],
 };
 
-function createFakePool({ unknownCities = [] } = {}) {
+function createFakePool({ unknownCities = [], updatedCities = 1 } = {}) {
   const queries = [];
   let released = false;
   const client = {
@@ -22,7 +22,7 @@ function createFakePool({ unknownCities = [] } = {}) {
         };
       }
       if (normalized.startsWith('INSERT INTO city_populations')) {
-        return { rows: [], rowCount: 1 };
+        return { rows: [], rowCount: updatedCities };
       }
       return { rows: [], rowCount: 0 };
     },
@@ -49,6 +49,9 @@ test('population update upserts data and recalculates city statistics', async ()
   const result = await service.updateFromJson(upload);
 
   assert.equal(result.cities, 1);
+  assert.equal(result.requestedCities, 1);
+  assert.equal(result.skippedCount, 0);
+  assert.deepEqual(result.skippedCities, []);
   assert.equal(result.asOf, '2026-01-01');
   assert.equal(pool.queries[0], 'BEGIN');
   assert.match(pool.queries.at(-2), /^WITH geometry_statistics AS/);
@@ -56,16 +59,27 @@ test('population update upserts data and recalculates city statistics', async ()
   assert.equal(pool.released, true);
 });
 
-test('population update rolls back when a city is unknown', async () => {
-  const pool = createFakePool({ unknownCities: ['Нет такого города'] });
+test('population update skips cities that are absent from the database', async () => {
+  const pool = createFakePool({
+    unknownCities: ['Киров'],
+    updatedCities: 1,
+  });
   const service = createPopulationImportService(pool);
+  const mixedUpload = {
+    ...upload,
+    populations: [
+      { name: 'Тестоград', population: 2000 },
+      { name: 'Киров', population: 450000 },
+    ],
+  };
 
-  await assert.rejects(
-    service.updateFromJson(upload),
-    /Unknown cities: Нет такого города/,
-  );
+  const result = await service.updateFromJson(mixedUpload);
 
-  assert.equal(pool.queries.at(-1), 'ROLLBACK');
+  assert.equal(result.cities, 1);
+  assert.equal(result.requestedCities, 2);
+  assert.equal(result.skippedCount, 1);
+  assert.deepEqual(result.skippedCities, ['Киров']);
+  assert.equal(pool.queries.at(-1), 'COMMIT');
   assert.equal(pool.released, true);
-  assert.doesNotMatch(pool.queries.join('\n'), /INSERT INTO city_populations/);
+  assert.match(pool.queries.join('\n'), /INSERT INTO city_populations/);
 });
