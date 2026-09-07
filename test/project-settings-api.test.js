@@ -16,6 +16,7 @@ function createRepository() {
     googleAnalyticsId: null,
     themePreset: 'classic',
     showLineLabels: false,
+    showLinePopups: true,
     mapboxAccessTokenConfigured: false,
     updatedAt: '2026-09-05T12:00:00.000Z',
   };
@@ -24,12 +25,14 @@ function createRepository() {
     async save(payload) {
       const {
         showLineLabels = false,
+        showLinePopups = settings.showLinePopups,
         mapboxAccessToken = null,
         ...base
       } = payload;
       settings = {
         ...buildProjectSettingsPlan(base),
         showLineLabels,
+        showLinePopups,
         mapboxAccessTokenConfigured: Boolean(mapboxAccessToken),
         updatedAt: '2026-09-05T13:00:00.000Z',
       };
@@ -79,6 +82,8 @@ test('public project settings are readable while admin editor remains protected'
     const publicSettings = await publicResponse.json();
     assert.equal(publicSettings.projectName, 'Выделенные полосы в России');
     assert.equal(publicSettings.themePreset, 'classic');
+    assert.equal(publicSettings.showLineLabels, false);
+    assert.equal(publicSettings.showLinePopups, true);
     assert.equal(publicSettings.yandexMetrikaId, null);
     assert.equal(publicSettings.googleAnalyticsId, null);
 
@@ -91,6 +96,7 @@ test('public project settings are readable while admin editor remains protected'
     assert.equal(response.status, 200);
     const payload = await response.json();
     assert.equal(payload.settings.projectName, 'Выделенные полосы в России');
+    assert.equal(payload.settings.showLinePopups, true);
     assert.ok(payload.editor.tags.includes('h2'));
     assert.ok(payload.editor.classes.includes('project-callout'));
     assert.deepEqual(
@@ -100,7 +106,7 @@ test('public project settings are readable while admin editor remains protected'
   });
 });
 
-test('admin can update project settings including public theme and analytics IDs', async () => {
+test('admin can update project settings including independent line labels and popups', async () => {
   await withServer(async (baseUrl) => {
     const valid = await fetch(`${baseUrl}/api/admin/project-settings`, {
       method: 'PUT',
@@ -112,6 +118,7 @@ test('admin can update project settings including public theme and analytics IDs
         projectName: 'Трамвайные пути России',
         themePreset: 'modern',
         showLineLabels: true,
+        showLinePopups: false,
         keywords: ['трамвай', 'обособление'],
         yandexMetrikaId: '12345678',
         googleAnalyticsId: 'g-ab12cd34ef',
@@ -123,6 +130,7 @@ test('admin can update project settings including public theme and analytics IDs
     assert.equal(payload.settings.projectName, 'Трамвайные пути России');
     assert.equal(payload.settings.themePreset, 'modern');
     assert.equal(payload.settings.showLineLabels, true);
+    assert.equal(payload.settings.showLinePopups, false);
     assert.equal(payload.settings.yandexMetrikaId, '12345678');
     assert.equal(payload.settings.googleAnalyticsId, 'G-AB12CD34EF');
 
