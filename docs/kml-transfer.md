@@ -98,12 +98,12 @@ CITY_GEOMETRIES.PROPERTIES.placemarkName
 
 Видимый `<Placemark><name>` portable KML может быть сгенерирован для удобства viewer и не должен автоматически считаться исходным line label.
 
-Public map использует `placemarkName`:
+Public map использует `placemarkName` двумя независимыми способами:
 
-- в hover-popup;
+- как hover-popup при `PROJECT_SETTINGS.SHOW_LINE_POPUPS=true`;
 - как постоянную подпись вдоль линии при `PROJECT_SETTINGS.SHOW_LINE_LABELS=true`.
 
-Popup выводит текст без HTML interpretation.
+Оба режима можно включать и отключать независимо. Popup выводит текст без HTML interpretation.
 
 ## Почему CODE не глобальный
 
