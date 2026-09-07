@@ -9,7 +9,7 @@ import {
 import { acquireDataImportLock } from './database-locks.js';
 import { compileReportMetricQuery } from './report-config-service.js';
 
-const SETTINGS_TRANSFER_SCHEMA_VERSION = 3;
+const SETTINGS_TRANSFER_SCHEMA_VERSION = 4;
 const SETTINGS_TRANSFER_KIND = 'project-settings';
 const LEGACY_SECURITY_DEFAULTS = Object.freeze({
   ipMaxFailedAttempts: 20,
@@ -50,9 +50,9 @@ function validateEnvelope(payload) {
   if (metadata.kind !== SETTINGS_TRANSFER_KIND) {
     throw new ProjectSettingsTransferValidationError(`_dtpstat.kind must be ${SETTINGS_TRANSFER_KIND}`);
   }
-  if (![1, 2, SETTINGS_TRANSFER_SCHEMA_VERSION].includes(metadata.schemaVersion)) {
+  if (![1, 2, 3, SETTINGS_TRANSFER_SCHEMA_VERSION].includes(metadata.schemaVersion)) {
     throw new ProjectSettingsTransferValidationError(
-      `_dtpstat.schemaVersion must be 1, 2 or ${SETTINGS_TRANSFER_SCHEMA_VERSION}`,
+      `_dtpstat.schemaVersion must be 1, 2, 3 or ${SETTINGS_TRANSFER_SCHEMA_VERSION}`,
     );
   }
   return { input, schemaVersion: metadata.schemaVersion };
@@ -61,17 +61,26 @@ function validateEnvelope(payload) {
 function normalizeProjectSettings(payload) {
   const input = object(payload, 'projectSettings');
   const hasMapboxAccessToken = Object.hasOwn(input, 'mapboxAccessToken');
+  const hasShowLinePopups = Object.hasOwn(input, 'showLinePopups');
   const {
     showLineLabels = false,
+    showLinePopups: rawShowLinePopups,
     mapboxAccessToken: rawMapboxAccessToken,
     ...base
   } = input;
   if (typeof showLineLabels !== 'boolean') {
     throw new ProjectSettingsValidationError('showLineLabels must be boolean');
   }
+  if (hasShowLinePopups && typeof rawShowLinePopups !== 'boolean') {
+    throw new ProjectSettingsValidationError('showLinePopups must be boolean');
+  }
   return {
     ...buildProjectSettingsPlan(base),
     showLineLabels,
+    // Transfer schemas 1-3 predate this field. Their effective behaviour was
+    // always to show hover popups, so missing values intentionally normalize
+    // to true.
+    showLinePopups: hasShowLinePopups ? rawShowLinePopups : true,
     hasMapboxAccessToken,
     mapboxAccessToken: hasMapboxAccessToken
       ? normalizeMapboxAccessToken(rawMapboxAccessToken, { optional: true })
@@ -92,6 +101,7 @@ const EXPORT_PROJECT_SETTINGS_SQL = `
     google_analytics_id AS "googleAnalyticsId",
     theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
+    show_line_popups AS "showLinePopups",
     mapbox_access_token AS "mapboxAccessToken"
   FROM project_settings WHERE id = 1
 `;
@@ -128,9 +138,10 @@ const UPDATE_PROJECT_SETTINGS_SQL = `
     yandex_metrika_id=$4, google_analytics_id=$5,
     theme_preset=$6,
     show_line_labels=$7,
-    mapbox_access_token=CASE WHEN $8::boolean THEN $9::text ELSE mapbox_access_token END,
+    show_line_popups=$8,
+    mapbox_access_token=CASE WHEN $9::boolean THEN $10::text ELSE mapbox_access_token END,
     mapbox_access_token_initialized=CASE
-      WHEN $8::boolean THEN TRUE
+      WHEN $9::boolean THEN TRUE
       ELSE mapbox_access_token_initialized
     END,
     updated_at=NOW()
@@ -341,6 +352,7 @@ export function createProjectSettingsTransferService(pool) {
           projectSettings.googleAnalyticsId,
           projectSettings.themePreset,
           projectSettings.showLineLabels,
+          projectSettings.showLinePopups,
           projectSettings.hasMapboxAccessToken,
           projectSettings.mapboxAccessToken,
         ]);
