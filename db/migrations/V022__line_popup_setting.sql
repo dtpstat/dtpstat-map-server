@@ -1,0 +1,7 @@
+SET SEARCH_PATH = BUSLANES, PUBLIC;
+
+ALTER TABLE PROJECT_SETTINGS
+    ADD COLUMN IF NOT EXISTS SHOW_LINE_POPUPS BOOLEAN NOT NULL DEFAULT TRUE;
+
+COMMENT ON COLUMN PROJECT_SETTINGS.SHOW_LINE_POPUPS IS
+    'Whether the public map shows a placemarkName popup when the pointer hovers over a line geometry.';
