@@ -27,5 +27,10 @@ test('failed-login SQL avoids PostgreSQL keyword and RETURNING ambiguities', asy
   assert.match(queryText, /SELECT\s+id\s+AS\s+user_id\s*,/i);
   assert.match(queryText, /WHERE\s+users\.id\s*=\s*next_state\.user_id/i);
   assert.doesNotMatch(queryText, /WHERE\s+users\.id\s*=\s*next_state\.id/i);
+  assert.match(
+    queryText,
+    /RETURNING\s+users\.failed_login_count\s+AS\s+"failedLoginCount"\s*,\s*users\.locked_until\s+AS\s+"lockedUntil"/i,
+  );
+  assert.doesNotMatch(queryText, /RETURNING\s+id\b/i);
   assert.deepEqual(queryValues, [7, timestamp, 900, 5, 1800]);
 });
