@@ -1,10 +1,22 @@
+#profile-editor-host {
+  min-height: 0;
+  flex: 1 1 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
 .profile-grid {
+  min-width: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
   gap: 1rem;
 }
 
 .profile-panel {
+  min-width: 0;
   padding: 1rem;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -53,6 +65,14 @@
   align-items: center;
   padding: .7rem 0;
   border-bottom: 1px solid var(--line);
+}
+
+@media (max-width: 1050px) {
+  #profile-editor-host {
+    flex: 0 0 auto;
+    overflow: visible;
+    scrollbar-gutter: auto;
+  }
 }
 
 @media (max-width: 850px) {
