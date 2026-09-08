@@ -95,7 +95,8 @@ test('project page enables only configured analytics collectors', () => {
   assert.match(both, /name="yandex-metrika-id" content="12345678"/);
   assert.match(both, /name="google-analytics-id" content="G-AB12CD34EF"/);
   assert.match(both, /src="https:\/\/mc\.yandex\.ru\/watch\/12345678"/);
-  assert.equal((both.match(/src="\/js\/metrics\.js"/g) ?? []).length, 1);
+  assert.equal((both.match(/<script src="\/js\/metrics\.js"><\/script>/g) ?? []).length, 1);
+  assert.doesNotMatch(both, /type="module" src="\/js\/metrics\.js"/);
 
   const googleOnly = renderProjectPage(template, {
     projectName: 'Проект',

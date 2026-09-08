@@ -41,7 +41,7 @@ function metricsMarkup(settings) {
       : '',
   ].filter(Boolean).join('\n    ');
   const script = yandexMetrikaId || googleAnalyticsId
-    ? '<script type="module" src="/js/metrics.js"></script>'
+    ? '<script src="/js/metrics.js"></script>'
     : '';
   const yandexNoScript = yandexMetrikaId
     ? `<img src="https://mc.yandex.ru/watch/${yandexMetrikaId}" alt="" hidden>`
