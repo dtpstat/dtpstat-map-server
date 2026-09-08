@@ -4,11 +4,14 @@ if (typeof document !== 'undefined') {
   stylesheet.href = '/admin/public-download-name.css';
   document.head.append(stylesheet);
 
-  const projectForm = document.querySelector('#project-settings-form');
-  const operation = document.querySelector('#operation-project-settings');
-  const projectMessage = document.querySelector('#project-settings-message');
+  function mountEditor() {
+    const projectForm = document.querySelector('#project-settings-form');
+    const operation = document.querySelector('#operation-project-settings');
+    const projectMessage = document.querySelector('#project-settings-message');
 
-  if (projectForm && operation && !document.querySelector('#public-download-name-form')) {
+    if (!projectForm || !operation || !projectMessage) return false;
+    if (document.querySelector('#public-download-name-form')) return true;
+
     const section = document.createElement('section');
     section.className = 'project-settings-section';
     section.id = 'project-public-download-name';
@@ -103,5 +106,18 @@ if (typeof document !== 'undefined') {
 
     renderPreview();
     void load();
+    return true;
+  }
+
+  const session = await globalThis.dtpstatAdminSession?.catch(() => null);
+  const canManageInterface = Boolean(
+    session?.user?.isSuperuser || session?.user?.canManageInterface,
+  );
+
+  if (canManageInterface && !mountEditor()) {
+    const observer = new MutationObserver(() => {
+      if (mountEditor()) observer.disconnect();
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
   }
 }
