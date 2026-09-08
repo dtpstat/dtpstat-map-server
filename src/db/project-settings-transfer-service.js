@@ -7,9 +7,12 @@ import {
   validateReportConfig,
 } from '../data/report-config.js';
 import { acquireDataImportLock } from './database-locks.js';
-import { compileReportMetricQuery } from './report-config-service.js';
+import {
+  compileReportMetricQuery,
+  compileReportRankQuery,
+} from './report-config-service.js';
 
-const SETTINGS_TRANSFER_SCHEMA_VERSION = 4;
+const SETTINGS_TRANSFER_SCHEMA_VERSION = 5;
 const SETTINGS_TRANSFER_KIND = 'project-settings';
 const LEGACY_SECURITY_DEFAULTS = Object.freeze({
   ipMaxFailedAttempts: 20,
@@ -50,9 +53,9 @@ function validateEnvelope(payload) {
   if (metadata.kind !== SETTINGS_TRANSFER_KIND) {
     throw new ProjectSettingsTransferValidationError(`_dtpstat.kind must be ${SETTINGS_TRANSFER_KIND}`);
   }
-  if (![1, 2, 3, SETTINGS_TRANSFER_SCHEMA_VERSION].includes(metadata.schemaVersion)) {
+  if (![1, 2, 3, 4, SETTINGS_TRANSFER_SCHEMA_VERSION].includes(metadata.schemaVersion)) {
     throw new ProjectSettingsTransferValidationError(
-      `_dtpstat.schemaVersion must be 1, 2, 3 or ${SETTINGS_TRANSFER_SCHEMA_VERSION}`,
+      `_dtpstat.schemaVersion must be 1, 2, 3, 4 or ${SETTINGS_TRANSFER_SCHEMA_VERSION}`,
     );
   }
   return { input, schemaVersion: metadata.schemaVersion };
@@ -114,6 +117,7 @@ const EXPORT_LINE_TYPES_SQL = `
 
 const EXPORT_REPORT_CONFIG_SQL = `
   SELECT metrics, table_columns AS "tableColumns", csv_columns AS "csvColumns",
+    rank_sort AS "rankSort",
     rank_metric_key AS "rankMetricKey", rank_direction AS "rankDirection"
   FROM report_config WHERE id = 1
 `;
@@ -183,12 +187,13 @@ const INSERT_MISSING_LINE_TYPES_SQL = `
 
 const SAVE_REPORT_CONFIG_SQL = `
   INSERT INTO report_config(
-    id,metrics,table_columns,csv_columns,rank_metric_key,rank_direction,updated_at
-  ) VALUES (1,$1::jsonb,$2::jsonb,$3::jsonb,$4,$5,NOW())
+    id,metrics,table_columns,csv_columns,rank_sort,rank_metric_key,rank_direction,updated_at
+  ) VALUES (1,$1::jsonb,$2::jsonb,$3::jsonb,$4::jsonb,$5,$6,NOW())
   ON CONFLICT(id) DO UPDATE SET
     metrics=EXCLUDED.metrics,
     table_columns=EXCLUDED.table_columns,
     csv_columns=EXCLUDED.csv_columns,
+    rank_sort=EXCLUDED.rank_sort,
     rank_metric_key=EXCLUDED.rank_metric_key,
     rank_direction=EXCLUDED.rank_direction,
     updated_at=NOW()
@@ -234,6 +239,7 @@ async function materializeReport(client, config) {
     await client.query(query.text, query.values);
   }
 
+  const primaryRank = config.rank.sort[0];
   await client.query(`
     UPDATE city_report_values
     SET rank_value=CASE
@@ -242,27 +248,10 @@ async function materializeReport(client, config) {
       ELSE NULL
     END,
     updated_at=NOW()
-  `, [config.rank.metricKey]);
+  `, [primaryRank.metricKey]);
 
-  const order = config.rank.direction === 'asc' ? 'ASC' : 'DESC';
-  await client.query(`
-    WITH ranked AS (
-      SELECT report.city_id,
-        CASE
-          WHEN report.rank_value IS NULL THEN NULL
-          ELSE ROW_NUMBER() OVER (
-            PARTITION BY COALESCE(city.is_large, FALSE)
-            ORDER BY report.rank_value ${order} NULLS LAST, city.name ASC
-          )::integer
-        END AS rank
-      FROM city_report_values AS report
-      JOIN cities AS city ON city.id=report.city_id
-    )
-    UPDATE city_report_values AS report
-    SET rank=ranked.rank, updated_at=NOW()
-    FROM ranked
-    WHERE ranked.city_id=report.city_id
-  `);
+  const rankQuery = compileReportRankQuery(config.rank);
+  await client.query(rankQuery.text, rankQuery.values);
 
   return inserted.rows.length;
 }
@@ -292,6 +281,12 @@ export function createProjectSettingsTransferService(pool) {
           throw new Error('Project settings are incomplete; run database migrations');
         }
         await client.query('COMMIT');
+        const rankSort = Array.isArray(reportRow.rankSort) && reportRow.rankSort.length > 0
+          ? reportRow.rankSort
+          : [{
+              metricKey: reportRow.rankMetricKey,
+              direction: reportRow.rankDirection,
+            }];
         return {
           _dtpstat: {
             kind: SETTINGS_TRANSFER_KIND,
@@ -304,10 +299,7 @@ export function createProjectSettingsTransferService(pool) {
             metrics: reportRow.metrics,
             tableColumns: reportRow.tableColumns,
             csvColumns: reportRow.csvColumns,
-            rank: {
-              metricKey: reportRow.rankMetricKey,
-              direction: reportRow.rankDirection,
-            },
+            rank: { sort: rankSort },
           },
           securitySettings,
         };
@@ -356,12 +348,14 @@ export function createProjectSettingsTransferService(pool) {
           projectSettings.hasMapboxAccessToken,
           projectSettings.mapboxAccessToken,
         ]);
+        const primaryRank = reportConfig.rank.sort[0];
         await client.query(SAVE_REPORT_CONFIG_SQL, [
           JSON.stringify(reportConfig.metrics),
           JSON.stringify(reportConfig.tableColumns),
           JSON.stringify(reportConfig.csvColumns),
-          reportConfig.rank.metricKey,
-          reportConfig.rank.direction,
+          JSON.stringify(reportConfig.rank.sort),
+          primaryRank.metricKey,
+          primaryRank.direction,
         ]);
         await client.query(UPDATE_SECURITY_SETTINGS_SQL, [
           securitySettings.maxFailedAttempts,
@@ -381,6 +375,7 @@ export function createProjectSettingsTransferService(pool) {
           projectName: projectSettings.projectName,
           lineTypes: lineTypes.length,
           metrics: reportConfig.metrics.length,
+          rankSort: reportConfig.rank.sort,
           materializedCities,
           transferSchemaVersion: schemaVersion,
         };
