@@ -2,6 +2,7 @@ import { normalizeAdminSecuritySettings } from '../data/admin-security.js';
 import { buildLineTypesPlan } from '../data/line-types.js';
 import { normalizeMapboxAccessToken } from '../data/mapbox-access-token.js';
 import { buildProjectSettingsPlan, ProjectSettingsValidationError } from '../data/project-settings.js';
+import { normalizePublicDownloadName } from '../data/public-download-name.js';
 import {
   orderReportMetricsByDependencies,
   validateReportConfig,
@@ -12,7 +13,7 @@ import {
   compileReportRankQuery,
 } from './report-config-service.js';
 
-const SETTINGS_TRANSFER_SCHEMA_VERSION = 5;
+const SETTINGS_TRANSFER_SCHEMA_VERSION = 6;
 const SETTINGS_TRANSFER_KIND = 'project-settings';
 const LEGACY_SECURITY_DEFAULTS = Object.freeze({
   ipMaxFailedAttempts: 20,
@@ -53,9 +54,9 @@ function validateEnvelope(payload) {
   if (metadata.kind !== SETTINGS_TRANSFER_KIND) {
     throw new ProjectSettingsTransferValidationError(`_dtpstat.kind must be ${SETTINGS_TRANSFER_KIND}`);
   }
-  if (![1, 2, 3, 4, SETTINGS_TRANSFER_SCHEMA_VERSION].includes(metadata.schemaVersion)) {
+  if (![1, 2, 3, 4, 5, SETTINGS_TRANSFER_SCHEMA_VERSION].includes(metadata.schemaVersion)) {
     throw new ProjectSettingsTransferValidationError(
-      `_dtpstat.schemaVersion must be 1, 2, 3, 4 or ${SETTINGS_TRANSFER_SCHEMA_VERSION}`,
+      `_dtpstat.schemaVersion must be 1, 2, 3, 4, 5 or ${SETTINGS_TRANSFER_SCHEMA_VERSION}`,
     );
   }
   return { input, schemaVersion: metadata.schemaVersion };
@@ -65,9 +66,11 @@ function normalizeProjectSettings(payload) {
   const input = object(payload, 'projectSettings');
   const hasMapboxAccessToken = Object.hasOwn(input, 'mapboxAccessToken');
   const hasShowLinePopups = Object.hasOwn(input, 'showLinePopups');
+  const hasPublicDownloadName = Object.hasOwn(input, 'publicDownloadName');
   const {
     showLineLabels = false,
     showLinePopups: rawShowLinePopups,
+    publicDownloadName: rawPublicDownloadName,
     mapboxAccessToken: rawMapboxAccessToken,
     ...base
   } = input;
@@ -84,6 +87,10 @@ function normalizeProjectSettings(payload) {
     // always to show hover popups, so missing values intentionally normalize
     // to true.
     showLinePopups: hasShowLinePopups ? rawShowLinePopups : true,
+    hasPublicDownloadName,
+    publicDownloadName: hasPublicDownloadName
+      ? normalizePublicDownloadName(rawPublicDownloadName)
+      : null,
     hasMapboxAccessToken,
     mapboxAccessToken: hasMapboxAccessToken
       ? normalizeMapboxAccessToken(rawMapboxAccessToken, { optional: true })
@@ -105,6 +112,7 @@ const EXPORT_PROJECT_SETTINGS_SQL = `
     theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
     show_line_popups AS "showLinePopups",
+    public_download_name AS "publicDownloadName",
     mapbox_access_token AS "mapboxAccessToken"
   FROM project_settings WHERE id = 1
 `;
@@ -143,9 +151,10 @@ const UPDATE_PROJECT_SETTINGS_SQL = `
     theme_preset=$6,
     show_line_labels=$7,
     show_line_popups=$8,
-    mapbox_access_token=CASE WHEN $9::boolean THEN $10::text ELSE mapbox_access_token END,
+    public_download_name=CASE WHEN $9::boolean THEN $10::text ELSE public_download_name END,
+    mapbox_access_token=CASE WHEN $11::boolean THEN $12::text ELSE mapbox_access_token END,
     mapbox_access_token_initialized=CASE
-      WHEN $9::boolean THEN TRUE
+      WHEN $11::boolean THEN TRUE
       ELSE mapbox_access_token_initialized
     END,
     updated_at=NOW()
@@ -345,6 +354,8 @@ export function createProjectSettingsTransferService(pool) {
           projectSettings.themePreset,
           projectSettings.showLineLabels,
           projectSettings.showLinePopups,
+          projectSettings.hasPublicDownloadName,
+          projectSettings.publicDownloadName,
           projectSettings.hasMapboxAccessToken,
           projectSettings.mapboxAccessToken,
         ]);
@@ -373,6 +384,7 @@ export function createProjectSettingsTransferService(pool) {
         await client.query('COMMIT');
         return {
           projectName: projectSettings.projectName,
+          publicDownloadName: projectSettings.publicDownloadName,
           lineTypes: lineTypes.length,
           metrics: reportConfig.metrics.length,
           rankSort: reportConfig.rank.sort,
