@@ -26,8 +26,8 @@ test('project settings repository reads and updates the singleton row', async ()
             themePreset: values[5],
             showLineLabels: values[6],
             showLinePopups: values[7] ?? true,
-            publicDownloadName: values[8] ?? 'bus-lanes',
-            mapboxAccessTokenConfigured: Boolean(values[9]),
+            publicDownloadName: 'bus-lanes',
+            mapboxAccessTokenConfigured: Boolean(values[8]),
             updatedAt: '2026-09-05T13:00:00.000Z',
           }],
         };
@@ -71,14 +71,13 @@ test('project settings repository reads and updates the singleton row', async ()
     themePreset: 'modern',
     showLineLabels: true,
     showLinePopups: false,
-    publicDownloadName: 'tram-lines',
     mapboxAccessToken: 'pk.test-public-token-value',
     footerHtml: '<p class="project-muted">Описание</p>',
   });
   assert.equal(saved.projectName, 'Трамвайные пути России');
   assert.equal(saved.themePreset, 'modern');
   assert.equal(saved.showLinePopups, false);
-  assert.equal(saved.publicDownloadName, 'tram-lines');
+  assert.equal(saved.publicDownloadName, 'bus-lanes');
   assert.deepEqual(calls[1].values, [
     'Трамвайные пути России',
     ['трамвай'],
@@ -88,7 +87,6 @@ test('project settings repository reads and updates the singleton row', async ()
     'modern',
     true,
     false,
-    'tram-lines',
     'pk.test-public-token-value',
   ]);
 
@@ -104,7 +102,21 @@ test('project settings repository reads and updates the singleton row', async ()
   assert.equal(calls[2].values[7], null);
   assert.equal(calls[2].values[8], null);
   assert.match(calls[2].text, /show_line_popups = COALESCE\(\$8::boolean, show_line_popups\)/i);
-  assert.match(calls[2].text, /public_download_name = COALESCE\(\$9::text, public_download_name\)/i);
+  assert.doesNotMatch(calls[2].text, /public_download_name\s*=/i);
+
+  await assert.rejects(
+    async () => repository.save({
+      projectName: 'Трамвайные пути России',
+      keywords: ['трамвай'],
+      yandexMetrikaId: null,
+      googleAnalyticsId: null,
+      themePreset: 'classic',
+      showLineLabels: false,
+      publicDownloadName: 'tram-lines',
+      footerHtml: '<p>Описание</p>',
+    }),
+    /unsupported properties/i,
+  );
 
   const renamed = await repository.savePublicDownloadName('  Трамвайные   линии  ');
   assert.equal(renamed.publicDownloadName, 'Трамвайные линии');
