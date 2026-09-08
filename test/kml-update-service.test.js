@@ -58,10 +58,19 @@ const defaultType = {
   width: 4,
 };
 
+const defaultMatchRows = [
+  { inputIndex: 0, boundaryId: '11', cityId: '1', cityName: 'Первый', candidateCount: 1 },
+  { inputIndex: 1, boundaryId: '12', cityId: '2', cityName: 'Второй', candidateCount: 2 },
+  { inputIndex: 2, boundaryId: null, cityId: null, cityName: null, candidateCount: 0 },
+];
+
 function createPool({
   createdLineTypes = [],
   initialTypeRows = [defaultType],
   finalTypeRows = initialTypeRows,
+  hasBoundaries = true,
+  hasLinkedBoundaries = true,
+  matchRows = defaultMatchRows,
 } = {}) {
   const queries = [];
   let released = false;
@@ -89,24 +98,24 @@ function createPool({
         const rows = loadCount === 1 ? initialTypeRows : finalTypeRows;
         return { rows, rowCount: rows.length };
       }
-      if (normalized.startsWith('SELECT EXISTS')) {
-        return { rows: [{ ready: true }], rowCount: 1 };
+      if (
+        normalized.startsWith('SELECT') &&
+        normalized.includes('AS "hasLinkedBoundaries"')
+      ) {
+        return {
+          rows: [{ hasBoundaries, hasLinkedBoundaries }],
+          rowCount: 1,
+        };
       }
       if (normalized.includes('LEFT JOIN LATERAL')) {
-        return {
-          rows: [
-            { inputIndex: 0, boundaryId: '11', cityId: '1', cityName: 'Первый', candidateCount: 1 },
-            { inputIndex: 1, boundaryId: '12', cityId: null, cityName: null, candidateCount: 2 },
-            { inputIndex: 2, boundaryId: null, cityId: null, cityName: null, candidateCount: 0 },
-          ],
-        };
+        return { rows: matchRows, rowCount: matchRows.length };
       }
       if (
         normalized.startsWith('WITH payload_rows AS') &&
         normalized.includes('INSERT INTO city_geometries')
       ) {
         insertedGeometryPayload = JSON.parse(values[0]);
-        return { rows: [], rowCount: 2 };
+        return { rows: [], rowCount: insertedGeometryPayload.length };
       }
       if (normalized.startsWith('WITH geometry_statistics AS')) {
         return { rows: [{ id: 1 }, { id: 2 }], rowCount: 2 };
@@ -182,7 +191,53 @@ test('KML update resolves imported NAME to local numeric type and atomically rep
     pool.insertedGeometryPayload.map((row) => row.properties.placemarkName),
     ['Первая', 'Вторая'],
   );
+  assert.deepEqual(
+    pool.insertedGeometryPayload.map((row) => row.cityId),
+    ['1', '2'],
+  );
+  const matchStageQuery = pool.queries.find((query) =>
+    query.startsWith('CREATE TEMP TABLE kml_place_match_geometries'));
+  assert.match(matchStageQuery, /FROM city_boundaries\s+WHERE city_id IS NOT NULL/);
+  const matchQuery = pool.queries.find((query) => query.includes('LEFT JOIN LATERAL'));
+  assert.match(matchQuery, /JOIN cities AS city ON city\.id = boundary\.city_id/);
+  assert.doesNotMatch(matchQuery, /\(boundary\.city_id IS NOT NULL\) DESC/);
   assert.equal(pool.queries.at(-1), 'COMMIT');
+  assert.equal(pool.released, true);
+});
+
+test('KML refuses a matched OSM boundary without a linked city', async () => {
+  const pool = createPool({
+    matchRows: [
+      { inputIndex: 0, boundaryId: '11', cityId: '1', cityName: 'Первый', candidateCount: 1 },
+      { inputIndex: 1, boundaryId: '12', cityId: null, cityName: null, candidateCount: 1 },
+      { inputIndex: 2, boundaryId: null, cityId: null, cityName: null, candidateCount: 0 },
+    ],
+  });
+  const service = createKmlUpdateService(pool, config, dependencies);
+
+  await assert.rejects(
+    service.update(undefined, {}),
+    /without a linked city/,
+  );
+  assert.equal(pool.queries.includes('DELETE FROM city_geometries'), false);
+  assert.equal(pool.queries.at(-1), 'ROLLBACK');
+  assert.equal(pool.released, true);
+});
+
+test('KML reports when OSM boundaries exist but none are linked to cities', async () => {
+  const pool = createPool({ hasLinkedBoundaries: false });
+  const service = createKmlUpdateService(pool, config, dependencies);
+
+  await assert.rejects(
+    service.update(undefined, {}),
+    /boundaries are not linked to cities/,
+  );
+  assert.equal(
+    pool.queries.some((query) =>
+      query.startsWith('CREATE TEMP TABLE kml_place_match_geometries')),
+    false,
+  );
+  assert.equal(pool.queries.at(-1), 'ROLLBACK');
   assert.equal(pool.released, true);
 });
 
