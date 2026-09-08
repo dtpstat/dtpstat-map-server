@@ -68,6 +68,7 @@ async function main() {
   const publicDownloadRepository = createPublicDownloadRepository(pool);
   const publicDownloadService = createPublicDownloadService({
     repository: publicDownloadRepository,
+    projectSettingsRepository,
     directory: path.join(config.projectRoot, 'var', 'public-downloads'),
   });
   const importService = createDataImportService(pool);
