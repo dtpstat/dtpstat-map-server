@@ -18,7 +18,7 @@ if (typeof document !== 'undefined') {
     section.innerHTML = `
       <div>
         <h5>Имя файлов открытых данных</h5>
-        <p>Задаётся только базовое имя. Сервер сам добавляет <code>.geojson</code> и <code>.csv</code>. Публичные URL остаются прежними для совместимости.</p>
+        <p>Задаётся только базовое имя. Сервер сам добавляет <code>.geojson</code> и <code>.csv</code>; это же имя используется в публичных URL и для файлов на диске.</p>
       </div>
       <form id="public-download-name-form" class="project-download-name-form">
         <label>Базовое имя файла
@@ -27,8 +27,8 @@ if (typeof document !== 'undefined') {
           <small>Без расширения и без символов пути <code>/</code> или <code>\\</code>.</small>
         </label>
         <div class="project-download-name-preview" aria-live="polite">
-          <span>GeoJSON:</span><code data-download-preview="geojson">bus-lanes.geojson</code>
-          <span>CSV:</span><code data-download-preview="csv">bus-lanes.csv</code>
+          <span>GeoJSON:</span><code data-download-preview="geojson">/bus-lanes.geojson</code>
+          <span>CSV:</span><code data-download-preview="csv">/bus-lanes.csv</code>
         </div>
         <button class="secondary" type="submit">Сохранить имя файлов</button>
       </form>
@@ -54,8 +54,8 @@ if (typeof document !== 'undefined') {
 
     function renderPreview() {
       const name = baseName();
-      geoJsonPreview.textContent = `${name}.geojson`;
-      csvPreview.textContent = `${name}.csv`;
+      geoJsonPreview.textContent = `/${name}.geojson`;
+      csvPreview.textContent = `/${name}.csv`;
     }
 
     input.addEventListener('input', renderPreview);
@@ -80,7 +80,7 @@ if (typeof document !== 'undefined') {
       event.preventDefault();
       if (!form.reportValidity()) return;
       saveButton.disabled = true;
-      setMessage('Сохраняем имя файлов…');
+      setMessage('Сохраняем имя и пересобираем публичные файлы…');
       try {
         const response = await fetch('/api/admin/project-settings/public-download-name', {
           method: 'PUT',
@@ -95,7 +95,7 @@ if (typeof document !== 'undefined') {
         if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
         input.value = payload.settings.publicDownloadName;
         renderPreview();
-        setMessage('Имя файлов сохранено.', 'success');
+        setMessage('Имя файлов и публичные URL обновлены.', 'success');
         window.dispatchEvent(new CustomEvent('dtpstat:project-settings-changed'));
       } catch (error) {
         setMessage(error.message, 'error');
