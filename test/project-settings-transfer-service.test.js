@@ -20,6 +20,7 @@ function exportPool() {
             themePreset: 'modern',
             showLineLabels: true,
             showLinePopups: false,
+            publicDownloadName: 'tram-lines',
             mapboxAccessToken: 'pk.test-public-token-value',
           }],
         };
@@ -100,15 +101,16 @@ function exportPool() {
   return { async connect() { return client; } };
 }
 
-test('settings export contains sequential ranking and line display settings but no private admin data', async () => {
+test('settings export contains download name, sequential ranking and line display settings but no private admin data', async () => {
   const service = createProjectSettingsTransferService(exportPool());
   const payload = await service.exportSettings();
 
   assert.equal(payload._dtpstat.kind, 'project-settings');
-  assert.equal(payload._dtpstat.schemaVersion, 5);
+  assert.equal(payload._dtpstat.schemaVersion, 6);
   assert.equal(payload.projectSettings.themePreset, 'modern');
   assert.equal(payload.projectSettings.showLineLabels, true);
   assert.equal(payload.projectSettings.showLinePopups, false);
+  assert.equal(payload.projectSettings.publicDownloadName, 'tram-lines');
   assert.equal(payload.projectSettings.mapboxAccessToken, 'pk.test-public-token-value');
   assert.equal(payload.lineTypes[0].name, 'default');
   assert.deepEqual(payload.reportConfig.rank.sort, [
@@ -150,7 +152,7 @@ test('settings import rejects unsupported schema versions before touching the da
 
   await assert.rejects(
     service.importSettings({
-      _dtpstat: { kind: 'project-settings', schemaVersion: 6 },
+      _dtpstat: { kind: 'project-settings', schemaVersion: 7 },
     }),
     (error) => error instanceof ProjectSettingsTransferValidationError && /schemaVersion/.test(error.message),
   );
