@@ -1,4 +1,9 @@
 if (typeof document !== 'undefined') {
+  const stylesheet = document.createElement('link');
+  stylesheet.rel = 'stylesheet';
+  stylesheet.href = '/admin/public-download-name.css';
+  document.head.append(stylesheet);
+
   const projectForm = document.querySelector('#project-settings-form');
   const operation = document.querySelector('#operation-project-settings');
   const projectMessage = document.querySelector('#project-settings-message');
