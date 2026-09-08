@@ -12,6 +12,7 @@ import {
   PUBLIC_THEME_PRESETS,
   ProjectSettingsValidationError,
 } from '../data/project-settings.js';
+import { PUBLIC_DOWNLOAD_NAME_MAX_LENGTH } from '../data/public-download-name.js';
 import { createAdminOperationAudit } from '../http/admin-auth.js';
 
 const DEFAULT_CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'base64');
@@ -21,6 +22,7 @@ const DEFAULT_CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'bas
  *   projectSettingsRepository: {
  *     get: () => Promise<any>,
  *     save: (payload: unknown) => Promise<any>,
+ *     savePublicDownloadName?: (value: unknown) => Promise<any>,
  *     getPublicMapConfig?: () => Promise<any>,
  *     getCityMarkerIcon?: () => Promise<any>,
  *     saveCityMarkerIcon?: (icon: object) => Promise<any>,
@@ -102,6 +104,9 @@ export function createProjectSettingsRouter({
             tags: PROJECT_CONTENT_TAGS,
             classes: PROJECT_CONTENT_CLASSES,
             themes: PUBLIC_THEME_PRESETS,
+            publicDownloadName: {
+              maxLength: PUBLIC_DOWNLOAD_NAME_MAX_LENGTH,
+            },
             cityMarkerIcon: {
               mime: 'image/png',
               maxBytes: CITY_MARKER_ICON_MAX_BYTES,
@@ -139,6 +144,29 @@ export function createProjectSettingsRouter({
       }
     },
   );
+
+  if (typeof projectSettingsRepository.savePublicDownloadName === 'function') {
+    router.put(
+      '/admin/project-settings/public-download-name',
+      adminAuth.requireInterface,
+      createAdminOperationAudit(securityService, 'interface.project.public-download-name.update'),
+      jsonBody,
+      async (request, response, next) => {
+        try {
+          const settings = await projectSettingsRepository.savePublicDownloadName(
+            request.body?.publicDownloadName,
+          );
+          response.set('Cache-Control', 'no-store').json({ settings });
+        } catch (error) {
+          if (error instanceof ProjectSettingsValidationError) {
+            response.status(400).json({ error: error.message });
+            return;
+          }
+          next(error);
+        }
+      },
+    );
+  }
 
   if (typeof projectSettingsRepository.saveCityMarkerIcon === 'function') {
     router.put(
