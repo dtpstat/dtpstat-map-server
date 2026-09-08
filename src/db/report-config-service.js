@@ -11,6 +11,7 @@ const LOAD_CONFIG_SQL = `
     metrics,
     table_columns AS "tableColumns",
     csv_columns AS "csvColumns",
+    rank_sort AS "rankSort",
     rank_metric_key AS "rankMetricKey",
     rank_direction AS "rankDirection",
     updated_at AS "updatedAt"
@@ -24,15 +25,17 @@ const SAVE_CONFIG_SQL = `
     metrics,
     table_columns,
     csv_columns,
+    rank_sort,
     rank_metric_key,
     rank_direction,
     updated_at
   )
-  VALUES (1, $1::jsonb, $2::jsonb, $3::jsonb, $4, $5, now())
+  VALUES (1, $1::jsonb, $2::jsonb, $3::jsonb, $4::jsonb, $5, $6, now())
   ON CONFLICT (id) DO UPDATE SET
     metrics = EXCLUDED.metrics,
     table_columns = EXCLUDED.table_columns,
     csv_columns = EXCLUDED.csv_columns,
+    rank_sort = EXCLUDED.rank_sort,
     rank_metric_key = EXCLUDED.rank_metric_key,
     rank_direction = EXCLUDED.rank_direction,
     updated_at = now()
@@ -60,14 +63,17 @@ const AGGREGATE_SQL = Object.freeze({
 
 function rowToConfig(row) {
   if (!row) throw new Error('Report configuration is missing; run database migrations');
+  const rank = Array.isArray(row.rankSort) && row.rankSort.length > 0
+    ? { sort: row.rankSort }
+    : {
+        metricKey: row.rankMetricKey,
+        direction: row.rankDirection,
+      };
   return validateReportConfig({
     metrics: row.metrics,
     tableColumns: row.tableColumns,
     csvColumns: row.csvColumns,
-    rank: {
-      metricKey: row.rankMetricKey,
-      direction: row.rankDirection,
-    },
+    rank,
     updatedAt: row.updatedAt instanceof Date
       ? row.updatedAt.toISOString()
       : row.updatedAt,
@@ -191,6 +197,53 @@ export function compileReportMetricQuery(metric) {
   };
 }
 
+/**
+ * Build deterministic sequential ranking SQL. The first criterion is mirrored
+ * in RANK_VALUE for compatibility; subsequent criteria are read from the
+ * materialized JSON values. Metric keys stay parameters and directions have
+ * already passed report-config validation.
+ *
+ * @param {{ sort: Array<{ metricKey: string, direction: 'asc' | 'desc' }> }} rank
+ */
+export function compileReportRankQuery(rank) {
+  const parameters = [];
+  const order = rank.sort.map((criterion, index) => {
+    const direction = criterion.direction === 'asc' ? 'ASC' : 'DESC';
+    if (index === 0) return `report.rank_value ${direction} NULLS LAST`;
+    const key = parameter(parameters, criterion.metricKey);
+    return `(CASE
+      WHEN jsonb_typeof(report.values -> (${key}::text)) = 'number'
+        THEN (report.values ->> (${key}::text))::double precision
+      ELSE NULL
+    END) ${direction} NULLS LAST`;
+  });
+  order.push('city.name ASC');
+
+  return {
+    text: `
+      WITH ranked AS (
+        SELECT
+          report.city_id,
+          CASE
+            WHEN report.rank_value IS NULL THEN NULL
+            ELSE ROW_NUMBER() OVER (
+              PARTITION BY COALESCE(city.is_large, FALSE)
+              ORDER BY ${order.join(',\n                       ')}
+            )::integer
+          END AS rank
+        FROM city_report_values AS report
+        JOIN cities AS city ON city.id = report.city_id
+      )
+      UPDATE city_report_values AS report
+      SET rank = ranked.rank,
+          updated_at = now()
+      FROM ranked
+      WHERE ranked.city_id = report.city_id
+    `,
+    values: parameters,
+  };
+}
+
 async function loadConfig(queryable) {
   const result = await queryable.query(LOAD_CONFIG_SQL);
   return rowToConfig(result.rows[0]);
@@ -222,6 +275,7 @@ async function materialize(queryable, config) {
     await queryable.query(query.text, query.values);
   }
 
+  const primaryRank = config.rank.sort[0];
   await queryable.query(
     `
       UPDATE city_report_values
@@ -232,36 +286,18 @@ async function materialize(queryable, config) {
       END,
       updated_at = now()
     `,
-    [config.rank.metricKey],
+    [primaryRank.metricKey],
   );
 
-  const order = config.rank.direction === 'asc' ? 'ASC' : 'DESC';
-  await queryable.query(`
-    WITH ranked AS (
-      SELECT
-        report.city_id,
-        CASE
-          WHEN report.rank_value IS NULL THEN NULL
-          ELSE ROW_NUMBER() OVER (
-            PARTITION BY COALESCE(city.is_large, FALSE)
-            ORDER BY report.rank_value ${order} NULLS LAST, city.name ASC
-          )::integer
-        END AS rank
-      FROM city_report_values AS report
-      JOIN cities AS city ON city.id = report.city_id
-    )
-    UPDATE city_report_values AS report
-    SET rank = ranked.rank,
-        updated_at = now()
-    FROM ranked
-    WHERE ranked.city_id = report.city_id
-  `);
+  const rankQuery = compileReportRankQuery(config.rank);
+  await queryable.query(rankQuery.text, rankQuery.values);
 
   return {
     cities: inserted.rows.length,
     metrics: config.metrics.length,
-    rankMetricKey: config.rank.metricKey,
-    rankDirection: config.rank.direction,
+    rankSort: config.rank.sort,
+    rankMetricKey: primaryRank.metricKey,
+    rankDirection: primaryRank.direction,
   };
 }
 
@@ -306,12 +342,14 @@ export function createReportConfigService(pool) {
         const config = validateReportConfig(payload, {
           allowedLineTypeNames: lineTypes.rows.map((row) => row.name),
         });
+        const primaryRank = config.rank.sort[0];
         const saved = await client.query(SAVE_CONFIG_SQL, [
           JSON.stringify(config.metrics),
           JSON.stringify(config.tableColumns),
           JSON.stringify(config.csvColumns),
-          config.rank.metricKey,
-          config.rank.direction,
+          JSON.stringify(config.rank.sort),
+          primaryRank.metricKey,
+          primaryRank.direction,
         ]);
         const updatedAt = saved.rows[0]?.updatedAt;
         const normalized = {
