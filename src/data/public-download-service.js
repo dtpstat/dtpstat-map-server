@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { publicDownloadFiles } from './public-download-name.js';
 
 const LEGACY_PUBLIC_CSV_COLUMNS = Object.freeze([
   Object.freeze({ kind: 'city', title: 'short_name' }),
@@ -69,9 +70,19 @@ export function serializePublicCsv(rows, columns = LEGACY_PUBLIC_CSV_COLUMNS) {
   return `${lines.join('\n')}\n`;
 }
 
+async function removeObsoleteSnapshots(directory, keepNames) {
+  const entries = await fs.readdir(directory, { withFileTypes: true });
+  await Promise.allSettled(entries
+    .filter((entry) =>
+      entry.isFile() &&
+      /\.(?:csv|geojson)$/i.test(entry.name) &&
+      !keepNames.has(entry.name))
+    .map((entry) => fs.unlink(path.join(directory, entry.name))));
+}
+
 /**
- * Materialize the public GeoJSON/CSV downloads as ordinary files. Both
- * payloads are fully calculated before either visible file is replaced.
+ * Materialize the public GeoJSON/CSV downloads as ordinary files. Both the
+ * filesystem names and public URLs are derived from PROJECT_SETTINGS.
  *
  * @param {{
  *   repository: {
@@ -79,29 +90,38 @@ export function serializePublicCsv(rows, columns = LEGACY_PUBLIC_CSV_COLUMNS) {
  *     exportCsvRows: () => Promise<any[]>,
  *     exportCsvColumns?: () => Promise<any[]>
  *   },
+ *   projectSettingsRepository?: { get: () => Promise<any> },
  *   directory: string
  * }} dependencies
  */
-export function createPublicDownloadService({ repository, directory }) {
-  const geoJsonPath = path.join(directory, 'bus-lanes.geojson');
-  const csvPath = path.join(directory, 'bus-lanes.csv');
+export function createPublicDownloadService({
+  repository,
+  projectSettingsRepository,
+  directory,
+}) {
+  let files = publicDownloadFiles(undefined);
 
   return {
     directory,
-    geoJsonPath,
-    csvPath,
+    get geoJsonPath() { return path.join(directory, files.geoJsonFileName); },
+    get csvPath() { return path.join(directory, files.csvFileName); },
+    get files() { return { ...files }; },
 
     async refresh() {
-      const [geoJson, csvRows, csvColumns] = await Promise.all([
+      const [settings, geoJson, csvRows, csvColumns] = await Promise.all([
+        projectSettingsRepository?.get?.() ?? Promise.resolve({}),
         repository.exportGeoJson(),
         repository.exportCsvRows(),
         repository.exportCsvColumns?.() ?? Promise.resolve(LEGACY_PUBLIC_CSV_COLUMNS),
       ]);
+      files = publicDownloadFiles(settings?.publicDownloadName);
+      const geoJsonPath = path.join(directory, files.geoJsonFileName);
+      const csvPath = path.join(directory, files.csvFileName);
       const geoJsonText = `${JSON.stringify(geoJson)}\n`;
       const csvText = serializePublicCsv(csvRows, csvColumns);
       const token = `${process.pid}-${Date.now()}-${crypto.randomUUID()}`;
-      const geoJsonTempPath = path.join(directory, `.bus-lanes.geojson.${token}.tmp`);
-      const csvTempPath = path.join(directory, `.bus-lanes.csv.${token}.tmp`);
+      const geoJsonTempPath = path.join(directory, `.${files.geoJsonFileName}.${token}.tmp`);
+      const csvTempPath = path.join(directory, `.${files.csvFileName}.${token}.tmp`);
 
       await fs.mkdir(directory, { recursive: true });
       try {
@@ -111,6 +131,10 @@ export function createPublicDownloadService({ repository, directory }) {
         ]);
         await fs.rename(geoJsonTempPath, geoJsonPath);
         await fs.rename(csvTempPath, csvPath);
+        await removeObsoleteSnapshots(
+          directory,
+          new Set([files.geoJsonFileName, files.csvFileName]),
+        );
       } finally {
         await Promise.allSettled([
           fs.unlink(geoJsonTempPath),
@@ -119,6 +143,11 @@ export function createPublicDownloadService({ repository, directory }) {
       }
 
       return {
+        publicDownloadName: files.baseName,
+        geoJsonFileName: files.geoJsonFileName,
+        csvFileName: files.csvFileName,
+        geoJsonUrl: files.geoJsonUrl,
+        csvUrl: files.csvUrl,
         geoJsonBytes: Buffer.byteLength(geoJsonText),
         csvBytes: Buffer.byteLength(csvText),
         featureCount: Array.isArray(geoJson.features) ? geoJson.features.length : 0,
