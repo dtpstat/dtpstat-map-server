@@ -132,3 +132,9 @@ DNS-фильтры и ad blockers часто намеренно блокирую
 4. Проверить Network/Console.
 5. Для GA4 смотреть Realtime.
 6. Для Yandex проверить визиты и Session Replay после обработки данных сервисом.
+
+## Reverse proxy и размер CSP
+
+Полный Yandex Metrica/Webvisor CSP содержит региональные collector origins и может превысить маленький default upstream-header buffer nginx. Production reverse proxy должен использовать достаточные `proxy_buffer_size/proxy_buffers`; рекомендуемая конфигурация и диагностика `502 upstream sent too big header` описаны в [deployment.md](deployment.md).
+
+Runtime mapuid sync `https://yandex.ru/an/mapuid/...` разрешён намеренно только в `img-src`; `script-src` и `connect-src` этим исключением не расширяются.

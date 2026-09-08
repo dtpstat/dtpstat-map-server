@@ -14,7 +14,7 @@
 ## Новый экземпляр
 
 ```bash
-npm install
+npm ci
 cp .env.example .env
 # заполнить .env
 npm run db:init
@@ -127,6 +127,13 @@ location / {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 
     proxy_http_version 1.1;
+
+    # Analytics/Webvisor CSP intentionally contains many provider origins and
+    # can exceed nginx's small default upstream-header buffer.
+    proxy_buffer_size 32k;
+    proxy_buffers 8 32k;
+    proxy_busy_buffers_size 64k;
+
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
 }
@@ -336,3 +343,89 @@ Mapbox `pk.*` — browser public token, но его ограничения вс�
 - [data-transfer.md](data-transfer.md)
 - [project-settings-transfer.md](project-settings-transfer.md)
 - [database-indexes.md](database-indexes.md)
+
+## Node.js / shared NVM для production
+
+Минимум проекта — Node.js `20.19+`; для production рекомендуется поддерживаемая ветка Node.js `24.x`. На сервере с несколькими экземплярами удобно держать один shared NVM в `/usr/local/nvm`, а стабильные runtime links — в `/usr/local/node` и `/usr/local/bin`.
+
+Пример общей установки NVM:
+
+```bash
+sudo mkdir -p /usr/local/nvm
+sudo git clone https://github.com/nvm-sh/nvm.git /usr/local/nvm
+cd /usr/local/nvm
+sudo git checkout "$(git describe --abbrev=0 --tags)"
+
+sudo tee /etc/profile.d/nvm.sh >/dev/null <<'EOF'
+export NVM_DIR="/usr/local/nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
+EOF
+sudo chmod 755 /etc/profile.d/nvm.sh
+sudo chmod -R a+rX /usr/local/nvm
+```
+
+Node 24 и стабильные system-wide links:
+
+```bash
+sudo bash -lc '
+export NVM_DIR=/usr/local/nvm
+source /usr/local/nvm/nvm.sh
+nvm install 24
+nvm alias default 24
+'
+
+export NVM_DIR=/usr/local/nvm
+source /usr/local/nvm/nvm.sh
+nvm use 24
+NODE24="$(dirname "$(dirname "$(nvm which 24)")")"
+sudo ln -sfn "$NODE24" /usr/local/node
+sudo ln -sfn /usr/local/node/bin/node /usr/local/bin/node
+sudo ln -sfn /usr/local/node/bin/npm /usr/local/bin/npm
+sudo ln -sfn /usr/local/node/bin/npx /usr/local/bin/npx
+sudo ln -sfn /usr/local/node/bin/corepack /usr/local/bin/corepack
+hash -r
+```
+
+После major Node upgrade dependencies пересобираются из lock-файла, а PM2 переустанавливается именно новым npm:
+
+```bash
+sudo /usr/local/bin/npm install -g pm2
+pm2 save
+pm2 kill
+pm2 resurrect
+pm2 startup systemd -u dtpstat --hp /home/dtpstat
+pm2 save
+
+cd /var/www/buslanes.ru && rm -rf node_modules && npm ci
+cd /var/www/tramlanes.ru && rm -rf node_modules && npm ci
+```
+
+Только после проверки `which node`, `node -v`, `which pm2`, `pm2 report` и startup logs старый distro `nodejs/npm` можно удалить через package manager. Production process log должен показывать ожидаемую версию Node.
+
+`npm install` не используется как deployment-команда: он способен менять lock-файл. Для reproducible deploy используется `npm ci`.
+
+## Большой CSP и nginx upstream buffers
+
+Yandex Metrica/Webvisor использует несколько региональных collector origins. Полный CSP получается крупнее типичного заголовка приложения. Если nginx пишет:
+
+```text
+upstream sent too big header while reading response header from upstream
+```
+
+и отдаёт `502 Bad Gateway`, это не падение Node. В `location /` должны быть достаточные upstream buffers:
+
+```nginx
+proxy_buffer_size 32k;
+proxy_buffers 8 32k;
+proxy_busy_buffers_size 64k;
+```
+
+Диагностика разделяет Node и proxy:
+
+```bash
+curl -sI http://127.0.0.1:3001/ | head
+curl -sI https://buslanes.ru/ | head
+```
+
+Первый запрос проверяет Express напрямую, второй — полный HTTPS/nginx path. После изменения nginx обязательно `sudo nginx -t` и `sudo systemctl reload nginx`.

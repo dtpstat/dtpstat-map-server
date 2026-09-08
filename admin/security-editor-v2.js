@@ -539,7 +539,10 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     const details = document.createElement('details');
     const summary = document.createElement('summary');
     const pre = document.createElement('pre');
-    summary.textContent = 'JSON';
+    const changeCount = Array.isArray(entry.details?.changes)
+      ? entry.details.changes.length
+      : 0;
+    summary.textContent = changeCount ? `Изменения (${changeCount})` : 'JSON';
     pre.textContent = JSON.stringify(entry.details ?? {}, null, 2);
     details.append(summary, pre);
     detailsCell.append(details);

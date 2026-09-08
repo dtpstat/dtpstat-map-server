@@ -2,6 +2,7 @@ import express, { Router } from 'express';
 import {
   AdminTaskAlreadyRunningError,
 } from '../data/admin-task-manager.js';
+import { adminAuditPayloadFingerprint } from '../data/admin-audit-details.js';
 import {
   KmlUpdateValidationError,
   resolveKmlUpdateRequest,
@@ -331,6 +332,11 @@ export function createApiRouter({
       type: 'geojson-import',
       endpoint: '/api/admin/import/lines',
       recordsSuccessfulUpdate: true,
+      parameters: {
+        featureCount: Array.isArray(request.body?.features) ? request.body.features.length : null,
+        businessLineTypes: Array.isArray(request.body?.lineTypes) ? request.body.lineTypes.length : null,
+        payload: adminAuditPayloadFingerprint(request.body),
+      },
     }, async (context) => importService.replaceFromGeoJson(
       request.body,
       {
@@ -367,7 +373,11 @@ export function createApiRouter({
         type: 'city-geojson-import',
         endpoint: '/api/admin/import/cities',
         recordsSuccessfulUpdate: !dryRun,
-        parameters: { dryRun },
+        parameters: {
+          dryRun,
+          featureCount: Array.isArray(request.body?.features) ? request.body.features.length : null,
+          payload: adminAuditPayloadFingerprint(request.body),
+        },
       }, async (context) => cityBoundaryTransferService.replaceFromGeoJson(
         request.body,
         {
@@ -407,6 +417,9 @@ export function createApiRouter({
             dryRun: options.dryRun,
             sourceCount: options.sources.length,
             cityBufferMeters: options.cityBufferMeters,
+            ...(request.body !== undefined
+              ? { payload: adminAuditPayloadFingerprint(request.body) }
+              : {}),
           },
         }, async (context) => kmlUpdateService.update(
           request.body,
@@ -458,6 +471,9 @@ export function createApiRouter({
             retryBaseDelayMs: options.retryBaseDelayMs,
             retryMaxDelayMs: options.retryMaxDelayMs,
             sourceURL: options.url,
+            ...(request.body !== undefined
+              ? { payload: adminAuditPayloadFingerprint(request.body) }
+              : {}),
           },
         }, async (context) => osmCityUpdateService.update(
           request.body,
@@ -617,6 +633,12 @@ export function createApiRouter({
         type: 'population-update',
         endpoint: '/api/admin/populations',
         recordsSuccessfulUpdate: true,
+        parameters: {
+          recordCount: Array.isArray(request.body?.populations) ? request.body.populations.length : null,
+          asOf: request.body?.asOf ?? null,
+          source: request.body?.source ?? null,
+          payload: adminAuditPayloadFingerprint(request.body),
+        },
       }, async (context) => populationService.updateFromJson(
         request.body,
         {

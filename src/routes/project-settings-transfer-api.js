@@ -4,7 +4,11 @@ import { LineTypeValidationError } from '../data/line-types.js';
 import { ProjectSettingsValidationError } from '../data/project-settings.js';
 import { ReportConfigValidationError } from '../data/report-config.js';
 import { ProjectSettingsTransferValidationError } from '../db/project-settings-transfer-service.js';
-import { createAdminOperationAudit } from '../http/admin-auth.js';
+import {
+  createAdminOperationAudit,
+  recordAdminOperationChanges,
+  recordAdminOperationDetails,
+} from '../http/admin-auth.js';
 
 function isValidationError(error) {
   return error instanceof ProjectSettingsTransferValidationError ||
@@ -71,7 +75,26 @@ export function createProjectSettingsTransferRouter({
         return;
       }
       try {
+        const before = await settingsTransferService.exportSettings();
         const imported = await settingsTransferService.importSettings(request.body);
+        const after = await settingsTransferService.exportSettings();
+        recordAdminOperationChanges(
+          response,
+          {
+            projectSettings: before.projectSettings,
+            lineTypes: before.lineTypes,
+            reportConfig: before.reportConfig,
+          },
+          {
+            projectSettings: after.projectSettings,
+            lineTypes: after.lineTypes,
+            reportConfig: after.reportConfig,
+          },
+        );
+        recordAdminOperationDetails(response, {
+          importSummary: imported,
+          securityDetailsExcluded: true,
+        });
         let derived = null;
         const warnings = [];
         if (afterImport) {

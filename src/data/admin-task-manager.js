@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import { sanitizeAdminAuditData } from './admin-audit-details.js';
+import { serviceLog } from '../service-log.js';
 
 export class AdminTaskAlreadyRunningError extends Error {
   /** @param {object} task */
@@ -127,24 +129,42 @@ export function createAdminTaskManager(dependencies = {}) {
   }
 
   async function persistTaskAudit(task) {
-    if (!recordTaskAudit || !task.actor) return;
+    if (!task.actor) return;
+    const durationMs = elapsedMilliseconds(
+      task.startedAt ?? task.createdAt,
+      task.completedAt,
+    );
+    const details = {
+      taskId: task.id,
+      endpoint: task.endpoint,
+      parameters: sanitizeAdminAuditData(task.parameters),
+      ...(task.result !== undefined
+        ? { changeSummary: sanitizeAdminAuditData(task.result) }
+        : {}),
+      ...(task.error !== undefined
+        ? { error: sanitizeAdminAuditData(task.error) }
+        : {}),
+    };
+    serviceLog(task.status === 'succeeded' ? 'info' : 'warning', 'admin.data-operation', {
+      operationType: task.type,
+      status: task.status,
+      durationMs,
+      ipAddress: task.actor.ipAddress ?? null,
+      userId: task.actor.userId ?? null,
+      username: task.actor.username ?? null,
+      ...details,
+    });
+    if (!recordTaskAudit) return;
     try {
       await recordTaskAudit({
         eventType: 'operation',
         operationType: task.type,
         status: task.status,
-        durationMs: elapsedMilliseconds(
-          task.startedAt ?? task.createdAt,
-          task.completedAt,
-        ),
+        durationMs,
         ipAddress: task.actor.ipAddress ?? null,
         userId: task.actor.userId ?? null,
         username: task.actor.username ?? null,
-        details: {
-          taskId: task.id,
-          endpoint: task.endpoint,
-          parameters: task.parameters,
-        },
+        details,
       });
     } catch (error) {
       appendLog(task, 'warning', 'Не удалось записать аудит admin-операции', {

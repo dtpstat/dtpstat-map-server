@@ -1,4 +1,5 @@
 import express, { Router } from 'express';
+import { adminAuditPayloadFingerprint } from '../data/admin-audit-details.js';
 import { AdminTaskAlreadyRunningError } from '../data/admin-task-manager.js';
 import {
   KmlTransferValidationError,
@@ -119,6 +120,7 @@ export function createKmlTransferRouter({
               mode: 'portable-kml',
               features: collection.features.length,
               businessLineTypes: collection.lineTypes.length,
+              payload: adminAuditPayloadFingerprint(request.body),
             },
           },
           async (context) => importService.replaceFromGeoJson(collection, {

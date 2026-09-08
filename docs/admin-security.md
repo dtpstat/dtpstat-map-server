@@ -203,7 +203,26 @@ DETAILS JSONB
 
 В audit входят login/lockout, data/settings operations, users/security и завершение background admin tasks.
 
-`V018` добавил indexes для filters по event/operation/status/username/IP.
+Для **несекретных mutating admin operations** `DETAILS` теперь хранит не только HTTP method/path/status, но и конкретный bounded change-set:
+
+```json
+{
+  "changes": [
+    { "path": "themePreset", "before": "classic", "after": "modern" },
+    { "path": "showLineLabels", "before": false, "after": true }
+  ]
+}
+```
+
+Synchronous settings editors строят field-level `before → after`. Background data tasks записывают input parameters, SHA-256/byte-size загруженного payload там, где он есть, и sanitized `changeSummary` из результата операции. Тот же sanitized summary пишется в server service log (`admin.operation` / `admin.data-operation`), поэтому разбор инцидента возможен даже при проблеме записи DB audit.
+
+Audit deliberately **не хранит concrete values security/profile operations**. Пароли, temporary passwords, session/cookie/Authorization values, hashes, secrets, credentials, private/API keys и поля с token-like именами не попадают в clear text. Для token-like полей несекретной конфигурации audit может показать сам факт изменения, но значения будут `[redacted]`. `settings.import` сравнивает только `projectSettings`, `lineTypes` и `reportConfig`; `securitySettings` из value-level diff исключены целиком.
+
+Чтобы `DETAILS` не превращался в копию данных, строки/depth/collections/change count ограничены; бинарные значения сохраняются только как metadata, а `createdAt/updatedAt` игнорируются как audit noise. Для больших data imports payload не сохраняется в audit: сохраняется fingerprint, позволяющий доказать, какой именно файл/JSON был применён.
+
+В web-admin JSON-details показывают `Изменения (N)`, когда change-set присутствует. CSV export продолжает включать `DETAILS` как JSON.
+
+`V018` добавил indexes для filters по event/operation/status/username/IP. Новая детализация использует существующий `DETAILS JSONB`, поэтому отдельная DB migration не требуется.
 
 ## WebSocket
 
