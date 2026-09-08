@@ -1,80 +1,17 @@
 # Развёртывание нескольких экземпляров
 
-Один и тот же `dtpstat-map-server` можно запускать несколько раз на одном сервере. Рекомендуемая изоляция — отдельная PostgreSQL database для каждого экземпляра и отдельный Node HTTP/HTTPS port.
-
-## Модель экземпляра
-
-Рекомендуется:
+Один checkout `dtpstat-map-server` можно запускать несколькими независимыми экземплярами. Рекомендуемая изоляция:
 
 ```text
-1 deployment приложения
+1 instance
 = 1 PostgreSQL database
 = 1 DATABASE_SCHEMA
-= 1 набор runtime ports/directories
+= 1 Node port
 ```
 
-Разные экземпляры могут использовать один PostgreSQL server и один `DATABASE_PORT`, но не одну и ту же database/schema как основной security boundary.
-
-## DATABASE_SCHEMA
-
-```dotenv
-DATABASE_SCHEMA=buslanes
-```
-
-Переменная одновременно является SQL schema и техническим namespace. Для legacy installs default — `buslanes`.
-
-Она определяет:
-
-- `search_path=<schema>,public`;
-- PostgreSQL `application_name`;
-- advisory locks;
-- `<schema>.schema_versions`;
-- service namespace;
-- default OSM User-Agent.
-
-Публичное имя проекта хранится отдельно в `PROJECT_SETTINGS.PROJECT_NAME` и не должно совпадать с `DATABASE_SCHEMA`.
-
-### Runtime SQL
-
-Application queries должны использовать `search_path`, а не жёсткие ссылки вида:
-
-```sql
-buslanes.some_table
-```
-
-Именно это позволяет одному и тому же runtime коду работать с `buslanes`, `tramlanes` и другими экземплярами.
-
-Исторические migrations — исключение: литерал `BUSLANES` в migration source является token, который migration runner заменяет на фактический `DATABASE_SCHEMA` перед исполнением.
-
-## Пример двух экземпляров
-
-Первый:
-
-```dotenv
-DATABASE_NAME=buslanes
-DATABASE_ROLE=buslanes
-DATABASE_SCHEMA=buslanes
-HOST=127.0.0.1
-HTTP_ENABLED=true
-HTTP_PORT=3000
-```
-
-Второй:
-
-```dotenv
-DATABASE_NAME=tramlanes
-DATABASE_ROLE=tramlanes
-DATABASE_SCHEMA=tramlanes
-HOST=127.0.0.1
-HTTP_ENABLED=true
-HTTP_PORT=3001
-```
-
-Если Node публикуется только через nginx, `HOST=127.0.0.1` предпочтительнее `0.0.0.0`.
+Разные instances могут использовать один PostgreSQL server, но не должны делить одну application database/schema как security boundary.
 
 ## Новый экземпляр
-
-Минимальная последовательность:
 
 ```bash
 npm install
@@ -85,97 +22,105 @@ npm run db:migrate
 npm start
 ```
 
-На первом старте при пустой `ADMIN_USERS` задайте:
+Минимальные runtime variables:
+
+```dotenv
+DATABASE_HOST=127.0.0.1
+DATABASE_PORT=5432
+DATABASE_NAME=tramlanes
+DATABASE_ROLE=tramlanes
+DATABASE_SCHEMA=tramlanes
+HOST=127.0.0.1
+HTTP_ENABLED=true
+HTTP_PORT=3002
+```
+
+Для initial bootstrap admin:
 
 ```dotenv
 IMPORT_API_USERNAME=admin
 IMPORT_API_PASSWORD=replace-with-a-long-random-password
 ```
 
-Сервер создаст bootstrap-superuser.
+После появления DB-backed admin user эти ENV credentials не участвуют в online login.
 
-После bootstrap эти ENV credentials больше не участвуют в online login. Их можно удалить либо оставить только как recovery source для:
+## DATABASE_SCHEMA
 
-```bash
-npm run admin:set-superuser
-```
+`DATABASE_SCHEMA` определяет:
+
+- `search_path=<schema>,public`;
+- PostgreSQL `application_name`;
+- advisory-lock namespace;
+- `<schema>.schema_versions`;
+- service namespace;
+- default OSM User-Agent.
+
+Runtime SQL должен использовать `search_path`, а не literals вида `buslanes.table`.
+
+В migration source token `BUSLANES` допустим: migration runner заменяет его на фактический schema name до выполнения.
 
 ## Mapbox bootstrap
 
-Начиная с `V019`, Mapbox public access token хранится в `PROJECT_SETTINGS`.
-
-Первичная конфигурация:
+Начиная с `V019`, public Mapbox token хранится в `PROJECT_SETTINGS`.
 
 ```dotenv
 MAPBOX_ACCESS_TOKEN=pk....
 ```
 
-Пока `PROJECT_SETTINGS.MAPBOX_ACCESS_TOKEN_INITIALIZED=false`, startup один раз копирует ENV token в БД и выставляет initialized marker. После этого ENV token игнорируется, а изменения выполняются в админке.
+используется только пока `MAPBOX_ACCESS_TOKEN_INITIALIZED=false`. После bootstrap authoritative value находится в БД и меняется через admin/settings transfer.
 
-`MAPBOX_STYLE_URL` остаётся runtime/deployment setting.
+`MAPBOX_STYLE_URL` остаётся deployment setting.
 
 ## Миграции
 
-Текущий набор: `V001…V022`.
+Текущий набор: `V001…V026`.
 
 Последние migrations:
 
 ```text
-V016__admin_security_and_line_labels.sql
-V017__protect_bootstrap_admin.sql
 V018__admin_sessions_roles_profile_and_ip_security.sql
 V019__mapbox_project_setting.sql
 V020__city_marker_icon.sql
 V021__public_theme_preset.sql
 V022__line_popup_setting.sql
+V023__merge_osm_relation_city_parts.sql
+V024__multi_column_report_ranking.sql
+V025__public_download_name.sql
+V026__dynamic_public_download_links.sql
 ```
 
-Назначение:
+Назначение `V023…V026`:
 
-- `V016` — DB users/security/audit и постоянные line labels;
-- `V017` — bootstrap DB invariant;
-- `V018` — sessions, дополнительные roles, profile/avatar, IP security и audit indexes;
-- `V019` — DB-backed Mapbox token;
-- `V020` — custom city marker PNG;
-- `V021` — `retro/classic/modern` public theme;
-- `V022` — независимый `SHOW_LINE_POPUPS` для hover-popup `placemarkName`.
+- `V023` — logical `FULL_NAME` OSM boundary, merge relation fragments по `PLACE_TYPE + FULL_NAME`, sync `CITIES.FULL_NAME`;
+- `V024` — ordered `REPORT_CONFIG.RANK_SORT`;
+- `V025` — configurable `PROJECT_SETTINGS.PUBLIC_DOWNLOAD_NAME`;
+- `V026` — dynamic footer placeholders для GeoJSON/CSV URLs.
 
-Следующая migration должна быть **V023+**. Уже опубликованные migration-файлы не меняются задним числом.
-
-История хранится в:
-
-```text
-<DATABASE_SCHEMA>.schema_versions
-```
-
-Legacy history `public.buslanes_schema_versions` автоматически переносится migration runner.
+Следующая migration: **V027+**. Опубликованные migration files не изменяются задним числом.
 
 ## Production за nginx
 
 Типичная схема:
 
 ```text
-browser
-  ↓ HTTPS
-nginx
-  ↓ HTTP 127.0.0.1:3001
-Node/Express
+browser HTTPS
+→ nginx
+→ HTTP 127.0.0.1:3002
+→ Node/Express
 ```
 
-Для одного доверенного nginx:
+Для одного trusted proxy:
 
 ```dotenv
 HOST=127.0.0.1
 HTTP_ENABLED=true
-HTTP_PORT=3001
+HTTP_PORT=3002
 HTTP_TRUST_PROXY_HOPS=1
 ```
 
-Рекомендуемый location:
-
 ```nginx
 location / {
-    proxy_pass http://127.0.0.1:3001;
+    proxy_pass http://127.0.0.1:3002;
 
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
@@ -189,69 +134,33 @@ location / {
 
 WebSocket headers нужны для `/api/admin/ws`.
 
-## Почему нужен X-Forwarded-Proto
+### CSRF / X-Forwarded-Proto
 
-Session-auth mutating admin requests проверяют same-origin. Browser при HTTPS отправляет:
-
-```text
-Origin: https://example.org
-```
-
-Если nginx терминирует TLS, а Express без trusted proxy видит `request.protocol=http`, expected origin становится `http://example.org`, и запрос отклоняется:
+Session-auth mutating requests проверяют same-origin. Если nginx завершает TLS, а Express не доверяет proxy, browser отправит `Origin: https://...`, тогда как Node будет считать protocol `http` и вернёт:
 
 ```text
 Cross-site administrative request rejected
 ```
 
-Правильная конфигурация — не ослаблять CSRF check, а настроить:
+Исправление — корректный `HTTP_TRUST_PROXY_HOPS` и `X-Forwarded-Proto`, а не ослабление CSRF.
 
-```dotenv
-HTTP_TRUST_PROXY_HOPS=1
-```
+### Upload limit
 
-и:
-
-```nginx
-proxy_set_header X-Forwarded-Proto $scheme;
-```
-
-## Trust proxy и IP
-
-Default:
-
-```dotenv
-HTTP_TRUST_PROXY_HOPS=0
-```
-
-Используйте `1` только если перед Node действительно ровно один доверенный proxy. Более длинная доверенная цепочка требует соответствующего числа hops.
-
-Нельзя бездумно доверять forwarded headers, если тот же Node port доступен клиентам напрямую: тогда можно подделать IP, используемый audit/IP security.
-
-## Размер upload через nginx
-
-Node ограничивает крупные protected imports переменной:
+Application default:
 
 ```dotenv
 IMPORT_API_MAX_BODY_BYTES=26214400
 ```
 
-Это 25 MiB.
-
-nginx по умолчанию может остановить upload раньше Node и вернуть:
-
-```text
-413 Request Entity Too Large
-```
-
-Для стандартного 25 MiB application limit удобно дать небольшой запас:
+Для nginx удобно:
 
 ```nginx
 client_max_body_size 30m;
 ```
 
-Если `IMPORT_API_MAX_BODY_BYTES` меняется, nginx limit должен быть согласован с ним.
+Иначе proxy может вернуть `413 Request Entity Too Large` раньше Node.
 
-Проверка/reload:
+Проверка:
 
 ```bash
 sudo nginx -t
@@ -260,18 +169,17 @@ sudo systemctl reload nginx
 
 ## PM2
 
-Запуск непосредственно Node entry point:
-
 ```bash
 cd /var/www/tramlanes.ru
 pm2 start src/server.js --name tramlanes
 pm2 save
 ```
 
-После изменения server code:
+После code/migrations:
 
 ```bash
 git pull
+npm run db:migrate
 pm2 restart tramlanes
 ```
 
@@ -287,140 +195,144 @@ pm2 restart tramlanes --update-env
 pm2 logs tramlanes
 ```
 
-Успешный startup заканчивается примерно так:
-
-```text
-[service] database.health:ok
-[service] admin-security.bootstrap:ok
-[service] project-settings.load:ok
-[service] city-report.refresh:ok
-[service] public-downloads.refresh:ok
-[service] admin-success-state.load:ok
-[service] http-servers.start:ok
-[service] startup:ready
-```
-
-На уже инициализированной БД `admin-security.bootstrap:ok` обычно содержит `created: false`.
-
-## Empty deployment
-
-Чистый экземпляр после migrations содержит schema/settings/security infrastructure, но может не иметь городов и линий. Это допустимо.
-
-После запуска данные импортируются через admin UI/API. Рекомендуемый перенос:
-
-```text
-cities → lines → populations
-```
-
-Population import допускает записи для городов, которых нет в target DB: они пропускаются, а существующие города обновляются.
-
 ## Public generated files
 
-Процесс должен иметь право записи в:
+Процесс должен иметь write access к:
 
 ```text
 var/public-downloads/
 ```
 
-После startup и успешных real-update операций пересобираются:
+Имя берётся из:
 
 ```text
-bus-lanes.geojson
-bus-lanes.csv
+PROJECT_SETTINGS.PUBLIC_DOWNLOAD_NAME
 ```
 
-`var/` — runtime state, не source data и не backup format.
+Например `tram-lines` создаёт:
 
-## Project settings и theme
+```text
+var/public-downloads/tram-lines.geojson
+var/public-downloads/tram-lines.csv
+```
+
+и public URLs:
+
+```text
+/tram-lines.geojson
+/tram-lines.csv
+```
+
+Расширение в админке не вводится.
+
+При переименовании snapshots сразу пересобираются; старые `.csv/.geojson` из runtime directory удаляются и старые URLs не являются aliases.
+
+`var/` — runtime state, не backup/source bundle.
+
+## OSM city normalization
+
+После `V023` relation fragments одного логического города объединяются по:
+
+```text
+OSM_TYPE = relation
+PLACE_TYPE
+FULL_NAME
+```
+
+`FULL_NAME` вычисляется как:
+
+```text
+addr:district → name:ru → osm_name
+```
+
+В результате одна логическая city/town boundary может быть `MultiPolygon`, даже если OSM source отдал несколько relation objects.
+
+## Project settings
 
 DB-backed `PROJECT_SETTINGS` включает:
 
 - project name/keywords/footer;
 - analytics IDs;
-- `SHOW_LINE_LABELS` — постоянные подписи вдоль линий;
-- `SHOW_LINE_POPUPS` — popup имени при наведении;
-- Mapbox public token;
-- theme preset;
-- custom city marker icon.
+- theme;
+- line labels/popups;
+- public Mapbox token;
+- custom city marker;
+- public download base name.
 
-`SHOW_LINE_LABELS` и `SHOW_LINE_POPUPS` независимы. На старых установках после `V022` popup остаётся включённым по default, поэтому миграция не меняет прежнее hover-поведение.
-
-Встроенные theme values:
-
-```text
-retro
-classic
-modern
-```
-
-Настройки конфигурируются в **Настройка интерфейса → Проект**.
+Настройки меняются в **Настройка интерфейса → Проект**.
 
 ## Settings transfer
 
-Superuser может переносить конфигурацию через:
+Superuser endpoints:
 
 ```text
 GET  /api/admin/settings/export
 POST /api/admin/settings/import
 ```
 
-Текущий формат — schemaVersion 4, импорт совместим с v1/v2/v3.
+Current format:
 
-Пакет переносит project settings, включая оба line-name переключателя, line types, report config, security settings и public Mapbox token. Custom city marker binary сейчас в пакет не входит.
+```text
+kind = project-settings
+schemaVersion = 6
+```
 
-Для legacy v1-v3 без `showLinePopups` используется compatibility default `true`.
+Import принимает v1-v6. V5 добавляет `rank.sort`, V6 — `publicDownloadName`.
+
+После import report values и public snapshots перестраиваются на target data.
 
 Подробнее: [project-settings-transfer.md](project-settings-transfer.md).
 
-## Recovery после неудачного deployment
+## Empty deployment
 
-### Снять lockout account/IP
+Чистый экземпляр после migrations может не иметь городов/линий. Это нормальное состояние.
+
+Рекомендуемый порядок загрузки:
+
+```text
+cities → lines → populations
+```
+
+## Recovery
+
+Снять lockout:
 
 ```bash
 npm run admin:unblock -- --user admin1 --ip 203.0.113.10
 ```
 
-### Восстановить login/password единственного superuser
-
-Если `.env` содержит нужные значения:
+Восстановить credentials единственного superuser:
 
 ```bash
 npm run admin:set-superuser
 ```
 
-Или явно:
+или:
 
 ```bash
 npm run admin:set-superuser -- --username admin1 --password 'new-password'
 ```
 
-Команда требует ровно одного `IS_SUPERUSER=TRUE`, сбрасывает его account blocks/counters, восстанавливает permissions и отзывает sessions. IP lockout очищается отдельно через `admin:unblock`.
-
-Эти команды используют `DATABASE_SCHEMA` и application DB role из текущего `.env`.
-
 ## Firewall
 
-Если Node стоит за nginx, внешний доступ к Node port обычно не нужен. Разрешайте извне только `80/443`, а Node bind оставляйте на loopback.
+Если Node работает только за nginx, наружу обычно нужны только `80/443`, а Node bind лучше оставлять на `127.0.0.1`.
 
-Если Node публикуется напрямую, откройте только конкретный необходимый port.
+Не доверяйте forwarded headers от произвольных клиентов: это влияет на audit/IP security.
 
 ## Секреты
 
-Не храните в git:
+Не хранить в git:
 
 - `.env`;
-- PostgreSQL passwords;
-- admin passwords;
+- DB/admin passwords;
 - TLS private keys;
 - private provider credentials.
 
-Mapbox `pk.*` является public browser token, но всё равно должен управляться как project configuration и иметь минимально необходимые ограничения на стороне Mapbox.
+Mapbox `pk.*` — browser public token, но его ограничения всё равно должны быть минимально необходимыми.
 
-`POSTGRES_ADMIN_*` нужны только `npm run db:init`; runtime использует `DATABASE_ROLE`.
+## См. также
 
-## Связанные документы
-
-- [Администраторы и безопасность](admin-security.md)
-- [Перенос данных](data-transfer.md)
-- [Перенос настроек](project-settings-transfer.md)
-- [Аудит индексов](database-indexes.md)
+- [admin-security.md](admin-security.md)
+- [data-transfer.md](data-transfer.md)
+- [project-settings-transfer.md](project-settings-transfer.md)
+- [database-indexes.md](database-indexes.md)
