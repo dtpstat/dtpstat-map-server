@@ -49,7 +49,7 @@ test('project settings migrations create branding, metrics, theme, line popup an
   assert.match(dynamicLinksSql, /Base name used for materialized public GeoJSON\/CSV files, URLs and download names/i);
 });
 
-test('admin interface exposes project settings, independent line display switches and download file name', async () => {
+test('admin interface loads editors and helpers explicitly without transitive side effects', async () => {
   const [shell, editor, downloadEditor, notices, branding, css, downloadCss] = await Promise.all([
     source('admin/admin-shell.js'),
     source('admin/project-settings-editor.js'),
@@ -60,11 +60,19 @@ test('admin interface exposes project settings, independent line display switche
     source('admin/public-download-name.css'),
   ]);
 
-  assert.match(shell, /import\('\.\/project-settings-editor\.js'\)/);
-  assert.match(shell, /import\('\.\/public-download-name-editor\.js'\)/);
-  assert.match(shell, /import\('\.\/report-config-editor\.js'\)/);
+  for (const moduleName of [
+    'project-settings-editor.js',
+    'public-download-name-editor.js',
+    'line-types-editor.js',
+    'report-config-editor.js',
+    'report-range-ui.js',
+    'project-branding.js',
+  ]) {
+    assert.match(shell, new RegExp(`import\\('\\./${moduleName.replaceAll('.', '\\.')}'\\)`));
+  }
   assert.doesNotMatch(notices, /-editor\.js/);
   assert.doesNotMatch(branding, /public-download-name-editor\.js/);
+
   assert.match(editor, /dataset\.interfaceTab = 'project'/);
   assert.match(editor, /dataset\.interfacePanel = 'project'/);
   assert.match(editor, /name="projectName"/);
@@ -118,6 +126,9 @@ test('public page derives metadata, theme stylesheet, analytics and download lin
   ]) {
     assert.ok(html.includes(marker), marker);
   }
+  assert.doesNotMatch(html, /bus-lanes\.jpeg/);
+  assert.doesNotMatch(app, /bus-lanes\.jpeg/);
+  assert.match(html, /name="twitter:card" content="summary"/);
   assert.match(html, /data-theme="\{\{PROJECT_THEME_NAME\}\}"/);
   assert.match(html, /\{\{PROJECT_THEME_STYLESHEET\}\}/);
   assert.match(html, /name="keywords" content="\{\{PROJECT_KEYWORDS\}\}"/);
