@@ -58,6 +58,10 @@ const ALLOWED_CLASSES = new Set(PROJECT_CONTENT_CLASSES);
 const GLOBAL_ATTRIBUTES = new Set(['class', 'id']);
 const LINK_ATTRIBUTES = new Set(['href', 'title', 'target', 'rel']);
 const REL_VALUES = new Set(['noopener', 'noreferrer', 'nofollow']);
+const PUBLIC_DOWNLOAD_LINK_TOKENS = new Set([
+  '{{PUBLIC_GEOJSON_URL}}',
+  '{{PUBLIC_CSV_URL}}',
+]);
 
 function escapeAttribute(value) {
   return String(value)
@@ -177,6 +181,7 @@ function normalizeGoogleAnalyticsId(value) {
 function safeHref(value) {
   const href = value.trim();
   if (!href) return false;
+  if (PUBLIC_DOWNLOAD_LINK_TOKENS.has(href)) return true;
   if (href.startsWith('#')) return true;
   if (href.startsWith('/') && !href.startsWith('//')) return true;
   if (href.startsWith('./') || href.startsWith('../')) return true;
