@@ -12,7 +12,6 @@
     "dev": "node --watch src/server.js",
     "db:init": "node scripts/init-database.js",
     "db:migrate": "node scripts/migrate.js",
-    "db:import": "node scripts/import-data.js",
     "admin:unblock": "node scripts/unblock-admin.js",
     "admin:set-superuser": "node scripts/set-superuser-credentials.js",
     "lint": "eslint .",
@@ -21,7 +20,6 @@
   },
   "dependencies": {
     "compression": "^1.8.1",
-    "csv-parse": "^6.1.0",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "fast-xml-parser": "^5.11.1",
