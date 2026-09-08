@@ -31,6 +31,19 @@ test('project settings normalize name keywords metrics theme and restricted foot
   assert.equal(normalizeProjectFooterHtml(plan.footerHtml), plan.footerHtml);
 });
 
+test('project footer accepts only the built-in public download URL tokens', () => {
+  const footer = normalizeProjectFooterHtml(
+    '<p><a href="{{PUBLIC_GEOJSON_URL}}">GeoJSON</a> <a href="{{PUBLIC_CSV_URL}}">CSV</a></p>',
+  );
+  assert.match(footer, /href="\{\{PUBLIC_GEOJSON_URL\}\}"/);
+  assert.match(footer, /href="\{\{PUBLIC_CSV_URL\}\}"/);
+
+  assert.throws(
+    () => normalizeProjectFooterHtml('<a href="{{UNKNOWN_URL}}">bad</a>'),
+    ProjectSettingsValidationError,
+  );
+});
+
 test('empty analytics IDs disable collectors and omitted theme remains classic', () => {
   const plan = buildProjectSettingsPlan({
     projectName: 'Проект',
