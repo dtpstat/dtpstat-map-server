@@ -42,3 +42,16 @@ export function normalizePublicDownloadName(value, options = {}) {
 
   return normalized;
 }
+
+/** @param {unknown} value */
+export function publicDownloadFiles(value) {
+  const baseName = normalizePublicDownloadName(value);
+  const encodedBaseName = encodeURIComponent(baseName);
+  return {
+    baseName,
+    geoJsonFileName: `${baseName}.geojson`,
+    csvFileName: `${baseName}.csv`,
+    geoJsonUrl: `/${encodedBaseName}.geojson`,
+    csvUrl: `/${encodedBaseName}.csv`,
+  };
+}
