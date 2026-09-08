@@ -190,6 +190,7 @@ async function loadInterfaceEditors(user) {
   interfaceCard?.classList.add('control-card');
   try {
     await import('./report-config-editor.js');
+    await import('./report-range-ui.js');
   } finally {
     interfaceTabs?.classList.remove('task-tabs');
     interfaceCard?.classList.remove('control-card');
@@ -288,6 +289,7 @@ async function startAdminShell() {
   const userBadge = document.querySelector('#admin-user');
   try {
     await import('./action-feedback.js');
+    await import('./project-branding.js');
     const session = await globalThis.dtpstatAdminSession;
     const user = session.user;
     ensureProfileSection();
