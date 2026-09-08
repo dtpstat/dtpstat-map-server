@@ -57,7 +57,7 @@ Google использует стандартную GA4 последовател�
 
 ## CSP
 
-Приложение использует Helmet CSP. Для Yandex разрешён опубликованный Yandex набор региональных `mc.yandex.*`, `mc.webvisor.*`, `yastatic.net`, websocket endpoints и `frame-ancestors`, необходимые Session Replay/картам.
+Приложение использует Helmet CSP. Для Yandex разрешён опубликованный Yandex набор региональных `mc.yandex.*`, `mc.webvisor.*`, `yastatic.net`, websocket endpoints и `frame-ancestors`, необходимые Session Replay/картам. Дополнительно `https://yandex.ru` разрешён только в `img-src`: текущий Metrica tag использует `https://yandex.ru/an/mapuid/...` для image-based mapuid sync; это разрешение намеренно не распространяется на `script-src` или `connect-src`.
 
 Для GA4 разрешены:
 

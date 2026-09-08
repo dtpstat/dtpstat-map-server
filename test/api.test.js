@@ -277,6 +277,9 @@ test('public page emits analytics markup and a CSP that permits configured colle
     assert.match(csp, /script-src[^;]*https:\/\/mc\.yandex\.com/);
     assert.match(csp, /script-src[^;]*https:\/\/mc\.webvisor\.org/);
     assert.match(csp, /script-src[^;]*https:\/\/yastatic\.net/);
+    assert.match(csp, /img-src[^;]*https:\/\/yandex\.ru(?:\s|;)/);
+    assert.doesNotMatch(csp, /script-src[^;]*\shttps:\/\/yandex\.ru(?:\s|;)/);
+    assert.doesNotMatch(csp, /connect-src[^;]*\shttps:\/\/yandex\.ru(?:\s|;)/);
     assert.match(csp, /script-src[^;]*https:\/\/\*\.googletagmanager\.com/);
     assert.match(csp, /connect-src[^;]*wss:\/\/mc\.webvisor\.org/);
     assert.match(csp, /connect-src[^;]*https:\/\/\*\.google-analytics\.com/);

@@ -380,6 +380,8 @@ export function createApp({
           imgSrc: [
             "'self'", 'data:', 'blob:', 'https://*.mapbox.com',
             ...YANDEX_METRIKA_HTTPS_ORIGINS,
+            // Current Metrica tag uses this image-only endpoint for mapuid sync.
+            'https://yandex.ru',
             'https://*.google-analytics.com',
             'https://*.googletagmanager.com',
           ],
