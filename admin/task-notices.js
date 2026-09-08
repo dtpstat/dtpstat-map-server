@@ -1,11 +1,3 @@
-import './line-types-editor.js';
-import './project-settings-editor.js';
-import './public-download-name-editor.js';
-import './report-config-editor.js';
-import './report-range-ui.js';
-import './project-branding.js';
-import './kml-transfer-editor.js';
-
 /**
  * Keep each operation notice inside its own tab panel. A notice from one task
  * must never be rendered in another task's live region.
