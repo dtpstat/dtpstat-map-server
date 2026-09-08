@@ -25,6 +25,7 @@ Node.js/Express + PostgreSQL/PostGIS сервер интерактивной к�
 - DB-backed Mapbox public token;
 - настраиваемый PNG-маркер городов;
 - настраиваемое базовое имя публичных GeoJSON/CSV;
+- DB-backed Yandex Metrica и Google Analytics 4 с CSP-safe ранней загрузкой;
 - DB-backed пользователи, роли, sessions, profile/avatar, IP/account lockout и audit;
 - WebSocket-журнал и single-task guard для длительных операций управления данными;
 - HTTP/HTTPS и deployment за reverse proxy.
@@ -192,6 +193,8 @@ Web UI использует HttpOnly session cookie. HTTP Basic остаётся
 - `PUBLIC_DOWNLOAD_NAME`.
 
 `SHOW_LINE_LABELS` и `SHOW_LINE_POPUPS` независимы.
+
+Analytics IDs подключаются только когда заданы. Счётчики загружаются ранним внешним скриптом в `<head>`; CSP разрешает официальные endpoints Yandex Metrica/Session Replay и GA4. Диагностика загрузчиков доступна в браузере через `window.dtpstatMetrics`. Подробнее: [docs/analytics.md](docs/analytics.md).
 
 ### Публичные GeoJSON/CSV
 

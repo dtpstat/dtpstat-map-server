@@ -122,6 +122,7 @@ async function withServer(callback, options = {}) {
   const app = createApp({
     adminTasks: options.adminTasks,
     repository: options.repository ?? createTestRepository(),
+    projectSettingsRepository: options.projectSettingsRepository,
     importService,
     populationService,
     kmlUpdateService,
@@ -239,6 +240,51 @@ test('API exposes public config, health, and ordered cities', async () => {
     });
     assert.deepEqual((await citiesResponse.json()).cities, cities);
   });
+});
+
+test('public page emits analytics markup and a CSP that permits configured collectors', async () => {
+  const projectSettingsRepository = {
+    async get() {
+      return {
+        projectName: 'Analytics test',
+        keywords: ['analytics'],
+        footerHtml: '<p>Analytics</p>',
+        yandexMetrikaId: '12345678',
+        googleAnalyticsId: 'G-AB12CD34EF',
+        themePreset: 'classic',
+        showLineLabels: false,
+        showLinePopups: true,
+        publicDownloadName: 'analytics-test',
+        updatedAt: '2026-09-08T00:00:00.000Z',
+      };
+    },
+    async save(payload) { return payload; },
+  };
+
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/`);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    const csp = response.headers.get('content-security-policy') ?? '';
+
+    assert.match(html, /name="yandex-metrika-id" content="12345678"/);
+    assert.match(html, /name="google-analytics-id" content="G-AB12CD34EF"/);
+    assert.match(html, /<script src="\/js\/metrics\.js"><\/script>/);
+    assert.ok(html.indexOf('/js/metrics.js') < html.indexOf('</head>'));
+    assert.ok(html.indexOf('/js/metrics.js') < html.indexOf('/js/app.js'));
+
+    assert.match(csp, /script-src[^;]*https:\/\/mc\.yandex\.ru/);
+    assert.match(csp, /script-src[^;]*https:\/\/mc\.yandex\.com/);
+    assert.match(csp, /script-src[^;]*https:\/\/mc\.webvisor\.org/);
+    assert.match(csp, /script-src[^;]*https:\/\/yastatic\.net/);
+    assert.match(csp, /script-src[^;]*https:\/\/\*\.googletagmanager\.com/);
+    assert.match(csp, /connect-src[^;]*wss:\/\/mc\.webvisor\.org/);
+    assert.match(csp, /connect-src[^;]*https:\/\/\*\.google-analytics\.com/);
+    assert.match(csp, /connect-src[^;]*https:\/\/\*\.analytics\.google\.com/);
+    assert.match(csp, /frame-src[^;]*https:\/\/mc\.webvisor\.com/);
+    assert.match(csp, /frame-ancestors[^;]*metrika\.yandex\.ru/);
+    assert.match(csp, /frame-ancestors[^;]*analytics\.yandex\.com/);
+  }, { projectSettingsRepository });
 });
 
 test('geometry endpoint validates IDs and returns a FeatureCollection', async () => {

@@ -140,6 +140,10 @@ test('public page derives metadata, theme stylesheet, analytics and download lin
   assert.match(app, /projectManifest\(settings\)/);
   assert.match(app, /renderProjectPage\(publicPageTemplate, settings\)/);
   assert.match(app, /https:\/\/mc\.yandex\.ru/);
+  assert.match(app, /https:\/\/mc\.yandex\.com/);
+  assert.match(app, /wss:\/\/mc\.webvisor\.org/);
+  assert.match(app, /YANDEX_METRIKA_FRAME_ANCESTORS/);
+  assert.match(app, /frameAncestors/);
   assert.match(app, /https:\/\/\*\.googletagmanager\.com/);
   assert.match(page, /publicDownloadFiles\(settings\.publicDownloadName\)/);
   assert.match(page, /replaceAll\('\{\{PUBLIC_GEOJSON_URL\}\}', files\.geoJsonUrl\)/);
@@ -148,6 +152,12 @@ test('public page derives metadata, theme stylesheet, analytics and download lin
   assert.match(metrics, /https:\/\/www\.googletagmanager\.com\/gtag\/js/);
   assert.match(metrics, /metaContent\('yandex-metrika-id'\)/);
   assert.match(metrics, /metaContent\('google-analytics-id'\)/);
+  assert.match(metrics, /webvisor: true/);
+  assert.match(metrics, /triggerEvent: true/);
+  assert.match(metrics, /window\.dtpstatMetrics = metricsState/);
+  assert.match(metrics, /dtpstat:metrics-status/);
+  assert.match(metrics, /script\.addEventListener\('error'/);
+  assert.ok(html.indexOf('{{PROJECT_METRICS_SCRIPT}}') < html.indexOf('</head>'));
   assert.match(contentCss, /\.project-callout/);
   assert.match(contentCss, /\.project-columns/);
   assert.match(contentCss, /\.project-link-button/);
