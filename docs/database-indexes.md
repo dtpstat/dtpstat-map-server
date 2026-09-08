@@ -1,22 +1,23 @@
 # Аудит индексов PostgreSQL / PostGIS
 
-Индексы проектируются под фактические SQL access paths, а не по правилу «индексировать каждую колонку». Лишний индекс увеличивает размер БД и стоимость `INSERT/UPDATE/DELETE`, VACUUM и массового импорта.
+Индексы соответствуют текущим SQL access paths. Неиспользуемый index увеличивает storage и стоимость `INSERT/UPDATE/DELETE`, VACUUM и bulk import.
 
-Основной application-data audit зафиксирован `V015__index_audit.sql`. Security indexes добавлены `V016…V018`. `V019…V021` расширяют singleton `PROJECT_SETTINGS` и новых indexes не требуют.
+Основной audit application tables зафиксирован `V015__index_audit.sql`. Security indexes добавлены `V016…V018`. `V019…V026` в основном расширяют singleton/configuration и OSM/report semantics; новых универсальных indexes для них не требуется.
 
 ## CITIES
 
-Основные indexes/constraints:
+Основные constraints/indexes:
 
-- `PRIMARY KEY (ID)`;
-- unique `SOURCE_INDEX`;
-- unique `SLUG`;
-- unique `NAME`;
-- исторический ranking index.
+```text
+PRIMARY KEY (ID)
+UNIQUE SOURCE_INDEX
+UNIQUE SLUG
+UNIQUE NAME
+```
 
-Runtime lookup идёт по ID/slug/name и joins. Отдельный index только по `IS_LARGE` не нужен из-за низкой cardinality.
+Public ranking читается из `CITY_REPORT_VALUES.RANK`; исторический city-ranking index больше не является основным report access path.
 
-Новый ranking читает `CITY_REPORT_VALUES.RANK`; старый city ranking index не является основным access path materialized report.
+Отдельный index по low-cardinality `IS_LARGE` не нужен.
 
 ## CITY_POPULATIONS
 
@@ -24,16 +25,19 @@ Runtime lookup идёт по ID/slug/name и joins. Отдельный index т�
 PRIMARY KEY (CITY_ID)
 ```
 
-PK уже является B-tree для join с `CITIES.ID`. По `POPULATION`, `AS_OF`, `SOURCE` runtime filters сейчас не выполняются.
+PK покрывает join с `CITIES.ID`. Runtime не фильтрует список по `POPULATION/AS_OF/SOURCE`, поэтому дополнительные B-tree indexes не нужны.
 
 ## CITY_BOUNDARIES
 
-Реляционные:
+Relational identity/provenance:
 
-- `PRIMARY KEY (ID)`;
-- unique `(OSM_TYPE, OSM_ID)`;
-- partial unique `(CITY_ID) WHERE CITY_ID IS NOT NULL`;
-- indexes по `OSM_NAME` и `PLACE_TYPE`.
+```text
+PRIMARY KEY (ID)
+UNIQUE (OSM_TYPE, OSM_ID)
+partial UNIQUE (CITY_ID) WHERE CITY_ID IS NOT NULL
+```
+
+Также используются indexes по OSM name/place type из базовой schema.
 
 Spatial:
 
@@ -42,9 +46,19 @@ GiST (GEOM)
 GiST (BOUNDS)
 ```
 
-`GEOM` обслуживает `&&`, `ST_Intersects`, `ST_Covers` и spatial matching. `BOUNDS` используется для extent/export.
+`GEOM` обслуживает `&&`, `ST_Intersects`, `ST_Covers` и spatial matching. `BOUNDS` — extent/export.
 
-Отдельный B-tree только по `OSM_ID` не нужен: natural identity — `(OSM_TYPE, OSM_ID)`.
+### V023 и FULL_NAME
+
+`V023` добавил generated `CITY_BOUNDARIES.FULL_NAME` и объединение `relation` fragments по:
+
+```text
+PLACE_TYPE + FULL_NAME
+```
+
+`FULL_NAME` пока не является frequent runtime lookup predicate после materialization, поэтому отдельный permanent B-tree не добавлен.
+
+`(OSM_TYPE, OSM_ID)` сохраняется как source provenance и для portable transfer/link restoration. Это не означает, что один OSM object равен одному логическому городу после V023.
 
 ## CITY_GEOMETRIES
 
@@ -54,14 +68,14 @@ Spatial:
 GiST (GEOM)
 ```
 
-Основной viewport predicate:
+Viewport path:
 
 ```text
 GEOM && padded_bbox
 AND ST_Intersects(GEOM, padded_bbox)
 ```
 
-Реляционные access paths после `V015`:
+Relational:
 
 ```text
 (CITY_ID, LINE_TYPE_ID)
@@ -69,15 +83,11 @@ BOUNDARY_ID
 LINE_TYPE_ID
 ```
 
-Старый отдельный `(CITY_ID)` удалён как избыточный: левый prefix `(CITY_ID, LINE_TYPE_ID)` обслуживает city-only lookup, а второй столбец нужен grouping/report queries.
+Отдельный `(CITY_ID)` не нужен: он является left prefix составного index. Отдельный `(LINE_TYPE_ID)` нужен для type-only access.
 
-Отдельный `(LINE_TYPE_ID)` остаётся, потому что составной index с `CITY_ID` первым не помогает lookup только по type.
-
-`PROPERTIES JSONB`, включая `placemarkName`, сейчас не требует GIN: properties возвращаются вместе с geometry, уже найденной spatial index. При появлении SQL search по JSONB index нужно проектировать под конкретный predicate.
+`PROPERTIES JSONB`, включая `placemarkName`, не индексируется: сейчас JSONB не используется как search predicate.
 
 ## LINE_TYPES
-
-Indexes:
 
 ```text
 PRIMARY KEY (ID)
@@ -85,13 +95,7 @@ UNIQUE (CODE)
 UNIQUE LOWER(BTRIM(NAME))
 ```
 
-Expression unique index совпадает с import/settings-transfer matching:
-
-```text
-LOWER(BTRIM(target.name)) = LOWER(BTRIM(source.name))
-```
-
-Обычный duplicate index по NAME не требуется.
+Expression unique index соответствует transfer/import matching по normalized NAME.
 
 ## PROJECT_SETTINGS
 
@@ -102,13 +106,9 @@ PRIMARY KEY (ID)
 CHECK (ID = 1)
 ```
 
-После `V019…V021` здесь также находятся:
+Здесь находятся project metadata, analytics, theme, line labels/popups, Mapbox token, city marker и `PUBLIC_DOWNLOAD_NAME`.
 
-- Mapbox token/bootstrap marker;
-- custom city marker binary/metadata;
-- public theme preset.
-
-Все эти поля читаются из одной строки `ID=1`; дополнительные indexes бессмысленны.
+Все поля читаются по `ID=1`; дополнительные indexes бессмысленны.
 
 ## REPORT_CONFIG
 
@@ -119,7 +119,18 @@ PRIMARY KEY (ID)
 CHECK (ID = 1)
 ```
 
-`METRICS`, `TABLE_COLUMNS`, `CSV_COLUMNS` — JSONB configuration, но runtime не ищет строки по содержимому этих JSONB. GIN не нужен.
+JSONB fields:
+
+```text
+METRICS
+TABLE_COLUMNS
+CSV_COLUMNS
+RANK_SORT
+```
+
+Runtime не ищет rows по содержимому этих JSONB, поэтому GIN не нужен.
+
+`RANK_SORT` из `V024` читается из singleton row и используется только при materialization.
 
 ## CITY_REPORT_VALUES
 
@@ -128,17 +139,11 @@ PRIMARY KEY (CITY_ID)
 CITY_REPORT_VALUES_RANK_IDX (RANK)
 ```
 
-PK обслуживает materialization update/join. Rank index — публичную выдачу рейтинга.
+PK — update/join при materialization. `RANK` — public ranking.
 
-`VALUES JSONB` возвращается целиком для города и не используется в `@>`/JSON-path filters, поэтому GIN сейчас не нужен.
-
-# Administrative security
+`VALUES JSONB` возвращается целиком и не участвует в `@>`/JSON-path predicates, поэтому GIN пока не нужен.
 
 ## ADMIN_USERS
-
-Создана `V016`, bootstrap marker/index — `V017`, новые role/profile fields — `V018`.
-
-Indexes:
 
 ```text
 PRIMARY KEY (ID)
@@ -146,15 +151,11 @@ UNIQUE LOWER(BTRIM(USERNAME))
 UNIQUE ((1)) WHERE IS_BOOTSTRAP
 ```
 
-Username expression index точно соответствует login lookup.
+Username expression index совпадает с login lookup. Bootstrap partial unique index обеспечивает DB invariant: максимум один bootstrap user.
 
-Bootstrap partial unique index — прежде всего DB invariant: максимум одна `IS_BOOTSTRAP=true` row.
-
-Отдельные indexes по role booleans, `IS_BLOCKED`, `MUST_CHANGE_PASSWORD` и account `LOCKED_UNTIL` сейчас не нужны: users ищутся по ID/username либо загружаются небольшим списком.
+Booleans roles/block state отдельно не индексируются из-за малого набора users и текущих access paths.
 
 ## ADMIN_SESSIONS
-
-`V018`:
 
 ```text
 PRIMARY KEY (ID)
@@ -163,37 +164,24 @@ UNIQUE (TOKEN_HASH)
 (EXPIRES_AT)
 ```
 
-Назначение:
+- token hash — authentication;
+- user/time — list/revoke sessions;
+- expiry — cleanup.
 
-- unique token hash — session authentication;
-- `(USER_ID, CREATED_AT DESC)` — список/revoke user sessions;
-- `EXPIRES_AT` — cleanup/expiry access path.
-
-Plaintext session token в БД отсутствует.
+Plaintext session token в DB не хранится.
 
 ## ADMIN_SECURITY_SETTINGS
 
-Singleton:
-
-```text
-PRIMARY KEY (ID)
-CHECK (ID = 1)
-```
-
-Account/IP thresholds, session timeouts и audit retention — fields одной строки, indexes не нужны.
+Singleton `ID=1`; indexes кроме PK не нужны.
 
 ## ADMIN_LOGIN_IP_STATE
 
 ```text
 PRIMARY KEY (IP_ADDRESS)
-partial index (LOCKED_UNTIL) WHERE LOCKED_UNTIL IS NOT NULL
+partial (LOCKED_UNTIL) WHERE LOCKED_UNTIL IS NOT NULL
 ```
 
-PK обслуживает login lookup/update по IP. Partial lock index позволяет работать только с реально locked rows без индексации постоянных NULL.
-
 ## ADMIN_BLOCKED_IPS
-
-`V018` создаёт:
 
 ```text
 PRIMARY KEY (ID)
@@ -201,20 +189,13 @@ PRIMARY KEY (ID)
 partial (EXPIRES_AT) WHERE EXPIRES_AT IS NOT NULL
 ```
 
-Первый B-tree обслуживает поиск manual block по IP и выбор последней записи. Partial expiration index предназначен для expiration/cleanup path.
-
 ## ADMIN_AUDIT_LOG
 
-`V016` создала базовые:
+Основные indexes:
 
 ```text
 (CREATED_AT DESC, ID DESC)
 (USER_ID, CREATED_AT DESC)
-```
-
-`V018` добавила server-side filter indexes:
-
-```text
 (EVENT_TYPE, CREATED_AT DESC, ID DESC)
 (OPERATION_TYPE, CREATED_AT DESC, ID DESC)
 (STATUS, CREATED_AT DESC, ID DESC)
@@ -222,9 +203,7 @@ partial (EXPIRES_AT) WHERE EXPIRES_AT IS NOT NULL
 (IP_ADDRESS, CREATED_AT DESC, ID DESC)
 ```
 
-Это соответствует UI/filter API, где audit можно фильтровать по event type, operation type, status, username и IP при сохранении сортировки newest-first.
-
-Таким образом старое утверждение «эти поля не используются как server-side filters» больше не актуально.
+Они соответствуют реальным server-side filters audit UI.
 
 ## ADMIN_TASK_SUCCESSES
 
@@ -232,61 +211,47 @@ partial (EXPIRES_AT) WHERE EXPIRES_AT IS NOT NULL
 PRIMARY KEY (TASK_TYPE)
 ```
 
-Таблица содержит небольшое число task types и читается/обновляется по `TASK_TYPE`. Index по `COMPLETED_AT` не нужен.
+Набор task types небольшой; index по completion time не нужен.
 
-Runtime repository обращается к таблице через `search_path`; hardcoded `buslanes.admin_task_successes` недопустим для cloned deployments.
+## Operational journals
 
-# Update/audit tables
+`GEOMETRY_UPDATE_RUNS` / `OSM_CITY_UPDATE_RUNS` — append-only journals. Дополнительные indexes добавляются только при появлении тяжёлого runtime filtering.
 
-## GEOMETRY_UPDATE_RUNS / OSM_CITY_UPDATE_RUNS
+## Temporary staging
 
-Это append-only operational journals. Пока runtime не имеет тяжёлого пользовательского filtering по timestamp/checksum, дополнительные indexes не добавляются заранее.
+KML/city/settings imports используют temporary staging. Для spatial KML matching создаётся temporary GiST и выполняется `ANALYZE`.
 
-`ADMIN_AUDIT_LOG` отличается тем, что имеет реальный UI filters и поэтому индексируется шире.
+Temporary indexes не должны превращаться в permanent schema objects без реального runtime access path.
 
-# Temporary staging
-
-KML matching создаёт временную spatial staging table и в рамках transaction строит временный GiST + `ANALYZE`.
-
-City import и project-settings import также используют temporary staging structures.
-
-Indexes этих temp tables не должны становиться постоянными schema objects.
-
-# Spatial vs relational indexes
-
-Для line viewport ключевой index — GiST geometry. B-tree indexes по city/type не заменяют spatial lookup.
-
-Для report/materialization, наоборот, важны relational joins `(CITY_ID, LINE_TYPE_ID)`; GiST не заменяет их.
-
-Такое разделение позволяет не пытаться обслужить все workload одним типом index.
-
-# Миграции, влияющие на текущий audit
+## Миграции, важные для текущего audit
 
 ```text
 V015__index_audit.sql
 V016__admin_security_and_line_labels.sql
 V017__protect_bootstrap_admin.sql
 V018__admin_sessions_roles_profile_and_ip_security.sql
+V023__merge_osm_relation_city_parts.sql
+V024__multi_column_report_ranking.sql
+V025__public_download_name.sql
+V026__dynamic_public_download_links.sql
 ```
 
-`V019__mapbox_project_setting.sql`, `V020__city_marker_icon.sql` и `V021__public_theme_preset.sql` добавляют singleton fields и дополнительных indexes не создают.
+`V019…V022` и `V025…V026` добавляют/меняют singleton/configuration fields и не требуют новых indexes.
 
-Следующее изменение schema/index set должно оформляться новой migration `V022+`, а не изменением уже применённых SQL files.
+Следующее schema/index изменение должно оформляться migration **V027+**.
 
-# Итог
-
-Главные текущие решения:
+## Итог
 
 ```text
-CITY_BOUNDARIES           GiST GEOM/BOUNDS + OSM natural identity
-CITY_GEOMETRIES           GiST GEOM + (CITY_ID, LINE_TYPE_ID)
-LINE_TYPES                unique normalized NAME
-CITY_REPORT_VALUES        PK CITY_ID + RANK
-ADMIN_USERS               normalized username + bootstrap invariant
-ADMIN_SESSIONS            token hash + user/expiry indexes
-ADMIN_LOGIN_IP_STATE      PK IP + partial lock expiry
-ADMIN_BLOCKED_IPS         IP history + partial expiration
-ADMIN_AUDIT_LOG           newest-first + filter-specific composite indexes
+CITY_BOUNDARIES      GiST GEOM/BOUNDS + OSM provenance identity
+CITY_GEOMETRIES      GiST GEOM + (CITY_ID, LINE_TYPE_ID)
+LINE_TYPES           normalized unique NAME
+CITY_REPORT_VALUES   PK CITY_ID + RANK
+ADMIN_USERS          normalized USERNAME + bootstrap invariant
+ADMIN_SESSIONS       TOKEN_HASH + user/expiry
+ADMIN_LOGIN_IP_STATE PK IP + partial lock expiry
+ADMIN_BLOCKED_IPS    IP history + partial expiration
+ADMIN_AUDIT_LOG      newest-first + filter-specific indexes
 ```
 
-Остальные fields либо singleton/low-cardinality, либо не участвуют в текущих SQL predicates, поэтому дополнительные indexes без конкретного access path не создаются.
+Остальные поля либо singleton/low-cardinality, либо не являются текущими predicates. Индексы «на всякий случай» не добавляются.
