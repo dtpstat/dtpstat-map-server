@@ -1,5 +1,3 @@
-import './public-download-name-editor.js';
-
 function applyAdminBranding(projectName) {
   const name = typeof projectName === 'string' ? projectName.trim() : '';
   if (!name) return false;
