@@ -57,7 +57,7 @@ function parseAuditFilters(query, { limitDefault = 200, limitMax = 500 } = {}) {
 }
 
 function csvCell(value) {
-  const text = value == null ? '' : String(value);
+  const text = (value === null || value === undefined) ? '' : String(value);
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 

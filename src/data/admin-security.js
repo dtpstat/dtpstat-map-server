@@ -664,7 +664,9 @@ export function createAdminSecurityService(repository) {
       expiresAt: durationSeconds ? new Date(Date.now() + durationSeconds * 1000).toISOString() : null,
       blockedBy: actor?.id ?? null,
       reason: normalizeReason(payload.reason),
-      sourceAuditId: payload.sourceAuditId == null ? null : integerField(payload.sourceAuditId, 'sourceAuditId', 1, Number.MAX_SAFE_INTEGER),
+      sourceAuditId: (payload.sourceAuditId === null || payload.sourceAuditId === undefined)
+        ? null
+        : integerField(payload.sourceAuditId, 'sourceAuditId', 1, Number.MAX_SAFE_INTEGER),
     });
   }
 

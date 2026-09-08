@@ -143,9 +143,9 @@ test('transfer exports require auth and expose portable download files', async (
     assert.equal(unauthorized.status, 401);
 
     const expectations = [
-      ['/api/admin/export/cities', 'dtpstat-buslines-cities.geojson', citySnapshot],
-      ['/api/admin/export/lines', 'dtpstat-buslines-lines.geojson', lineSnapshot],
-      ['/api/admin/export/populations', 'dtpstat-buslines-populations.json', populationSnapshot],
+      ['/api/admin/export/cities', 'cities.geojson', citySnapshot],
+      ['/api/admin/export/lines', 'lines.geojson', lineSnapshot],
+      ['/api/admin/export/populations', 'populations.json', populationSnapshot],
     ];
     for (const [endpoint, fileName, expected] of expectations) {
       const response = await fetch(`${baseUrl}${endpoint}`, {

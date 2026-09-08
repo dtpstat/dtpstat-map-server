@@ -110,11 +110,11 @@ test('versioned data import applies dictionary by imported NAME before inserting
   const result = await service.replaceFromGeoJson(versionedUpload);
 
   assert.deepEqual(result.lineTypes, ['Трамвай']);
-  assert.ok(pool.queries.some((query) => query.startsWith('UPDATE line_types AS line_type')));
+  assert.ok(pool.queries.some((query) => query.includes('UPDATE line_types AS line_type')));
   assert.ok(pool.queries.some((query) => query.includes('INSERT INTO line_types (name, title')));
   const geometryDelete = pool.queries.indexOf('DELETE FROM city_geometries');
   const typeDelete = pool.queries.findIndex((query) =>
-    query.startsWith('WITH payload AS') && query.includes('DELETE FROM line_types AS line_type'));
+    query.includes('WITH payload AS') && query.includes('DELETE FROM line_types AS line_type'));
   const typeUpdate = pool.queries.findIndex((query) => query.includes('UPDATE line_types AS line_type'));
   const geometryInsert = pool.queries.findIndex((query) => query.includes('INSERT INTO city_geometries'));
   assert.ok(geometryDelete >= 0);

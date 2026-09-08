@@ -8,12 +8,12 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const source = (file) => fs.readFile(path.join(projectRoot, file), 'utf8');
 
 test('admin exposes portable KML import/export and distinguishes business type from geometry type', async () => {
-  const [loader, editor] = await Promise.all([
-    source('admin/task-notices.js'),
+  const [shell, editor] = await Promise.all([
+    source('admin/admin-shell.js'),
     source('admin/kml-transfer-editor.js'),
   ]);
 
-  assert.match(loader, /import '\.\/kml-transfer-editor\.js'/);
+  assert.match(shell, /await import\('\.\/kml-transfer-editor\.js'\)/);
   assert.match(editor, /\/api\/admin\/export\/lines\.kml/);
   assert.match(editor, /\/api\/admin\/import\/lines\.kml/);
   assert.match(editor, /businessTypeCode/);

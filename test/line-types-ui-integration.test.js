@@ -35,7 +35,7 @@ test('line type migrations keep FK storage and migrate to numeric CODE + NAME + 
   assert.match(numericSql, /Human-readable legend title/i);
 });
 
-test('admin groups data by entity and exposes operation-level tabs', async () => {
+test('admin groups data by entity and exposes current operation-level tabs', async () => {
   const [html, admin, css] = await Promise.all([
     source('admin/index.html'),
     source('admin/admin.js'),
@@ -50,12 +50,12 @@ test('admin groups data by entity and exposes operation-level tabs', async () =>
     'osm-geojson',
     'kml-external',
     'kml-geojson',
-    'kml-types',
     'population-json',
   ]) {
     assert.match(html, new RegExp(`data-operation-tab="${operation}"`));
     assert.match(html, new RegExp(`data-operation-panel="${operation}"`));
   }
+  assert.doesNotMatch(html, /data-operation-tab="kml-types"/);
   assert.match(admin, /'osm-city-update': 'osm-update'/);
   assert.match(admin, /'city-geojson-import': 'osm-geojson'/);
   assert.match(admin, /'kml-update': 'kml-external'/);
@@ -103,15 +103,16 @@ test('successful-update timestamps stay inside their operation blocks', async ()
 });
 
 test('admin line type editor keeps CODE and NAME read-only and edits TITLE/style only', async () => {
-  const [html, editor] = await Promise.all([
+  const [html, shell, editor] = await Promise.all([
     source('admin/index.html'),
+    source('admin/admin-shell.js'),
     source('admin/line-types-editor.js'),
   ]);
 
-  assert.match(html, /src="\/admin\/line-types-editor\.js"/);
+  assert.match(shell, /await import\('\.\/line-types-editor\.js'\)/);
+  assert.doesNotMatch(html, /src="\/admin\/line-types-editor\.js"/);
   assert.match(html, /href="\/admin\/line-types\.css"/);
   assert.match(html, /id="line-types-editor-host"/);
-  assert.match(html, /data-example="kml-sources"/);
   assert.match(editor, /CODE генерируется базой автоматически/);
   assert.match(editor, /NAME приходит из импорта/);
   assert.match(editor, /TITLE — редактируемая подпись легенды/);
@@ -120,7 +121,8 @@ test('admin line type editor keeps CODE and NAME read-only and edits TITLE/style
   assert.match(editor, /titleInput\.name = 'title'/);
   assert.match(editor, /code: Number\(/);
   assert.doesNotMatch(editor, /Добавить тип/);
-  assert.match(editor, /data-operation-tab="kml-types"/);
+  assert.doesNotMatch(editor, /data-operation-tab="kml-types"/);
+  assert.match(editor, /window\.addEventListener\('dtpstat:line-types-changed'/);
   assert.match(editor, /void load\(\{ changed: true \}\)/);
   assert.match(editor, /colorInput\.type = 'color'/);
   assert.match(editor, /\['solid', 'Сплошная'\]/);

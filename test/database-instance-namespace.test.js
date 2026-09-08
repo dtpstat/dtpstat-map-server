@@ -26,7 +26,6 @@ test('runtime database namespace is not tied to the repository name', async () =
     'src/db/kml-update-service.js',
     'src/db/osm-city-update-service.js',
     'scripts/database.js',
-    'scripts/import-data.js',
     'scripts/migrate.js',
     'scripts/init-database.js',
   ].map(source));

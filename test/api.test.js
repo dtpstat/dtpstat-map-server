@@ -329,19 +329,19 @@ test('root serves the optimized client without embedded GeoJSON', async () => {
   });
 });
 
-test('admin web panel is protected by the same Basic Auth', async () => {
+test('admin entry requires auth while static admin assets remain public', async () => {
   const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
   await withServer(async (baseUrl) => {
     const unauthorized = await fetch(`${baseUrl}/admin/`);
     assert.equal(unauthorized.status, 401);
-    const unauthorizedScript = await fetch(`${baseUrl}/admin/admin.js`);
-    assert.equal(unauthorizedScript.status, 401);
+    const publicScript = await fetch(`${baseUrl}/admin/admin.js`);
+    assert.equal(publicScript.status, 200);
     const authorized = await fetch(`${baseUrl}/admin/`, {
       headers: { Authorization: authorization },
     });
     assert.equal(authorized.status, 200);
     const html = await authorized.text();
-    assert.match(html, /Администрирование данных/);
+    assert.match(html, /Администрирование/);
     assert.match(html, /role="tablist"/);
     assert.equal((html.match(/data-task-tab=/g) ?? []).length, 3);
     assert.equal((html.match(/data-task-action=/g) ?? []).length, 5);

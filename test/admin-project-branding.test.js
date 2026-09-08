@@ -7,12 +7,12 @@ import { applyAdminBranding } from '../admin/project-branding.js';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-test('admin loads project branding module', async () => {
+test('admin loads project branding module explicitly from the page shell', async () => {
   const source = await fs.readFile(
-    path.join(projectRoot, 'admin/task-notices.js'),
+    path.join(projectRoot, 'admin/index.html'),
     'utf8',
   );
-  assert.match(source, /import '\.\/project-branding\.js'/);
+  assert.match(source, /src="\/admin\/project-branding\.js"/);
 });
 
 test('project name is applied to admin heading and browser title', () => {

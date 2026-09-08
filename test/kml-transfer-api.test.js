@@ -33,6 +33,15 @@ const snapshot = {
   ],
 };
 
+function requireData(request, response, next) {
+  if (request.get('authorization') !== authorization) {
+    response.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  request.adminUser = { id: 1, username: 'importer', canManageData: true };
+  next();
+}
+
 async function withServer(callback) {
   let importedCollection = null;
   let taskDefinition = null;
@@ -66,11 +75,9 @@ async function withServer(callback) {
       },
     },
     adminTasks,
-    importApi: {
-      username: 'importer',
-      password: 'test-secret',
-      maxBodyBytes: 1024 * 1024,
-    },
+    adminAuth: { requireData },
+    securityService: { async appendAudit() {} },
+    maxBodyBytes: 1024 * 1024,
   }));
   app.use((error, _request, response, _next) => {
     response.status(503).json({ error: error.message });
@@ -102,6 +109,7 @@ test('portable KML export requires auth and carries numeric code/name/title dict
     });
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type'), /vnd\.google-earth\.kml\+xml/);
+    assert.match(response.headers.get('content-disposition') ?? '', /filename="lines\.kml"/);
     const xml = await response.text();
     assert.match(xml, /dtpstat\.businessLineTypes/);
     const parsed = parseLinesKml(xml);

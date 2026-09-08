@@ -27,6 +27,6 @@ test('runtime metadata and admin download names are project-neutral', async () =
   assert.match(api, /'lines\.geojson'/);
   assert.match(api, /'populations\.json'/);
   assert.doesNotMatch(kmlApi, /dtpstat-buslines-lines\.kml/);
-  assert.match(kmlApi, /filename=\\"lines\.kml\\"/);
+  assert.match(kmlApi, /filename="lines\.kml"/);
   assert.doesNotMatch(compose, /buslines-postgres/);
 });

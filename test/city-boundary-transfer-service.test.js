@@ -154,6 +154,6 @@ test('city transfer dryRun performs a full validation and rolls back', async () 
 
   assert.equal(result.dryRun, true);
   assert.equal(pool.queries.at(-1), 'ROLLBACK');
-  assert.doesNotMatch(pool.queries.join('\n'), /COMMIT/);
+  assert.equal(pool.queries.includes('COMMIT'), false);
   assert.equal(pool.released, true);
 });

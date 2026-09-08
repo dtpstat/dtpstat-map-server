@@ -203,7 +203,7 @@ test('retro table hides the low-zoom hint and uses zebra striping', async () => 
   ]);
 
   assert.doesNotMatch(publicApp, /Выберите город или увеличьте карту для показа линий/);
-  assert.match(publicApp, /cityList\.setStatus\(''\)/);
+  assert.match(publicApp, /setCityStatus\(''\)/);
   assert.match(cityList, /elements\.status\.hidden = !message/);
   assert.match(retroCss, /tbody tr:nth-child\(odd\)/);
   assert.match(retroCss, /tbody tr:nth-child\(even\)/);

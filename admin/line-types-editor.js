@@ -20,7 +20,6 @@ if (typeof document !== 'undefined') {
     const table = host.querySelector('#line-types-table');
     const form = host.querySelector('#line-types-form');
     const message = host.querySelector('#line-types-message');
-    const tab = document.querySelector('[data-operation-tab="kml-types"]');
 
     function setMessage(text, tone = '') {
       message.textContent = text;
@@ -153,9 +152,6 @@ if (typeof document !== 'undefined') {
       }
     });
 
-    tab?.addEventListener('click', () => {
-      void load({ changed: true });
-    });
     window.addEventListener('dtpstat:line-types-changed', () => {
       void load({ changed: true });
     });

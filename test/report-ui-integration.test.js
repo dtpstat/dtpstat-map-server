@@ -8,8 +8,8 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const source = (relativePath) => fs.readFile(path.join(projectRoot, relativePath), 'utf8');
 
 test('admin report builder is catalog-driven, four-tabbed and has no free-form expression editor', async () => {
-  const [notices, editor, rangeUi, css, migration, reportConfig] = await Promise.all([
-    source('admin/task-notices.js'),
+  const [shell, editor, rangeUi, css, migration, reportConfig] = await Promise.all([
+    source('admin/admin-shell.js'),
     source('admin/report-config-editor.js'),
     source('admin/report-range-ui.js'),
     source('admin/report-config.css'),
@@ -17,8 +17,8 @@ test('admin report builder is catalog-driven, four-tabbed and has no free-form e
     source('src/data/report-config.js'),
   ]);
 
-  assert.match(notices, /report-config-editor\.js/);
-  assert.match(notices, /report-range-ui\.js/);
+  assert.match(shell, /await import\('\.\/report-config-editor\.js'\)/);
+  assert.match(shell, /await import\('\.\/report-range-ui\.js'\)/);
   assert.match(editor, /dataset\.taskTab = 'report'/);
   assert.match(editor, /\/api\/admin\/report-config/);
   assert.match(editor, /data-report-view-tab="metrics"/);

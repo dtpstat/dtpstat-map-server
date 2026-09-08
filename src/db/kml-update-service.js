@@ -358,7 +358,7 @@ function previewLineTypes(names) {
 
 /** @param {any[]} rows */
 function publicLineTypes(rows) {
-  return rows.map(({ requestedName, ...lineType }) => lineType);
+  return rows.map(({ requestedName: _requestedName, ...lineType }) => lineType);
 }
 
 /**

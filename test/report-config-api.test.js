@@ -9,6 +9,23 @@ import {
 import { createReportConfigRouter } from '../src/routes/report-config-api.js';
 
 const authorization = `Basic ${Buffer.from('admin:test-secret').toString('base64')}`;
+const adminUser = {
+  id: 1,
+  username: 'admin',
+  isSuperuser: true,
+  canManageInterface: true,
+};
+const adminAuth = {
+  requireInterface(request, response, next) {
+    if (request.get('authorization') !== authorization) {
+      response.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    request.adminUser = adminUser;
+    next();
+  },
+};
+const securityService = { async appendAudit() {} };
 
 async function withServer(callback, options = {}) {
   let config = structuredClone(DEFAULT_REPORT_CONFIG);
@@ -36,7 +53,6 @@ async function withServer(callback, options = {}) {
       };
     },
   };
-  const adminTasks = options.adminTasks ?? { active: () => null };
   const app = express();
   app.use('/api', createReportConfigRouter({
     reportConfigService,
@@ -48,12 +64,9 @@ async function withServer(callback, options = {}) {
         ];
       },
     },
-    adminTasks,
-    importApi: {
-      username: 'admin',
-      password: 'test-secret',
-      maxBodyBytes: 1024 * 1024,
-    },
+    adminAuth,
+    securityService,
+    maxBodyBytes: 1024 * 1024,
     afterSave: async () => {
       afterSaveCalls += 1;
       return { csvBytes: 123, cityCount: 12 };
@@ -184,26 +197,5 @@ test('saving report rejects arbitrary technical field names', async () => {
     assert.equal(response.status, 400);
     assert.match((await response.json()).error, /not allowed/);
     assert.equal(state.afterSaveCalls(), 0);
-  });
-});
-
-test('saving report is blocked while another admin task is active', async () => {
-  await withServer(async (baseUrl, state) => {
-    const response = await fetch(`${baseUrl}/api/admin/report-config`, {
-      method: 'PUT',
-      headers: {
-        Authorization: authorization,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(DEFAULT_REPORT_CONFIG),
-    });
-    assert.equal(response.status, 409);
-    const payload = await response.json();
-    assert.equal(payload.taskId, 'active-task');
-    assert.equal(state.afterSaveCalls(), 0);
-  }, {
-    adminTasks: {
-      active: () => ({ id: 'active-task', type: 'kml-update', status: 'running' }),
-    },
   });
 });

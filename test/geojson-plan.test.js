@@ -1,26 +1,22 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
 import {
   buildGeoJsonPlan,
   GeoJsonValidationError,
 } from '../src/data/geojson-plan.js';
 
-const projectRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-);
-
-test('legacy repository GeoJSON derives cities, multipliers, and default imported type name', async () => {
-  const source = JSON.parse(
-    await fs.readFile(path.join(projectRoot, 'bus-lanes.geojson'), 'utf8'),
-  );
+test('legacy line GeoJSON derives cities, multipliers, and default imported type name', () => {
+  const source = {
+    type: 'FeatureCollection',
+    features: [
+      feature('Альфа', 1, [30, 60], [30.1, 60.1]),
+      feature('Бета', 2, [31, 61], [31.1, 61.1]),
+    ],
+  };
   const plan = buildGeoJsonPlan(source);
-  assert.equal(plan.cities.length, 71);
-  assert.equal(plan.geometries.length, 872);
-  assert.equal(plan.ignoredFeatures.length, 10);
+  assert.equal(plan.cities.length, 2);
+  assert.equal(plan.geometries.length, 2);
+  assert.equal(plan.ignoredFeatures.length, 0);
   assert.equal(plan.lineTypes.length, 0);
   assert.deepEqual(
     [...new Set(plan.geometries.map((geometry) => geometry.lanes))].sort(),

@@ -50,13 +50,15 @@ test('admin population hint shows and validates the complete item structure', ()
   assert.equal(typeof plan.populations[1].attributes, 'object');
 });
 
-test('admin loads schema-backed examples and explains NAME/CODE/TITLE ownership', async () => {
-  const [html, examples] = await Promise.all([
+test('admin loads schema-backed examples explicitly and explains NAME/CODE/TITLE ownership', async () => {
+  const [html, shell, examples] = await Promise.all([
     fs.readFile(path.join(projectRoot, 'admin/index.html'), 'utf8'),
+    fs.readFile(path.join(projectRoot, 'admin/admin-shell.js'), 'utf8'),
     fs.readFile(path.join(projectRoot, 'admin/json-examples.js'), 'utf8'),
   ]);
 
-  assert.match(html, /src="\/admin\/json-examples\.js"/);
+  assert.match(shell, /await import\('\.\/json-examples\.js'\)/);
+  assert.doesNotMatch(html, /src="\/admin\/json-examples\.js"/);
   assert.doesNotMatch(html, /"populations":\[…\]/);
   assert.match(examples, /multiple \(1 или 2\)/);
   assert.match(examples, /type — NAME бизнес-типа из источника/);

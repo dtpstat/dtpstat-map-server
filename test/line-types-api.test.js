@@ -18,6 +18,15 @@ const lineTypes = [
   },
 ];
 
+function requireInterface(request, response, next) {
+  if (request.get('authorization') !== authorization) {
+    response.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  request.adminUser = { id: 1, username: 'importer', canManageInterface: true };
+  next();
+}
+
 async function withServer(callback, options = {}) {
   let savedPayload;
   const repository = options.repository ?? {
@@ -27,16 +36,12 @@ async function withServer(callback, options = {}) {
       return lineTypes;
     },
   };
-  const adminTasks = options.adminTasks ?? { active: () => null };
   const app = express();
   app.use('/api', createLineTypesRouter({
     lineTypesRepository: repository,
-    adminTasks,
-    importApi: {
-      username: 'importer',
-      password: 'test-secret',
-      maxBodyBytes: 1024 * 1024,
-    },
+    adminAuth: { requireInterface },
+    securityService: { async appendAudit() {} },
+    maxBodyBytes: 1024 * 1024,
   }));
   app.use((error, _request, response, _next) => {
     if (error?.type === 'entity.parse.failed') {
@@ -67,7 +72,7 @@ test('public line type API exposes code, import name, title and styles', async (
   });
 });
 
-test('admin line type update requires Basic Auth and saves only editable settings', async () => {
+test('admin line type update requires auth and saves only editable settings', async () => {
   await withServer(async (baseUrl, savedPayload) => {
     const body = {
       lineTypes: [{
@@ -100,25 +105,14 @@ test('admin line type update requires Basic Auth and saves only editable setting
   });
 });
 
-test('admin line type update is blocked while a data task is active', async () => {
-  await withServer(async (baseUrl) => {
+test('admin line type update rejects a missing JSON content type', async () => {
+  await withServer(async (baseUrl, savedPayload) => {
     const response = await fetch(`${baseUrl}/api/admin/line-types`, {
       method: 'PUT',
-      headers: {
-        Authorization: authorization,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ lineTypes: [] }),
+      headers: { Authorization: authorization },
+      body: 'not-json',
     });
-    assert.equal(response.status, 409);
-    const payload = await response.json();
-    assert.equal(payload.taskId, 'task-1');
-    assert.equal(payload.task.type, 'kml-update');
-  }, {
-    adminTasks: {
-      active() {
-        return { id: 'task-1', type: 'kml-update', status: 'running' };
-      },
-    },
+    assert.equal(response.status, 415);
+    assert.equal(savedPayload(), undefined);
   });
 });
