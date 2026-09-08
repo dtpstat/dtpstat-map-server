@@ -6,7 +6,13 @@ const DEFAULT_REPORT_CONFIG = Object.freeze({
     Object.freeze({ kind: 'metric', metricKey: 'population', title: 'жители (тыс.)', scale: 0.001, decimals: 0, formatRules: Object.freeze([]) }),
     Object.freeze({ kind: 'metric', metricKey: 'lane_m_per_1000', title: 'ВП (м/1000 чел.)', scale: 1, decimals: 1, formatRules: Object.freeze([]) }),
   ]),
-  rank: Object.freeze({ metricKey: 'lane_m_per_1000', direction: 'desc' }),
+  rank: Object.freeze({
+    sort: Object.freeze([
+      Object.freeze({ metricKey: 'lane_m_per_1000', direction: 'desc' }),
+    ]),
+    metricKey: 'lane_m_per_1000',
+    direction: 'desc',
+  }),
 });
 
 /** @param {HTMLElement} element */
@@ -120,12 +126,24 @@ function sortField(column) {
   return null;
 }
 
+/** @param {any} reportConfig */
+function rankMetricKeys(reportConfig) {
+  if (Array.isArray(reportConfig.rank?.sort)) {
+    return new Set(
+      reportConfig.rank.sort
+        .map((criterion) => criterion?.metricKey)
+        .filter(Boolean),
+    );
+  }
+  return new Set(reportConfig.rank?.metricKey ? [reportConfig.rank.metricKey] : []);
+}
+
 /** @param {any} column @param {any} reportConfig */
 function cellClass(column, reportConfig) {
   const classes = [`column-${column.kind}`];
   if (
     column.kind === 'metric' &&
-    column.metricKey === reportConfig.rank?.metricKey
+    rankMetricKeys(reportConfig).has(column.metricKey)
   ) {
     classes.push('is-rank-metric');
   }
