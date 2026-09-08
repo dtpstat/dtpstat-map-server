@@ -28,9 +28,9 @@ export function expandViewportBounds(viewport) {
 const LIST_CITIES_SQL = `
   SELECT
     city.id::integer AS id,
-    slug,
-    name,
-    full_name AS "fullName",
+    city.slug,
+    city.name,
+    city.full_name AS "fullName",
     population.population,
     city.lane_length_m AS "laneLengthMeters",
     city.lane_m_per_1000 AS "laneMetersPer1000",
