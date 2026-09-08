@@ -29,7 +29,8 @@
 - допустимые constants;
 - arithmetic operation;
 - priority;
-- scale/format.
+- scale/format;
+- последовательность метрик для ranking.
 
 Backend компилирует проверенную декларативную модель в SQL.
 
@@ -41,10 +42,13 @@ Backend компилирует проверенную декларативную
 METRICS
 TABLE_COLUMNS
 CSV_COLUMNS
+RANK_SORT
 RANK_METRIC_KEY
 RANK_DIRECTION
 UPDATED_AT
 ```
+
+`RANK_SORT` добавлен миграцией `V024` и содержит ordered JSON array критериев рейтинга. Старые `RANK_METRIC_KEY` и `RANK_DIRECTION` сохранены как compatibility mirror первого критерия.
 
 `CITY_REPORT_VALUES` — materialized result по city:
 
@@ -55,6 +59,8 @@ RANK_VALUE
 RANK
 UPDATED_AT
 ```
+
+`RANK_VALUE` хранит значение первого критерия рейтинга для совместимости и быстрых публичных чтений. Остальные критерии берутся из уже материализованного `VALUES` при построении `RANK`.
 
 Это обычная table, а не PostgreSQL materialized view: набор metrics динамический и не имеет фиксированных DB columns.
 
@@ -281,6 +287,73 @@ min=201  max=null
 
 Styles влияют только на presentation, не на metric value/rank/sort.
 
+## Ranking: последовательные критерии
+
+Начиная с `V024`, рейтинг задаётся **ordered list** критериев. До восьми разных metrics можно использовать последовательно.
+
+Пример:
+
+```json
+{
+  "rank": {
+    "sort": [
+      { "metricKey": "separation_ratio", "direction": "desc" },
+      { "metricKey": "network_length_m", "direction": "desc" },
+      { "metricKey": "population", "direction": "asc" }
+    ]
+  }
+}
+```
+
+Семантика:
+
+```text
+1. separation_ratio DESC
+2. если одинаково → network_length_m DESC
+3. если снова одинаково → population ASC
+4. если всё одинаково → city.name ASC
+```
+
+`direction`:
+
+```text
+desc = большее значение выше
+asc  = меньшее значение выше
+```
+
+Все criteria используют `NULLS LAST`. Если значение **первого** критерия `NULL`, город получает `RANK = NULL`, как и в старой модели.
+
+Rank по-прежнему вычисляется отдельно внутри текущих категорий городов:
+
+```sql
+PARTITION BY COALESCE(city.is_large, FALSE)
+```
+
+Одинаковую metric нельзя добавить в `rank.sort` дважды.
+
+Admin UI позволяет:
+
+- добавлять criterion;
+- удалять criterion, кроме последнего оставшегося;
+- менять metric;
+- выбирать `Больше — выше` / `Меньше — выше`;
+- менять priority стрелками `↑/↓`.
+
+Старый format:
+
+```json
+{
+  "rank": {
+    "metricKey": "separation_ratio",
+    "direction": "desc"
+  }
+}
+```
+
+по-прежнему принимается и нормализуется в массив из одного элемента.
+
+Клик пользователя по заголовку публичной таблицы остаётся обычной временной **single-column** сортировкой UI. Настроенная multi-column последовательность определяет именно материализованный `RANK`/колонку `№` и исходный порядок рейтинга.
+
 ## Пример: выделенные полосы
 
 ```text
@@ -305,7 +378,9 @@ population    × 0.001
 Ranking:
 
 ```text
-lane_m_per_1000 DESC
+1. lane_m_per_1000 DESC
+2. при необходимости дополнительная metric
+3. city.name ASC как deterministic fallback
 ```
 
 ## Пример: трамвайная сеть
@@ -325,6 +400,15 @@ network_length_m × 0.001
 population       × 0.001
 ```
 
+Пример ranking:
+
+```text
+separation_ratio DESC
+network_length_m DESC
+```
+
+То есть при одинаковой доле обособления выше будет город с большей длиной сети.
+
 ## Public report config
 
 ```text
@@ -337,7 +421,8 @@ GET /api/report-config
 - `metricKey`;
 - scale/decimals;
 - conditional rules;
-- ranking settings.
+- ordered `rank.sort`;
+- compatibility aliases первого ranking criterion.
 
 Metric values приходят вместе с city data в объекте `metrics`.
 
@@ -375,17 +460,6 @@ Public URL:
 /bus-lanes.csv
 ```
 
-## Ranking
-
-Configuration задаёт:
-
-```text
-RANK_METRIC_KEY
-RANK_DIRECTION = asc | desc
-```
-
-Materialization пишет `RANK_VALUE` и `RANK`. Rank partition учитывает категорию города в соответствии с current implementation.
-
 ## Admin API
 
 Получение config/catalog:
@@ -414,7 +488,7 @@ GET  /api/admin/settings/export
 POST /api/admin/settings/import
 ```
 
-Актуальный package format — schemaVersion 3. При import report config валидируется относительно итогового target set `LINE_TYPES.NAME`, после чего `CITY_REPORT_VALUES` строится заново на target data.
+Актуальный package format — schemaVersion 5. V5 переносит `rank.sort`; v1-v4 с одиночным `metricKey/direction` продолжают импортироваться и нормализуются в один criterion. После import `CITY_REPORT_VALUES` строится заново на target data.
 
 Подробнее: [project-settings-transfer.md](project-settings-transfer.md).
 
@@ -422,7 +496,7 @@ POST /api/admin/settings/import
 
 `PROJECT_SETTINGS.THEME_PRESET` (`retro/classic/modern`) изменяет presentation публичной страницы, но не semantic report config, metric values, ranking или CSV.
 
-То же относится к custom city marker и line labels.
+То же относится к custom city marker и line labels/popups.
 
 ## Индексы
 
