@@ -35,6 +35,7 @@ const CREATE_MATCH_GEOMETRIES_SQL = `
       )
     END AS geom
   FROM city_boundaries
+  WHERE city_id IS NOT NULL
 `;
 
 const INDEX_MATCH_GEOMETRIES_SQL = `
@@ -78,7 +79,7 @@ const MATCH_GEOMETRIES_SQL = `
       boundary.place_type,
       count(*) OVER ()::integer AS candidate_count
     FROM kml_place_match_geometries AS boundary
-    LEFT JOIN cities AS city ON city.id = boundary.city_id
+    JOIN cities AS city ON city.id = boundary.city_id
     CROSS JOIN LATERAL (
       SELECT ST_CollectionExtract(
         ST_Intersection(prepared.geom, boundary.geom),
@@ -90,7 +91,6 @@ const MATCH_GEOMETRIES_SQL = `
       AND ST_Length(intersection.overlap::geography) > 0
     ORDER BY
       ST_Length(intersection.overlap::geography) DESC,
-      (boundary.city_id IS NOT NULL) DESC,
       ST_Area(boundary.geom::geography) ASC,
       (boundary.osm_type = 'relation') DESC,
       boundary.boundary_id ASC
@@ -383,12 +383,22 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           throw new Error('Not every imported KML business type was resolved');
         }
 
-        const boundaryResult = await client.query(
-          'SELECT EXISTS (SELECT 1 FROM city_boundaries) AS ready',
-        );
-        if (!boundaryResult.rows[0]?.ready) {
+        const boundaryResult = await client.query(`
+          SELECT
+            EXISTS (SELECT 1 FROM city_boundaries) AS "hasBoundaries",
+            EXISTS (
+              SELECT 1 FROM city_boundaries WHERE city_id IS NOT NULL
+            ) AS "hasLinkedBoundaries"
+        `);
+        const boundaryState = boundaryResult.rows[0] ?? {};
+        if (!boundaryState.hasBoundaries) {
           throw new KmlUpdateMatchError(
             'OSM place boundaries are empty; run POST /api/admin/update/cities first',
+          );
+        }
+        if (!boundaryState.hasLinkedBoundaries) {
+          throw new KmlUpdateMatchError(
+            'OSM place boundaries are not linked to cities; import or refresh city boundaries first',
           );
         }
         await client.query(CREATE_MATCH_GEOMETRIES_SQL, [
@@ -406,7 +416,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
         const ambiguous = matchResult.rows.filter((row) => row.candidateCount > 1);
         if (unmatched.length > 0 && options.unmatchedPolicy === 'fail') {
           throw new KmlUpdateMatchError(
-            `${unmatched.length} KML geometries do not overlap an OSM place polygon`,
+            `${unmatched.length} KML geometries do not overlap an OSM place polygon linked to a city`,
           );
         }
         if (ambiguous.length > 0 && options.ambiguousPolicy === 'fail') {
@@ -415,31 +425,33 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           );
         }
 
-        const matched = matchResult.rows
-          .filter((row) => row.boundaryId !== null)
-          .map((row) => {
-            const feature = features[row.inputIndex];
-            const lineType = typeByName.get(
-              comparableLineTypeName(feature.businessTypeName),
-            );
-            return {
-              cityId: row.cityId,
-              boundaryId: row.boundaryId,
-              lineTypeId: lineType.id,
-              businessTypeCode: lineType.code,
-              businessTypeName: lineType.name,
-              multiple: feature.multiple,
-              properties: feature.properties,
-              geometry: feature.geometry,
-            };
-          });
+        const matchedRows = matchResult.rows.filter((row) => row.boundaryId !== null);
+        if (matchedRows.some((row) => row.cityId === null)) {
+          throw new Error('KML matched an OSM boundary without a linked city');
+        }
+        const matched = matchedRows.map((row) => {
+          const feature = features[row.inputIndex];
+          const lineType = typeByName.get(
+            comparableLineTypeName(feature.businessTypeName),
+          );
+          return {
+            cityId: row.cityId,
+            boundaryId: row.boundaryId,
+            lineTypeId: lineType.id,
+            businessTypeCode: lineType.code,
+            businessTypeName: lineType.name,
+            multiple: feature.multiple,
+            properties: feature.properties,
+            geometry: feature.geometry,
+          };
+        });
         if (matched.length === 0) {
-          throw new KmlUpdateMatchError('No KML geometries overlap an OSM place polygon');
+          throw new KmlUpdateMatchError(
+            'No KML geometries overlap an OSM place polygon linked to a city',
+          );
         }
 
-        const citiesUpdated = new Set(
-          matched.map((row) => row.cityId).filter((cityId) => cityId !== null),
-        ).size;
+        const citiesUpdated = new Set(matched.map((row) => row.cityId)).size;
         const placesUpdated = new Set(matched.map((row) => row.boundaryId)).size;
         const reportedLineTypes = publicLineTypes(typeRows)
           .sort((left, right) => {
