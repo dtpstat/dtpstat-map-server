@@ -50,17 +50,21 @@ test('project settings migrations create branding, metrics, theme, line popup an
 });
 
 test('admin interface exposes project settings, independent line display switches and download file name', async () => {
-  const [shell, editor, downloadEditor, notices, css, downloadCss] = await Promise.all([
+  const [shell, editor, downloadEditor, notices, branding, css, downloadCss] = await Promise.all([
     source('admin/admin-shell.js'),
     source('admin/project-settings-editor.js'),
     source('admin/public-download-name-editor.js'),
     source('admin/task-notices.js'),
+    source('admin/project-branding.js'),
     source('admin/project-settings.css'),
     source('admin/public-download-name.css'),
   ]);
 
   assert.match(shell, /import\('\.\/project-settings-editor\.js'\)/);
+  assert.match(shell, /import\('\.\/public-download-name-editor\.js'\)/);
   assert.match(shell, /import\('\.\/report-config-editor\.js'\)/);
+  assert.doesNotMatch(notices, /-editor\.js/);
+  assert.doesNotMatch(branding, /public-download-name-editor\.js/);
   assert.match(editor, /dataset\.interfaceTab = 'project'/);
   assert.match(editor, /dataset\.interfacePanel = 'project'/);
   assert.match(editor, /name="projectName"/);
@@ -82,7 +86,6 @@ test('admin interface exposes project settings, independent line display switche
   assert.match(css, /\.project-theme-grid/);
   assert.match(css, /data-theme-preview/);
 
-  assert.match(notices, /public-download-name-editor\.js/);
   assert.match(downloadEditor, /name="publicDownloadName"/);
   assert.match(downloadEditor, /публичных URL и для файлов на диске/);
   assert.match(downloadEditor, /`\/\$\{name\}\.geojson`/);
@@ -161,6 +164,8 @@ test('public GeoJSON and CSV routes and disk files are fully derived from the co
   assert.match(service, /path\.join\(directory, files\.geoJsonFileName\)/);
   assert.match(service, /path\.join\(directory, files\.csvFileName\)/);
   assert.match(service, /removeObsoleteSnapshots/);
+  assert.match(service, /await Promise\.all\(entries/);
+  assert.doesNotMatch(service, /Promise\.allSettled\(entries/);
 });
 
 test('public map reloads independent line display settings without a page refresh', async () => {
