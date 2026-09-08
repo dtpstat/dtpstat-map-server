@@ -35,7 +35,6 @@ const CREATE_MATCH_GEOMETRIES_SQL = `
       )
     END AS geom
   FROM city_boundaries
-  WHERE city_id IS NOT NULL
 `;
 
 const INDEX_MATCH_GEOMETRIES_SQL = `
@@ -73,13 +72,14 @@ const MATCH_GEOMETRIES_SQL = `
   LEFT JOIN LATERAL (
     SELECT
       boundary.boundary_id,
-      boundary.city_id,
-      city.name AS city_name,
+      COALESCE(boundary.city_id, named_city.id) AS city_id,
+      COALESCE(linked_city.name, named_city.name, boundary.osm_name) AS city_name,
       boundary.osm_name AS place_name,
       boundary.place_type,
       count(*) OVER ()::integer AS candidate_count
     FROM kml_place_match_geometries AS boundary
-    JOIN cities AS city ON city.id = boundary.city_id
+    LEFT JOIN cities AS linked_city ON linked_city.id = boundary.city_id
+    LEFT JOIN cities AS named_city ON named_city.name = boundary.osm_name
     CROSS JOIN LATERAL (
       SELECT ST_CollectionExtract(
         ST_Intersection(prepared.geom, boundary.geom),
@@ -91,12 +91,111 @@ const MATCH_GEOMETRIES_SQL = `
       AND ST_Length(intersection.overlap::geography) > 0
     ORDER BY
       ST_Length(intersection.overlap::geography) DESC,
+      (boundary.city_id IS NOT NULL) DESC,
       ST_Area(boundary.geom::geography) ASC,
       (boundary.osm_type = 'relation') DESC,
       boundary.boundary_id ASC
     LIMIT 1
   ) AS candidate ON TRUE
   ORDER BY prepared."inputIndex"
+`;
+
+const UPSERT_MATCHED_OSM_CITIES_SQL = `
+  WITH requested AS (
+    SELECT DISTINCT
+      payload."cityName" AS city_name,
+      payload."boundaryId" AS boundary_id
+    FROM jsonb_to_recordset($1::jsonb) AS payload(
+      "cityName" text,
+      "boundaryId" bigint
+    )
+    WHERE payload."cityName" IS NOT NULL
+      AND payload."boundaryId" IS NOT NULL
+  ),
+  canonical AS (
+    SELECT DISTINCT ON (requested.city_name)
+      requested.city_name,
+      boundary.osm_type,
+      boundary.osm_id,
+      boundary.place_type
+    FROM requested
+    JOIN city_boundaries AS boundary ON boundary.id = requested.boundary_id
+    ORDER BY
+      requested.city_name,
+      (boundary.city_id IS NOT NULL) DESC,
+      (boundary.osm_type = 'relation') DESC,
+      ST_Area(boundary.geom::geography) DESC,
+      boundary.id
+  )
+  INSERT INTO cities (
+    slug,
+    name,
+    full_name,
+    lane_length_m,
+    attributes
+  )
+  SELECT
+    'osm-' || canonical.osm_type || '-' || canonical.osm_id,
+    canonical.city_name,
+    canonical.city_name,
+    0,
+    jsonb_build_object(
+      '_osm',
+      jsonb_build_object(
+        'osmType', canonical.osm_type,
+        'osmId', canonical.osm_id,
+        'placeType', canonical.place_type
+      )
+    )
+  FROM canonical
+  ON CONFLICT (name) DO UPDATE SET
+    attributes = cities.attributes || EXCLUDED.attributes,
+    updated_at = now()
+  RETURNING id::integer AS id, name
+`;
+
+const LINK_MATCHED_OSM_CITIES_SQL = `
+  WITH requested AS (
+    SELECT DISTINCT payload."cityName" AS city_name
+    FROM jsonb_to_recordset($1::jsonb) AS payload("cityName" text)
+    WHERE payload."cityName" IS NOT NULL
+  ),
+  candidates AS (
+    SELECT DISTINCT ON (city.id)
+      city.id AS city_id,
+      boundary.id AS boundary_id
+    FROM requested
+    JOIN cities AS city ON city.name = requested.city_name
+    JOIN city_boundaries AS boundary ON boundary.osm_name = city.name
+    WHERE boundary.city_id IS NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM city_boundaries AS linked
+        WHERE linked.city_id = city.id
+      )
+    ORDER BY
+      city.id,
+      (boundary.osm_type = 'relation') DESC,
+      ST_Area(boundary.geom::geography) DESC,
+      boundary.id
+  )
+  UPDATE city_boundaries AS boundary
+  SET city_id = candidates.city_id,
+      updated_at = now()
+  FROM candidates
+  WHERE boundary.id = candidates.boundary_id
+`;
+
+const LOAD_MATCHED_CITY_IDS_SQL = `
+  WITH requested AS (
+    SELECT DISTINCT payload."cityName" AS city_name
+    FROM jsonb_to_recordset($1::jsonb) AS payload("cityName" text)
+    WHERE payload."cityName" IS NOT NULL
+  )
+  SELECT city.id::integer AS id, city.name
+  FROM requested
+  JOIN cities AS city ON city.name = requested.city_name
+  ORDER BY city.id
 `;
 
 const INSERT_MISSING_LINE_TYPES_SQL = `
@@ -383,24 +482,15 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           throw new Error('Not every imported KML business type was resolved');
         }
 
-        const boundaryResult = await client.query(`
-          SELECT
-            EXISTS (SELECT 1 FROM city_boundaries) AS "hasBoundaries",
-            EXISTS (
-              SELECT 1 FROM city_boundaries WHERE city_id IS NOT NULL
-            ) AS "hasLinkedBoundaries"
-        `);
-        const boundaryState = boundaryResult.rows[0] ?? {};
-        if (!boundaryState.hasBoundaries) {
+        const boundaryResult = await client.query(
+          'SELECT EXISTS (SELECT 1 FROM city_boundaries) AS ready',
+        );
+        if (!boundaryResult.rows[0]?.ready) {
           throw new KmlUpdateMatchError(
             'OSM place boundaries are empty; run POST /api/admin/update/cities first',
           );
         }
-        if (!boundaryState.hasLinkedBoundaries) {
-          throw new KmlUpdateMatchError(
-            'OSM place boundaries are not linked to cities; import or refresh city boundaries first',
-          );
-        }
+
         await client.query(CREATE_MATCH_GEOMETRIES_SQL, [
           options.cityBufferMeters,
         ]);
@@ -416,7 +506,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
         const ambiguous = matchResult.rows.filter((row) => row.candidateCount > 1);
         if (unmatched.length > 0 && options.unmatchedPolicy === 'fail') {
           throw new KmlUpdateMatchError(
-            `${unmatched.length} KML geometries do not overlap an OSM place polygon linked to a city`,
+            `${unmatched.length} KML geometries do not overlap an imported OSM place polygon`,
           );
         }
         if (ambiguous.length > 0 && options.ambiguousPolicy === 'fail') {
@@ -426,16 +516,57 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
         }
 
         const matchedRows = matchResult.rows.filter((row) => row.boundaryId !== null);
-        if (matchedRows.some((row) => row.cityId === null)) {
-          throw new Error('KML matched an OSM boundary without a linked city');
+        if (matchedRows.length === 0) {
+          throw new KmlUpdateMatchError(
+            'No KML geometries overlap an imported OSM place polygon',
+          );
         }
+
+        const matchedCityPayload = matchedRows.map((row) => ({
+          cityName: row.cityName ?? row.placeName,
+          boundaryId: row.boundaryId,
+        }));
+        let cityIdByName = new Map(
+          matchedRows
+            .filter((row) => row.cityId !== null && row.cityName)
+            .map((row) => [row.cityName, Number(row.cityId)]),
+        );
+
+        if (!options.dryRun) {
+          await client.query(UPSERT_MATCHED_OSM_CITIES_SQL, [
+            JSON.stringify(matchedCityPayload),
+          ]);
+          await client.query(LINK_MATCHED_OSM_CITIES_SQL, [
+            JSON.stringify(matchedCityPayload),
+          ]);
+          const cityResult = await client.query(LOAD_MATCHED_CITY_IDS_SQL, [
+            JSON.stringify(matchedCityPayload),
+          ]);
+          cityIdByName = new Map(
+            cityResult.rows.map((row) => [row.name, Number(row.id)]),
+          );
+          if (cityIdByName.size !== new Set(
+            matchedCityPayload.map((row) => row.cityName),
+          ).size) {
+            throw new Error('Not every matched OSM place was resolved to a city record');
+          }
+        }
+
         const matched = matchedRows.map((row) => {
           const feature = features[row.inputIndex];
           const lineType = typeByName.get(
             comparableLineTypeName(feature.businessTypeName),
           );
+          const cityName = row.cityName ?? row.placeName;
+          const cityId = row.cityId === null
+            ? cityIdByName.get(cityName) ?? null
+            : Number(row.cityId);
+          if (!options.dryRun && cityId === null) {
+            throw new Error(`Matched OSM place has no city record: ${cityName}`);
+          }
           return {
-            cityId: row.cityId,
+            cityId,
+            cityName,
             boundaryId: row.boundaryId,
             lineTypeId: lineType.id,
             businessTypeCode: lineType.code,
@@ -445,13 +576,8 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
             geometry: feature.geometry,
           };
         });
-        if (matched.length === 0) {
-          throw new KmlUpdateMatchError(
-            'No KML geometries overlap an OSM place polygon linked to a city',
-          );
-        }
 
-        const citiesUpdated = new Set(matched.map((row) => row.cityId)).size;
+        const citiesUpdated = new Set(matched.map((row) => row.cityName)).size;
         const placesUpdated = new Set(matched.map((row) => row.boundaryId)).size;
         const reportedLineTypes = publicLineTypes(typeRows)
           .sort((left, right) => {
