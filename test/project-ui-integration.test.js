@@ -13,13 +13,14 @@ async function source(relativePath) {
   return fs.readFile(path.join(projectRoot, relativePath), 'utf8');
 }
 
-test('project settings migrations create branding, metrics, theme and line popup settings', async () => {
-  const [baseSql, metricsSql, limitSql, themeSql, popupSql] = await Promise.all([
+test('project settings migrations create branding, metrics, theme, line popup and download-name settings', async () => {
+  const [baseSql, metricsSql, limitSql, themeSql, popupSql, downloadNameSql] = await Promise.all([
     source('db/migrations/V009__project_settings.sql'),
     source('db/migrations/V010__project_metrics.sql'),
     source('db/migrations/V011__limit_yandex_metrika_id.sql'),
     source('db/migrations/V021__public_theme_preset.sql'),
     source('db/migrations/V022__line_popup_setting.sql'),
+    source('db/migrations/V025__public_download_name.sql'),
   ]);
 
   assert.match(baseSql, /CREATE TABLE IF NOT EXISTS BUSLANES\.PROJECT_SETTINGS/i);
@@ -40,13 +41,18 @@ test('project settings migrations create branding, metrics, theme and line popup
   assert.match(themeSql, /THEME_PRESET TEXT NOT NULL DEFAULT 'classic'/i);
   assert.match(themeSql, /THEME_PRESET IN \('retro', 'classic', 'modern'\)/i);
   assert.match(popupSql, /SHOW_LINE_POPUPS BOOLEAN NOT NULL DEFAULT TRUE/i);
+  assert.match(downloadNameSql, /PUBLIC_DOWNLOAD_NAME TEXT NOT NULL DEFAULT 'bus-lanes'/i);
+  assert.match(downloadNameSql, /PROJECT_SETTINGS_PUBLIC_DOWNLOAD_NAME_CHECK/i);
 });
 
-test('admin interface exposes project settings and independent line display switches', async () => {
-  const [shell, editor, css] = await Promise.all([
+test('admin interface exposes project settings, independent line display switches and download file name', async () => {
+  const [shell, editor, downloadEditor, notices, css, downloadCss] = await Promise.all([
     source('admin/admin-shell.js'),
     source('admin/project-settings-editor.js'),
+    source('admin/public-download-name-editor.js'),
+    source('admin/task-notices.js'),
     source('admin/project-settings.css'),
+    source('admin/public-download-name.css'),
   ]);
 
   assert.match(shell, /import\('\.\/project-settings-editor\.js'\)/);
@@ -71,6 +77,14 @@ test('admin interface exposes project settings and independent line display swit
   assert.match(editor, /\/api\/admin\/project-settings/);
   assert.match(css, /\.project-theme-grid/);
   assert.match(css, /data-theme-preview/);
+
+  assert.match(notices, /public-download-name-editor\.js/);
+  assert.match(downloadEditor, /name="publicDownloadName"/);
+  assert.match(downloadEditor, /\.geojson/);
+  assert.match(downloadEditor, /\.csv/);
+  assert.match(downloadEditor, /\/api\/admin\/project-settings\/public-download-name/);
+  assert.match(downloadEditor, /Сохранить имя файлов/);
+  assert.match(downloadCss, /\.project-download-name-form/);
 });
 
 test('public page derives metadata, theme stylesheet and analytics loaders from project settings', async () => {
@@ -117,6 +131,16 @@ test('public page derives metadata, theme stylesheet and analytics loaders from 
   assert.match(retroCss, /--selected:\s*#fff400/i);
   assert.match(classicCss, /--selected:\s*#ffdf75/i);
   assert.match(modernCss, /--selected:\s*#e5eee3/i);
+});
+
+test('public GeoJSON and CSV routes keep stable URLs but use configured attachment names', async () => {
+  const app = await source('src/app.js');
+
+  assert.match(app, /\['\/bus-lanes\.csv', 'bus-lanes\.csv'\]/);
+  assert.match(app, /\['\/bus-lanes\.geojson', 'bus-lanes\.geojson'\]/);
+  assert.match(app, /settings\.publicDownloadName \|\| DEFAULT_PUBLIC_DOWNLOAD_NAME/);
+  assert.match(app, /path\.extname\(fileName\)/);
+  assert.match(app, /\.attachment\(`\$\{baseName\}\$\{extension\}`\)/);
 });
 
 test('public map reloads independent line display settings without a page refresh', async () => {
