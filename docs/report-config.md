@@ -1,38 +1,37 @@
 # Конструктор расчётов и публичного отчёта
 
-Начиная с `V014`, публичный ranking/CSV не зашит в код под один транспортный проект. Настройка находится в:
+Настройка находится в:
 
 ```text
 Настройка интерфейса → Расчёты
 ```
 
-и требует `CAN_MANAGE_INTERFACE` либо superuser.
+Нужен `CAN_MANAGE_INTERFACE` или superuser.
 
-Внутри четыре вкладки:
+Конфигурация разделена на:
 
 1. **Метрики**;
-2. **Публичная таблица**;
+2. **Публичную таблицу**;
 3. **CSV**;
 4. **Рейтинг**.
 
-Все части сохраняются одной конфигурацией. После validation сервер пересчитывает `CITY_REPORT_VALUES`, затем обновляет public snapshots.
+Сохранение configuration пересчитывает `CITY_REPORT_VALUES`, после чего пересобираются public snapshots.
 
-## Принцип: без произвольного SQL
+## Без произвольного SQL
 
-Администратор не вводит SQL/table/column names. Он выбирает только server-owned entities:
+Admin выбирает только server-owned элементы DSL:
 
-- поля города;
-- поля geometry;
+- поля city/geometry;
 - aggregate;
-- business type;
+- business line type;
 - другую metric;
-- допустимые constants;
-- arithmetic operation;
+- constant;
+- arithmetic operator;
 - priority;
-- scale/format;
-- последовательность метрик для ranking.
+- display scale/precision;
+- ordered ranking criteria.
 
-Backend компилирует проверенную декларативную модель в SQL.
+Backend валидирует модель и компилирует SQL сам.
 
 ## Хранение
 
@@ -48,9 +47,9 @@ RANK_DIRECTION
 UPDATED_AT
 ```
 
-`RANK_SORT` добавлен миграцией `V024` и содержит ordered JSON array критериев рейтинга. Старые `RANK_METRIC_KEY` и `RANK_DIRECTION` сохранены как compatibility mirror первого критерия.
+`RANK_SORT` добавлен в `V024`. Старые `RANK_METRIC_KEY/RANK_DIRECTION` остаются compatibility mirror первого criterion.
 
-`CITY_REPORT_VALUES` — materialized result по city:
+`CITY_REPORT_VALUES`:
 
 ```text
 CITY_ID
@@ -60,49 +59,39 @@ RANK
 UPDATED_AT
 ```
 
-`RANK_VALUE` хранит значение первого критерия рейтинга для совместимости и быстрых публичных чтений. Остальные критерии берутся из уже материализованного `VALUES` при построении `RANK`.
+`RANK_VALUE` хранит значение первого ranking criterion. Остальные значения уже находятся в `VALUES`.
 
-Это обычная table, а не PostgreSQL materialized view: набор metrics динамический и не имеет фиксированных DB columns.
+## Когда выполняется refresh
 
-## Когда пересчитывается CITY_REPORT_VALUES
-
-Полный refresh происходит:
+Полный materialization refresh происходит:
 
 - при startup;
-- после real import/update cities/boundaries;
-- после line import/update;
+- после real city/boundary update;
+- после line update/import;
 - после population update;
-- после сохранения `REPORT_CONFIG`;
+- после изменения `REPORT_CONFIG`;
 - после project-settings import.
 
-При сохранении report config запись configuration и materialization выполняются согласованно в DB transaction/lock.
+## Доступные исходные поля
 
-После commit пересобираются public files.
-
-## Разрешённые исходные поля
-
-Текущие logical fields:
-
-| Поле | Семантика |
+| Logical field | Семантика |
 | --- | --- |
 | `city.population` | население |
-| `city.area_m2` | geodesic area boundary в м² |
+| `city.area_m2` | площадь OSM boundary в м² |
 | `geometry.length_m` | физическая длина geometry |
-| `geometry.lane_length_m` | length с multiplier/числом полос |
+| `geometry.lane_length_m` | длина с multiplier/lanes |
 | `geometry.lanes` | multiplier/lanes |
 | `geometry.id` | source для `COUNT` |
 
-`city.area_m2` считается как:
+`city.area_m2` считается через:
 
 ```text
 ST_Area(CITY_BOUNDARIES.GEOM::geography)
 ```
 
-Результат — м². При отсутствии boundary значение `NULL`.
+## Aggregates
 
-## Aggregate geometry
-
-Для numeric geometry fields доступны:
+Для numeric geometry fields:
 
 ```text
 SUM
@@ -118,31 +107,25 @@ MAX
 COUNT
 ```
 
-Median реализована ordered-set aggregate PostgreSQL:
+Median использует PostgreSQL:
 
 ```text
 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ...)
 ```
 
-Пустой set для MEDIAN возвращает `NULL`.
+## Business line type filter
 
-## Business type filter
-
-Geometry aggregate может быть ограничен одним `LINE_TYPES.NAME`.
-
-Например:
+Aggregate может быть ограничен одним `LINE_TYPES.NAME`, например:
 
 ```text
-SUM(geometry.length_m WHERE LINE_TYPES.NAME = «Обособленные»)
+SUM(geometry.length_m WHERE type = «Обособленные»)
 ```
 
-`NAME` выбирается из текущего server-owned dictionary. Numeric `LINE_TYPES.CODE` в report semantic identity не используется.
+NAME выбирается из текущего dictionary. Numeric CODE не является semantic identity report configuration.
 
 ## Metric references
 
-Metric может ссылаться на другую metric как source/operand.
-
-Например:
+Metric может ссылаться на уже объявленную logical metric как source или operand:
 
 ```text
 network_length_m   = SUM(geometry.length_m)
@@ -156,13 +139,13 @@ Backend строит dependency graph и вычисляет metrics тополо
 
 - reference на отсутствующую metric;
 - self-reference;
-- indirect cycle `A → B → C → A`.
+- dependency cycles.
 
-UI order карточек не равен execution order. Карточки можно переставлять для удобства, а dependency order вычисляется отдельно.
+UI order карточек и execution order — разные понятия.
 
-## Arithmetic
+## Arithmetic и priority
 
-Поддерживаются:
+Операторы:
 
 ```text
 +
@@ -172,18 +155,14 @@ UI order карточек не равен execution order. Карточки мо
 % от
 ```
 
-Деление на `0`/`NULL` нормализуется в безопасный `NULL`, а не SQL exception.
-
-Операции можно переставлять.
-
-## Priority и ОПЗ
+Деление на `0`/`NULL` даёт `NULL`, а не SQL exception.
 
 Каждая operation имеет priority `1…12`:
 
 - большее число выполняется раньше;
 - одинаковый priority — слева направо.
 
-Старая configuration без priority нормализуется к default `1`.
+Backend преобразует linear expression в RPN до SQL compilation.
 
 Пример:
 
@@ -191,79 +170,34 @@ UI order карточек не равен execution order. Карточки мо
 A +[1] B ×[2] C
 ```
 
-означает:
+эквивалентен:
 
 ```text
 A + (B × C)
 ```
 
-ОПЗ:
+## Единицы и display scale
 
-```text
-A B C × +
-```
-
-А:
-
-```text
-A +[2] B ×[1] C
-```
-
-означает:
-
-```text
-(A + B) × C
-```
-
-ОПЗ:
-
-```text
-A B + C ×
-```
-
-Backend переводит linear expression в RPN до SQL compilation. UI показывает read-only фактические brackets и ОПЗ.
-
-## Единицы и scale
-
-Рекомендуется хранить metric в canonical units:
+Рекомендуемые canonical units:
 
 - length — metres;
 - area — m²;
 - population — persons;
 - ratio — `0..1`.
 
-Публичная table и CSV могут независимо задавать `scale` и decimals.
+HTML table и CSV независимо задают `scale` и `decimals`.
 
-Например одна metric `network_length_m` может показываться:
+Например:
 
 ```text
-HTML: km, scale=0.001
-CSV:  m,  scale=1
+metric: network_length_m
+HTML: × 0.001 → km
+CSV:  × 1     → m
 ```
 
 ## Conditional formatting
 
-Conditional styles доступны для numeric table columns:
-
-- `rank`;
-- `metric`.
-
-CSV presentation styles не экспортирует.
-
-На одну column допускается до восьми rules. Пример:
-
-```json
-{
-  "min": 10,
-  "max": 20,
-  "bold": true,
-  "italic": false,
-  "underline": true,
-  "strike": false,
-  "color": "#2457aa",
-  "fontSizeStep": 1
-}
-```
+Доступно для numeric public-table columns (`rank`, `metric`).
 
 Range semantics:
 
@@ -271,27 +205,22 @@ Range semantics:
 min <= value < max
 ```
 
-`null` означает open boundary.
+`null` означает open boundary. Если ranges пересекаются, выигрывает первое правило сверху.
 
-Пример непрерывных ranges:
+Поддерживаются:
 
-```text
-min=null max=91
-min=91   max=201
-min=201  max=null
-```
+- bold;
+- italic;
+- underline;
+- strike;
+- color;
+- relative font-size step.
 
-Для metric condition сравнивается число после `scale`, но до string rounding.
+Presentation rules не влияют на metric value/ranking/CSV data.
 
-Если rules пересекаются, применяется первое совпавшее сверху. Порядок rules является частью configuration.
+## Последовательный рейтинг
 
-Styles влияют только на presentation, не на metric value/rank/sort.
-
-## Ranking: последовательные критерии
-
-Начиная с `V024`, рейтинг задаётся **ordered list** критериев. До восьми разных metrics можно использовать последовательно.
-
-Пример:
+`V024` добавил ordered multi-column ranking. Допускается до восьми уникальных metrics.
 
 ```json
 {
@@ -309,78 +238,44 @@ Styles влияют только на presentation, не на metric value/rank/
 
 ```text
 1. separation_ratio DESC
-2. если одинаково → network_length_m DESC
-3. если снова одинаково → population ASC
-4. если всё одинаково → city.name ASC
+2. при равенстве → network_length_m DESC
+3. при равенстве → population ASC
+4. при полном равенстве → city.name ASC
 ```
 
-`direction`:
+Все criteria используют `NULLS LAST`.
 
-```text
-desc = большее значение выше
-asc  = меньшее значение выше
-```
+Если значение **первого** criterion `NULL`, `RANK` остаётся `NULL`, как в прежней модели.
 
-Все criteria используют `NULLS LAST`. Если значение **первого** критерия `NULL`, город получает `RANK = NULL`, как и в старой модели.
-
-Rank по-прежнему вычисляется отдельно внутри текущих категорий городов:
+Ranking вычисляется отдельно внутри категорий:
 
 ```sql
 PARTITION BY COALESCE(city.is_large, FALSE)
 ```
 
-Одинаковую metric нельзя добавить в `rank.sort` дважды.
+Одинаковую metric нельзя добавить дважды.
 
-Admin UI позволяет:
-
-- добавлять criterion;
-- удалять criterion, кроме последнего оставшегося;
-- менять metric;
-- выбирать `Больше — выше` / `Меньше — выше`;
-- менять priority стрелками `↑/↓`.
-
-Старый format:
+Старый single-rank формат по-прежнему принимается:
 
 ```json
 {
   "rank": {
-    "metricKey": "separation_ratio",
+    "metricKey": "score",
     "direction": "desc"
   }
 }
 ```
 
-по-прежнему принимается и нормализуется в массив из одного элемента.
+и нормализуется в `rank.sort` из одного элемента.
 
-Клик пользователя по заголовку публичной таблицы остаётся обычной временной **single-column** сортировкой UI. Настроенная multi-column последовательность определяет именно материализованный `RANK`/колонку `№` и исходный порядок рейтинга.
+Клик пользователя по header публичной таблицы — временная UI single-column сортировка; он не меняет materialized `RANK`.
 
 ## Пример: выделенные полосы
 
 ```text
-lane_length_m    = SUM(geometry.lane_length_m)
-population       = city.population
-lane_m_per_1000  = metric(lane_length_m) / metric(population) × 1000
-```
-
-Table:
-
-```text
-№ | город | длина (км) | жители (тыс.) | м/1000 чел.
-```
-
-Display scale:
-
-```text
-lane_length_m × 0.001
-population    × 0.001
-```
-
-Ranking:
-
-```text
-1. lane_m_per_1000 DESC
-2. при необходимости дополнительная metric
-3. city.name ASC как deterministic fallback
+lane_length_m   = SUM(geometry.lane_length_m)
+population      = city.population
+lane_m_per_1000 = metric(lane_length_m) / metric(population) × 1000
 ```
 
 ## Пример: трамвайная сеть
@@ -392,14 +287,6 @@ population         = city.population
 separation_ratio   = metric(separated_length_m) / metric(network_length_m)
 ```
 
-Display:
-
-```text
-separation_ratio × 100
-network_length_m × 0.001
-population       × 0.001
-```
-
 Пример ranking:
 
 ```text
@@ -407,96 +294,77 @@ separation_ratio DESC
 network_length_m DESC
 ```
 
-То есть при одинаковой доле обособления выше будет город с большей длиной сети.
-
-## Public report config
+## Public API
 
 ```text
 GET /api/report-config
 ```
 
-Публичный endpoint отдаёт UI configuration, необходимую для построения table/ranking:
+Возвращает presentation configuration:
 
-- column order/type/title;
-- `metricKey`;
+- columns;
+- metricKey;
 - scale/decimals;
 - conditional rules;
-- ordered `rank.sort`;
+- `rank.sort`;
 - compatibility aliases первого ranking criterion.
 
-Metric values приходят вместе с city data в объекте `metrics`.
+Actual metric values приходят в city payload `metrics`.
 
-Desktop и mobile используют одну data/model implementation; отдельного duplicate набора rows для mobile нет.
+Desktop/mobile используют один table model; отдельных duplicate rows нет.
 
-## Public table loading state
+## Admin API
 
-Status загрузки списка городов отображается **внутри таблицы под её header**, только после того как report config уже построил header. До появления header отдельный status row не показывается.
+```text
+GET /api/admin/report-config
+PUT /api/admin/report-config
+```
 
-После успешной загрузки routine status очищается. Errors/no-data остаются пользовательскими состояниями.
+PUT требует `CAN_MANAGE_INTERFACE` или superuser.
 
 ## CSV
 
-CSV columns настраиваются отдельно от HTML table.
-
-Доступны, в зависимости от current configuration:
+CSV columns конфигурируются независимо от HTML table. Доступны:
 
 - rank;
 - city;
 - metric;
-- city category;
+- category;
 - bounds `minx/miny/maxx/maxy`.
 
-CSV headers должны быть unique case-insensitively.
+Headers должны быть unique case-insensitively.
 
-Generated file:
-
-```text
-var/public-downloads/bus-lanes.csv
-```
-
-Public URL:
+Имя generated CSV не зашито в report config. Оно берётся из:
 
 ```text
-/bus-lanes.csv
+PROJECT_SETTINGS.PUBLIC_DOWNLOAD_NAME
 ```
 
-## Admin API
-
-Получение config/catalog:
+Например `tram-lines`:
 
 ```text
-GET /api/admin/report-config
+var/public-downloads/tram-lines.csv
+/tram-lines.csv
 ```
 
-Сохранение:
+GeoJSON использует то же base name с расширением `.geojson`.
+
+## Settings transfer
+
+`REPORT_CONFIG` входит в project-settings package.
+
+Текущий package format:
 
 ```text
-PUT /api/admin/report-config
-Content-Type: application/json
+schemaVersion 6
 ```
 
-Требуется `CAN_MANAGE_INTERFACE` или superuser.
+- v5 добавил `rank.sort`;
+- v6 добавил `projectSettings.publicDownloadName`.
 
-Interactive web-admin использует session cookie; Basic остаётся доступен для scripted API.
-
-## Связь с project-settings transfer
-
-`REPORT_CONFIG` входит в:
-
-```text
-GET  /api/admin/settings/export
-POST /api/admin/settings/import
-```
-
-Актуальный package format — schemaVersion 5. V5 переносит `rank.sort`; v1-v4 с одиночным `metricKey/direction` продолжают импортироваться и нормализуются в один criterion. После import `CITY_REPORT_VALUES` строится заново на target data.
+Legacy single-rank packages остаются импортируемыми.
 
 Подробнее: [project-settings-transfer.md](project-settings-transfer.md).
-
-## Theme не влияет на расчёты
-
-`PROJECT_SETTINGS.THEME_PRESET` (`retro/classic/modern`) изменяет presentation публичной страницы, но не semantic report config, metric values, ranking или CSV.
-
-То же относится к custom city marker и line labels/popups.
 
 ## Индексы
 
@@ -507,6 +375,6 @@ PRIMARY KEY (CITY_ID)
 INDEX (RANK)
 ```
 
-JSONB `VALUES` не индексируется, потому что public runtime читает готовый object, а не выполняет JSON predicates.
+`VALUES JSONB` сейчас не требует GIN: runtime возвращает whole object и не выполняет JSON predicates.
 
 Подробнее: [database-indexes.md](database-indexes.md).
