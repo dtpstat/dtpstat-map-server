@@ -29,6 +29,7 @@ async function withServer(callback, options = {}) {
         materialized: {
           cities: 12,
           metrics: config.metrics.length,
+          rankSort: config.rank.sort,
           rankMetricKey: config.rank.metricKey,
           rankDirection: config.rank.direction,
         },
@@ -116,6 +117,7 @@ test('admin report endpoint requires auth and returns fixed catalogs', async () 
       [-2, -1, 0, 1, 2],
     );
     assert.equal(payload.catalog.maxFormatRules, 8);
+    assert.equal(payload.catalog.maxRankSorts, 8);
     assert.deepEqual(payload.lineTypes.map((item) => item.name), [
       'Обособленные',
       'Совмещённые',
@@ -123,7 +125,7 @@ test('admin report endpoint requires auth and returns fixed catalogs', async () 
   });
 });
 
-test('saving report materializes values and rebuilds public snapshots', async () => {
+test('saving report materializes values, sequential ranking and public snapshots', async () => {
   await withServer(async (baseUrl, state) => {
     const config = structuredClone(DEFAULT_REPORT_CONFIG);
     config.tableColumns[2].title = 'длина сети (км)';
@@ -137,6 +139,13 @@ test('saving report materializes values and rebuilds public snapshots', async ()
       color: '#112233',
       fontSizeStep: 1,
     }];
+    config.rank = {
+      sort: [
+        { metricKey: 'lane_m_per_1000', direction: 'desc' },
+        { metricKey: 'lane_length_m', direction: 'desc' },
+        { metricKey: 'population', direction: 'asc' },
+      ],
+    };
 
     const response = await fetch(`${baseUrl}/api/admin/report-config`, {
       method: 'PUT',
@@ -151,6 +160,8 @@ test('saving report materializes values and rebuilds public snapshots', async ()
 
     assert.equal(payload.config.tableColumns[2].title, 'длина сети (км)');
     assert.equal(payload.config.tableColumns[2].formatRules[0].color, '#112233');
+    assert.deepEqual(payload.config.rank.sort, config.rank.sort);
+    assert.deepEqual(payload.materialized.rankSort, config.rank.sort);
     assert.equal(payload.materialized.cities, 12);
     assert.equal(payload.snapshots.csvBytes, 123);
     assert.equal(state.afterSaveCalls(), 1);
