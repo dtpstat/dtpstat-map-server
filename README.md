@@ -222,7 +222,7 @@ Footer может использовать placeholders:
 
 Они подставляются при рендеринге страницы из текущего `PUBLIC_DOWNLOAD_NAME`.
 
-`var/public-downloads/` — runtime state, а не backup/source bundle. Старые статические `bus-lanes.csv`/`bus-lanes.geojson` из корня репозитория удалены.
+`var/public-downloads/` — runtime state, а не backup/source bundle. Статические source snapshots в корне репозитория не используются и не хранятся.
 
 ## Расчёты и рейтинг
 
@@ -324,13 +324,14 @@ npm start
 npm run dev
 npm run db:init
 npm run db:migrate
-npm run db:import
 npm run admin:unblock
 npm run admin:set-superuser
 npm run lint
 npm test
 npm run check
 ```
+
+Импорт и перенос application data выполняются через административные API/UI. Отдельного repository-snapshot import script нет.
 
 ## Документация
 
