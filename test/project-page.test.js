@@ -41,6 +41,21 @@ test('project page renders title keywords footer and classic theme fallback', ()
   assert.doesNotMatch(html, /\{\{YANDEX_/);
 });
 
+test('project page resolves footer download tokens from configured public file name', () => {
+  const html = renderProjectPage(template, {
+    projectName: 'Проект',
+    keywords: [],
+    footerHtml: '<p><a href="{{PUBLIC_GEOJSON_URL}}">GeoJSON</a> <a href="{{PUBLIC_CSV_URL}}">CSV</a></p>',
+    publicDownloadName: 'Трамвайные линии',
+    yandexMetrikaId: null,
+    googleAnalyticsId: null,
+  });
+
+  assert.match(html, /href="\/%D0%A2%D1%80%D0%B0%D0%BC%D0%B2%D0%B0%D0%B9%D0%BD%D1%8B%D0%B5%20%D0%BB%D0%B8%D0%BD%D0%B8%D0%B8\.geojson"/);
+  assert.match(html, /href="\/%D0%A2%D1%80%D0%B0%D0%BC%D0%B2%D0%B0%D0%B9%D0%BD%D1%8B%D0%B5%20%D0%BB%D0%B8%D0%BD%D0%B8%D0%B8\.csv"/);
+  assert.doesNotMatch(html, /PUBLIC_(?:GEOJSON|CSV)_URL/);
+});
+
 test('project page loads exactly the selected built-in theme stylesheet', () => {
   for (const themePreset of ['retro', 'classic', 'modern']) {
     const html = renderProjectPage(template, {
