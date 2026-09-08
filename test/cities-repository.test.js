@@ -18,6 +18,9 @@ test('city list does not require population but does require line geometries', a
   await repository.listCities();
 
   assert.match(sql, /city\.id::integer AS id/);
+  assert.match(sql, /city\.slug/);
+  assert.match(sql, /city\.name/);
+  assert.match(sql, /city\.full_name AS "fullName"/);
   assert.match(sql, /ST_PointOnSurface\(boundary\.geom\)/);
   assert.match(
     sql,
@@ -32,6 +35,7 @@ test('city list does not require population but does require line geometries', a
     /CASE WHEN city\.is_large IS TRUE THEN 'large' ELSE 'small' END AS category/,
   );
   assert.doesNotMatch(sql, /\n\s+id::integer AS id/);
+  assert.doesNotMatch(sql, /\n\s+full_name AS "fullName"/);
 });
 
 test('viewport selector is twenty percent larger overall and clamps WGS84 bounds', () => {
