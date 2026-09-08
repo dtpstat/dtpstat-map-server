@@ -61,13 +61,12 @@ const UPDATE_SETTINGS_SQL = `
     theme_preset = COALESCE($6::text, theme_preset),
     show_line_labels = $7,
     show_line_popups = COALESCE($8::boolean, show_line_popups),
-    public_download_name = COALESCE($9::text, public_download_name),
     mapbox_access_token = CASE
-      WHEN $10::text IS NULL THEN mapbox_access_token
-      ELSE $10::text
+      WHEN $9::text IS NULL THEN mapbox_access_token
+      ELSE $9::text
     END,
     mapbox_access_token_initialized = CASE
-      WHEN $10::text IS NULL THEN mapbox_access_token_initialized
+      WHEN $9::text IS NULL THEN mapbox_access_token_initialized
       ELSE TRUE
     END,
     updated_at = now()
@@ -149,12 +148,10 @@ function splitProjectSettingsPayload(payload) {
     throw new ProjectSettingsValidationError('Request body must be a JSON object');
   }
   const hasShowLinePopups = Object.hasOwn(payload, 'showLinePopups');
-  const hasPublicDownloadName = Object.hasOwn(payload, 'publicDownloadName');
   const {
     themePreset: rawThemePreset,
     showLineLabels = false,
     showLinePopups: rawShowLinePopups,
-    publicDownloadName: rawPublicDownloadName,
     mapboxAccessToken = null,
     ...base
   } = payload;
@@ -171,9 +168,6 @@ function splitProjectSettingsPayload(payload) {
       : normalizePublicThemePreset(rawThemePreset),
     showLineLabels,
     showLinePopups: hasShowLinePopups ? rawShowLinePopups : null,
-    publicDownloadName: hasPublicDownloadName
-      ? normalizePublicDownloadName(rawPublicDownloadName)
-      : null,
     mapboxAccessToken: normalizeMapboxAccessToken(mapboxAccessToken, { optional: true }),
   };
 }
@@ -250,7 +244,6 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
       themePreset,
       showLineLabels,
       showLinePopups,
-      publicDownloadName,
       mapboxAccessToken,
     } = splitProjectSettingsPayload(payload);
     const result = await database.query(UPDATE_SETTINGS_SQL, [
@@ -262,7 +255,6 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
       themePreset,
       showLineLabels,
       showLinePopups,
-      publicDownloadName,
       mapboxAccessToken,
     ]);
     if (!result.rows[0]) {
