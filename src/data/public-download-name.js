@@ -18,15 +18,15 @@ export function normalizePublicDownloadName(value, options = {}) {
   if (typeof value !== 'string') {
     throw new ProjectSettingsValidationError('publicDownloadName must be a string');
   }
+  if (/[\u0000-\u001f\u007f]/.test(value)) {
+    throw new ProjectSettingsValidationError('publicDownloadName contains control characters');
+  }
 
   const normalized = value.trim().replace(/\s+/g, ' ').normalize('NFC');
   if (!normalized || normalized.length > PUBLIC_DOWNLOAD_NAME_MAX_LENGTH) {
     throw new ProjectSettingsValidationError(
       `publicDownloadName must contain 1-${PUBLIC_DOWNLOAD_NAME_MAX_LENGTH} characters`,
     );
-  }
-  if (/[\u0000-\u001f\u007f]/.test(normalized)) {
-    throw new ProjectSettingsValidationError('publicDownloadName contains control characters');
   }
   if (/[\\/]/.test(normalized)) {
     throw new ProjectSettingsValidationError('publicDownloadName must not contain path separators');
