@@ -3,6 +3,7 @@ const MAX_OPERATIONS = 12;
 const MAX_TABLE_COLUMNS = 12;
 const MAX_CSV_COLUMNS = 24;
 const MAX_FORMAT_RULES = 8;
+const MAX_RANK_SORTS = 8;
 
 export class ReportConfigValidationError extends Error {
   constructor(message) {
@@ -215,7 +216,13 @@ export const DEFAULT_REPORT_CONFIG = Object.freeze({
     Object.freeze({ kind: 'maxx', title: 'maxx' }),
     Object.freeze({ kind: 'maxy', title: 'maxy' }),
   ]),
-  rank: Object.freeze({ metricKey: 'lane_m_per_1000', direction: 'desc' }),
+  rank: Object.freeze({
+    sort: Object.freeze([
+      Object.freeze({ metricKey: 'lane_m_per_1000', direction: 'desc' }),
+    ]),
+    metricKey: 'lane_m_per_1000',
+    direction: 'desc',
+  }),
   updatedAt: null,
 });
 
@@ -497,6 +504,40 @@ function normalizeColumn(value, index, metricKeys, allowedKinds, label) {
   return normalized;
 }
 
+function normalizeRank(value, metricKeys) {
+  const rank = object(value, 'rank');
+  const rawSort = Array.isArray(rank.sort)
+    ? rank.sort
+    : [{ metricKey: rank.metricKey, direction: rank.direction }];
+  if (rawSort.length === 0 || rawSort.length > MAX_RANK_SORTS) {
+    throw new ReportConfigValidationError(`rank.sort must contain 1-${MAX_RANK_SORTS} items`);
+  }
+
+  const seen = new Set();
+  const sort = rawSort.map((item, index) => {
+    const criterion = object(item, `rank.sort[${index}]`);
+    const key = metricKey(criterion.metricKey, `rank.sort[${index}].metricKey`);
+    if (!metricKeys.has(key)) {
+      throw new ReportConfigValidationError(`rank.sort[${index}].metricKey references unknown metric ${key}`);
+    }
+    if (seen.has(key)) {
+      throw new ReportConfigValidationError(`rank.sort contains duplicate metric ${key}`);
+    }
+    seen.add(key);
+    const direction = text(criterion.direction, `rank.sort[${index}].direction`, 4);
+    if (!['asc', 'desc'].includes(direction)) {
+      throw new ReportConfigValidationError(`rank.sort[${index}].direction must be asc or desc`);
+    }
+    return { metricKey: key, direction };
+  });
+
+  return {
+    sort,
+    metricKey: sort[0].metricKey,
+    direction: sort[0].direction,
+  };
+}
+
 export function validateReportConfig(payload, options = {}) {
   const input = object(payload, 'report config');
   if (!Array.isArray(input.metrics) || input.metrics.length === 0 || input.metrics.length > MAX_METRICS) {
@@ -536,21 +577,13 @@ export function validateReportConfig(payload, options = {}) {
     csvHeaders.add(normalizedHeader);
   }
 
-  const rankInput = object(input.rank, 'rank');
-  const rankMetricKey = metricKey(rankInput.metricKey, 'rank.metricKey');
-  if (!metricKeys.has(rankMetricKey)) {
-    throw new ReportConfigValidationError(`rank.metricKey references unknown metric ${rankMetricKey}`);
-  }
-  const direction = text(rankInput.direction, 'rank.direction', 4);
-  if (!['asc', 'desc'].includes(direction)) {
-    throw new ReportConfigValidationError('rank.direction must be asc or desc');
-  }
+  const rank = normalizeRank(input.rank, metricKeys);
 
   return {
     metrics,
     tableColumns,
     csvColumns,
-    rank: { metricKey: rankMetricKey, direction },
+    rank,
     updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : null,
   };
 }
@@ -576,6 +609,7 @@ export const REPORT_CONFIG_CATALOG = Object.freeze({
   decimals: REPORT_DECIMALS,
   formatFontSizes: REPORT_FORMAT_FONT_SIZES,
   maxFormatRules: MAX_FORMAT_RULES,
+  maxRankSorts: MAX_RANK_SORTS,
   tableColumnKinds: REPORT_TABLE_COLUMN_KINDS,
   csvColumnKinds: REPORT_CSV_COLUMN_KINDS,
 });
