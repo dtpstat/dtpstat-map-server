@@ -39,12 +39,20 @@ function exportPool() {
       if (/FROM report_config/i.test(text)) {
         return {
           rows: [{
-            metrics: [{
-              key: 'population',
-              name: 'Население',
-              source: { kind: 'field', field: 'city.population' },
-              operations: [],
-            }],
+            metrics: [
+              {
+                key: 'population',
+                name: 'Население',
+                source: { kind: 'field', field: 'city.population' },
+                operations: [],
+              },
+              {
+                key: 'area',
+                name: 'Площадь',
+                source: { kind: 'field', field: 'city.area_m2' },
+                operations: [],
+              },
+            ],
             tableColumns: [
               { kind: 'city', title: 'город' },
               {
@@ -65,6 +73,10 @@ function exportPool() {
                 scale: 1,
                 decimals: null,
               },
+            ],
+            rankSort: [
+              { metricKey: 'population', direction: 'desc' },
+              { metricKey: 'area', direction: 'asc' },
             ],
             rankMetricKey: 'population',
             rankDirection: 'desc',
@@ -88,18 +100,21 @@ function exportPool() {
   return { async connect() { return client; } };
 }
 
-test('settings export contains line display settings but no users, password hashes or audit log', async () => {
+test('settings export contains sequential ranking and line display settings but no private admin data', async () => {
   const service = createProjectSettingsTransferService(exportPool());
   const payload = await service.exportSettings();
 
   assert.equal(payload._dtpstat.kind, 'project-settings');
-  assert.equal(payload._dtpstat.schemaVersion, 4);
+  assert.equal(payload._dtpstat.schemaVersion, 5);
   assert.equal(payload.projectSettings.themePreset, 'modern');
   assert.equal(payload.projectSettings.showLineLabels, true);
   assert.equal(payload.projectSettings.showLinePopups, false);
   assert.equal(payload.projectSettings.mapboxAccessToken, 'pk.test-public-token-value');
   assert.equal(payload.lineTypes[0].name, 'default');
-  assert.equal(payload.reportConfig.rank.metricKey, 'population');
+  assert.deepEqual(payload.reportConfig.rank.sort, [
+    { metricKey: 'population', direction: 'desc' },
+    { metricKey: 'area', direction: 'asc' },
+  ]);
   assert.equal(payload.securitySettings.maxFailedAttempts, 5);
 
   const json = JSON.stringify(payload);
@@ -135,7 +150,7 @@ test('settings import rejects unsupported schema versions before touching the da
 
   await assert.rejects(
     service.importSettings({
-      _dtpstat: { kind: 'project-settings', schemaVersion: 5 },
+      _dtpstat: { kind: 'project-settings', schemaVersion: 6 },
     }),
     (error) => error instanceof ProjectSettingsTransferValidationError && /schemaVersion/.test(error.message),
   );
