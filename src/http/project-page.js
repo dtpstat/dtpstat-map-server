@@ -1,3 +1,5 @@
+import { publicDownloadFiles } from '../data/public-download-name.js';
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -48,6 +50,13 @@ function metricsMarkup(settings) {
   return { meta, script, yandexNoScript };
 }
 
+function footerMarkup(settings) {
+  const files = publicDownloadFiles(settings.publicDownloadName);
+  return String(settings.footerHtml ?? '')
+    .replaceAll('{{PUBLIC_GEOJSON_URL}}', files.geoJsonUrl)
+    .replaceAll('{{PUBLIC_CSV_URL}}', files.csvUrl);
+}
+
 export function renderProjectPage(template, settings) {
   const projectName = escapeHtml(settings.projectName);
   const keywords = escapeHtml((settings.keywords ?? []).join(', '));
@@ -59,7 +68,7 @@ export function renderProjectPage(template, settings) {
     .replaceAll('{{PROJECT_THEME_NAME}}', theme.name)
     .replace('{{PROJECT_THEME_STYLESHEET}}', theme.stylesheet)
     .replace('{{PROJECT_METRICS_META}}', metrics.meta)
-    .replace('{{PROJECT_FOOTER_HTML}}', settings.footerHtml)
+    .replace('{{PROJECT_FOOTER_HTML}}', footerMarkup(settings))
     .replace('{{YANDEX_METRIKA_NOSCRIPT}}', metrics.yandexNoScript)
     .replace('{{PROJECT_METRICS_SCRIPT}}', metrics.script);
 }
