@@ -5,7 +5,10 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { CITY_MARKER_ICON } from '../public/js/city-marker-icon.js';
 import { createAdminTaskManager } from './data/admin-task-manager.js';
-import { DEFAULT_PUBLIC_DOWNLOAD_NAME } from './data/public-download-name.js';
+import {
+  DEFAULT_PUBLIC_DOWNLOAD_NAME,
+  publicDownloadFiles,
+} from './data/public-download-name.js';
 import {
   DEFAULT_REPORT_CONFIG,
   validateReportConfig,
@@ -28,10 +31,6 @@ const PUBLIC_ASSETS = new Map([
   ['/android-chrome-192x192.png', 'android-chrome-192x192.png'],
   ['/android-chrome-512x512.png', 'android-chrome-512x512.png'],
   ['/bus-lanes.jpeg', 'bus-lanes.jpeg'],
-]);
-const PUBLIC_DOWNLOADS = new Map([
-  ['/bus-lanes.csv', 'bus-lanes.csv'],
-  ['/bus-lanes.geojson', 'bus-lanes.geojson'],
 ]);
 const CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'base64');
 const TEST_PROJECT_SETTINGS = Object.freeze({
@@ -375,6 +374,7 @@ export function createApp({
   app.use('/api', createProjectSettingsRouter({
     projectSettingsRepository: effectiveProjectSettingsRepository,
     ...commonAdmin,
+    afterPublicDownloadNameSave: async () => refreshPublicDownloads?.(),
   }));
   app.use('/api', createReportConfigRouter({
     reportConfigService: effectiveReportConfigService,
@@ -410,28 +410,43 @@ export function createApp({
       response.sendFile(fileName, { root: config.projectRoot });
     });
   }
-  for (const [route, fileName] of PUBLIC_DOWNLOADS) {
-    app.get(route, async (_request, response, next) => {
-      try {
-        const settings = await effectiveProjectSettingsRepository.get();
-        const baseName = settings.publicDownloadName || DEFAULT_PUBLIC_DOWNLOAD_NAME;
-        const extension = path.extname(fileName);
-        response
-          .set('Cache-Control', 'no-cache')
-          .attachment(`${baseName}${extension}`);
-        response.sendFile(fileName, { root: publicDownloadDirectory }, (error) => {
-          if (!error) return;
-          if (error.status === 404 || error.code === 'ENOENT') {
-            response.status(404).type('text').send('Not found');
-            return;
-          }
-          next(error);
-        });
-      } catch (error) {
-        next(error);
+
+  app.get('/:publicDownloadFile', async (request, response, next) => {
+    const requestedFile = request.params.publicDownloadFile;
+    if (!/\.(?:csv|geojson)$/i.test(requestedFile)) {
+      next();
+      return;
+    }
+
+    try {
+      const settings = await effectiveProjectSettingsRepository.get();
+      const files = publicDownloadFiles(settings.publicDownloadName);
+      const contentTypes = new Map([
+        [files.csvFileName, 'text/csv; charset=utf-8'],
+        [files.geoJsonFileName, 'application/geo+json; charset=utf-8'],
+      ]);
+      const contentType = contentTypes.get(requestedFile);
+      if (!contentType) {
+        next();
+        return;
       }
-    });
-  }
+
+      response
+        .set('Cache-Control', 'no-cache')
+        .type(contentType)
+        .attachment(requestedFile);
+      response.sendFile(requestedFile, { root: publicDownloadDirectory }, (error) => {
+        if (!error) return;
+        if (error.status === 404 || error.code === 'ENOENT') {
+          response.status(404).type('text').send('Not found');
+          return;
+        }
+        next(error);
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
 
   app.get('/site.webmanifest', async (_request, response, next) => {
     try {
