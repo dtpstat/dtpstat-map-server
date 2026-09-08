@@ -13,6 +13,9 @@ test('default bus-lane report configuration is valid', () => {
   const config = validateReportConfig(structuredClone(DEFAULT_REPORT_CONFIG));
 
   assert.equal(config.rank.metricKey, 'lane_m_per_1000');
+  assert.deepEqual(config.rank.sort, [
+    { metricKey: 'lane_m_per_1000', direction: 'desc' },
+  ]);
   assert.equal(config.tableColumns.length, 5);
   assert.equal(config.csvColumns.length, 8);
   assert.equal(config.metrics.length, 3);
@@ -37,6 +40,7 @@ test('city area and median geometry aggregation are available in the catalog', (
     REPORT_CONFIG_CATALOG.fields.find((field) => field.key === 'geometry.id')?.aggregates.includes('median'),
     false,
   );
+  assert.equal(REPORT_CONFIG_CATALOG.maxRankSorts, 8);
 });
 
 test('legacy report operations without explicit priority keep left-to-right semantics', () => {
@@ -187,6 +191,39 @@ test('tram report can calculate separation ratio with a selected line-type group
   assert.equal(config.metrics[2].operations[0].priority, 1);
   assert.equal(config.tableColumns[2].scale, 100);
   assert.equal(config.rank.direction, 'desc');
+  assert.deepEqual(config.rank.sort, [
+    { metricKey: 'separation_ratio', direction: 'desc' },
+  ]);
+});
+
+test('ranking accepts ordered unique metric criteria and legacy single criterion', () => {
+  const config = structuredClone(DEFAULT_REPORT_CONFIG);
+  config.rank = {
+    sort: [
+      { metricKey: 'lane_m_per_1000', direction: 'desc' },
+      { metricKey: 'lane_length_m', direction: 'desc' },
+      { metricKey: 'population', direction: 'asc' },
+    ],
+  };
+  const normalized = validateReportConfig(config);
+  assert.deepEqual(normalized.rank.sort, config.rank.sort);
+  assert.equal(normalized.rank.metricKey, 'lane_m_per_1000');
+  assert.equal(normalized.rank.direction, 'desc');
+
+  const legacy = structuredClone(DEFAULT_REPORT_CONFIG);
+  legacy.rank = { metricKey: 'population', direction: 'asc' };
+  assert.deepEqual(validateReportConfig(legacy).rank.sort, [
+    { metricKey: 'population', direction: 'asc' },
+  ]);
+
+  const duplicate = structuredClone(DEFAULT_REPORT_CONFIG);
+  duplicate.rank = {
+    sort: [
+      { metricKey: 'population', direction: 'asc' },
+      { metricKey: 'population', direction: 'desc' },
+    ],
+  };
+  assert.throws(() => validateReportConfig(duplicate), /duplicate metric population/);
 });
 
 test('public numeric columns normalize safe conditional formatting rules', () => {
@@ -314,7 +351,7 @@ test('table, CSV and rank cannot reference unknown metrics', () => {
   for (const mutate of [
     (config) => { config.tableColumns[2].metricKey = 'missing'; },
     (config) => { config.csvColumns[1].metricKey = 'missing'; },
-    (config) => { config.rank.metricKey = 'missing'; },
+    (config) => { config.rank.sort[0].metricKey = 'missing'; },
   ]) {
     const config = structuredClone(DEFAULT_REPORT_CONFIG);
     mutate(config);
