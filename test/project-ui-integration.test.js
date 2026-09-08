@@ -13,14 +13,15 @@ async function source(relativePath) {
   return fs.readFile(path.join(projectRoot, relativePath), 'utf8');
 }
 
-test('project settings migrations create branding, metrics, theme, line popup and download-name settings', async () => {
-  const [baseSql, metricsSql, limitSql, themeSql, popupSql, downloadNameSql] = await Promise.all([
+test('project settings migrations create branding, metrics, theme, line popup and dynamic download-name settings', async () => {
+  const [baseSql, metricsSql, limitSql, themeSql, popupSql, downloadNameSql, dynamicLinksSql] = await Promise.all([
     source('db/migrations/V009__project_settings.sql'),
     source('db/migrations/V010__project_metrics.sql'),
     source('db/migrations/V011__limit_yandex_metrika_id.sql'),
     source('db/migrations/V021__public_theme_preset.sql'),
     source('db/migrations/V022__line_popup_setting.sql'),
     source('db/migrations/V025__public_download_name.sql'),
+    source('db/migrations/V026__dynamic_public_download_links.sql'),
   ]);
 
   assert.match(baseSql, /CREATE TABLE IF NOT EXISTS BUSLANES\.PROJECT_SETTINGS/i);
@@ -43,6 +44,9 @@ test('project settings migrations create branding, metrics, theme, line popup an
   assert.match(popupSql, /SHOW_LINE_POPUPS BOOLEAN NOT NULL DEFAULT TRUE/i);
   assert.match(downloadNameSql, /PUBLIC_DOWNLOAD_NAME TEXT NOT NULL DEFAULT 'bus-lanes'/i);
   assert.match(downloadNameSql, /PROJECT_SETTINGS_PUBLIC_DOWNLOAD_NAME_CHECK/i);
+  assert.match(dynamicLinksSql, /\{\{PUBLIC_GEOJSON_URL\}\}/);
+  assert.match(dynamicLinksSql, /\{\{PUBLIC_CSV_URL\}\}/);
+  assert.match(dynamicLinksSql, /Base name used for materialized public GeoJSON\/CSV files, URLs and download names/i);
 });
 
 test('admin interface exposes project settings, independent line display switches and download file name', async () => {
@@ -80,17 +84,19 @@ test('admin interface exposes project settings, independent line display switche
 
   assert.match(notices, /public-download-name-editor\.js/);
   assert.match(downloadEditor, /name="publicDownloadName"/);
-  assert.match(downloadEditor, /\.geojson/);
-  assert.match(downloadEditor, /\.csv/);
+  assert.match(downloadEditor, /публичных URL и для файлов на диске/);
+  assert.match(downloadEditor, /`\/\$\{name\}\.geojson`/);
+  assert.match(downloadEditor, /`\/\$\{name\}\.csv`/);
   assert.match(downloadEditor, /\/api\/admin\/project-settings\/public-download-name/);
   assert.match(downloadEditor, /Сохранить имя файлов/);
   assert.match(downloadCss, /\.project-download-name-form/);
 });
 
-test('public page derives metadata, theme stylesheet and analytics loaders from project settings', async () => {
-  const [html, app, metrics, contentCss, retroCss, classicCss, modernCss] = await Promise.all([
+test('public page derives metadata, theme stylesheet, analytics and download links from project settings', async () => {
+  const [html, app, page, metrics, contentCss, retroCss, classicCss, modernCss] = await Promise.all([
     source('index.html'),
     source('src/app.js'),
+    source('src/http/project-page.js'),
     source('public/js/metrics.js'),
     source('public/css/project-content.css'),
     source('public/css/themes/retro.css'),
@@ -121,6 +127,9 @@ test('public page derives metadata, theme stylesheet and analytics loaders from 
   assert.match(app, /renderProjectPage\(publicPageTemplate, settings\)/);
   assert.match(app, /https:\/\/mc\.yandex\.ru/);
   assert.match(app, /https:\/\/\*\.googletagmanager\.com/);
+  assert.match(page, /publicDownloadFiles\(settings\.publicDownloadName\)/);
+  assert.match(page, /replaceAll\('\{\{PUBLIC_GEOJSON_URL\}\}', files\.geoJsonUrl\)/);
+  assert.match(page, /replaceAll\('\{\{PUBLIC_CSV_URL\}\}', files\.csvUrl\)/);
   assert.match(metrics, /https:\/\/mc\.yandex\.ru\/metrika\/tag\.js/);
   assert.match(metrics, /https:\/\/www\.googletagmanager\.com\/gtag\/js/);
   assert.match(metrics, /metaContent\('yandex-metrika-id'\)/);
@@ -133,14 +142,25 @@ test('public page derives metadata, theme stylesheet and analytics loaders from 
   assert.match(modernCss, /--selected:\s*#e5eee3/i);
 });
 
-test('public GeoJSON and CSV routes keep stable URLs but use configured attachment names', async () => {
-  const app = await source('src/app.js');
+test('public GeoJSON and CSV routes and disk files are fully derived from the configured base name', async () => {
+  const [app, service] = await Promise.all([
+    source('src/app.js'),
+    source('src/data/public-download-service.js'),
+  ]);
 
-  assert.match(app, /\['\/bus-lanes\.csv', 'bus-lanes\.csv'\]/);
-  assert.match(app, /\['\/bus-lanes\.geojson', 'bus-lanes\.geojson'\]/);
-  assert.match(app, /settings\.publicDownloadName \|\| DEFAULT_PUBLIC_DOWNLOAD_NAME/);
-  assert.match(app, /path\.extname\(fileName\)/);
-  assert.match(app, /\.attachment\(`\$\{baseName\}\$\{extension\}`\)/);
+  assert.match(app, /app\.get\('\/:publicDownloadFile'/);
+  assert.match(app, /publicDownloadFiles\(settings\.publicDownloadName\)/);
+  assert.match(app, /\[files\.csvFileName, 'text\/csv; charset=utf-8'\]/);
+  assert.match(app, /\[files\.geoJsonFileName, 'application\/geo\+json; charset=utf-8'\]/);
+  assert.match(app, /response\.sendFile\(requestedFile, \{ root: publicDownloadDirectory \}/);
+  assert.doesNotMatch(app, /const PUBLIC_DOWNLOADS/);
+  assert.doesNotMatch(app, /\['\/bus-lanes\.csv', 'bus-lanes\.csv'\]/);
+  assert.doesNotMatch(app, /\['\/bus-lanes\.geojson', 'bus-lanes\.geojson'\]/);
+
+  assert.match(service, /files = publicDownloadFiles\(settings\?\.publicDownloadName\)/);
+  assert.match(service, /path\.join\(directory, files\.geoJsonFileName\)/);
+  assert.match(service, /path\.join\(directory, files\.csvFileName\)/);
+  assert.match(service, /removeObsoleteSnapshots/);
 });
 
 test('public map reloads independent line display settings without a page refresh', async () => {
