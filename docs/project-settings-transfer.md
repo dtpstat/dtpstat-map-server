@@ -19,7 +19,7 @@ Endpoint доступны только `IS_SUPERUSER`.
 
 ```text
 _dtpstat.kind = project-settings
-_dtpstat.schemaVersion = 5
+_dtpstat.schemaVersion = 6
 ```
 
 Import принимает:
@@ -30,13 +30,16 @@ schemaVersion 2
 schemaVersion 3
 schemaVersion 4
 schemaVersion 5
+schemaVersion 6
 ```
 
 Legacy packages нормализуются к текущей модели. Для отсутствующих в старых форматах security fields используются совместимые defaults; отсутствующий theme normalizes to `classic`. До v4 hover-popup имени линии был всегда включён, поэтому для v1-v3 без `showLinePopups` используется compatibility default `true`.
 
-V5 добавляет перенос ordered multi-column ranking. V1-v4 с прежним одиночным `rank.metricKey/rank.direction` продолжают импортироваться и нормализуются в один criterion.
+V5 добавил перенос ordered multi-column ranking. V1-v4 с прежним одиночным `rank.metricKey/rank.direction` продолжают импортироваться и нормализуются в один criterion.
 
-## Что входит в v5
+V6 добавляет `projectSettings.publicDownloadName` — базовое имя публичных GeoJSON/CSV файлов. При импорте v1-v5 без этого поля текущее имя target deployment сохраняется.
+
+## Что входит в v6
 
 ### PROJECT_SETTINGS
 
@@ -50,6 +53,7 @@ V5 добавляет перенос ordered multi-column ranking. V1-v4 с пр
 - `themePreset`;
 - `showLineLabels` — постоянные подписи `placemarkName` вдоль линий;
 - `showLinePopups` — popup `placemarkName` при наведении указателя;
+- `publicDownloadName` — базовое имя скачиваемых GeoJSON/CSV без расширения;
 - public `mapboxAccessToken`.
 
 `showLineLabels` и `showLinePopups` независимы: можно включить любой из режимов отдельно, оба одновременно или отключить оба.
@@ -61,6 +65,15 @@ retro
 classic
 modern
 ```
+
+`publicDownloadName` задаётся без `.geojson`/`.csv`. Сервер сам формирует:
+
+```text
+<publicDownloadName>.geojson
+<publicDownloadName>.csv
+```
+
+Public URL остаются стабильными (`/bus-lanes.geojson` и `/bus-lanes.csv`), имя из настройки используется в `Content-Disposition`, то есть как имя файла при скачивании.
 
 Mapbox token — browser/public `pk.*` token. В settings transfer он является частью project configuration.
 
@@ -144,16 +157,16 @@ Package намеренно не переносит:
 - `MAPBOX_STYLE_URL`;
 - custom city marker PNG binary и его image metadata.
 
-Последний пункт важен: city marker хранится в `PROJECT_SETTINGS`, но текущий v5 transfer package его **не экспортирует**.
+Последний пункт важен: city marker хранится в `PROJECT_SETTINGS`, но текущий v6 transfer package его **не экспортирует**.
 
-## Пример v5
+## Пример v6
 
 ```json
 {
   "_dtpstat": {
     "kind": "project-settings",
-    "schemaVersion": 5,
-    "exportedAt": "2026-09-08T02:30:00.000Z"
+    "schemaVersion": 6,
+    "exportedAt": "2026-09-08T03:00:00.000Z"
   },
   "projectSettings": {
     "projectName": "Трамвайные системы России",
@@ -164,6 +177,7 @@ Package намеренно не переносит:
     "themePreset": "classic",
     "showLineLabels": false,
     "showLinePopups": true,
+    "publicDownloadName": "tram-lines",
     "mapboxAccessToken": "pk...."
   },
   "lineTypes": [
@@ -239,9 +253,23 @@ Package намеренно не переносит:
 
 Для v1-v3 отсутствующий `showLinePopups` трактуется как `true`, поскольку именно так работал публичный frontend до разделения настроек.
 
+## Семантика имени публичных файлов
+
+Начиная с v6 settings package содержит:
+
+```json
+{
+  "publicDownloadName": "tram-lines"
+}
+```
+
+Расширение в setting не хранится. Значения с `.csv` или `.geojson`, path separators и control characters отклоняются validator-ом.
+
+Для v1-v5 отсутствие поля означает **сохранить текущее target-значение**, а не сбросить его в `bus-lanes`.
+
 ## Семантика ranking transfer
 
-V5 экспортирует ordered array:
+V5 и новее экспортируют ordered array:
 
 ```json
 {
@@ -302,7 +330,7 @@ Target-only types, отсутствующие в package, **не удаляют�
 
 1. проверяет `_dtpstat.kind/schemaVersion`;
 2. валидирует project settings;
-3. валидирует footer HTML/analytics/theme/line display settings/Mapbox token;
+3. валидирует footer HTML/analytics/theme/line display settings/public download name/Mapbox token;
 4. валидирует line type dictionary;
 5. нормализует security policy;
 6. открывает DB transaction/import lock;
