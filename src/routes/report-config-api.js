@@ -4,7 +4,10 @@ import {
   REPORT_CONFIG_CATALOG,
   ReportConfigValidationError,
 } from '../data/report-config.js';
-import { createAdminOperationAudit } from '../http/admin-auth.js';
+import {
+  createAdminOperationAudit,
+  recordAdminOperationChanges,
+} from '../http/admin-auth.js';
 
 /**
  * @param {{
@@ -70,7 +73,13 @@ export function createReportConfigRouter({
     jsonBody,
     async (request, response, next) => {
       try {
+        const previousConfig = await reportConfigService.get();
         const result = await reportConfigService.save(request.body);
+        recordAdminOperationChanges(
+          response,
+          { reportConfig: previousConfig },
+          { reportConfig: result.config },
+        );
         const snapshots = await afterSave(result);
         response.set('Cache-Control', 'no-store');
         response.json({

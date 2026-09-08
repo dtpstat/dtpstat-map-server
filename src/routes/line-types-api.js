@@ -1,6 +1,9 @@
 import express, { Router } from 'express';
 import { LineTypeValidationError } from '../data/line-types.js';
-import { createAdminOperationAudit } from '../http/admin-auth.js';
+import {
+  createAdminOperationAudit,
+  recordAdminOperationChanges,
+} from '../http/admin-auth.js';
 
 /**
  * @param {{
@@ -43,7 +46,13 @@ export function createLineTypesRouter({
         return;
       }
       try {
+        const previousLineTypes = await lineTypesRepository.list();
         const lineTypes = await lineTypesRepository.save(request.body);
+        recordAdminOperationChanges(
+          response,
+          { lineTypes: previousLineTypes },
+          { lineTypes },
+        );
         response.set('Cache-Control', 'no-store');
         response.json({ lineTypes });
       } catch (error) {

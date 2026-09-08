@@ -13,7 +13,10 @@ import {
   ProjectSettingsValidationError,
 } from '../data/project-settings.js';
 import { PUBLIC_DOWNLOAD_NAME_MAX_LENGTH } from '../data/public-download-name.js';
-import { createAdminOperationAudit } from '../http/admin-auth.js';
+import {
+  createAdminOperationAudit,
+  recordAdminOperationChanges,
+} from '../http/admin-auth.js';
 
 const DEFAULT_CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'base64');
 
@@ -131,7 +134,9 @@ export function createProjectSettingsRouter({
     jsonBody,
     async (request, response, next) => {
       try {
+        const previousSettings = await projectSettingsRepository.get();
         const settings = await projectSettingsRepository.save(request.body);
+        recordAdminOperationChanges(response, previousSettings, settings);
         response.set('Cache-Control', 'no-store');
         response.json({ settings });
       } catch (error) {
@@ -161,6 +166,11 @@ export function createProjectSettingsRouter({
             request.body?.publicDownloadName,
           );
           const publicDownloads = await afterPublicDownloadNameSave?.();
+          recordAdminOperationChanges(
+            response,
+            { publicDownloadName: previousName },
+            { publicDownloadName: settings.publicDownloadName },
+          );
           response.set('Cache-Control', 'no-store').json({ settings, publicDownloads });
         } catch (error) {
           if (error instanceof ProjectSettingsValidationError) {
@@ -190,11 +200,31 @@ export function createProjectSettingsRouter({
       cityMarkerBody,
       async (request, response, next) => {
         try {
+          const previousIcon = typeof projectSettingsRepository.getCityMarkerIcon === 'function'
+            ? await projectSettingsRepository.getCityMarkerIcon()
+            : null;
           const icon = validateCityMarkerIcon(
             request.body,
             request.get('content-type'),
           );
           const settings = await projectSettingsRepository.saveCityMarkerIcon(icon);
+          recordAdminOperationChanges(
+            response,
+            {
+              cityMarkerIcon: previousIcon
+                ? { custom: true, mime: previousIcon.mime, bytes: previousIcon.data?.length ?? null }
+                : { custom: false },
+            },
+            {
+              cityMarkerIcon: {
+                custom: true,
+                mime: icon.mime,
+                width: icon.width,
+                height: icon.height,
+                bytes: icon.data.length,
+              },
+            },
+          );
           response.set('Cache-Control', 'no-store').json({ settings });
         } catch (error) {
           if (error instanceof CityMarkerIconValidationError) {
@@ -214,7 +244,19 @@ export function createProjectSettingsRouter({
       createAdminOperationAudit(securityService, 'interface.project.city-marker-icon.reset'),
       async (_request, response, next) => {
         try {
+          const previousIcon = typeof projectSettingsRepository.getCityMarkerIcon === 'function'
+            ? await projectSettingsRepository.getCityMarkerIcon()
+            : null;
           const settings = await projectSettingsRepository.clearCityMarkerIcon();
+          recordAdminOperationChanges(
+            response,
+            {
+              cityMarkerIcon: previousIcon
+                ? { custom: true, mime: previousIcon.mime, bytes: previousIcon.data?.length ?? null }
+                : { custom: false },
+            },
+            { cityMarkerIcon: { custom: false } },
+          );
           response.set('Cache-Control', 'no-store').json({ settings });
         } catch (error) {
           next(error);

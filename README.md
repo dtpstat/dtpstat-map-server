@@ -4,7 +4,7 @@ Node.js/Express + PostgreSQL/PostGIS сервер интерактивной к�
 
 Требования:
 
-- Node.js `20.19+`;
+- Node.js `20.19+` (для production рекомендуется Node.js `24.x`);
 - PostgreSQL;
 - PostGIS.
 
@@ -26,14 +26,14 @@ Node.js/Express + PostgreSQL/PostGIS сервер интерактивной к�
 - настраиваемый PNG-маркер городов;
 - настраиваемое базовое имя публичных GeoJSON/CSV;
 - DB-backed Yandex Metrica и Google Analytics 4 с CSP-safe ранней загрузкой;
-- DB-backed пользователи, роли, sessions, profile/avatar, IP/account lockout и audit;
+- DB-backed пользователи, роли, sessions, profile/avatar, IP/account lockout и audit с конкретным before/after change-set для несекретных admin-изменений;
 - WebSocket-журнал и single-task guard для длительных операций управления данными;
 - HTTP/HTTPS и deployment за reverse proxy.
 
 ## Быстрый запуск
 
 ```bash
-npm install
+npm ci
 cp .env.example .env
 # заполнить .env
 npm run db:init
