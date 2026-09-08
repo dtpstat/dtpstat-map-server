@@ -178,6 +178,7 @@ function setupInterfaceTabs() {
 
 async function loadInterfaceEditors(user) {
   await import('./project-settings-editor.js');
+  await import('./public-download-name-editor.js');
   await import('./line-types-editor.js');
 
   // Compatibility bootstrap for the legacy report module only. The temporary
