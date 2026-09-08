@@ -92,19 +92,14 @@ if (taskTabs && controlCard && !document.querySelector('[data-task-tab="report"]
 
           <section class="report-builder-section report-view-panel" id="report-view-rank"
                    role="tabpanel" data-report-view-panel="rank" hidden>
-            <h5>Рейтинг</h5>
-            <p>Выберите материализованную метрику, по которой присваивается место внутри каждой категории городов.</p>
-            <div class="report-rank-grid">
-              <label>Метрика рейтинга
-                <select id="report-rank-metric"></select>
-              </label>
-              <label>Направление
-                <select id="report-rank-direction">
-                  <option value="desc">Больше — выше</option>
-                  <option value="asc">Меньше — выше</option>
-                </select>
-              </label>
+            <div class="report-section-heading">
+              <div>
+                <h5>Рейтинг</h5>
+                <p>Критерии применяются последовательно сверху вниз внутри каждой категории городов: сначала первый, при равенстве — второй и так далее. Последний резервный критерий всегда — название города.</p>
+              </div>
+              <button class="secondary report-add-button" id="report-add-rank-sort" type="button">Добавить критерий</button>
             </div>
+            <div class="report-column-list" id="report-rank-sort"></div>
           </section>
         </div>
         <button class="task-action report-save-button" type="submit">Сохранить и пересчитать</button>
@@ -130,8 +125,8 @@ if (form) {
   const metricsHost = document.querySelector('#report-metrics');
   const tableColumnsHost = document.querySelector('#report-table-columns');
   const csvColumnsHost = document.querySelector('#report-csv-columns');
-  const rankMetric = document.querySelector('#report-rank-metric');
-  const rankDirection = document.querySelector('#report-rank-direction');
+  const rankSortHost = document.querySelector('#report-rank-sort');
+  const addRankSort = document.querySelector('#report-add-rank-sort');
   const updatedAt = document.querySelector('#report-config-updated-at');
   const message = document.querySelector('#report-config-message');
   const viewTabs = [...document.querySelectorAll('[data-report-view-tab]')];
@@ -259,6 +254,20 @@ if (form) {
     };
   }
 
+  function normalizeRankShape() {
+    const fallback = state.config.metrics[0]?.key;
+    const rank = state.config.rank && typeof state.config.rank === 'object'
+      ? state.config.rank
+      : {};
+    if (!Array.isArray(rank.sort) || rank.sort.length === 0) {
+      rank.sort = [{
+        metricKey: rank.metricKey ?? fallback,
+        direction: rank.direction === 'asc' ? 'asc' : 'desc',
+      }];
+    }
+    state.config.rank = rank;
+  }
+
   function normalizeReferences() {
     const keys = new Set(state.config.metrics.map((metric) => metric.key));
     const fallback = state.config.metrics[0]?.key;
@@ -267,7 +276,23 @@ if (form) {
         if (column.kind === 'metric' && !keys.has(column.metricKey)) column.metricKey = fallback;
       }
     }
-    if (!keys.has(state.config.rank.metricKey)) state.config.rank.metricKey = fallback;
+
+    normalizeRankShape();
+    const usedRankKeys = new Set();
+    state.config.rank.sort = state.config.rank.sort.filter((criterion) => {
+      if (!criterion || !keys.has(criterion.metricKey) || usedRankKeys.has(criterion.metricKey)) {
+        return false;
+      }
+      usedRankKeys.add(criterion.metricKey);
+      criterion.direction = criterion.direction === 'asc' ? 'asc' : 'desc';
+      return true;
+    });
+    if (state.config.rank.sort.length === 0 && fallback) {
+      state.config.rank.sort.push({ metricKey: fallback, direction: 'desc' });
+    }
+    const primary = state.config.rank.sort[0];
+    state.config.rank.metricKey = primary?.metricKey ?? fallback;
+    state.config.rank.direction = primary?.direction ?? 'desc';
   }
 
   function metricIsReferencedByMetric(key) {
@@ -962,9 +987,89 @@ if (form) {
   }
 
   function renderRank() {
-    rankMetric.replaceChildren(...metricOptions().map((item) => option(item.value, item.label)));
-    rankMetric.value = state.config.rank.metricKey;
-    rankDirection.value = state.config.rank.direction;
+    normalizeRankShape();
+    rankSortHost.replaceChildren();
+    const sort = state.config.rank.sort;
+    const used = new Set(sort.map((criterion) => criterion.metricKey));
+
+    sort.forEach((criterion, index) => {
+      const card = document.createElement('article');
+      card.className = 'report-column-card';
+      const row = document.createElement('div');
+      row.className = 'report-column-row';
+
+      const priorityLabel = document.createElement('label');
+      priorityLabel.textContent = 'Порядок';
+      const priority = document.createElement('input');
+      priority.type = 'text';
+      priority.readOnly = true;
+      priority.value = index === 0 ? '1 — сначала' : String(index + 1);
+      priorityLabel.append(priority);
+
+      const metricLabel = document.createElement('label');
+      metricLabel.textContent = 'Метрика';
+      const availableMetrics = metricOptions().filter((item) =>
+        item.value === criterion.metricKey || !used.has(item.value));
+      const metricSelect = select(availableMetrics, criterion.metricKey);
+      metricLabel.append(metricSelect);
+      metricSelect.addEventListener('change', () => {
+        criterion.metricKey = metricSelect.value;
+        normalizeReferences();
+        renderAll();
+      });
+
+      const directionLabel = document.createElement('label');
+      directionLabel.textContent = 'Направление';
+      const directionSelect = select([
+        { value: 'desc', label: 'Больше — выше' },
+        { value: 'asc', label: 'Меньше — выше' },
+      ], criterion.direction);
+      directionLabel.append(directionSelect);
+      directionSelect.addEventListener('change', () => {
+        criterion.direction = directionSelect.value;
+        normalizeReferences();
+      });
+
+      const actions = document.createElement('div');
+      actions.className = 'report-row-actions';
+      const up = document.createElement('button');
+      up.type = 'button';
+      up.className = 'secondary report-small-button';
+      up.textContent = '↑';
+      up.title = 'Повысить приоритет';
+      up.disabled = index === 0;
+      up.addEventListener('click', () => {
+        [sort[index - 1], sort[index]] = [sort[index], sort[index - 1]];
+        renderAll();
+      });
+      const down = document.createElement('button');
+      down.type = 'button';
+      down.className = 'secondary report-small-button';
+      down.textContent = '↓';
+      down.title = 'Понизить приоритет';
+      down.disabled = index === sort.length - 1;
+      down.addEventListener('click', () => {
+        [sort[index + 1], sort[index]] = [sort[index], sort[index + 1]];
+        renderAll();
+      });
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'danger report-small-button';
+      remove.textContent = '×';
+      remove.title = 'Удалить критерий';
+      remove.disabled = sort.length <= 1;
+      remove.addEventListener('click', () => {
+        sort.splice(index, 1);
+        renderAll();
+      });
+      actions.append(up, down, remove);
+      row.append(priorityLabel, metricLabel, directionLabel, actions);
+      card.append(row);
+      rankSortHost.append(card);
+    });
+
+    const maxRankSorts = state.catalog.maxRankSorts ?? 8;
+    addRankSort.disabled = sort.length >= maxRankSorts || used.size >= state.config.metrics.length;
   }
 
   function renderAll() {
@@ -978,8 +1083,14 @@ if (form) {
     setView(state.view);
   }
 
-  rankMetric.addEventListener('change', () => { state.config.rank.metricKey = rankMetric.value; });
-  rankDirection.addEventListener('change', () => { state.config.rank.direction = rankDirection.value; });
+  addRankSort.addEventListener('click', () => {
+    normalizeReferences();
+    const used = new Set(state.config.rank.sort.map((criterion) => criterion.metricKey));
+    const candidate = metricOptions().find((item) => !used.has(item.value));
+    if (!candidate) return;
+    state.config.rank.sort.push({ metricKey: candidate.value, direction: 'desc' });
+    renderAll();
+  });
 
   document.querySelector('#report-add-metric').addEventListener('click', () => {
     const source = defaultOperand('aggregate');
@@ -1025,6 +1136,7 @@ if (form) {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!form.reportValidity() || !state.config) return;
+    normalizeReferences();
     setMessage('Сохраняем конфигурацию и пересчитываем города…');
     try {
       const response = await fetch('/api/admin/report-config', {
