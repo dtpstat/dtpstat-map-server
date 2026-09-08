@@ -59,9 +59,35 @@ const defaultType = {
 };
 
 const defaultMatchRows = [
-  { inputIndex: 0, boundaryId: '11', cityId: '1', cityName: 'Первый', candidateCount: 1 },
-  { inputIndex: 1, boundaryId: '12', cityId: '2', cityName: 'Второй', candidateCount: 2 },
-  { inputIndex: 2, boundaryId: null, cityId: null, cityName: null, candidateCount: 0 },
+  {
+    inputIndex: 0,
+    boundaryId: '11',
+    cityId: '1',
+    cityName: 'Первый',
+    placeName: 'Первый',
+    candidateCount: 1,
+  },
+  {
+    inputIndex: 1,
+    boundaryId: '12',
+    cityId: null,
+    cityName: 'Второй',
+    placeName: 'Второй',
+    candidateCount: 2,
+  },
+  {
+    inputIndex: 2,
+    boundaryId: null,
+    cityId: null,
+    cityName: null,
+    placeName: null,
+    candidateCount: 0,
+  },
+];
+
+const defaultResolvedCities = [
+  { id: 1, name: 'Первый' },
+  { id: 2, name: 'Второй' },
 ];
 
 function createPool({
@@ -69,8 +95,8 @@ function createPool({
   initialTypeRows = [defaultType],
   finalTypeRows = initialTypeRows,
   hasBoundaries = true,
-  hasLinkedBoundaries = true,
   matchRows = defaultMatchRows,
+  resolvedCities = defaultResolvedCities,
 } = {}) {
   const queries = [];
   let released = false;
@@ -78,11 +104,13 @@ function createPool({
   let loadCount = 0;
   let insertCount = 0;
   let insertedGeometryPayload = null;
+  let matchedCityPayload = null;
 
   const client = {
     async query(text, values = []) {
       const normalized = text.trim();
       queries.push(normalized);
+
       if (
         normalized.startsWith('WITH requested AS') &&
         normalized.includes('INSERT INTO line_types (name, title)')
@@ -98,17 +126,30 @@ function createPool({
         const rows = loadCount === 1 ? initialTypeRows : finalTypeRows;
         return { rows, rowCount: rows.length };
       }
-      if (
-        normalized.startsWith('SELECT') &&
-        normalized.includes('AS "hasLinkedBoundaries"')
-      ) {
-        return {
-          rows: [{ hasBoundaries, hasLinkedBoundaries }],
-          rowCount: 1,
-        };
+      if (normalized === 'SELECT EXISTS (SELECT 1 FROM city_boundaries) AS ready') {
+        return { rows: [{ ready: hasBoundaries }], rowCount: 1 };
       }
       if (normalized.includes('LEFT JOIN LATERAL')) {
         return { rows: matchRows, rowCount: matchRows.length };
+      }
+      if (
+        normalized.startsWith('WITH requested AS') &&
+        normalized.includes('INSERT INTO cities (')
+      ) {
+        matchedCityPayload = JSON.parse(values[0]);
+        return { rows: resolvedCities, rowCount: resolvedCities.length };
+      }
+      if (
+        normalized.startsWith('WITH requested AS') &&
+        normalized.includes('UPDATE city_boundaries AS boundary')
+      ) {
+        return { rows: [], rowCount: 1 };
+      }
+      if (
+        normalized.startsWith('WITH requested AS') &&
+        normalized.includes('SELECT city.id::integer AS id, city.name')
+      ) {
+        return { rows: resolvedCities, rowCount: resolvedCities.length };
       }
       if (
         normalized.startsWith('WITH payload_rows AS') &&
@@ -137,6 +178,7 @@ function createPool({
     get connections() { return connections; },
     get insertCount() { return insertCount; },
     get insertedGeometryPayload() { return insertedGeometryPayload; },
+    get matchedCityPayload() { return matchedCityPayload; },
     async connect() {
       connections += 1;
       return client;
@@ -172,7 +214,7 @@ function parserFor(nextFeatures) {
   };
 }
 
-test('KML update resolves imported NAME to local numeric type and atomically replaces geometries', async () => {
+test('KML matches every imported OSM place and materializes missing city records', async () => {
   const pool = createPool();
   const service = createKmlUpdateService(pool, config, dependencies);
 
@@ -181,6 +223,7 @@ test('KML update resolves imported NAME to local numeric type and atomically rep
   assert.equal(result.importedGeometries, 2);
   assert.equal(result.skippedWithoutCity, 1);
   assert.equal(result.resolvedAmbiguous, 1);
+  assert.equal(result.citiesUpdated, 2);
   assert.equal(result.lineTypes[0].code, 0);
   assert.equal(result.lineTypes[0].name, 'default');
   assert.deepEqual(result.createdLineTypes, []);
@@ -193,44 +236,78 @@ test('KML update resolves imported NAME to local numeric type and atomically rep
   );
   assert.deepEqual(
     pool.insertedGeometryPayload.map((row) => row.cityId),
-    ['1', '2'],
+    [1, 2],
   );
+  assert.deepEqual(pool.matchedCityPayload, [
+    { cityName: 'Первый', boundaryId: '11' },
+    { cityName: 'Второй', boundaryId: '12' },
+  ]);
+
   const matchStageQuery = pool.queries.find((query) =>
     query.startsWith('CREATE TEMP TABLE kml_place_match_geometries'));
-  assert.match(matchStageQuery, /FROM city_boundaries\s+WHERE city_id IS NOT NULL/);
+  assert.match(matchStageQuery, /FROM city_boundaries\s*$/);
+  assert.doesNotMatch(matchStageQuery, /WHERE city_id IS NOT NULL/);
+
   const matchQuery = pool.queries.find((query) => query.includes('LEFT JOIN LATERAL'));
-  assert.match(matchQuery, /JOIN cities AS city ON city\.id = boundary\.city_id/);
-  assert.doesNotMatch(matchQuery, /\(boundary\.city_id IS NOT NULL\) DESC/);
+  assert.match(matchQuery, /LEFT JOIN cities AS named_city ON named_city\.name = boundary\.osm_name/);
+  assert.match(matchQuery, /COALESCE\(boundary\.city_id, named_city\.id\) AS city_id/);
   assert.equal(pool.queries.at(-1), 'COMMIT');
   assert.equal(pool.released, true);
 });
 
-test('KML refuses a matched OSM boundary without a linked city', async () => {
+test('KML imports lines when all matching OSM boundaries initially have city_id NULL', async () => {
   const pool = createPool({
     matchRows: [
-      { inputIndex: 0, boundaryId: '11', cityId: '1', cityName: 'Первый', candidateCount: 1 },
-      { inputIndex: 1, boundaryId: '12', cityId: null, cityName: null, candidateCount: 1 },
-      { inputIndex: 2, boundaryId: null, cityId: null, cityName: null, candidateCount: 0 },
+      {
+        inputIndex: 0,
+        boundaryId: '11',
+        cityId: null,
+        cityName: 'Первый',
+        placeName: 'Первый',
+        candidateCount: 1,
+      },
+      {
+        inputIndex: 1,
+        boundaryId: '12',
+        cityId: null,
+        cityName: 'Второй',
+        placeName: 'Второй',
+        candidateCount: 1,
+      },
+      {
+        inputIndex: 2,
+        boundaryId: null,
+        cityId: null,
+        cityName: null,
+        placeName: null,
+        candidateCount: 0,
+      },
     ],
   });
   const service = createKmlUpdateService(pool, config, dependencies);
 
-  await assert.rejects(
-    service.update(undefined, {}),
-    /without a linked city/,
+  const result = await service.update(undefined, {});
+
+  assert.equal(result.importedGeometries, 2);
+  assert.deepEqual(pool.insertedGeometryPayload.map((row) => row.cityId), [1, 2]);
+  assert.equal(
+    pool.queries.some((query) => query.includes('INSERT INTO cities (')),
+    true,
   );
-  assert.equal(pool.queries.includes('DELETE FROM city_geometries'), false);
-  assert.equal(pool.queries.at(-1), 'ROLLBACK');
-  assert.equal(pool.released, true);
+  assert.equal(
+    pool.queries.some((query) => query.includes('UPDATE city_boundaries AS boundary')),
+    true,
+  );
+  assert.equal(pool.queries.at(-1), 'COMMIT');
 });
 
-test('KML reports when OSM boundaries exist but none are linked to cities', async () => {
-  const pool = createPool({ hasLinkedBoundaries: false });
+test('KML reports empty OSM boundary storage before matching', async () => {
+  const pool = createPool({ hasBoundaries: false });
   const service = createKmlUpdateService(pool, config, dependencies);
 
   await assert.rejects(
     service.update(undefined, {}),
-    /boundaries are not linked to cities/,
+    /OSM place boundaries are empty/,
   );
   assert.equal(
     pool.queries.some((query) =>
@@ -314,18 +391,24 @@ test('KML matches imported NAME ignoring case and outer spaces without creating 
   assert.equal(pool.insertCount, 0);
 });
 
-test('KML dry run does not insert missing types or allocate numeric CODE values', async () => {
+test('KML dry run uses OSM place names without creating city or line-type records', async () => {
   const typedFeatures = features.map((feature) => ({
     ...feature,
     businessTypeName: 'Новый тип',
   }));
-  const pool = createPool({ initialTypeRows: [] });
+  const pool = createPool({
+    initialTypeRows: [],
+    matchRows: defaultMatchRows.map((row) => row.boundaryId === null
+      ? row
+      : { ...row, cityId: null }),
+  });
   const service = createKmlUpdateService(pool, config, parserFor(typedFeatures));
 
   const result = await service.update(undefined, { dryRun: 'true' });
 
   assert.equal(result.dryRun, true);
   assert.equal(result.importedGeometries, 2);
+  assert.equal(result.citiesUpdated, 2);
   assert.deepEqual(result.createdLineTypes, []);
   assert.deepEqual(result.wouldCreateLineTypes, [
     {
@@ -339,6 +422,10 @@ test('KML dry run does not insert missing types or allocate numeric CODE values'
     },
   ]);
   assert.equal(pool.insertCount, 0);
+  assert.equal(
+    pool.queries.some((query) => query.includes('INSERT INTO cities (')),
+    false,
+  );
   assert.equal(pool.queries.some((query) => query === 'DELETE FROM city_geometries'), false);
   assert.equal(pool.queries.at(-1), 'ROLLBACK');
 });
