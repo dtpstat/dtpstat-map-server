@@ -70,14 +70,22 @@ export function serializePublicCsv(rows, columns = LEGACY_PUBLIC_CSV_COLUMNS) {
   return `${lines.join('\n')}\n`;
 }
 
+async function unlinkIfPresent(filePath) {
+  try {
+    await fs.unlink(filePath);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+}
+
 async function removeObsoleteSnapshots(directory, keepNames) {
   const entries = await fs.readdir(directory, { withFileTypes: true });
-  await Promise.allSettled(entries
+  await Promise.all(entries
     .filter((entry) =>
       entry.isFile() &&
       /\.(?:csv|geojson)$/i.test(entry.name) &&
       !keepNames.has(entry.name))
-    .map((entry) => fs.unlink(path.join(directory, entry.name))));
+    .map((entry) => unlinkIfPresent(path.join(directory, entry.name))));
 }
 
 /**
