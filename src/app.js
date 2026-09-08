@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { CITY_MARKER_ICON } from '../public/js/city-marker-icon.js';
 import { createAdminTaskManager } from './data/admin-task-manager.js';
+import { DEFAULT_PUBLIC_DOWNLOAD_NAME } from './data/public-download-name.js';
 import {
   DEFAULT_REPORT_CONFIG,
   validateReportConfig,
@@ -40,6 +41,7 @@ const TEST_PROJECT_SETTINGS = Object.freeze({
   yandexMetrikaId: null,
   googleAnalyticsId: null,
   showLineLabels: false,
+  publicDownloadName: DEFAULT_PUBLIC_DOWNLOAD_NAME,
   updatedAt: '2026-01-01T00:00:00.000Z',
 });
 
@@ -50,6 +52,17 @@ function testProjectSettingsRepository() {
     async save(payload) {
       settings = { ...payload, updatedAt: new Date().toISOString() };
       return settings;
+    },
+    async savePublicDownloadName(value) {
+      settings = {
+        ...settings,
+        publicDownloadName: value,
+        updatedAt: new Date().toISOString(),
+      };
+      return {
+        publicDownloadName: settings.publicDownloadName,
+        updatedAt: settings.updatedAt,
+      };
     },
   };
 }
@@ -398,16 +411,25 @@ export function createApp({
     });
   }
   for (const [route, fileName] of PUBLIC_DOWNLOADS) {
-    app.get(route, (_request, response, next) => {
-      response.set('Cache-Control', 'no-cache');
-      response.sendFile(fileName, { root: publicDownloadDirectory }, (error) => {
-        if (!error) return;
-        if (error.status === 404 || error.code === 'ENOENT') {
-          response.status(404).type('text').send('Not found');
-          return;
-        }
+    app.get(route, async (_request, response, next) => {
+      try {
+        const settings = await effectiveProjectSettingsRepository.get();
+        const baseName = settings.publicDownloadName || DEFAULT_PUBLIC_DOWNLOAD_NAME;
+        const extension = path.extname(fileName);
+        response
+          .set('Cache-Control', 'no-cache')
+          .attachment(`${baseName}${extension}`);
+        response.sendFile(fileName, { root: publicDownloadDirectory }, (error) => {
+          if (!error) return;
+          if (error.status === 404 || error.code === 'ENOENT') {
+            response.status(404).type('text').send('Not found');
+            return;
+          }
+          next(error);
+        });
+      } catch (error) {
         next(error);
-      });
+      }
     });
   }
 
