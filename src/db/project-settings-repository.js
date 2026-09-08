@@ -4,6 +4,7 @@ import {
   ProjectSettingsValidationError,
 } from '../data/project-settings.js';
 import { normalizeMapboxAccessToken } from '../data/mapbox-access-token.js';
+import { normalizePublicDownloadName } from '../data/public-download-name.js';
 
 const SELECT_SETTINGS_SQL = `
   SELECT
@@ -15,6 +16,7 @@ const SELECT_SETTINGS_SQL = `
     theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
     show_line_popups AS "showLinePopups",
+    public_download_name AS "publicDownloadName",
     (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured",
     (city_marker_icon IS NOT NULL) AS "cityMarkerIconConfigured",
     city_marker_icon_width::integer AS "cityMarkerIconWidth",
@@ -59,12 +61,13 @@ const UPDATE_SETTINGS_SQL = `
     theme_preset = COALESCE($6::text, theme_preset),
     show_line_labels = $7,
     show_line_popups = COALESCE($8::boolean, show_line_popups),
+    public_download_name = COALESCE($9::text, public_download_name),
     mapbox_access_token = CASE
-      WHEN $9::text IS NULL THEN mapbox_access_token
-      ELSE $9::text
+      WHEN $10::text IS NULL THEN mapbox_access_token
+      ELSE $10::text
     END,
     mapbox_access_token_initialized = CASE
-      WHEN $9::text IS NULL THEN mapbox_access_token_initialized
+      WHEN $10::text IS NULL THEN mapbox_access_token_initialized
       ELSE TRUE
     END,
     updated_at = now()
@@ -78,10 +81,22 @@ const UPDATE_SETTINGS_SQL = `
     theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
     show_line_popups AS "showLinePopups",
+    public_download_name AS "publicDownloadName",
     (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured",
     (city_marker_icon IS NOT NULL) AS "cityMarkerIconConfigured",
     city_marker_icon_width::integer AS "cityMarkerIconWidth",
     city_marker_icon_height::integer AS "cityMarkerIconHeight",
+    updated_at AS "updatedAt"
+`;
+
+const UPDATE_PUBLIC_DOWNLOAD_NAME_SQL = `
+  UPDATE project_settings
+  SET
+    public_download_name = $1,
+    updated_at = now()
+  WHERE id = 1
+  RETURNING
+    public_download_name AS "publicDownloadName",
     updated_at AS "updatedAt"
 `;
 
@@ -134,10 +149,12 @@ function splitProjectSettingsPayload(payload) {
     throw new ProjectSettingsValidationError('Request body must be a JSON object');
   }
   const hasShowLinePopups = Object.hasOwn(payload, 'showLinePopups');
+  const hasPublicDownloadName = Object.hasOwn(payload, 'publicDownloadName');
   const {
     themePreset: rawThemePreset,
     showLineLabels = false,
     showLinePopups: rawShowLinePopups,
+    publicDownloadName: rawPublicDownloadName,
     mapboxAccessToken = null,
     ...base
   } = payload;
@@ -154,6 +171,9 @@ function splitProjectSettingsPayload(payload) {
       : normalizePublicThemePreset(rawThemePreset),
     showLineLabels,
     showLinePopups: hasShowLinePopups ? rawShowLinePopups : null,
+    publicDownloadName: hasPublicDownloadName
+      ? normalizePublicDownloadName(rawPublicDownloadName)
+      : null,
     mapboxAccessToken: normalizeMapboxAccessToken(mapboxAccessToken, { optional: true }),
   };
 }
@@ -230,6 +250,7 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
       themePreset,
       showLineLabels,
       showLinePopups,
+      publicDownloadName,
       mapboxAccessToken,
     } = splitProjectSettingsPayload(payload);
     const result = await database.query(UPDATE_SETTINGS_SQL, [
@@ -241,8 +262,18 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
       themePreset,
       showLineLabels,
       showLinePopups,
+      publicDownloadName,
       mapboxAccessToken,
     ]);
+    if (!result.rows[0]) {
+      throw new Error('Project settings row is missing; run database migrations');
+    }
+    return result.rows[0];
+  }
+
+  async function savePublicDownloadName(value) {
+    const publicDownloadName = normalizePublicDownloadName(value);
+    const result = await database.query(UPDATE_PUBLIC_DOWNLOAD_NAME_SQL, [publicDownloadName]);
     if (!result.rows[0]) {
       throw new Error('Project settings row is missing; run database migrations');
     }
@@ -273,6 +304,7 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
   return {
     get,
     save,
+    savePublicDownloadName,
     getMapboxAccessToken,
     getCityMarkerIcon,
     getPublicMapConfig,
