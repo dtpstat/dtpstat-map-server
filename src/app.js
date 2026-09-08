@@ -30,7 +30,6 @@ const PUBLIC_ASSETS = new Map([
   ['/apple-touch-icon.png', 'apple-touch-icon.png'],
   ['/android-chrome-192x192.png', 'android-chrome-192x192.png'],
   ['/android-chrome-512x512.png', 'android-chrome-512x512.png'],
-  ['/bus-lanes.jpeg', 'bus-lanes.jpeg'],
 ]);
 const CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'base64');
 const TEST_PROJECT_SETTINGS = Object.freeze({
@@ -39,7 +38,9 @@ const TEST_PROJECT_SETTINGS = Object.freeze({
   footerHtml: '<h2>О проекте</h2><p>Тестовые настройки проекта.</p>',
   yandexMetrikaId: null,
   googleAnalyticsId: null,
+  themePreset: 'classic',
   showLineLabels: false,
+  showLinePopups: true,
   publicDownloadName: DEFAULT_PUBLIC_DOWNLOAD_NAME,
   updatedAt: '2026-01-01T00:00:00.000Z',
 });
@@ -115,7 +116,7 @@ function testSettingsTransferService() {
       return {
         _dtpstat: {
           kind: 'project-settings',
-          schemaVersion: 2,
+          schemaVersion: 6,
           exportedAt: '2026-01-01T00:00:00.000Z',
         },
         projectSettings: TEST_PROJECT_SETTINGS,
