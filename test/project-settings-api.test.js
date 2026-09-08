@@ -28,7 +28,6 @@ function createRepository() {
       const {
         showLineLabels = false,
         showLinePopups = settings.showLinePopups,
-        publicDownloadName = settings.publicDownloadName,
         mapboxAccessToken = null,
         ...base
       } = payload;
@@ -36,7 +35,7 @@ function createRepository() {
         ...buildProjectSettingsPlan(base),
         showLineLabels,
         showLinePopups,
-        publicDownloadName: normalizePublicDownloadName(publicDownloadName),
+        publicDownloadName: settings.publicDownloadName,
         mapboxAccessTokenConfigured: Boolean(mapboxAccessToken),
         updatedAt: '2026-09-05T13:00:00.000Z',
       };
@@ -70,13 +69,14 @@ function adminAuth() {
   };
 }
 
-async function withServer(callback) {
+async function withServer(callback, options = {}) {
   const app = express();
   app.use('/api', createProjectSettingsRouter({
-    projectSettingsRepository: createRepository(),
+    projectSettingsRepository: options.repository ?? createRepository(),
     adminAuth: adminAuth(),
     securityService: { async appendAudit() {} },
     maxBodyBytes: 1024 * 1024,
+    afterPublicDownloadNameSave: options.afterPublicDownloadNameSave,
   }));
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -137,7 +137,6 @@ test('admin can update project settings including independent line labels and po
         themePreset: 'modern',
         showLineLabels: true,
         showLinePopups: false,
-        publicDownloadName: 'tram-lines',
         keywords: ['трамвай', 'обособление'],
         yandexMetrikaId: '12345678',
         googleAnalyticsId: 'g-ab12cd34ef',
@@ -150,7 +149,7 @@ test('admin can update project settings including independent line labels and po
     assert.equal(payload.settings.themePreset, 'modern');
     assert.equal(payload.settings.showLineLabels, true);
     assert.equal(payload.settings.showLinePopups, false);
-    assert.equal(payload.settings.publicDownloadName, 'tram-lines');
+    assert.equal(payload.settings.publicDownloadName, 'bus-lanes');
     assert.equal(payload.settings.yandexMetrikaId, '12345678');
     assert.equal(payload.settings.googleAnalyticsId, 'G-AB12CD34EF');
 
@@ -172,7 +171,8 @@ test('admin can update project settings including independent line labels and po
   });
 });
 
-test('download base name has a protected dedicated editor endpoint', async () => {
+test('download base name has a protected dedicated editor endpoint and refreshes snapshots', async () => {
+  let refreshes = 0;
   await withServer(async (baseUrl) => {
     const unauthorized = await fetch(`${baseUrl}/api/admin/project-settings/public-download-name`, {
       method: 'PUT',
@@ -190,7 +190,10 @@ test('download base name has a protected dedicated editor endpoint', async () =>
       body: JSON.stringify({ publicDownloadName: '  Трамвайные   линии  ' }),
     });
     assert.equal(valid.status, 200);
-    assert.equal((await valid.json()).settings.publicDownloadName, 'Трамвайные линии');
+    const payload = await valid.json();
+    assert.equal(payload.settings.publicDownloadName, 'Трамвайные линии');
+    assert.equal(payload.publicDownloads.geoJsonUrl, '/tram-lines.geojson');
+    assert.equal(refreshes, 1);
 
     const invalid = await fetch(`${baseUrl}/api/admin/project-settings/public-download-name`, {
       method: 'PUT',
@@ -202,6 +205,12 @@ test('download base name has a protected dedicated editor endpoint', async () =>
     });
     assert.equal(invalid.status, 400);
     assert.match((await invalid.json()).error, /extension/i);
+    assert.equal(refreshes, 1);
+  }, {
+    async afterPublicDownloadNameSave() {
+      refreshes += 1;
+      return { geoJsonUrl: '/tram-lines.geojson', csvUrl: '/tram-lines.csv' };
+    },
   });
 });
 
