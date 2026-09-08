@@ -64,7 +64,7 @@ test('public CSV applies configured metrics, order, scale and precision', () => 
   );
 });
 
-test('public download service materializes GeoJSON and configured CSV as files', async () => {
+test('public download service materializes configured file names and removes obsolete snapshots', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'dtpstat-public-'));
   const repository = {
     async exportGeoJson() {
@@ -101,24 +101,40 @@ test('public download service materializes GeoJSON and configured CSV as files',
       ];
     },
   };
+  const projectSettingsRepository = {
+    async get() { return { publicDownloadName: 'tram-lines' }; },
+  };
 
   try {
-    const service = createPublicDownloadService({ repository, directory });
+    await fs.writeFile(path.join(directory, 'bus-lanes.geojson'), '{}\n', 'utf8');
+    await fs.writeFile(path.join(directory, 'bus-lanes.csv'), 'old\n', 'utf8');
+
+    const service = createPublicDownloadService({
+      repository,
+      projectSettingsRepository,
+      directory,
+    });
     const result = await service.refresh();
-    const [geoJsonText, csvText] = await Promise.all([
+    const [geoJsonText, csvText, names] = await Promise.all([
       fs.readFile(service.geoJsonPath, 'utf8'),
       fs.readFile(service.csvPath, 'utf8'),
+      fs.readdir(directory),
     ]);
 
+    assert.equal(result.publicDownloadName, 'tram-lines');
+    assert.equal(result.geoJsonFileName, 'tram-lines.geojson');
+    assert.equal(result.csvFileName, 'tram-lines.csv');
+    assert.equal(result.geoJsonUrl, '/tram-lines.geojson');
+    assert.equal(result.csvUrl, '/tram-lines.csv');
+    assert.equal(path.basename(service.geoJsonPath), 'tram-lines.geojson');
+    assert.equal(path.basename(service.csvPath), 'tram-lines.csv');
     assert.equal(result.featureCount, 1);
     assert.equal(result.cityCount, 1);
     assert.equal(result.csvColumns, 2);
     assert.deepEqual(JSON.parse(geoJsonText), await repository.exportGeoJson());
     assert.equal(csvText, 'city,score\nТестоград,5.0\n');
-    assert.equal(
-      (await fs.readdir(directory)).some((name) => name.endsWith('.tmp')),
-      false,
-    );
+    assert.deepEqual(names.sort(), ['tram-lines.csv', 'tram-lines.geojson']);
+    assert.equal(names.some((name) => name.endsWith('.tmp')), false);
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
