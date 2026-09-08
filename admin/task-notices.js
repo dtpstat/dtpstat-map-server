@@ -1,5 +1,6 @@
 import './line-types-editor.js';
 import './project-settings-editor.js';
+import './public-download-name-editor.js';
 import './report-config-editor.js';
 import './report-range-ui.js';
 import './project-branding.js';
