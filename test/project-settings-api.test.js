@@ -3,6 +3,7 @@ import http from 'node:http';
 import express from 'express';
 import test from 'node:test';
 import { buildProjectSettingsPlan } from '../src/data/project-settings.js';
+import { normalizePublicDownloadName } from '../src/data/public-download-name.js';
 import { createProjectSettingsRouter } from '../src/routes/project-settings-api.js';
 
 const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
@@ -17,6 +18,7 @@ function createRepository() {
     themePreset: 'classic',
     showLineLabels: false,
     showLinePopups: true,
+    publicDownloadName: 'bus-lanes',
     mapboxAccessTokenConfigured: false,
     updatedAt: '2026-09-05T12:00:00.000Z',
   };
@@ -26,6 +28,7 @@ function createRepository() {
       const {
         showLineLabels = false,
         showLinePopups = settings.showLinePopups,
+        publicDownloadName = settings.publicDownloadName,
         mapboxAccessToken = null,
         ...base
       } = payload;
@@ -33,10 +36,22 @@ function createRepository() {
         ...buildProjectSettingsPlan(base),
         showLineLabels,
         showLinePopups,
+        publicDownloadName: normalizePublicDownloadName(publicDownloadName),
         mapboxAccessTokenConfigured: Boolean(mapboxAccessToken),
         updatedAt: '2026-09-05T13:00:00.000Z',
       };
       return settings;
+    },
+    async savePublicDownloadName(value) {
+      settings = {
+        ...settings,
+        publicDownloadName: normalizePublicDownloadName(value),
+        updatedAt: '2026-09-05T14:00:00.000Z',
+      };
+      return {
+        publicDownloadName: settings.publicDownloadName,
+        updatedAt: settings.updatedAt,
+      };
     },
   };
 }
@@ -84,6 +99,7 @@ test('public project settings are readable while admin editor remains protected'
     assert.equal(publicSettings.themePreset, 'classic');
     assert.equal(publicSettings.showLineLabels, false);
     assert.equal(publicSettings.showLinePopups, true);
+    assert.equal(publicSettings.publicDownloadName, 'bus-lanes');
     assert.equal(publicSettings.yandexMetrikaId, null);
     assert.equal(publicSettings.googleAnalyticsId, null);
 
@@ -97,6 +113,8 @@ test('public project settings are readable while admin editor remains protected'
     const payload = await response.json();
     assert.equal(payload.settings.projectName, 'Выделенные полосы в России');
     assert.equal(payload.settings.showLinePopups, true);
+    assert.equal(payload.settings.publicDownloadName, 'bus-lanes');
+    assert.equal(payload.editor.publicDownloadName.maxLength, 120);
     assert.ok(payload.editor.tags.includes('h2'));
     assert.ok(payload.editor.classes.includes('project-callout'));
     assert.deepEqual(
@@ -119,6 +137,7 @@ test('admin can update project settings including independent line labels and po
         themePreset: 'modern',
         showLineLabels: true,
         showLinePopups: false,
+        publicDownloadName: 'tram-lines',
         keywords: ['трамвай', 'обособление'],
         yandexMetrikaId: '12345678',
         googleAnalyticsId: 'g-ab12cd34ef',
@@ -131,6 +150,7 @@ test('admin can update project settings including independent line labels and po
     assert.equal(payload.settings.themePreset, 'modern');
     assert.equal(payload.settings.showLineLabels, true);
     assert.equal(payload.settings.showLinePopups, false);
+    assert.equal(payload.settings.publicDownloadName, 'tram-lines');
     assert.equal(payload.settings.yandexMetrikaId, '12345678');
     assert.equal(payload.settings.googleAnalyticsId, 'G-AB12CD34EF');
 
@@ -149,6 +169,39 @@ test('admin can update project settings including independent line labels and po
     });
     assert.equal(invalidTheme.status, 400);
     assert.match((await invalidTheme.json()).error, /themePreset/);
+  });
+});
+
+test('download base name has a protected dedicated editor endpoint', async () => {
+  await withServer(async (baseUrl) => {
+    const unauthorized = await fetch(`${baseUrl}/api/admin/project-settings/public-download-name`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publicDownloadName: 'tram-lines' }),
+    });
+    assert.equal(unauthorized.status, 401);
+
+    const valid = await fetch(`${baseUrl}/api/admin/project-settings/public-download-name`, {
+      method: 'PUT',
+      headers: {
+        Authorization: authorization,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ publicDownloadName: '  Трамвайные   линии  ' }),
+    });
+    assert.equal(valid.status, 200);
+    assert.equal((await valid.json()).settings.publicDownloadName, 'Трамвайные линии');
+
+    const invalid = await fetch(`${baseUrl}/api/admin/project-settings/public-download-name`, {
+      method: 'PUT',
+      headers: {
+        Authorization: authorization,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ publicDownloadName: 'tram-lines.csv' }),
+    });
+    assert.equal(invalid.status, 400);
+    assert.match((await invalid.json()).error, /extension/i);
   });
 });
 
