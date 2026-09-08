@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { compileReportMetricQuery } from '../src/db/report-config-service.js';
+import {
+  compileReportMetricQuery,
+  compileReportRankQuery,
+} from '../src/db/report-config-service.js';
 
 test('metric compiler uses server SQL fragments and parameters for selected group values', () => {
   const query = compileReportMetricQuery({
@@ -136,4 +139,25 @@ test('city area field is calculated from the OSM boundary geography in square me
   assert.match(query.text, /city_boundary\.city_id = city\.id/);
   assert.match(query.text, /GROUP BY city\.id, population\.population/);
   assert.deepEqual(query.values, ['city_area_m2']);
+});
+
+test('rank compiler applies criteria sequentially and parameterizes secondary metric keys', () => {
+  const query = compileReportRankQuery({
+    sort: [
+      { metricKey: 'primary_score', direction: 'desc' },
+      { metricKey: 'network_length_m', direction: 'asc' },
+      { metricKey: 'population', direction: 'desc' },
+    ],
+  });
+
+  assert.match(query.text, /report\.rank_value DESC NULLS LAST/);
+  assert.match(query.text, /report\.values -> \(\$1::text\)/);
+  assert.match(query.text, /report\.values -> \(\$2::text\)/);
+  assert.match(query.text, /\) ASC NULLS LAST/);
+  assert.match(query.text, /\) DESC NULLS LAST/);
+  assert.match(query.text, /city\.name ASC/);
+  assert.match(query.text, /PARTITION BY COALESCE\(city\.is_large, FALSE\)/);
+  assert.deepEqual(query.values, ['network_length_m', 'population']);
+  assert.doesNotMatch(query.text, /network_length_m/);
+  assert.doesNotMatch(query.text, /population'/);
 });
