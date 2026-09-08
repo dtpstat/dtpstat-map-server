@@ -19,7 +19,7 @@ Endpoint доступны только `IS_SUPERUSER`.
 
 ```text
 _dtpstat.kind = project-settings
-_dtpstat.schemaVersion = 4
+_dtpstat.schemaVersion = 5
 ```
 
 Import принимает:
@@ -29,11 +29,14 @@ schemaVersion 1
 schemaVersion 2
 schemaVersion 3
 schemaVersion 4
+schemaVersion 5
 ```
 
 Legacy packages нормализуются к текущей модели. Для отсутствующих в старых форматах security fields используются совместимые defaults; отсутствующий theme normalizes to `classic`. До v4 hover-popup имени линии был всегда включён, поэтому для v1-v3 без `showLinePopups` используется compatibility default `true`.
 
-## Что входит в v4
+V5 добавляет перенос ordered multi-column ranking. V1-v4 с прежним одиночным `rank.metricKey/rank.direction` продолжают импортироваться и нормализуются в один criterion.
+
+## Что входит в v5
 
 ### PROJECT_SETTINGS
 
@@ -84,9 +87,22 @@ Mapbox token — browser/public `pk.*` token. В settings transfer он явля
 - table columns;
 - conditional formatting;
 - CSV columns;
-- ranking metric/direction.
+- ordered ranking criteria `rank.sort`.
 
-`CITY_REPORT_VALUES` не копируется: target materialized report строится заново.
+Пример:
+
+```json
+"rank": {
+  "sort": [
+    { "metricKey": "separation_ratio", "direction": "desc" },
+    { "metricKey": "network_length_m", "direction": "desc" }
+  ]
+}
+```
+
+Критерии применяются последовательно сверху вниз. Старые single-rank packages преобразуются в массив из одного элемента.
+
+`CITY_REPORT_VALUES` не копируется: target materialized report строится заново с той же последовательностью сортировки.
 
 ### ADMIN_SECURITY_SETTINGS
 
@@ -128,16 +144,16 @@ Package намеренно не переносит:
 - `MAPBOX_STYLE_URL`;
 - custom city marker PNG binary и его image metadata.
 
-Последний пункт важен: city marker хранится в `PROJECT_SETTINGS`, но текущий v4 transfer package его **не экспортирует**.
+Последний пункт важен: city marker хранится в `PROJECT_SETTINGS`, но текущий v5 transfer package его **не экспортирует**.
 
-## Пример v4
+## Пример v5
 
 ```json
 {
   "_dtpstat": {
     "kind": "project-settings",
-    "schemaVersion": 4,
-    "exportedAt": "2026-09-07T21:30:00.000Z"
+    "schemaVersion": 5,
+    "exportedAt": "2026-09-08T02:30:00.000Z"
   },
   "projectSettings": {
     "projectName": "Трамвайные системы России",
@@ -165,8 +181,10 @@ Package намеренно не переносит:
     "tableColumns": [],
     "csvColumns": [],
     "rank": {
-      "metricKey": "example",
-      "direction": "desc"
+      "sort": [
+        { "metricKey": "example", "direction": "desc" },
+        { "metricKey": "secondary", "direction": "asc" }
+      ]
     }
   },
   "securitySettings": {
@@ -183,7 +201,7 @@ Package намеренно не переносит:
 }
 ```
 
-Фактический `reportConfig` должен пройти обычный server validator.
+Фактический `reportConfig` должен пройти обычный server validator; `metricKey` каждого ranking criterion должен существовать среди импортируемых metrics, а одна metric не может повторяться в `rank.sort`.
 
 ## Семантика Mapbox token при import
 
@@ -195,7 +213,7 @@ Package намеренно не переносит:
 
 ## Семантика theme
 
-В v4 экспортируется явный:
+Начиная с v3 экспортируется явный:
 
 ```json
 "themePreset": "retro | classic | modern"
@@ -205,7 +223,7 @@ Package намеренно не переносит:
 
 ## Семантика отображения наименований линий
 
-В v4 это два независимых boolean-параметра:
+Начиная с v4 это два независимых boolean-параметра:
 
 ```json
 {
@@ -220,6 +238,42 @@ Package намеренно не переносит:
 - выключение постоянных подписей не влияет на popup.
 
 Для v1-v3 отсутствующий `showLinePopups` трактуется как `true`, поскольку именно так работал публичный frontend до разделения настроек.
+
+## Семантика ranking transfer
+
+V5 экспортирует ordered array:
+
+```json
+{
+  "rank": {
+    "sort": [
+      { "metricKey": "primary", "direction": "desc" },
+      { "metricKey": "secondary", "direction": "asc" }
+    ]
+  }
+}
+```
+
+При import target materialization использует тот же порядок:
+
+```text
+primary DESC
+→ при равенстве secondary ASC
+→ при полном равенстве city.name ASC
+```
+
+V1-v4 могут содержать старую форму:
+
+```json
+{
+  "rank": {
+    "metricKey": "primary",
+    "direction": "desc"
+  }
+}
+```
+
+Она остаётся валидной и превращается в один элемент `rank.sort`.
 
 ## LINE_TYPES matching
 
@@ -253,9 +307,9 @@ Target-only types, отсутствующие в package, **не удаляют�
 5. нормализует security policy;
 6. открывает DB transaction/import lock;
 7. сопоставляет и создаёт target line types;
-8. валидирует `REPORT_CONFIG` уже против итогового набора target `LINE_TYPES.NAME`;
+8. валидирует `REPORT_CONFIG`, включая `rank.sort`, уже против итогового набора target `LINE_TYPES.NAME`;
 9. сохраняет settings/security/report config;
-10. пересчитывает `CITY_REPORT_VALUES`.
+10. пересчитывает `CITY_REPORT_VALUES` с последовательным ranking.
 
 До `COMMIT` операция атомарна: ошибка приводит к rollback.
 
