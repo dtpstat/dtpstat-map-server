@@ -30,7 +30,8 @@ const DEFAULT_CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'bas
  *   },
  *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
  *   securityService: ReturnType<import('../data/admin-security.js').createAdminSecurityService>,
- *   maxBodyBytes: number
+ *   maxBodyBytes: number,
+ *   afterPublicDownloadNameSave?: () => Promise<any>
  * }} dependencies
  */
 export function createProjectSettingsRouter({
@@ -38,6 +39,7 @@ export function createProjectSettingsRouter({
   adminAuth,
   securityService,
   maxBodyBytes,
+  afterPublicDownloadNameSave,
 }) {
   const router = Router();
   const jsonBody = express.json({
@@ -152,15 +154,27 @@ export function createProjectSettingsRouter({
       createAdminOperationAudit(securityService, 'interface.project.public-download-name.update'),
       jsonBody,
       async (request, response, next) => {
+        let previousName;
         try {
+          previousName = (await projectSettingsRepository.get()).publicDownloadName;
           const settings = await projectSettingsRepository.savePublicDownloadName(
             request.body?.publicDownloadName,
           );
-          response.set('Cache-Control', 'no-store').json({ settings });
+          const publicDownloads = await afterPublicDownloadNameSave?.();
+          response.set('Cache-Control', 'no-store').json({ settings, publicDownloads });
         } catch (error) {
           if (error instanceof ProjectSettingsValidationError) {
             response.status(400).json({ error: error.message });
             return;
+          }
+          if (previousName !== undefined && typeof afterPublicDownloadNameSave === 'function') {
+            try {
+              await projectSettingsRepository.savePublicDownloadName(previousName);
+              await afterPublicDownloadNameSave();
+            } catch {
+              // Preserve the original failure. Startup refresh will repair any
+              // filesystem/DB mismatch if rollback materialization also fails.
+            }
           }
           next(error);
         }
