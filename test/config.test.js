@@ -11,7 +11,7 @@ const REQUIRED_ENV = {
   IMPORT_API_PASSWORD: 'test-secret',
 };
 
-test('loadConfig enables HTTP with safe defaults', () => {
+test('loadConfig enables HTTP with safe generic defaults', () => {
   const config = loadConfig(REQUIRED_ENV, '/project');
 
   assert.deepEqual(config.http, {
@@ -70,18 +70,22 @@ test('loadConfig enables HTTP with safe defaults', () => {
       'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
     ],
   );
+  assert.equal(config.publicMap.bootstrapAccessToken, 'pk.test');
+  assert.equal(config.publicMap.styleUrl, 'mapbox://styles/mapbox/streets-v12');
+  assert.deepEqual(config.publicMap.initialCenter, [37.6173, 55.7558]);
+  assert.equal(config.publicMap.initialZoom, 4);
 });
 
-test('loadConfig allows removing bootstrap credentials after ADMIN_USERS exists', () => {
+test('loadConfig allows removing bootstrap credentials and Mapbox token after DB bootstrap', () => {
   const config = loadConfig({
     DATABASE_NAME: 'example',
     DATABASE_ROLE: 'example_app',
     DATABASE_ROLE_PASSWORD: 'database-secret',
-    MAPBOX_ACCESS_TOKEN: 'pk.test',
   }, '/project');
 
   assert.equal(config.importApi.bootstrapUsername, null);
   assert.equal(config.importApi.bootstrapPassword, null);
+  assert.equal(config.publicMap.bootstrapAccessToken, null);
 });
 
 test('loadConfig configures only explicit trusted reverse proxy hops', () => {
@@ -147,7 +151,7 @@ test('loadConfig keeps the OSM geometry batch within its configured maximum', ()
   );
 });
 
-test('loadConfig validates default KML sources with explicit multipliers', () => {
+test('loadConfig validates optional KML sources with explicit multipliers', () => {
   const config = loadConfig({
     ...REQUIRED_ENV,
     KML_UPDATE_SOURCES_JSON: JSON.stringify([
@@ -224,27 +228,9 @@ test('loadConfig rejects invalid protocol and port combinations', () => {
   );
 });
 
-test('loadConfig requires database and public map settings, not ongoing admin credentials', () => {
+test('loadConfig requires application database settings', () => {
   assert.throws(
-    () =>
-      loadConfig(
-        {
-          MAPBOX_ACCESS_TOKEN: 'pk.test',
-        },
-        '/project',
-      ),
+    () => loadConfig({}, '/project'),
     /DATABASE_NAME is required/,
-  );
-  assert.throws(
-    () =>
-      loadConfig(
-        {
-          DATABASE_NAME: 'example',
-          DATABASE_ROLE: 'example_app',
-          DATABASE_ROLE_PASSWORD: 'database-secret',
-        },
-        '/project',
-      ),
-    /MAPBOX_ACCESS_TOKEN is required/,
   );
 });
