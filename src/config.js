@@ -352,9 +352,11 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
       bootstrapAccessToken: env.MAPBOX_ACCESS_TOKEN?.trim() || null,
       styleUrl:
         env.MAPBOX_STYLE_URL?.trim() ||
-        'mapbox://styles/culebron/cj7ornxjab8oq2spdw84gxob0',
-      initialCenter: [49.1245, 55.7836],
-      initialZoom: 12,
+        'mapbox://styles/mapbox/streets-v12',
+      // Only used before city data is available. Once cities are loaded the
+      // public app positions the map on the selected/first city boundary.
+      initialCenter: [37.6173, 55.7558],
+      initialZoom: 4,
     },
   };
 }
