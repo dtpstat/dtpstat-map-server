@@ -1,7 +1,14 @@
 export class OsmCityDownloadError extends Error {
   /**
    * @param {string} message
-   * @param {{ statusCode?: number, retryAfterMs?: number | null, finalURL?: string }} [details]
+   * @param {{
+   *   statusCode?: number,
+   *   retryAfterMs?: number | null,
+   *   finalURL?: string,
+   *   code?: string,
+   *   limitBytes?: number,
+   *   receivedBytes?: number,
+   * }} [details]
    */
   constructor(message, details = {}) {
     super(message);
@@ -9,6 +16,9 @@ export class OsmCityDownloadError extends Error {
     this.statusCode = details.statusCode ?? null;
     this.retryAfterMs = details.retryAfterMs ?? null;
     this.finalURL = details.finalURL ?? null;
+    this.code = details.code ?? null;
+    this.limitBytes = details.limitBytes ?? null;
+    this.receivedBytes = details.receivedBytes ?? null;
   }
 }
 
@@ -131,6 +141,12 @@ export async function downloadOsmCities(
       if (Number.isFinite(declaredLength) && declaredLength > options.maxBytes) {
         throw new OsmCityDownloadError(
           'OSM response exceeds the configured size limit',
+          {
+            code: 'response-size-limit',
+            limitBytes: options.maxBytes,
+            receivedBytes: declaredLength,
+            finalURL: url.toString(),
+          },
         );
       }
       if (!response.body) {
@@ -145,6 +161,12 @@ export async function downloadOsmCities(
         if (bytes > options.maxBytes) {
           throw new OsmCityDownloadError(
             'OSM response exceeds the configured size limit',
+            {
+              code: 'response-size-limit',
+              limitBytes: options.maxBytes,
+              receivedBytes: bytes,
+              finalURL: url.toString(),
+            },
           );
         }
         chunks.push(buffer);
