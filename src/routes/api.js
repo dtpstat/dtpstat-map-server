@@ -138,10 +138,16 @@ export function createApiRouter({
     let message = `Прогресс: ${progress.phase}`;
     if (progress.phase === 'resume') {
       message = `OSM: возобновление checkpoint ${progress.checkpointId}; уже загружено ${progress.stagedPlaces}/${progress.indexedPlaces}, осталось ${progress.remainingPlaces}`;
+      if ((progress.unbuildableGeometryPlaces ?? 0) > 0) {
+        message += `; без построенного полигона ${progress.unbuildableGeometryPlaces}`;
+      }
     } else if (progress.phase === 'index') {
       message = `OSM: загружена часть индекса ${progress.indexPart}/${progress.indexPartCount}`;
     } else if (progress.phase === 'geometry') {
       message = `OSM: обработан пакет ${progress.batch}/${progress.batchCount}`;
+      if ((progress.batchUnbuildableGeometryPlaces ?? 0) > 0) {
+        message += `; без построенного полигона ${progress.batchUnbuildableGeometryPlaces}`;
+      }
     } else if (progress.phase === 'retry') {
       const target = progress.requestPhase === 'geometry'
         ? `пакет ${progress.batch}/${progress.batchCount}`

@@ -87,7 +87,7 @@ const batches = [
   },
 ];
 
-function createPool() {
+function createPool({ stageCount = 3, boundaryCount = 3 } = {}) {
   const queries = [];
   let released = false;
   let connections = 0;
@@ -102,10 +102,10 @@ function createPool() {
         return { rows: [], rowCount: 0 };
       }
       if (normalized.startsWith('SELECT count(*)::integer')) {
-        return { rows: [{ count: 3 }], rowCount: 1 };
+        return { rows: [{ count: stageCount }], rowCount: 1 };
       }
       if (normalized.startsWith('INSERT INTO city_boundaries')) {
-        return { rows: [], rowCount: 3 };
+        return { rows: [], rowCount: boundaryCount };
       }
       if (normalized.startsWith('UPDATE city_geometries')) {
         return { rows: [], rowCount: 0 };
@@ -137,19 +137,32 @@ function createPool() {
   };
 }
 
-function createCheckpointRepositoryMock() {
+function createCheckpointRepositoryMock({
+  unbuildableKeys = new Set(),
+} = {}) {
   let checkpoint = null;
   let nextId = 1;
   const staged = new Map();
   const calls = [];
 
-  const snapshot = () => checkpoint && {
-    ...structuredClone(checkpoint),
-    stagedObjects: staged.size,
-    remainingObjects: Math.max(
-      0,
-      checkpoint.totalObjects - staged.size,
-    ),
+  const snapshot = () => {
+    if (!checkpoint) return null;
+    const values = [...staged.values()];
+    const geometryObjects = values.filter(
+      (item) => item.geometryStatus !== 'unbuildable',
+    ).length;
+    const unbuildableGeometryObjects =
+      values.length - geometryObjects;
+    return {
+      ...structuredClone(checkpoint),
+      stagedObjects: staged.size,
+      geometryObjects,
+      unbuildableGeometryObjects,
+      remainingObjects: Math.max(
+        0,
+        checkpoint.totalObjects - staged.size,
+      ),
+    };
   };
 
   return {
@@ -216,8 +229,19 @@ function createCheckpointRepositoryMock() {
         id,
         keys: places.map((item) => `${item.osmType}/${item.osmId}`),
       });
+      let batchUnbuildableGeometryObjects = 0;
       for (const item of places) {
-        staged.set(`${item.osmType}/${item.osmId}`, structuredClone(item));
+        const key = `${item.osmType}/${item.osmId}`;
+        const geometryStatus = unbuildableKeys.has(key)
+          ? 'unbuildable'
+          : 'ready';
+        if (geometryStatus === 'unbuildable') {
+          batchUnbuildableGeometryObjects += 1;
+        }
+        staged.set(key, {
+          ...structuredClone(item),
+          geometryStatus,
+        });
       }
       checkpoint.status = 'downloading';
       checkpoint.downloadedBytes += metrics.downloadedBytes ?? 0;
@@ -228,7 +252,12 @@ function createCheckpointRepositoryMock() {
       checkpoint.ignoredElements += metrics.ignoredElements ?? 0;
       checkpoint.stagedBatchCount += 1;
       checkpoint.lastError = null;
-      return snapshot();
+      return {
+        ...snapshot(),
+        batchGeometryObjects:
+          places.length - batchUnbuildableGeometryObjects,
+        batchUnbuildableGeometryObjects,
+      };
     },
     async addMetrics(id, metrics) {
       calls.push({ method: 'addMetrics', id });
@@ -288,15 +317,24 @@ function createCheckpointRepositoryMock() {
     async stats(id) {
       calls.push({ method: 'stats', id });
       const values = [...staged.values()];
+      const readyValues = values.filter(
+        (item) => item.geometryStatus !== 'unbuildable',
+      );
       const names = new Map();
-      for (const item of values) {
+      for (const item of readyValues) {
         names.set(item.name, (names.get(item.name) ?? 0) + 1);
       }
       return {
         stagedObjects: values.length,
-        cityPlaces: values.filter((item) => item.placeType === 'city').length,
-        townPlaces: values.filter((item) => item.placeType === 'town').length,
-        administrativePlaces: values.filter(
+        geometryObjects: readyValues.length,
+        unbuildableGeometryObjects: values.length - readyValues.length,
+        cityPlaces: readyValues.filter(
+          (item) => item.placeType === 'city',
+        ).length,
+        townPlaces: readyValues.filter(
+          (item) => item.placeType === 'town',
+        ).length,
+        administrativePlaces: readyValues.filter(
           (item) =>
             item.adminLevel !== null &&
             item.adminLevel !== undefined,
@@ -460,6 +498,65 @@ test('OSM resume survives failure and skips already staged objects', async () =>
     query.startsWith('DELETE FROM osm_city_update_checkpoint_stage')));
   assert.ok(pool.queries.some((query) =>
     query.startsWith('UPDATE osm_city_update_checkpoints')));
+});
+
+test('OSM resume records unbuildable polygons as processed and excludes them from replacement', async () => {
+  const repository = createCheckpointRepositoryMock({
+    unbuildableKeys: new Set(['way/9']),
+  });
+  await createFailedCheckpoint({ checkpointRepository: repository });
+
+  const pool = createPool({ stageCount: 2, boundaryCount: 2 });
+  const progress = [];
+  const queries = [];
+  const service = createOsmCityUpdateService(pool, config, {
+    checkpointRepository: repository,
+    async download(_url, query) {
+      queries.push(query);
+      return {
+        jsonText: 'resume-unbuildable',
+        bytes: 10,
+        finalURL: config.url,
+        query,
+      };
+    },
+    parseBatch() {
+      return batches[1];
+    },
+    reportProgress(value) {
+      progress.push(value);
+    },
+  });
+
+  const result = await service.update(undefined, { resume: 'true' });
+
+  assert.equal(queries.length, 1);
+  assert.match(queries[0], /way\(id:9\)/);
+  assert.equal(repository.state.stagedObjects, 3);
+  assert.equal(repository.state.remainingObjects, 0);
+  assert.equal(repository.state.geometryObjects, 2);
+  assert.equal(repository.state.unbuildableGeometryObjects, 1);
+  assert.equal(repository.staged.get('way/9').geometryStatus, 'unbuildable');
+  assert.equal(result.indexedPlaces, 3);
+  assert.equal(result.importedPlaces, 2);
+  assert.equal(result.unbuildableGeometryPlaces, 1);
+  assert.deepEqual(
+    progress.filter((item) => item.phase === 'geometry')
+      .map((item) => ({
+        stagedPlaces: item.stagedPlaces,
+        geometryPlaces: item.geometryPlaces,
+        unbuildableGeometryPlaces: item.unbuildableGeometryPlaces,
+        batchUnbuildableGeometryPlaces:
+          item.batchUnbuildableGeometryPlaces,
+      })),
+    [{
+      stagedPlaces: 3,
+      geometryPlaces: 2,
+      unbuildableGeometryPlaces: 1,
+      batchUnbuildableGeometryPlaces: 1,
+    }],
+  );
+  assert.ok(pool.queries.includes('COMMIT'));
 });
 
 test('OSM resume rejects incompatible batch semantics before downloading', async () => {

@@ -4,6 +4,10 @@ function mapCheckpoint(row) {
   if (!row) return null;
   const totalObjects = Number(row.totalObjects ?? 0);
   const stagedObjects = Number(row.stagedObjects ?? 0);
+  const geometryObjects = Number(row.geometryObjects ?? 0);
+  const unbuildableGeometryObjects = Number(
+    row.unbuildableGeometryObjects ?? 0,
+  );
   return {
     id: Number(row.id),
     status: row.status,
@@ -23,6 +27,8 @@ function mapCheckpoint(row) {
     stagedBatchCount: Number(row.stagedBatchCount ?? 0),
     totalObjects,
     stagedObjects,
+    geometryObjects,
+    unbuildableGeometryObjects,
     remainingObjects: Math.max(0, totalObjects - stagedObjects),
     lastError: row.lastError,
     createdAt: row.createdAt,
@@ -54,7 +60,15 @@ const CHECKPOINT_SELECT = `
     checkpoint.updated_at AS "updatedAt",
     checkpoint.completed_at AS "completedAt",
     jsonb_array_length(checkpoint.index_objects)::integer AS "totalObjects",
-    COUNT(stage.osm_id)::integer AS "stagedObjects"
+    COUNT(stage.osm_id)::integer AS "stagedObjects",
+    (
+      COUNT(stage.osm_id)
+      FILTER (WHERE stage.geometry_status = 'ready')
+    )::integer AS "geometryObjects",
+    (
+      COUNT(stage.osm_id)
+      FILTER (WHERE stage.geometry_status = 'unbuildable')
+    )::integer AS "unbuildableGeometryObjects"
   FROM osm_city_update_checkpoints AS checkpoint
   LEFT JOIN osm_city_update_checkpoint_stage AS stage
     ON stage.checkpoint_id = checkpoint.id
@@ -104,6 +118,7 @@ const STAGE_BATCH_SQL = `
     tags,
     geom,
     bounds,
+    geometry_status,
     content_checksum,
     staged_at
   )
@@ -117,6 +132,7 @@ const STAGE_BATCH_SQL = `
     tags,
     geom,
     ST_Envelope(geom),
+    CASE WHEN geom IS NULL THEN 'unbuildable' ELSE 'ready' END,
     "contentChecksum",
     NOW()
   FROM polygons
@@ -127,8 +143,10 @@ const STAGE_BATCH_SQL = `
     tags = EXCLUDED.tags,
     geom = EXCLUDED.geom,
     bounds = EXCLUDED.bounds,
+    geometry_status = EXCLUDED.geometry_status,
     content_checksum = EXCLUDED.content_checksum,
     staged_at = NOW()
+  RETURNING geometry_status AS "geometryStatus"
 `;
 
 export function createOsmCityCheckpointRepository(pool) {
@@ -340,6 +358,9 @@ export function createOsmCityCheckpointRepository(pool) {
         if (staged.rowCount !== places.length) {
           throw new Error('Not every OSM place in checkpoint batch was staged');
         }
+        const batchUnbuildableGeometryObjects = staged.rows.filter(
+          (row) => row.geometryStatus === 'unbuildable',
+        ).length;
 
         const identities = places.map((place) => ({
           osmType: place.osmType,
@@ -357,6 +378,7 @@ export function createOsmCityCheckpointRepository(pool) {
              ON identities."osmType" = stage.osm_type
             AND identities."osmId" = stage.osm_id
            WHERE stage.checkpoint_id = $1
+             AND stage.geometry_status = 'ready'
              AND (
                ST_IsEmpty(stage.geom)
                OR NOT ST_IsValid(stage.geom)
@@ -402,7 +424,13 @@ export function createOsmCityCheckpointRepository(pool) {
       } finally {
         client.release();
       }
-      return this.getById(checkpointId);
+      const checkpoint = await this.getById(checkpointId);
+      return {
+        ...checkpoint,
+        batchGeometryObjects:
+          places.length - batchUnbuildableGeometryObjects,
+        batchUnbuildableGeometryObjects,
+      };
     },
 
     async addMetrics(checkpointId, metrics = {}) {
@@ -473,10 +501,20 @@ export function createOsmCityCheckpointRepository(pool) {
       const result = await query(
         `SELECT
            COUNT(*)::integer AS "stagedObjects",
-           COUNT(*) FILTER (WHERE place_type = 'city')::integer AS "cityPlaces",
-           COUNT(*) FILTER (WHERE place_type = 'town')::integer AS "townPlaces",
            COUNT(*) FILTER (
-             WHERE admin_level IS NOT NULL
+             WHERE geometry_status = 'ready'
+           )::integer AS "geometryObjects",
+           COUNT(*) FILTER (
+             WHERE geometry_status = 'unbuildable'
+           )::integer AS "unbuildableGeometryObjects",
+           COUNT(*) FILTER (
+             WHERE geometry_status = 'ready' AND place_type = 'city'
+           )::integer AS "cityPlaces",
+           COUNT(*) FILTER (
+             WHERE geometry_status = 'ready' AND place_type = 'town'
+           )::integer AS "townPlaces",
+           COUNT(*) FILTER (
+             WHERE geometry_status = 'ready' AND admin_level IS NOT NULL
            )::integer AS "administrativePlaces",
            (
              SELECT COUNT(*)::integer
@@ -484,6 +522,7 @@ export function createOsmCityCheckpointRepository(pool) {
                SELECT name
                FROM osm_city_update_checkpoint_stage
                WHERE checkpoint_id = $1
+                 AND geometry_status = 'ready'
                GROUP BY name
                HAVING COUNT(*) > 1
              ) AS duplicate_names

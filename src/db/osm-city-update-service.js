@@ -129,6 +129,7 @@ const MATERIALIZE_CHECKPOINT_STAGE_SQL = `
     bounds
   FROM osm_city_update_checkpoint_stage
   WHERE checkpoint_id = $1
+    AND geometry_status = 'ready'
 `;
 
 const CREATE_STAGE_SQL = `
@@ -884,6 +885,12 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         ? await checkpointRepository.getStagedKeys(checkpoint.id)
         : new Set();
       let stagedPlaces = stagedKeys.size;
+      let geometryPlaces = checkpointRepository
+        ? Number(checkpoint?.geometryObjects ?? 0)
+        : stagedPlaces;
+      let unbuildableGeometryPlaces = checkpointRepository
+        ? Number(checkpoint?.unbuildableGeometryObjects ?? 0)
+        : 0;
       const pendingObjects = checkpointRepository
         ? index.objects.filter((object) => !stagedKeys.has(objectKey(object)))
         : index.objects;
@@ -894,6 +901,8 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           checkpointId: checkpoint.id,
           checkpointStatus: checkpoint.status,
           stagedPlaces,
+          geometryPlaces,
+          unbuildableGeometryPlaces,
           indexedPlaces: index.objects.length,
           remainingPlaces: pendingObjects.length,
         };
@@ -999,14 +1008,22 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           const parsed = parseBatch(batchDownload.jsonText);
           assertCompleteBatch(objects, parsed.places, batchNumber);
 
+          let batchUnbuildableGeometryPlaces = 0;
           if (checkpointRepository) {
-            await checkpointRepository.stageBatch(
+            checkpoint = await checkpointRepository.stageBatch(
               checkpoint.id,
               addContentChecksums(parsed.places),
               {
                 ...metricDelta(),
                 ignoredElements: parsed.ignoredElements,
               },
+            );
+            geometryPlaces = Number(checkpoint.geometryObjects ?? 0);
+            unbuildableGeometryPlaces = Number(
+              checkpoint.unbuildableGeometryObjects ?? 0,
+            );
+            batchUnbuildableGeometryPlaces = Number(
+              checkpoint.batchUnbuildableGeometryObjects ?? 0,
             );
             rememberPersistedMetrics();
           } else {
@@ -1019,6 +1036,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
               );
             }
             await assertValidStage(client);
+            geometryPlaces += parsed.places.length;
           }
           throwIfAdminTaskCancelled(operation.signal);
 
@@ -1033,6 +1051,9 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
             batch: batchNumber,
             batchCount: geometryBatches.length,
             stagedPlaces,
+            geometryPlaces,
+            unbuildableGeometryPlaces,
+            batchUnbuildableGeometryPlaces,
             indexedPlaces: index.objects.length,
           };
           reportProgress(progress);
@@ -1064,6 +1085,10 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           );
 
           const stats = await checkpointRepository.stats(checkpoint.id);
+          geometryPlaces = Number(stats.geometryObjects ?? 0);
+          unbuildableGeometryPlaces = Number(
+            stats.unbuildableGeometryObjects ?? 0,
+          );
           cityPlaces = Number(stats.cityPlaces ?? 0);
           townPlaces = Number(stats.townPlaces ?? 0);
           administrativePlaces = Number(stats.administrativePlaces ?? 0);
@@ -1083,8 +1108,8 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         }
 
         const stageCountResult = await client.query(COUNT_STAGE_SQL);
-        if (stageCountResult.rows[0]?.count !== index.objects.length) {
-          throw new Error('Not every indexed OSM place was staged');
+        if (stageCountResult.rows[0]?.count !== geometryPlaces) {
+          throw new Error('Not every buildable OSM place was staged');
         }
         await assertValidStage(client);
         throwIfAdminTaskCancelled(operation.signal);
@@ -1098,8 +1123,8 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         const boundaryResult = await client.query(INSERT_BOUNDARIES_SQL, [
           index.osmTimestamp,
         ]);
-        if (boundaryResult.rowCount !== index.objects.length) {
-          throw new Error('Not every OSM boundary was inserted');
+        if (boundaryResult.rowCount !== geometryPlaces) {
+          throw new Error('Not every buildable OSM boundary was inserted');
         }
         await client.query(ACTIVATE_NEW_PLACES_SQL);
         await client.query('SELECT rebuild_city_boundary_hierarchy()');
@@ -1130,7 +1155,9 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           indexRequestCount: indexQueries.length,
           downloadedBytes,
           sourceElements: index.sourceElements,
-          importedPlaces: index.objects.length,
+          indexedPlaces: index.objects.length,
+          importedPlaces: geometryPlaces,
+          unbuildableGeometryPlaces,
           cityPlaces,
           townPlaces,
           administrativePlaces,
@@ -1170,7 +1197,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           checksum,
           downloadedBytes,
           index.sourceElements,
-          index.objects.length,
+          geometryPlaces,
           ignoredElements,
           index.osmTimestamp,
           cityPlaces,
