@@ -170,5 +170,10 @@ export function buildPopulationPlan(payload) {
   for (const [index, item] of payload.populations.entries()) {
     accumulator.addItem(item, index);
   }
-  return accumulator.finish();
+  const result = accumulator.finish();
+  return {
+    asOf: result.asOf,
+    source: result.source,
+    populations: result.populations,
+  };
 }
