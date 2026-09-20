@@ -178,10 +178,11 @@ if (typeof document !== 'undefined') {
       if (state.map || !globalThis.L) return;
       state.map = globalThis.L.map(mapHost, { preferCanvas: true }).setView([55.75, 37.62], 4);
       globalThis.L.tileLayer(
-        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         {
           maxZoom: 19,
-          attribution: '&copy; OpenStreetMap contributors',
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         },
       ).addTo(state.map);
     }
