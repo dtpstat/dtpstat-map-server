@@ -175,9 +175,13 @@
                       <input name="queryTimeoutSeconds" type="number" inputmode="numeric"
                              min="1" step="1" required>
                     </label>
-                    <label>Общий лимит ответа, байт
-                      <input name="maxBytes" type="number" inputmode="numeric"
-                             min="1024" step="1" required>
+                    <label>Лимит одного ответа, байт
+                      <input name="maxResponseBytes" type="number" inputmode="numeric"
+                             min="1048576" step="1" required>
+                    </label>
+                    <label>Общий лимит загрузки, байт
+                      <input name="maxTotalBytes" type="number" inputmode="numeric"
+                             min="1048576" step="1" required>
                     </label>
                     <label>Максимум повторов
                       <input name="maxRetries" type="number" inputmode="numeric"
