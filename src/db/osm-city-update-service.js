@@ -1211,6 +1211,25 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         };
       } catch (error) {
         if (inTransaction) await client.query('ROLLBACK');
+        if (checkpointRepository && checkpoint) {
+          try {
+            const delta = metricDelta();
+            if (Object.values(delta).some((value) => value !== 0)) {
+              await checkpointRepository.addMetrics(checkpoint.id, delta);
+              rememberPersistedMetrics();
+            }
+            await checkpointRepository.mark(
+              checkpoint.id,
+              operation.signal?.aborted ? 'cancelled' : 'failed',
+              checkpointErrorDetails(error),
+            );
+          } catch (checkpointError) {
+            console.error(
+              'Failed to persist OSM checkpoint failure state',
+              checkpointError,
+            );
+          }
+        }
         throw error;
       } finally {
         await client.query(DROP_STAGE_SQL).catch(() => {});
