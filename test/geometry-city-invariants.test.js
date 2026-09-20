@@ -46,3 +46,39 @@ test('geometry merge cannot silently cross OSM ownership boundaries', async () =
   assert.match(repository, /geometry\.boundary_id::integer AS "boundaryId"/);
   assert.match(repository, /row\.boundaryId !== first\.boundaryId/);
 });
+
+
+test('all relation-mutating services assert the canonical invariant before commit', async () => {
+  const files = [
+    'src/db/osm-city-update-service.js',
+    'src/db/osm-boundary-admin-repository.js',
+    'src/db/city-boundary-transfer-service.js',
+    'src/db/data-import-service.js',
+    'src/db/geometry-editor-repository.js',
+    'src/db/geometry-import-repository.js',
+  ];
+  for (const file of files) {
+    const source = await read(file);
+    assert.match(
+      source,
+      /assert_city_geometry_invariants\(\)/i,
+      file + ' must assert city/geometry relation invariants',
+    );
+  }
+});
+
+test('public GeoJSON includes universal effective geometries, not only lines', async () => {
+  const source = await read('src/db/public-download-repository.js');
+  assert.match(source, /FROM effective_city_geometries AS geometry/i);
+  assert.match(source, /LEFT JOIN line_types AS line_type/i);
+  assert.match(source, /'geometryFamily'/);
+  assert.match(source, /'displayName'/);
+  assert.match(source, /'tooltip'/);
+  assert.match(source, /'tags'/);
+});
+
+test('pending geometry import database guard exists for every service that uses it', async () => {
+  const migration = await read('db/migrations/V036__geometry_city_invariants.sql');
+  assert.match(migration, /CREATE OR REPLACE FUNCTION BUSLANES\.ASSERT_NO_PENDING_GEOMETRY_IMPORT/);
+  assert.match(migration, /ERRCODE = '55000'/);
+});

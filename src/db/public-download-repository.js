@@ -11,6 +11,14 @@ const EXPORT_PUBLIC_GEOJSON_SQL = `
             jsonb_build_object(
               'short_name', city.name,
               'name', COALESCE(city.full_name, city.name),
+              'geometryFamily', CASE
+                WHEN GeometryType(geometry.geom) = 'POINT' THEN 'point'
+                WHEN GeometryType(geometry.geom) IN ('LINESTRING', 'MULTILINESTRING') THEN 'line'
+                WHEN GeometryType(geometry.geom) IN ('POLYGON', 'MULTIPOLYGON') THEN 'polygon'
+              END,
+              'displayName', geometry.display_name,
+              'tooltip', geometry.tooltip,
+              'tags', geometry.tags,
               'lanes', geometry.lanes,
               'length', geometry.length_m,
               'lanes_length', geometry.lane_length_m,
@@ -27,7 +35,7 @@ const EXPORT_PUBLIC_GEOJSON_SQL = `
   FROM effective_city_geometries AS geometry
   JOIN city_boundaries AS boundary
     ON boundary.id = geometry.boundary_id
-  JOIN line_types AS line_type ON line_type.id = geometry.line_type_id
+  LEFT JOIN line_types AS line_type ON line_type.id = geometry.line_type_id
   LEFT JOIN cities AS city ON city.id = geometry.city_id
   LEFT JOIN city_populations AS population ON population.city_id = city.id
 `;

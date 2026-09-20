@@ -198,6 +198,7 @@ export function createOsmBoundaryAdminRepository(pool) {
             [ids, active],
           );
           await client.query('SELECT sync_active_boundary_cities()');
+          await client.query('SELECT assert_city_geometry_invariants()');
           await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         }
 
@@ -295,6 +296,7 @@ export function createOsmBoundaryAdminRepository(pool) {
           [id, next.active, next.displayName, next.displayType],
         );
         await client.query('SELECT sync_active_boundary_cities()');
+        await client.query('SELECT assert_city_geometry_invariants()');
 
         const resolvedResult = await client.query(
           `SELECT city_id::integer AS "cityId"

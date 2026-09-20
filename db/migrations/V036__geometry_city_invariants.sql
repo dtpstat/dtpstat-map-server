@@ -99,6 +99,23 @@ JOIN BUSLANES.CITY_BOUNDARIES AS BOUNDARY
 COMMENT ON VIEW BUSLANES.EFFECTIVE_CITY_GEOMETRIES IS
     'Canonical active geometry set: exact own boundary is active and boundary/city links agree. Hidden rows remain effective for metrics.';
 
+CREATE OR REPLACE FUNCTION BUSLANES.ASSERT_NO_PENDING_GEOMETRY_IMPORT()
+RETURNS VOID
+LANGUAGE PLPGSQL
+AS $FUNCTION$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM BUSLANES.GEOMETRY_IMPORT_SESSIONS
+        WHERE STATUS = 'pending'
+    ) THEN
+        RAISE EXCEPTION USING
+            ERRCODE = '55000',
+            MESSAGE = 'A staged geometry import is waiting for administrator conflict resolution';
+    END IF;
+END
+$FUNCTION$;
+
 CREATE OR REPLACE FUNCTION BUSLANES.ASSERT_CITY_GEOMETRY_INVARIANTS()
 RETURNS VOID
 LANGUAGE PLPGSQL

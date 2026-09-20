@@ -586,6 +586,7 @@ async function applyStaged(client, sessionId, rawDecisions = []) {
     }
   }
 
+  await client.query('SELECT assert_city_geometry_invariants()');
   await client.query(RECALCULATE_CITY_STATISTICS_SQL);
 
   const metadata = session.metadata ?? {};

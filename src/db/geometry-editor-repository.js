@@ -233,6 +233,7 @@ export function createGeometryEditorRepository(pool) {
       await acquireDataImportLock(client, pool);
       await client.query('SELECT assert_no_pending_geometry_import()');
       const result = await operation(client);
+      await client.query('SELECT assert_city_geometry_invariants()');
       await client.query(RECALCULATE_CITY_STATISTICS_SQL);
       await client.query('COMMIT');
       return result;

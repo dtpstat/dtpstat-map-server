@@ -582,6 +582,7 @@ export function createDataImportService(pool) {
         const geometryResult = await client.query(
           INSERT_STREAM_GEOMETRIES_SQL,
         );
+        await client.query('SELECT assert_city_geometry_invariants()');
         const statisticsResult = await client.query(
           RECALCULATE_CITY_STATISTICS_SQL,
         );
@@ -694,6 +695,7 @@ export function createDataImportService(pool) {
         }
 
         const geometryResult = await client.query(INSERT_GEOMETRIES_SQL, [serializedGeometries]);
+        await client.query('SELECT assert_city_geometry_invariants()');
         const statisticsResult = await client.query(RECALCULATE_CITY_STATISTICS_SQL);
 
         if (geometryResult.rowCount !== plan.geometries.length) {

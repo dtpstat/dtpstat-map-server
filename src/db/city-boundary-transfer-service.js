@@ -353,6 +353,7 @@ export function createCityBoundaryTransferService(pool) {
         await client.query('SELECT rebuild_city_boundary_hierarchy()');
         const restored = await client.query(RESTORE_GEOMETRY_LINKS_SQL);
         await client.query('SELECT sync_active_boundary_cities()');
+        await client.query('SELECT assert_city_geometry_invariants()');
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
 
@@ -494,6 +495,7 @@ export function createCityBoundaryTransferService(pool) {
         // reassign their application city and must update existing line rows
         // against the restored exact OSM object.
         await client.query('SELECT sync_active_boundary_cities()');
+        await client.query('SELECT assert_city_geometry_invariants()');
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
 

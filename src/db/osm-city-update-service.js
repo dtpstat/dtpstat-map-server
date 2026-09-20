@@ -1137,6 +1137,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         // city_id so renamed/reassigned active boundaries can realign existing
         // line rows as part of the same transaction.
         await client.query('SELECT sync_active_boundary_cities()');
+        await client.query('SELECT assert_city_geometry_invariants()');
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
 
