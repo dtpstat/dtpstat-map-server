@@ -407,7 +407,11 @@
                 </div>
               </section>
 
-              <section class="osm-boundary-details">
+              <section class="osm-boundary-map-panel" aria-label="Карта выбранной OSM геометрии">
+                <div id="osm-boundary-map" class="osm-boundary-map"></div>
+              </section>
+
+              <aside class="osm-boundary-details" aria-label="Атрибуты выбранного OSM объекта">
                 <form id="osm-boundary-form">
                   <div class="osm-boundary-selected-title" id="osm-boundary-selected-title">
                     Выберите объект в дереве
@@ -444,10 +448,7 @@
                   <button type="submit" disabled>Сохранить объект</button>
                   <p class="notice" id="osm-boundary-message" role="status"></p>
                 </form>
-
-                <div id="osm-boundary-map" class="osm-boundary-map"
-                     aria-label="Карта выбранной OSM геометрии"></div>
-              </section>
+              </aside>
             </div>
           </div>
         </section>
