@@ -89,8 +89,8 @@ test('OSM request URL override is allowlisted and cannot raise ENV limits', () =
   );
   assert.throws(
     () => resolveOsmCityUpdateRequest(undefined, {
-      maxResponseBytes: '900000',
-      maxTotalBytes: '500000',
+      maxResponseBytes: '400000',
+      maxTotalBytes: '300000',
     }, config),
     /maxResponseBytes must not exceed maxTotalBytes/,
   );
