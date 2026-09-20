@@ -402,7 +402,7 @@ export function createOsmCityCheckpointRepository(pool) {
            COUNT(*) FILTER (WHERE place_type = 'city')::integer AS "cityPlaces",
            COUNT(*) FILTER (WHERE place_type = 'town')::integer AS "townPlaces",
            COUNT(*) FILTER (
-             WHERE admin_level IS NOT NULL AND place_type IS NULL
+             WHERE admin_level IS NOT NULL
            )::integer AS "administrativePlaces",
            (
              SELECT COUNT(*)::integer
