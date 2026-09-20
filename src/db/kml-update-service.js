@@ -237,6 +237,7 @@ const INSERT_GEOMETRIES_SQL = `
       "lineTypeId" bigint,
       multiple smallint,
       properties jsonb,
+      "sourceTags" jsonb,
       geometry jsonb
     )
   ),
@@ -257,7 +258,9 @@ const INSERT_GEOMETRIES_SQL = `
     length_m,
     lane_length_m,
     properties,
-    geom
+    geom,
+    display_name,
+    source_tags
   )
   SELECT
     prepared."cityId",
@@ -267,7 +270,9 @@ const INSERT_GEOMETRIES_SQL = `
     ST_Length(prepared.geom::geography),
     ST_Length(prepared.geom::geography) * prepared.multiple,
     prepared.properties,
-    prepared.geom
+    prepared.geom,
+    NULLIF(BTRIM(prepared.properties ->> 'placemarkName'), ''),
+    prepared."sourceTags"
   FROM prepared
 `;
 
@@ -286,6 +291,12 @@ const INSERT_UPDATE_RUN_SQL = `
   VALUES ($1::jsonb, $2, $3, $4, $5, $6, $7, $8, $9)
   RETURNING id::integer AS id, created_at AS "createdAt"
 `;
+
+function importedSourceTags(properties) {
+  const tags = { ...(properties ?? {}) };
+  delete tags.fingerprint;
+  return tags;
+}
 
 /** @param {Array<any>} features */
 function removeDuplicateFeatures(features) {
@@ -559,6 +570,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
             businessTypeName: lineType.name,
             multiple: feature.multiple,
             properties: feature.properties,
+            sourceTags: importedSourceTags(feature.properties),
             geometry: feature.geometry,
           };
         });

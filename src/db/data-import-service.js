@@ -296,7 +296,9 @@ const INSERT_STREAM_GEOMETRIES_SQL = `
     length_m,
     lane_length_m,
     properties,
-    geom
+    geom,
+    display_name,
+    source_tags
   )
   SELECT
     city.id,
@@ -306,7 +308,13 @@ const INSERT_STREAM_GEOMETRIES_SQL = `
     ST_Length(stage.geom::geography),
     ST_Length(stage.geom::geography) * stage.lanes,
     stage.properties,
-    stage.geom
+    stage.geom,
+    NULLIF(BTRIM(stage.properties ->> 'placemarkName'), ''),
+    CASE
+      WHEN stage.properties ->> 'source' = 'kml'
+        THEN stage.properties - 'fingerprint'
+      ELSE '{}'::jsonb
+    END
   FROM line_transfer_stage AS stage
   JOIN line_types AS line_type
     ON LOWER(BTRIM(line_type.name)) = LOWER(BTRIM(stage.line_type_name))
@@ -346,7 +354,9 @@ const INSERT_GEOMETRIES_SQL = `
     length_m,
     lane_length_m,
     properties,
-    geom
+    geom,
+    display_name,
+    source_tags
   )
   SELECT
     city.id,
@@ -356,7 +366,13 @@ const INSERT_GEOMETRIES_SQL = `
     ST_Length(prepared.geom::geography),
     ST_Length(prepared.geom::geography) * prepared.lanes,
     prepared.properties,
-    prepared.geom
+    prepared.geom,
+    NULLIF(BTRIM(prepared.properties ->> 'placemarkName'), ''),
+    CASE
+      WHEN prepared.properties ->> 'source' = 'kml'
+        THEN prepared.properties - 'fingerprint'
+      ELSE '{}'::jsonb
+    END
   FROM prepared
   JOIN line_types AS line_type
     ON LOWER(BTRIM(line_type.name)) = LOWER(BTRIM(prepared."lineTypeName"))

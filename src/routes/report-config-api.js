@@ -50,15 +50,17 @@ export function createReportConfigRouter({
     adminAuth.requireInterface,
     async (_request, response, next) => {
       try {
-        const [config, lineTypes] = await Promise.all([
+        const [config, lineTypes, geometryTags] = await Promise.all([
           reportConfigService.get(),
           lineTypesRepository.list(),
+          reportConfigService.listGeometryTags?.() ?? Promise.resolve([]),
         ]);
         response.set('Cache-Control', 'no-store');
         response.json({
           config,
           catalog: REPORT_CONFIG_CATALOG,
           lineTypes: lineTypes.map(({ code, name, title }) => ({ code, name, title })),
+          geometryTags,
         });
       } catch (error) {
         next(error);
