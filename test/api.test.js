@@ -542,7 +542,17 @@ test('import endpoint rejects unsupported and malformed bodies', async () => {
       },
       body: '{',
     });
-    assert.equal(malformed.status, 400);
+    assert.equal(malformed.status, 202);
+    const { completed } = await acceptAndWaitForAdminTask(
+      malformed,
+      baseUrl,
+      authorization,
+    );
+    assert.equal(completed.status, 'failed');
+    assert.match(
+      completed.task.error.message,
+      /JSON|property name|Unexpected/i,
+    );
   });
 });
 
