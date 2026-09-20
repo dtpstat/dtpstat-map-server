@@ -79,6 +79,18 @@ function csrfAllowed(request, authMethod) {
   }
 }
 
+function applySessionExpiry(response, result) {
+  if (
+    result?.authMethod === 'session' &&
+    result.sessionEffectiveExpiresAt
+  ) {
+    response.set(
+      'X-DTPStat-Admin-Session-Expires-At',
+      result.sessionEffectiveExpiresAt,
+    );
+  }
+}
+
 /**
  * Session cookies are preferred for the interactive web admin. DB-backed Basic
  * Auth remains accepted for scripts and compatibility clients.
@@ -145,6 +157,8 @@ export function createAdminAuthorization(securityService) {
         request.adminUser = user;
         request.adminSessionId = result.sessionId ?? null;
         request.adminAuthMethod = result.authMethod ?? 'basic';
+        request.adminSessionExpiresAt = result.sessionEffectiveExpiresAt ?? null;
+        applySessionExpiry(response, result);
         next();
       } catch (error) {
         next(error);
@@ -161,6 +175,8 @@ export function createAdminAuthorization(securityService) {
       request.adminUser = result.user;
       request.adminSessionId = result.sessionId ?? null;
       request.adminAuthMethod = result.authMethod ?? 'basic';
+      request.adminSessionExpiresAt = result.sessionEffectiveExpiresAt ?? null;
+      applySessionExpiry(response, result);
       next();
     } catch (error) {
       next(error);
