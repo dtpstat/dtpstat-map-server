@@ -11,6 +11,8 @@ function createPool({
   currentPopulation = 120000,
   resolvedCityId = currentCityId,
   finalPopulation = currentPopulation,
+  finalActive = currentActive,
+  subtreeRows = null,
 } = {}) {
   const queries = [];
   const parameters = [];
@@ -22,11 +24,16 @@ function createPool({
       queries.push(normalized);
       parameters.push(values);
 
+      if (/^WITH RECURSIVE subtree AS/i.test(normalized)) {
+        const rows = subtreeRows ?? [{ id: 5, active: currentActive }];
+        return { rows, rowCount: rows.length };
+      }
+
       if (/FOR UPDATE OF boundary/i.test(normalized)) {
         return {
           rows: [{
             id: 5,
-            active: currentActive,
+            active: finalActive,
             displayName: 'Тестоград',
             displayType: 'city',
             cityId: currentCityId,
@@ -153,4 +160,65 @@ test('population cannot be edited while the OSM boundary is inactive', async () 
 
   assert.equal(pool.queries.at(-1), 'ROLLBACK');
   assert.equal(pool.released, true);
+});
+
+
+test('OSM subtree deactivation updates the selected node and every descendant once', async () => {
+  const pool = createPool({
+    finalActive: false,
+    subtreeRows: [
+      { id: 5, active: true },
+      { id: 6, active: true },
+      { id: 7, active: false },
+    ],
+  });
+  const repository = createOsmBoundaryAdminRepository(pool);
+
+  const result = await repository.setSubtreeActive(5, false);
+
+  assert.equal(result.active, false);
+  assert.equal(result.affectedCount, 3);
+  assert.equal(result.changedCount, 2);
+  assert.equal(result.previousActiveCount, 2);
+  assert.equal(result.previousInactiveCount, 1);
+  assert.equal(result.root.active, false);
+
+  const updateIndex = pool.queries.findIndex((query) =>
+    /UPDATE city_boundaries[\s\S]*ANY\(\$1::bigint\[\]\)/i.test(query));
+  assert.ok(updateIndex >= 0);
+  assert.deepEqual(pool.parameters[updateIndex], [[5, 6, 7], false]);
+  assert.ok(pool.queries.includes('SELECT sync_active_boundary_cities()'));
+  assert.ok(pool.queries.some((query) => /^WITH geometry_statistics AS/i.test(query)));
+  assert.equal(pool.queries.at(-1), 'COMMIT');
+  assert.equal(pool.released, true);
+});
+
+test('OSM subtree activation returns null for a missing root without derived updates', async () => {
+  const pool = createPool({ subtreeRows: [] });
+  const repository = createOsmBoundaryAdminRepository(pool);
+
+  const result = await repository.setSubtreeActive(999, false);
+
+  assert.equal(result, null);
+  assert.equal(
+    pool.queries.some((query) => query.startsWith('UPDATE city_boundaries')),
+    false,
+  );
+  assert.equal(pool.queries.at(-1), 'ROLLBACK');
+  assert.equal(pool.released, true);
+});
+
+test('OSM subtree activation validates boolean state before opening a transaction', async () => {
+  const pool = createPool();
+  const repository = createOsmBoundaryAdminRepository(pool);
+
+  await assert.rejects(
+    repository.setSubtreeActive(5, 'false'),
+    (error) =>
+      error instanceof OsmBoundaryAdminValidationError &&
+      /active must be boolean/.test(error.message),
+  );
+
+  assert.equal(pool.queries.length, 0);
+  assert.equal(pool.released, false);
 });
