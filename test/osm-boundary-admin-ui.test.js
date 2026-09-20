@@ -28,7 +28,11 @@ test('OSM object editor is a top-level admin section with population editing', a
   );
   assert.match(
     html,
-    /id="osm-boundary-tree"[\s\S]*id="osm-boundary-map"[\s\S]*id="osm-boundary-form"/,
+    /id="osm-boundary-search"[\s\S]*id="osm-boundary-tree"[\s\S]*id="osm-boundary-map"[\s\S]*id="osm-boundary-form"/,
+  );
+  assert.match(
+    html,
+    /id="osm-boundary-search"[^>]*type="search"[^>]*placeholder="Название, тип, OSM ID…"/,
   );
   assert.match(
     html,
@@ -46,6 +50,19 @@ test('OSM object editor is a top-level admin section with population editing', a
   assert.match(editor, /#admin-section-osm-objects/);
   assert.match(editor, /population\.dataset\.initialValue/);
   assert.match(editor, /changes\.population/);
+  assert.match(editor, /function normalizeSearchText\(value\)/);
+  assert.match(editor, /\.toLocaleLowerCase\('ru-RU'\)[\s\S]*\.replace\(\/\\s\+\/gu, ''\)/);
+  assert.match(editor, /function compareBoundaries\(a, b\)/);
+  assert.doesNotMatch(editor, /Number\(b\.active\) - Number\(a\.active\)/);
+  assert.match(
+    editor,
+    /compareText\(a\.displayName, b\.displayName\)[\s\S]*compareText\(a\.displayType, b\.displayType\)/,
+  );
+  assert.match(
+    editor,
+    /if \(!boundarySearchText\(item\)\.includes\(query\)\) continue;[\s\S]*current = byId\.get\(current\.parentId\)/,
+  );
+  assert.match(editor, /searchInput\.addEventListener\('input', \(\) => renderTree\(\)\)/);
   assert.match(
     editor,
     /https:\/\/tile\.openstreetmap\.org\/\{z\}\/\{x\}\/\{y\}\.png/,
@@ -57,4 +74,6 @@ test('OSM object editor is a top-level admin section with population editing', a
     /grid-template-columns:\s*minmax\(19rem, \.72fr\)[\s\S]*minmax\(30rem, 1\.8fr\)[\s\S]*minmax\(20rem, \.82fr\)/,
   );
   assert.match(styles, /#osm-boundary-form[\s\S]*flex-direction:\s*column/);
+  assert.match(styles, /\.osm-boundary-tree-panel[\s\S]*flex-direction:\s*column/);
+  assert.match(styles, /\.osm-boundary-tree[\s\S]*overflow:\s*auto/);
 });
