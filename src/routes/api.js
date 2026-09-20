@@ -721,6 +721,18 @@ export function createApiRouter({
         transfer: {
           requestCompression: ['gzip', 'deflate', 'br'],
           responseCompression: 'Accept-Encoding negotiation',
+          portableFormats: ['json', 'zip-single-file'],
+          streaming: true,
+          zip: {
+            entries: 1,
+            zip64: false,
+            compressionMethods: ['store', 'deflate'],
+          },
+          limits: {
+            uploadBytes: streamTransfer.maxUploadBytes,
+            decodedJsonBytes: streamTransfer.maxJsonBytes,
+            itemBytes: streamTransfer.maxItemBytes,
+          },
         },
         osmCityUpdate: {
           allowedURLs: [...osmCityUpdate.allowedURLs],
