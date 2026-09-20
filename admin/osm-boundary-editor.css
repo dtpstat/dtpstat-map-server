@@ -137,7 +137,7 @@
 .osm-boundary-section-card .osm-boundary-map {
   min-height: 0;
 }
-.osm-boundary-map .leaflet-control-attribution { font-size: 9px; }
+.osm-boundary-map .mapboxgl-ctrl-attrib { font-size: 9px; }
 
 @media (max-width: 1250px) {
   .osm-boundary-layout,
