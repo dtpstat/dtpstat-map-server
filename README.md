@@ -11,8 +11,9 @@ Node.js/Express + PostgreSQL/PostGIS сервер интерактивной к�
 ## Возможности
 
 - публичная Mapbox-карта с viewport-загрузкой линий;
-- города и границы из OSM/Overpass;
-- объединение частей одного OSM `relation` в один логический город;
+- города и административные границы из OSM/Overpass;
+- пакетная загрузка `place=city/town` и настраиваемого диапазона `boundary=administrative`;
+- дерево вложенности OSM-полигонов, ручные active/displayName/displayType и Leaflet-preview;
 - импорт GeoJSON, KML и Google My Maps;
 - переносимый GeoJSON/KML со словарём `LINE_TYPES`;
 - сохранение `<Placemark><name>` как `properties.placemarkName`;
@@ -91,7 +92,7 @@ HTTP_PORT=3002
 
 ## Миграции
 
-Текущая последовательность: `V001…V026`.
+Текущая последовательность: `V001…V027`.
 
 Последние изменения:
 
@@ -106,8 +107,9 @@ HTTP_PORT=3002
 | `V024` | последовательный multi-column ranking (`REPORT_CONFIG.RANK_SORT`) |
 | `V025` | `PROJECT_SETTINGS.PUBLIC_DOWNLOAD_NAME` |
 | `V026` | динамические ссылки на публичные GeoJSON/CSV в footer |
+| `V027` | OSM object identity, active/display identity, hierarchy, DB-backed OSM import settings и пороги large/small |
 
-Следующая migration: **V027+**. Уже опубликованные migrations не редактируются задним числом.
+Следующая migration: **V028+**. Уже опубликованные migrations не редактируются задним числом.
 
 История хранится в:
 
@@ -115,25 +117,33 @@ HTTP_PORT=3002
 <DATABASE_SCHEMA>.schema_versions
 ```
 
-## OSM города
+## OSM геометрии
 
-`CITY_BOUNDARIES.FULL_NAME` вычисляется как первое непустое значение:
-
-```text
-addr:district
-→ name:ru
-→ osm_name
-```
-
-Для `OSM_TYPE='relation'` строки с одинаковыми:
+Начиная с `V027`, исходная identity каждого объекта — строго:
 
 ```text
-PLACE_TYPE + FULL_NAME
+OSM_TYPE + OSM_ID
 ```
 
-считаются частями одного логического города и объединяются в `MultiPolygon`.
+Разные relations больше никогда не объединяются по совпадению имени. Историческая
+нормализация V023 отключена новой migration; после перехода на V027 рекомендуется
+один раз заново выполнить OSM update, чтобы восстановить объекты, ранее потерянные
+из-за name-based merge.
 
-`OSM_TYPE/OSM_ID` пока сохраняются как provenance и используются portable city-transfer для восстановления связей. Это не identity логического города после нормализации relation fragments.
+Загрузчик получает ID-индекс, дедуплицирует пересечения selectors по
+`(osm_type, osm_id)`, затем последовательно загружает geometry batches.
+
+Для каждого объекта отдельно хранятся source-признаки OSM и пользовательская
+конфигурация:
+
+- `PLACE_TYPE` / `ADMIN_LEVEL`;
+- `IS_ACTIVE`;
+- `DISPLAY_NAME` / `DISPLAY_TYPE`;
+- `PARENT_ID`, вычисленный по полному `ST_Covers(parent, child)`;
+- `AREA_M2`.
+
+Только активные boundaries участвуют в привязке населения, линий, публичной
+карте и отчётах. Просто пересекающиеся полигоны не образуют parent/child связь.
 
 ## Основные таблицы
 
@@ -147,6 +157,7 @@ PLACE_TYPE + FULL_NAME
 - `project_settings`;
 - `report_config`;
 - `city_report_values`;
+- `osm_import_settings`;
 - `admin_users`;
 - `admin_sessions`;
 - `admin_security_settings`;
@@ -283,9 +294,9 @@ GET  /api/admin/settings/export
 POST /api/admin/settings/import
 ```
 
-Текущий package: `project-settings`, **schemaVersion 6**.
+Текущий package: `project-settings`, **schemaVersion 7**.
 
-Импорт принимает `v1…v6` и нормализует legacy fields. V5 добавил `rank.sort`, V6 — `publicDownloadName`.
+Импорт принимает `v1…v7` и нормализует legacy fields. V5 добавил `rank.sort`, V6 — `publicDownloadName`, V7 — пороги разделения больших/малых городов.
 
 Переносятся project settings, line types, report config, security policy и public Mapbox token. Не переносятся users/password hashes/sessions/audit, source data, `.env`, TLS/DB secrets и custom city marker binary.
 
