@@ -217,7 +217,7 @@ export function compileReportMetricQuery(metric) {
         FROM cities AS city
         LEFT JOIN city_populations AS population
           ON population.city_id = city.id
-        LEFT JOIN city_geometries AS geometry
+        LEFT JOIN effective_city_geometries AS geometry
           ON geometry.city_id = city.id
         LEFT JOIN line_types AS line_type
           ON line_type.id = geometry.line_type_id
@@ -305,7 +305,7 @@ async function materialize(queryable, config) {
     )
       AND EXISTS (
         SELECT 1
-        FROM city_geometries AS geometry_presence
+        FROM effective_city_geometries AS geometry_presence
         WHERE geometry_presence.city_id = city.id
       )
     ORDER BY city.id

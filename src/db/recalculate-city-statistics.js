@@ -13,7 +13,7 @@ export const RECALCULATE_CITY_STATISTICS_SQL = `
         0
       )::double precision AS lane_length_m
     FROM cities AS city
-    LEFT JOIN city_geometries AS geometry ON geometry.city_id = city.id
+    LEFT JOIN effective_city_geometries AS geometry ON geometry.city_id = city.id
     GROUP BY city.id
   ),
   boundary_statistics AS (

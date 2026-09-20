@@ -460,6 +460,7 @@ export function createGeometryEditorRepository(pool) {
           SELECT
             geometry.id::integer AS id,
             geometry.city_id::integer AS "cityId",
+            geometry.boundary_id::integer AS "boundaryId",
             CASE
               WHEN GeometryType(geometry.geom) = 'POINT' THEN 'point'
               WHEN GeometryType(geometry.geom) IN ('LINESTRING', 'MULTILINESTRING') THEN 'line'
@@ -481,8 +482,14 @@ export function createGeometryEditorRepository(pool) {
         if (first.family === 'point') {
           throw new GeometryEditorValidationError('Point geometries cannot be merged');
         }
-        if (rows.rows.some((row) => row.cityId !== first.cityId || row.family !== first.family)) {
-          throw new GeometryEditorValidationError('Merged geometries must belong to the same city and geometry family');
+        if (rows.rows.some((row) =>
+          row.cityId !== first.cityId ||
+          row.boundaryId !== first.boundaryId ||
+          row.family !== first.family
+        )) {
+          throw new GeometryEditorValidationError(
+            'Merged geometries must belong to the same city, OSM boundary and geometry family',
+          );
         }
         if (rows.rows.some((row) => row.isVisible !== first.isVisible)) {
           throw new GeometryEditorValidationError('Merged geometries must have the same visibility');
