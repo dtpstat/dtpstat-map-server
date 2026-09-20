@@ -12,8 +12,8 @@ const UPSERT_CITIES_SQL = `
     "fullName" text,
     attributes jsonb
   )
-  ON CONFLICT (name) DO UPDATE SET
-    slug = EXCLUDED.slug,
+  ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
     full_name = EXCLUDED.full_name,
     attributes = cities.attributes || EXCLUDED.attributes,
     updated_at = now()
@@ -89,6 +89,7 @@ const FIND_UNKNOWN_BOUNDARIES_SQL = `
   LEFT JOIN city_boundaries AS boundary
     ON boundary.osm_type = payload."boundaryOsmType"
    AND boundary.osm_id = payload."boundaryOsmId"
+   AND boundary.is_active
   WHERE payload."boundaryOsmId" IS NOT NULL
     AND boundary.id IS NULL
   ORDER BY osm_type, osm_id
@@ -121,6 +122,7 @@ const FIND_BOUNDARY_CITY_CONFLICTS_SQL = `
   JOIN city_boundaries AS boundary
     ON boundary.osm_type = payload."boundaryOsmType"
    AND boundary.osm_id = payload."boundaryOsmId"
+   AND boundary.is_active
   JOIN cities AS city ON city.slug = payload."citySlug"
   WHERE boundary.city_id IS NOT NULL
     AND boundary.city_id <> city.id
@@ -148,6 +150,7 @@ const LINK_BOUNDARIES_SQL = `
   JOIN cities AS city ON city.slug = payload.city_slug
   WHERE boundary.osm_type = payload.osm_type
     AND boundary.osm_id = payload.osm_id
+    AND boundary.is_active
     AND boundary.city_id IS NULL
 `;
 
@@ -197,6 +200,7 @@ const INSERT_GEOMETRIES_SQL = `
   LEFT JOIN city_boundaries AS boundary
     ON boundary.osm_type = prepared."boundaryOsmType"
    AND boundary.osm_id = prepared."boundaryOsmId"
+   AND boundary.is_active
 `;
 
 /** @param {{ connect: () => Promise<any>, databaseSchema?: string }} pool */
@@ -233,7 +237,7 @@ export function createDataImportService(pool) {
             .map((row) => `${row.osm_type}/${row.osm_id}`)
             .join(', ');
           throw new GeoJsonValidationError(
-            `Line GeoJSON references unknown city boundaries: ${objects}. Import the city GeoJSON snapshot first.`,
+            `Line GeoJSON references unknown or inactive city boundaries: ${objects}. Import/activate the OSM boundary snapshot first.`,
           );
         }
         const conflicts = await client.query(
