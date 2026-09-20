@@ -1,0 +1,332 @@
+import { TextDecoder } from 'node:util';
+import { throwIfAdminTaskCancelled } from './admin-task-manager.js';
+
+export class StreamingJsonError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'StreamingJsonError';
+  }
+}
+
+class AsyncCharReader {
+  constructor(source, { maxBytes, signal }) {
+    this.iterator = source[Symbol.asyncIterator]();
+    this.decoder = new TextDecoder('utf-8', { fatal: true });
+    this.maxBytes = maxBytes;
+    this.signal = signal;
+    this.buffer = '';
+    this.offset = 0;
+    this.done = false;
+    this.bytes = 0;
+    this.firstCharacter = true;
+  }
+
+  compact() {
+    if (this.offset > 65536 && this.offset * 2 > this.buffer.length) {
+      this.buffer = this.buffer.slice(this.offset);
+      this.offset = 0;
+    }
+  }
+
+  async fill() {
+    throwIfAdminTaskCancelled(this.signal);
+    while (this.offset >= this.buffer.length && !this.done) {
+      this.compact();
+      const next = await this.iterator.next();
+      if (next.done) {
+        this.done = true;
+        try {
+          this.buffer += this.decoder.decode();
+        } catch {
+          throw new StreamingJsonError('JSON input is not valid UTF-8');
+        }
+        break;
+      }
+      const chunk = Buffer.isBuffer(next.value)
+        ? next.value
+        : Buffer.from(next.value);
+      this.bytes += chunk.length;
+      if (this.bytes > this.maxBytes) {
+        throw new StreamingJsonError(
+          `Decoded JSON exceeds the configured limit of ${this.maxBytes} bytes`,
+        );
+      }
+      try {
+        this.buffer += this.decoder.decode(chunk, { stream: true });
+      } catch {
+        throw new StreamingJsonError('JSON input is not valid UTF-8');
+      }
+    }
+  }
+
+  async peek() {
+    await this.fill();
+    if (this.offset >= this.buffer.length) return null;
+    if (this.firstCharacter) {
+      this.firstCharacter = false;
+      if (this.buffer[this.offset] === '\uFEFF') {
+        this.offset += 1;
+        return this.peek();
+      }
+    }
+    return this.buffer[this.offset];
+  }
+
+  async next() {
+    const value = await this.peek();
+    if (value === null) return null;
+    this.offset += 1;
+    return value;
+  }
+
+  async whitespace() {
+    for (;;) {
+      const value = await this.peek();
+      if (value === null || !/\s/u.test(value)) return;
+      this.offset += 1;
+    }
+  }
+}
+
+async function expect(reader, expected, message) {
+  await reader.whitespace();
+  const value = await reader.next();
+  if (value !== expected) {
+    throw new StreamingJsonError(message ?? `Expected ${expected}`);
+  }
+}
+
+async function readStringRaw(reader, limit) {
+  await reader.whitespace();
+  if (await reader.next() !== '"') {
+    throw new StreamingJsonError('Expected a JSON string');
+  }
+  let raw = '"';
+  let escaped = false;
+  for (;;) {
+    const value = await reader.next();
+    if (value === null) {
+      throw new StreamingJsonError('Unexpected end of JSON string');
+    }
+    raw += value;
+    if (raw.length > limit) {
+      throw new StreamingJsonError(
+        `JSON string exceeds the configured item limit of ${limit} characters`,
+      );
+    }
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (value === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (value === '"') return raw;
+    if (value.charCodeAt(0) < 0x20) {
+      throw new StreamingJsonError('JSON string contains an unescaped control character');
+    }
+  }
+}
+
+async function readValueRaw(reader, limit) {
+  await reader.whitespace();
+  const first = await reader.peek();
+  if (first === null) {
+    throw new StreamingJsonError('Unexpected end of JSON input');
+  }
+
+  if (first === '"') return readStringRaw(reader, limit);
+
+  let raw = '';
+  if (first === '{' || first === '[') {
+    const stack = [];
+    let inString = false;
+    let escaped = false;
+    for (;;) {
+      const value = await reader.next();
+      if (value === null) {
+        throw new StreamingJsonError('Unexpected end of JSON value');
+      }
+      raw += value;
+      if (raw.length > limit) {
+        throw new StreamingJsonError(
+          `One JSON value exceeds the configured item limit of ${limit} characters`,
+        );
+      }
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (value === '\\') {
+          escaped = true;
+        } else if (value === '"') {
+          inString = false;
+        } else if (value.charCodeAt(0) < 0x20) {
+          throw new StreamingJsonError(
+            'JSON string contains an unescaped control character',
+          );
+        }
+        continue;
+      }
+
+      if (value === '"') {
+        inString = true;
+        continue;
+      }
+      if (value === '{' || value === '[') {
+        stack.push(value);
+        continue;
+      }
+      if (value === '}' || value === ']') {
+        const expected = value === '}' ? '{' : '[';
+        if (stack.pop() !== expected) {
+          throw new StreamingJsonError('JSON value has mismatched brackets');
+        }
+        if (stack.length === 0) return raw;
+      }
+    }
+  }
+
+  for (;;) {
+    const value = await reader.peek();
+    if (
+      value === null ||
+      value === ',' ||
+      value === '}' ||
+      value === ']' ||
+      /\s/u.test(value)
+    ) {
+      break;
+    }
+    raw += await reader.next();
+    if (raw.length > limit) {
+      throw new StreamingJsonError(
+        `One JSON value exceeds the configured item limit of ${limit} characters`,
+      );
+    }
+  }
+  if (!raw) throw new StreamingJsonError('Expected a JSON value');
+  return raw;
+}
+
+function parseRaw(raw, label) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new StreamingJsonError(`${label} is not valid JSON`);
+  }
+}
+
+/**
+ * Parse a top-level JSON object while materializing one selected array one item
+ * at a time. Other top-level values are bounded individually and retained only
+ * when their key is requested through metadataKeys.
+ *
+ * @param {AsyncIterable<Buffer | Uint8Array | string>} source
+ * @param {{
+ *   arrayKey: string,
+ *   metadataKeys?: Set<string>,
+ *   maxBytes: number,
+ *   maxItemBytes: number,
+ *   signal?: AbortSignal,
+ *   onItem: (item: unknown, index: number) => Promise<void> | void,
+ *   onProgress?: (progress: object) => Promise<void> | void
+ * }} options
+ */
+export async function parseStreamingJsonObject(source, options) {
+  const reader = new AsyncCharReader(source, options);
+  const metadata = {};
+  const seenKeys = new Set();
+  let arraySeen = false;
+  let itemCount = 0;
+
+  await expect(reader, '{', 'JSON document must be a top-level object');
+  await reader.whitespace();
+  if (await reader.peek() === '}') {
+    await reader.next();
+  } else {
+    for (;;) {
+      const keyRaw = await readStringRaw(reader, 4096);
+      const key = parseRaw(keyRaw, 'JSON object key');
+      if (seenKeys.has(key)) {
+        throw new StreamingJsonError(`Duplicate top-level JSON property: ${key}`);
+      }
+      seenKeys.add(key);
+      await expect(reader, ':', `Expected ':' after JSON property ${key}`);
+
+      if (key === options.arrayKey) {
+        arraySeen = true;
+        await expect(
+          reader,
+          '[',
+          `JSON property ${options.arrayKey} must be an array`,
+        );
+        await reader.whitespace();
+        if (await reader.peek() !== ']') {
+          for (;;) {
+            const raw = await readValueRaw(reader, options.maxItemBytes);
+            const item = parseRaw(
+              raw,
+              `JSON ${options.arrayKey} item ${itemCount}`,
+            );
+            await options.onItem(item, itemCount);
+            itemCount += 1;
+            if (itemCount % 100 === 0) {
+              await options.onProgress?.({
+                phase: 'parse',
+                items: itemCount,
+                decodedBytes: reader.bytes,
+              });
+            }
+            await reader.whitespace();
+            const separator = await reader.next();
+            if (separator === ']') break;
+            if (separator !== ',') {
+              throw new StreamingJsonError(
+                `Expected ',' or ']' in JSON ${options.arrayKey} array`,
+              );
+            }
+          }
+        } else {
+          await reader.next();
+        }
+      } else {
+        const raw = await readValueRaw(reader, options.maxItemBytes);
+        const value = parseRaw(raw, `JSON property ${key}`);
+        if (options.metadataKeys?.has(key)) metadata[key] = value;
+      }
+
+      await reader.whitespace();
+      const separator = await reader.next();
+      if (separator === '}') break;
+      if (separator !== ',') {
+        throw new StreamingJsonError(
+          "Expected ',' or '}' after top-level JSON property",
+        );
+      }
+      await reader.whitespace();
+    }
+  }
+
+  await reader.whitespace();
+  if (await reader.next() !== null) {
+    throw new StreamingJsonError('JSON document contains trailing data');
+  }
+  if (!arraySeen) {
+    throw new StreamingJsonError(
+      `JSON document must contain the ${options.arrayKey} array`,
+    );
+  }
+
+  await options.onProgress?.({
+    phase: 'parsed',
+    items: itemCount,
+    decodedBytes: reader.bytes,
+  });
+  return {
+    metadata,
+    itemCount,
+    decodedBytes: reader.bytes,
+  };
+}
