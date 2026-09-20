@@ -267,14 +267,24 @@ spool-файл в `var/import-staging`, после чего background admin tas
 
 ZIP-контракт намеренно строгий:
 
-- ровно **одна** file entry;
-- каталогов и путей внутри archive быть не должно;
+- после игнорирования directory entries должна остаться ровно **одна**
+  ordinary data entry;
+- имя и расширение этой entry не определяют формат: допустимы, например,
+  `stdin` или `payload/data`; JSON/GeoJSON определяется и валидируется по
+  содержимому/schema;
 - encryption и multi-volume ZIP не поддерживаются;
 - поддерживаются Store и Deflate;
-- проверяются CRC32 и declared decoded size;
-- ZIP64 не принимается: ZIP transfer ограничен ZIP32 (< 4 GiB). Для больших
-  объёмов до configured raw JSON limit можно использовать обычный streaming
-  JSON/GeoJSON без ZIP.
+- поддерживаются classic ZIP и ZIP64, включая streamed archives с data
+  descriptor, когда размер entry неизвестен в local header;
+- проверяются CRC32, decoded size, central-directory consistency,
+  максимальное число entries и compression ratio.
+
+Сам HTTP request также может быть потоком без `Content-Length`
+(`Transfer-Encoding: chunked`). Это позволяет подавать на endpoint ZIP,
+который другой процесс формирует из stdin на лету. Сервер не собирает его в
+RAM: на диск spoolятся только transport bytes архива, после чего единственная
+data entry декодируется непосредственно в streaming JSON parser. Отдельный
+распакованный JSON-файл не создаётся.
 
 Лимиты:
 
@@ -284,19 +294,28 @@ ZIP-контракт намеренно строгий:
 IMPORT_API_MAX_BODY_BYTES=26214400
 
 # Размер входящего transport body: raw JSON, HTTP-compressed JSON или ZIP.
-IMPORT_API_MAX_STREAM_UPLOAD_BYTES=2147483648
+IMPORT_API_MAX_STREAM_UPLOAD_BYTES=8589934592
 
 # Максимальный размер JSON после HTTP/ZIP decompression.
-IMPORT_API_MAX_STREAM_JSON_BYTES=3221225472
+IMPORT_API_MAX_STREAM_JSON_BYTES=34359738368
 
 # Максимальный размер одного feature/population JSON value.
 IMPORT_API_MAX_STREAM_ITEM_BYTES=134217728
+
+# ZIP-bomb / archive structure limits.
+IMPORT_API_MAX_STREAM_ZIP_RATIO=1000
+IMPORT_API_MAX_STREAM_ZIP_ENTRIES=64
+
+# Streaming JSON complexity limits.
+IMPORT_API_MAX_STREAM_JSON_DEPTH=128
+IMPORT_API_MAX_STREAM_JSON_ITEMS=5000000
 ```
 
 Для nginx `client_max_body_size` должен быть **не меньше**
 `IMPORT_API_MAX_STREAM_UPLOAD_BYTES` (либо выбранного production значения).
-Например для лимита 2 GiB нужно настраивать nginx соответственно, а не оставлять
-старые `30m`.
+Например для лимита 8 GiB нужно настраивать nginx соответственно, а не оставлять
+старые `30m`. Для действительно streaming/chunked upload также необходимо,
+чтобы reverse proxy не буферизовал request body целиком собственной политикой.
 
 Пример raw gzip:
 
@@ -312,7 +331,7 @@ gzip -c cities.geojson | curl --fail-with-body \
   https://target.example/api/admin/import/cities
 ```
 
-Пример ZIP:
+Пример готового ZIP:
 
 ```bash
 curl --fail-with-body \
@@ -323,7 +342,14 @@ curl --fail-with-body \
   https://target.example/api/admin/import/cities
 ```
 
-После полного приёма HTTP upload сервер отвечает `202` и запускает admin task.
+То же API принимает ZIP из pipe/stdin: upstream ZIP producer пишет archive
+bytes в stdout, а `curl --data-binary @-` передаёт их без промежуточного
+JSON-файла на стороне сервера. Имя единственной data entry может быть
+`stdin`; расширение `.json` не требуется.
+
+После полного приёма transport stream сервер отвечает `202` и запускает
+admin task. Полный transport body не держится в heap; spool нужен для проверки
+ZIP central directory/ZIP64 metadata перед транзакционным чтением JSON.
 Синтаксическая ошибка JSON, неправильный ZIP, schema/PostGIS ошибка или отмена
 задачи переводят task в `failed/cancelled`; DB import выполняется в одной
 транзакции и делает `ROLLBACK` целиком. Уже изменённые production rows при
