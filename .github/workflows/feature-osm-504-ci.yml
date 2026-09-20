@@ -1,4 +1,5 @@
 name: OSM 504 adaptive split check
+# rerun after test fix
 on:
   push:
     branches:
