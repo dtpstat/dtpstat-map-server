@@ -239,8 +239,10 @@ async function loadDataEditors() {
 
 function setupPrimarySections(user) {
   const mustChangePassword = Boolean(user.mustChangePassword);
+  const dataAccess = !mustChangePassword && canManageData(user);
   const permissions = {
-    data: !mustChangePassword && canManageData(user),
+    data: dataAccess,
+    'osm-objects': dataAccess,
     interface: !mustChangePassword && canManageInterface(user),
     security: !mustChangePassword && canAccessSecurity(user),
     profile: true,
@@ -254,7 +256,8 @@ function setupPrimarySections(user) {
     tab.hidden = !permissions[key];
   }
 
-  const available = ['data', 'interface', 'security', 'profile'].filter((key) => permissions[key]);
+  const available = ['data', 'osm-objects', 'interface', 'security', 'profile']
+    .filter((key) => permissions[key]);
   const select = (key) => {
     if (!permissions[key]) return;
     for (const tab of tabs) {
@@ -265,6 +268,9 @@ function setupPrimarySections(user) {
     for (const panel of panels) panel.hidden = panel.dataset.adminSectionPanel !== key;
     if (connection) connection.hidden = key !== 'data' || !permissions.data;
     if (key === 'security') window.dispatchEvent(new CustomEvent('dtpstat:security-refresh'));
+    if (key === 'osm-objects') {
+      window.dispatchEvent(new CustomEvent('dtpstat:osm-boundary-editor-open'));
+    }
   };
 
   for (const tab of tabs) tab.addEventListener('click', () => select(tab.dataset.adminSectionTab));
