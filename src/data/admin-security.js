@@ -187,6 +187,8 @@ function publicUser(user) {
     email: user.email ?? null,
     canManageData: Boolean(user.canManageData),
     canManageInterface: Boolean(user.canManageInterface),
+    canEditGeometries: Boolean(user.canEditGeometries),
+    canEditOsm: Boolean(user.canEditOsm),
     canManageUsers: Boolean(user.canManageUsers),
     canViewAudit: Boolean(user.canViewAudit),
     canManageSecurity: Boolean(user.canManageSecurity),
@@ -268,6 +270,8 @@ export function createAdminSecurityService(repository) {
         passwordHash,
         canManageData: true,
         canManageInterface: true,
+        canEditGeometries: true,
+        canEditOsm: true,
         canManageUsers: true,
         canViewAudit: true,
         canManageSecurity: true,
@@ -516,7 +520,8 @@ export function createAdminSecurityService(repository) {
     }
     const allowed = new Set([
       'username', 'displayName', 'email', 'password',
-      'canManageData', 'canManageInterface', 'canManageUsers', 'canViewAudit', 'canManageSecurity',
+      'canManageData', 'canManageInterface', 'canEditGeometries', 'canEditOsm',
+      'canManageUsers', 'canViewAudit', 'canManageSecurity',
     ]);
     const unknown = Object.keys(payload).filter((key) => !allowed.has(key));
     if (unknown.length) throw new AdminSecurityValidationError(`Request body contains unsupported properties: ${unknown.join(', ')}`);
@@ -530,6 +535,8 @@ export function createAdminSecurityService(repository) {
       passwordHash: await hashAdminPassword(password),
       canManageData: booleanField(payload.canManageData, 'canManageData'),
       canManageInterface: booleanField(payload.canManageInterface, 'canManageInterface'),
+      canEditGeometries: booleanField(payload.canEditGeometries, 'canEditGeometries'),
+      canEditOsm: booleanField(payload.canEditOsm, 'canEditOsm'),
       canManageUsers: booleanField(payload.canManageUsers, 'canManageUsers'),
       canViewAudit: booleanField(payload.canViewAudit, 'canViewAudit'),
       canManageSecurity: booleanField(payload.canManageSecurity, 'canManageSecurity'),
@@ -552,7 +559,8 @@ export function createAdminSecurityService(repository) {
     }
     const allowed = new Set([
       'displayName', 'email', 'canManageData', 'canManageInterface',
-      'canManageUsers', 'canViewAudit', 'canManageSecurity',
+      'canEditGeometries', 'canEditOsm', 'canManageUsers',
+      'canViewAudit', 'canManageSecurity',
     ]);
     const unknown = Object.keys(payload).filter((key) => !allowed.has(key));
     if (unknown.length) throw new AdminSecurityValidationError(`Request body contains unsupported properties: ${unknown.join(', ')}`);
@@ -565,6 +573,8 @@ export function createAdminSecurityService(repository) {
       email: payload.email === undefined ? current.email : normalizeAdminEmail(payload.email),
       canManageData: protectedUser ? true : booleanField(payload.canManageData, 'canManageData', current.canManageData),
       canManageInterface: protectedUser ? true : booleanField(payload.canManageInterface, 'canManageInterface', current.canManageInterface),
+      canEditGeometries: protectedUser ? true : booleanField(payload.canEditGeometries, 'canEditGeometries', current.canEditGeometries),
+      canEditOsm: protectedUser ? true : booleanField(payload.canEditOsm, 'canEditOsm', current.canEditOsm),
       canManageUsers: protectedUser ? true : booleanField(payload.canManageUsers, 'canManageUsers', current.canManageUsers),
       canViewAudit: protectedUser ? true : booleanField(payload.canViewAudit, 'canViewAudit', current.canViewAudit),
       canManageSecurity: protectedUser ? true : booleanField(payload.canManageSecurity, 'canManageSecurity', current.canManageSecurity),

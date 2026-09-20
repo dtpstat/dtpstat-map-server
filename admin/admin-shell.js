@@ -242,7 +242,8 @@ function setupPrimarySections(user) {
   const dataAccess = !mustChangePassword && canManageData(user);
   const permissions = {
     data: dataAccess,
-    'osm-objects': dataAccess,
+    'osm-objects': !mustChangePassword && Boolean(user.isSuperuser || user.canEditOsm),
+    geometries: !mustChangePassword && Boolean(user.isSuperuser || user.canEditGeometries),
     interface: !mustChangePassword && canManageInterface(user),
     security: !mustChangePassword && canAccessSecurity(user),
     profile: true,

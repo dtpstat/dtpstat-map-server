@@ -175,7 +175,7 @@ export function createOsmBoundariesRouter({
     },
   );
 
-  router.get('/admin/osm-boundaries', adminAuth.requireData, async (_request, response, next) => {
+  router.get('/admin/osm-boundaries', adminAuth.requireOsmEditor, async (_request, response, next) => {
     try {
       response.set('Cache-Control', 'no-store').json({
         boundaries: await boundaryRepository.list(),
@@ -185,7 +185,7 @@ export function createOsmBoundariesRouter({
 
   router.get(
     '/admin/osm-boundaries/:boundaryId/geometry',
-    adminAuth.requireData,
+    adminAuth.requireOsmEditor,
     async (request, response, next) => {
       try {
         const feature = await boundaryRepository.getGeometry(request.params.boundaryId);
@@ -206,7 +206,7 @@ export function createOsmBoundariesRouter({
 
   router.patch(
     '/admin/osm-boundaries/:boundaryId/subtree',
-    adminAuth.requireData,
+    adminAuth.requireOsmEditor,
     audit('data.osm-boundary.subtree-active'),
     jsonBody,
     async (request, response, next) => {
@@ -260,7 +260,7 @@ export function createOsmBoundariesRouter({
 
   router.patch(
     '/admin/osm-boundaries/:boundaryId',
-    adminAuth.requireData,
+    adminAuth.requireOsmEditor,
     audit('data.osm-boundary.update'),
     jsonBody,
     async (request, response, next) => {
