@@ -213,6 +213,36 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     240000,
     { min: osmCityRetryBaseDelayMs, max: 3600000 },
   );
+  const legacyOsmMaxBytes = integerValue(
+    env,
+    'OSM_CITY_UPDATE_MAX_BYTES',
+    300 * 1024 * 1024,
+    { min: 1024 * 1024, max: 500 * 1024 * 1024 },
+  );
+  const hasLegacyOsmMaxBytes = env.OSM_CITY_UPDATE_MAX_BYTES !== undefined &&
+    env.OSM_CITY_UPDATE_MAX_BYTES !== '';
+  const osmCityMaxResponseBytes = integerValue(
+    env,
+    'OSM_CITY_UPDATE_MAX_RESPONSE_BYTES',
+    hasLegacyOsmMaxBytes
+      ? Math.min(legacyOsmMaxBytes, 128 * 1024 * 1024)
+      : 128 * 1024 * 1024,
+    { min: 1024 * 1024, max: 512 * 1024 * 1024 },
+  );
+  const osmCityMaxTotalBytes = integerValue(
+    env,
+    'OSM_CITY_UPDATE_MAX_TOTAL_BYTES',
+    hasLegacyOsmMaxBytes
+      ? legacyOsmMaxBytes
+      : 2 * 1024 * 1024 * 1024,
+    { min: 1024 * 1024, max: 8 * 1024 * 1024 * 1024 },
+  );
+  if (osmCityMaxResponseBytes > osmCityMaxTotalBytes) {
+    throw new Error(
+      'OSM_CITY_UPDATE_MAX_RESPONSE_BYTES must not exceed OSM_CITY_UPDATE_MAX_TOTAL_BYTES',
+    );
+  }
+
   const osmCityUrl = normalizeOsmUpdateUrl(
     env.OSM_CITY_UPDATE_URL?.trim() || 'https://overpass-api.de/api/interpreter',
     osmAllowedHosts,
@@ -332,12 +362,10 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
         'OSM_CITY_UPDATE_USER_AGENT',
         `${databaseSchema}/2.0 OSM city updater`,
       ),
-      maxBytes: integerValue(
-        env,
-        'OSM_CITY_UPDATE_MAX_BYTES',
-        300 * 1024 * 1024,
-        { min: 1024, max: 500 * 1024 * 1024 },
-      ),
+      maxResponseBytes: osmCityMaxResponseBytes,
+      maxTotalBytes: osmCityMaxTotalBytes,
+      // Compatibility alias for callers/tests that still inspect the old key.
+      maxBytes: osmCityMaxTotalBytes,
       maxRequestBodyBytes: integerValue(
         env,
         'OSM_CITY_UPDATE_REQUEST_MAX_BODY_BYTES',
