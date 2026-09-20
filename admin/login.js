@@ -4,7 +4,7 @@ const loginReason = new URLSearchParams(window.location.search);
 
 if (message && loginReason.get('expired') === '1') {
   message.textContent = 'Сессия истекла. Войдите снова.';
-  message.className = 'notice notice-warning';
+  message.className = 'notice';
 }
 
 async function alreadyAuthenticated() {
