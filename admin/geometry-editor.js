@@ -22,12 +22,26 @@ if (section) {
   const finishDrawButton = document.querySelector('#geometry-finish-draw');
   const cancelDrawButton = document.querySelector('#geometry-cancel-draw');
   const modeLabel = document.querySelector('#geometry-editor-mode');
+  const importPanel = document.querySelector('#geometry-import-conflicts');
+  const importTitle = document.querySelector('#geometry-import-conflicts-title');
+  const importSummary = document.querySelector('#geometry-import-conflicts-summary');
+  const importList = document.querySelector('#geometry-import-conflict-list');
+  const importApply = document.querySelector('#geometry-import-apply');
+  const importDiscard = document.querySelector('#geometry-import-discard');
+  const conflictDecision = document.querySelector('#geometry-conflict-decision');
+  const conflictTitle = document.querySelector('#geometry-conflict-title');
+  const conflictDescription = document.querySelector('#geometry-conflict-description');
+  const conflictCandidates = document.querySelector('#geometry-conflict-candidates');
+  const conflictKeep = document.querySelector('#geometry-conflict-keep');
+  const conflictAdd = document.querySelector('#geometry-conflict-add');
+  const conflictReplace = document.querySelector('#geometry-conflict-replace');
 
   const MAP_SOURCE = 'geometry-editor-items';
   const SELECTED_SOURCE = 'geometry-editor-selected';
   const HANDLE_SOURCE = 'geometry-editor-handles';
   const DRAW_SOURCE = 'geometry-editor-draw';
   const BOUNDARY_SOURCE = 'geometry-editor-boundary';
+  const IMPORT_SOURCE = 'geometry-editor-import-conflict';
 
   const state = {
     cities: [],
@@ -47,6 +61,9 @@ if (section) {
     mapReady: null,
     dragPath: null,
     suppressMapClick: false,
+    importSession: null,
+    activeConflictId: null,
+    conflictDecisions: new Map(),
   };
 
   async function api(path, options = {}) {
@@ -302,6 +319,7 @@ if (section) {
       map.addSource(SELECTED_SOURCE, { type: 'geojson', data: emptyCollection() });
       map.addSource(HANDLE_SOURCE, { type: 'geojson', data: emptyCollection() });
       map.addSource(DRAW_SOURCE, { type: 'geojson', data: emptyCollection() });
+      map.addSource(IMPORT_SOURCE, { type: 'geojson', data: emptyCollection() });
 
       addLayerSafe(map, {
         id: 'geometry-editor-boundary-fill',
@@ -396,6 +414,26 @@ if (section) {
         source: DRAW_SOURCE,
         paint: { 'fill-color': '#ff6b72', 'fill-opacity': 0.18 },
       });
+      addLayerSafe(map, {
+        id: 'geometry-editor-import-existing',
+        type: 'line',
+        source: IMPORT_SOURCE,
+        filter: ['==', ['get', 'role'], 'existing'],
+        paint: { 'line-color': '#b86cff', 'line-width': 6, 'line-opacity': 0.85 },
+      });
+      addLayerSafe(map, {
+        id: 'geometry-editor-import-incoming',
+        type: 'line',
+        source: IMPORT_SOURCE,
+        filter: ['==', ['get', 'role'], 'incoming'],
+        paint: {
+          'line-color': '#ff5d67',
+          'line-width': 8,
+          'line-opacity': 0.9,
+          'line-dasharray': [1.6, 1],
+        },
+      });
+
       addLayerSafe(map, {
         id: 'geometry-editor-vertices',
         type: 'circle',
@@ -496,6 +534,82 @@ if (section) {
     }
   }
 
+  function relationLabel(relation) {
+    const labels = {
+      'equals-different-tags': 'геометрия равна, исходные теги различаются',
+      'within-same-tags': 'одна линия входит в другую при одинаковых исходных тегах',
+      overlaps: 'линии частично совпадают',
+    };
+    return labels[relation] || relation;
+  }
+
+  function activeConflict() {
+    if (!state.importSession) return null;
+    return state.importSession.conflicts.find(function (item) {
+      return item.incomingId === state.activeConflictId;
+    }) || null;
+  }
+
+  function importConflictFeatures() {
+    const conflict = activeConflict();
+    if (!conflict) return emptyCollection();
+    const features = [{
+      type: 'Feature',
+      geometry: conflict.geometry,
+      properties: {
+        role: 'incoming',
+        id: conflict.incomingId,
+        name: conflict.displayName || ('Incoming #' + conflict.incomingId),
+      },
+    }];
+    for (const candidate of conflict.candidates) {
+      features.push({
+        type: 'Feature',
+        geometry: candidate.existing.geometry,
+        properties: {
+          role: 'existing',
+          id: candidate.existing.id,
+          name: candidate.existing.displayName || ('Geometry #' + candidate.existing.id),
+          relation: candidate.relation,
+        },
+      });
+    }
+    return { type: 'FeatureCollection', features };
+  }
+
+  function fitFeatureCollection(collection) {
+    if (!state.map || !collection || !collection.features || !collection.features.length) return;
+    let west = Infinity;
+    let south = Infinity;
+    let east = -Infinity;
+    let north = -Infinity;
+    const visit = function (value) {
+      if (!Array.isArray(value)) return;
+      if (
+        value.length >= 2 &&
+        typeof value[0] === 'number' &&
+        typeof value[1] === 'number'
+      ) {
+        west = Math.min(west, value[0]);
+        east = Math.max(east, value[0]);
+        south = Math.min(south, value[1]);
+        north = Math.max(north, value[1]);
+        return;
+      }
+      value.forEach(visit);
+    };
+    collection.features.forEach(function (item) {
+      visit(item.geometry && item.geometry.coordinates);
+    });
+    if ([west, south, east, north].every(Number.isFinite)) {
+      state.map.fitBounds([[west, south], [east, north]], {
+        padding: 80,
+        maxZoom: 18,
+        duration: 250,
+      });
+    }
+  }
+
   function updateMapSources() {
     const map = state.map;
     if (!map) return;
@@ -513,10 +627,14 @@ if (section) {
     );
     map.getSource(HANDLE_SOURCE)?.setData(handleFeatures());
     map.getSource(DRAW_SOURCE)?.setData(drawingFeature());
+    map.getSource(IMPORT_SOURCE)?.setData(importConflictFeatures());
+    const conflictBoundary = activeConflict()?.boundaryGeometry;
     map.getSource(BOUNDARY_SOURCE)?.setData(
-      state.city?.boundaryGeometry
-        ? { type: 'Feature', geometry: state.city.boundaryGeometry, properties: {} }
-        : emptyCollection(),
+      conflictBoundary
+        ? { type: 'Feature', geometry: conflictBoundary, properties: {} }
+        : state.city?.boundaryGeometry
+          ? { type: 'Feature', geometry: state.city.boundaryGeometry, properties: {} }
+          : emptyCollection(),
     );
   }
 
