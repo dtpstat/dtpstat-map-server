@@ -229,7 +229,9 @@ export function createApiRouter({
             signal: request.signal,
           })
         : Readable.from(source);
-      const downloadName = zip ? `${fileName}.zip` : fileName;
+      const downloadName = zip
+        ? `${fileName.replace(/\.(?:geojson|json)$/iu, '')}.zip`
+        : fileName;
       response
         .set('Cache-Control', 'no-store')
         .set(
