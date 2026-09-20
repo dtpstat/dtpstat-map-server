@@ -281,20 +281,6 @@ function asIso(value) {
   return value instanceof Date ? value.toISOString() : value;
 }
 
-function geometryRecord(row, prefix = '') {
-  const value = (name) => row[prefix + name];
-  return {
-    id: Number(value('id')),
-    cityId: value('cityId') === null ? null : Number(value('cityId')),
-    boundaryId: Number(value('boundaryId')),
-    displayName: value('displayName'),
-    geometryType: value('geometryType'),
-    sourceTags: value('sourceTags') ?? {},
-    tags: value('tags') ?? [],
-    wasEdited: Boolean(value('wasEdited')),
-    geometry: value('geometry'),
-  };
-}
 
 function decisionMap(decisions) {
   if (!Array.isArray(decisions)) {
