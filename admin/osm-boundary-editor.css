@@ -117,6 +117,23 @@
 #osm-boundary-form > .check {
   align-self: flex-start;
 }
+.osm-boundary-branch-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .5rem;
+  padding: .65rem;
+  border: 1px solid #233840;
+  border-radius: 8px;
+  background: rgba(12, 20, 23, .62);
+}
+.osm-boundary-branch-actions > button {
+  min-width: 0;
+}
+.osm-boundary-branch-actions > small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  line-height: 1.35;
+}
 .osm-boundary-selected-title { font-weight: 800; }
 .osm-boundary-meta {
   margin: 0;
@@ -187,5 +204,11 @@
 }
 @media (max-width: 650px) {
   .osm-selection-grid,
-  .osm-number-grid { grid-template-columns: minmax(0, 1fr); }
+  .osm-number-grid,
+  .osm-boundary-branch-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .osm-boundary-branch-actions > small {
+    grid-column: 1;
+  }
 }
