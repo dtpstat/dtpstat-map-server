@@ -13,6 +13,7 @@ if (typeof document !== 'undefined') {
     const state = {
       boundaries: [],
       selectedId: null,
+      expandedIds: new Set(),
       map: null,
       mapReady: null,
     };
@@ -86,25 +87,50 @@ if (typeof document !== 'undefined') {
         a.id - b.id;
     }
 
-    function subtreeItems(rootId) {
+    function treeIndex(items = state.boundaries) {
+      const byId = new Map();
       const childrenByParent = new Map();
-      for (const item of state.boundaries) {
+      for (const item of items) {
+        byId.set(item.id, item);
         const children = childrenByParent.get(item.parentId) ?? [];
         children.push(item);
         childrenByParent.set(item.parentId, children);
       }
+      return { byId, childrenByParent };
+    }
 
+    function subtreeItems(rootId) {
+      const { byId, childrenByParent } = treeIndex();
       const result = [];
       const stack = [rootId];
       while (stack.length) {
         const id = stack.pop();
-        const item = state.boundaries.find((candidate) => candidate.id === id);
+        const item = byId.get(id);
         if (!item) continue;
         result.push(item);
         for (const child of childrenByParent.get(id) ?? []) {
           stack.push(child.id);
         }
       }
+      return result;
+    }
+
+    function branchStatus(item, childrenByParent, memo = new Map()) {
+      if (memo.has(item.id)) return memo.get(item.id);
+      let totalCount = 1;
+      let activeCount = item.active ? 1 : 0;
+      for (const child of childrenByParent.get(item.id) ?? []) {
+        const childStatus = branchStatus(child, childrenByParent, memo);
+        totalCount += childStatus.totalCount;
+        activeCount += childStatus.activeCount;
+      }
+      const status = activeCount === 0
+        ? 'inactive'
+        : activeCount === totalCount
+          ? 'active'
+          : 'partial';
+      const result = { status, activeCount, totalCount };
+      memo.set(item.id, result);
       return result;
     }
 
@@ -130,19 +156,64 @@ if (typeof document !== 'undefined') {
       }
     }
 
-    function node(item, childrenByParent) {
+    function node(
+      item,
+      childrenByParent,
+      fullChildrenByParent,
+      statusMemo,
+      searchMode,
+    ) {
       const wrapper = document.createElement('div');
       wrapper.className = 'osm-boundary-node';
+
+      const children = childrenByParent.get(item.id) ?? [];
+      const hasChildren = children.length > 0;
+      const expanded = hasChildren && (
+        searchMode || state.expandedIds.has(item.id)
+      );
+
+      const row = document.createElement('div');
+      row.className = 'osm-boundary-node-row';
+
+      if (hasChildren) {
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'osm-boundary-toggle';
+        toggle.setAttribute('aria-expanded', String(expanded));
+        toggle.setAttribute(
+          'aria-label',
+          expanded ? 'Свернуть ветку' : 'Развернуть ветку',
+        );
+        toggle.textContent = expanded ? '▾' : '▸';
+        toggle.addEventListener('click', () => {
+          if (state.expandedIds.has(item.id)) {
+            state.expandedIds.delete(item.id);
+          } else {
+            state.expandedIds.add(item.id);
+          }
+          renderTree();
+        });
+        row.append(toggle);
+      } else {
+        const spacer = document.createElement('span');
+        spacer.className = 'osm-boundary-toggle-spacer';
+        row.append(spacer);
+      }
 
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'osm-boundary-node-button';
       button.classList.toggle('is-selected', item.id === state.selectedId);
 
+      const aggregate = branchStatus(item, fullChildrenByParent, statusMemo);
       const dot = document.createElement('span');
       dot.className = 'osm-boundary-active-dot';
-      dot.classList.toggle('is-active', item.active);
-      dot.title = item.active ? 'Активная геометрия' : 'Неактивная геометрия';
+      dot.classList.add(`is-${aggregate.status}`);
+      dot.title = aggregate.status === 'active'
+        ? `Ветка полностью включена (${aggregate.activeCount}/${aggregate.totalCount})`
+        : aggregate.status === 'inactive'
+          ? `Ветка полностью выключена (0/${aggregate.totalCount})`
+          : `Ветка включена частично (${aggregate.activeCount}/${aggregate.totalCount})`;
 
       const copy = document.createElement('span');
       copy.className = 'osm-boundary-node-copy';
@@ -159,13 +230,21 @@ if (typeof document !== 'undefined') {
       type.textContent = item.displayType;
       button.append(dot, copy, type);
       button.addEventListener('click', () => void selectBoundary(item.id));
-      wrapper.append(button);
+      row.append(button);
+      wrapper.append(row);
 
-      const children = childrenByParent.get(item.id) ?? [];
-      if (children.length) {
+      if (expanded) {
         const host = document.createElement('div');
         host.className = 'osm-boundary-children';
-        for (const child of children) host.append(node(child, childrenByParent));
+        for (const child of children) {
+          host.append(node(
+            child,
+            childrenByParent,
+            fullChildrenByParent,
+            statusMemo,
+            searchMode,
+          ));
+        }
         wrapper.append(host);
       }
       return wrapper;
@@ -173,8 +252,9 @@ if (typeof document !== 'undefined') {
 
     function renderTree() {
       treeHost.replaceChildren();
-      const byId = new Map(state.boundaries.map((item) => [item.id, item]));
+      const { byId, childrenByParent: fullChildrenByParent } = treeIndex();
       const query = normalizeSearchText(searchInput.value);
+      const searchMode = Boolean(query);
       const visibleIds = new Set();
 
       if (query) {
@@ -212,7 +292,16 @@ if (typeof document !== 'undefined') {
         treeHost.append(empty);
         return;
       }
-      for (const item of roots) treeHost.append(node(item, childrenByParent));
+      const statusMemo = new Map();
+      for (const item of roots) {
+        treeHost.append(node(
+          item,
+          childrenByParent,
+          fullChildrenByParent,
+          statusMemo,
+          searchMode,
+        ));
+      }
     }
 
     function metaItem(label, value) {
@@ -421,6 +510,10 @@ if (typeof document !== 'undefined') {
       try {
         const payload = await api('/api/admin/osm-boundaries');
         state.boundaries = payload.boundaries ?? [];
+        const validIds = new Set(state.boundaries.map((item) => item.id));
+        state.expandedIds = new Set(
+          [...state.expandedIds].filter((id) => validIds.has(id)),
+        );
         const selected = keepSelection
           ? state.boundaries.find((item) => item.id === state.selectedId)
           : null;
