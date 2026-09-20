@@ -125,6 +125,46 @@ function rangedQueryInteger(value, name, minimum, maximum, fallback) {
  * @param {any} config
  */
 export function resolveOsmCityUpdateRequest(body, query, config) {
+  const includeCity = queryBoolean(
+    query.includeCity,
+    'includeCity',
+    config.includeCity ?? true,
+  );
+  const includeTown = queryBoolean(
+    query.includeTown,
+    'includeTown',
+    config.includeTown ?? true,
+  );
+  const includeAdministrative = queryBoolean(
+    query.includeAdministrative,
+    'includeAdministrative',
+    config.includeAdministrative ?? false,
+  );
+  const adminLevelMin = rangedQueryInteger(
+    query.adminLevelMin,
+    'adminLevelMin',
+    1,
+    20,
+    config.adminLevelMin ?? 4,
+  );
+  const adminLevelMax = rangedQueryInteger(
+    query.adminLevelMax,
+    'adminLevelMax',
+    1,
+    20,
+    config.adminLevelMax ?? 8,
+  );
+  if (!includeCity && !includeTown && !includeAdministrative) {
+    throw new OsmCityUpdateValidationError(
+      'At least one OSM object class must be enabled',
+    );
+  }
+  if (adminLevelMin > adminLevelMax) {
+    throw new OsmCityUpdateValidationError(
+      'adminLevelMin must not exceed adminLevelMax',
+    );
+  }
+
   const retryMaxDelayMs = rangedQueryInteger(
     query.retryMaxDelayMs,
     'retryMaxDelayMs',
@@ -147,6 +187,11 @@ export function resolveOsmCityUpdateRequest(body, query, config) {
       config.url,
     ),
     dryRun: queryBoolean(query.dryRun, 'dryRun', config.dryRun),
+    includeCity,
+    includeTown,
+    includeAdministrative,
+    adminLevelMin,
+    adminLevelMax,
     timeoutMs: boundedQueryInteger(
       query.timeoutMs,
       'timeoutMs',

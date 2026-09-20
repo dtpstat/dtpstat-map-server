@@ -45,7 +45,8 @@ const DROP_STAGE_SQL = 'DROP TABLE IF EXISTS osm_city_boundary_stage';
 const CREATE_STAGE_SQL = `
   CREATE TEMP TABLE osm_city_boundary_stage (
     name text NOT NULL,
-    place_type text NOT NULL,
+    place_type text,
+    admin_level smallint,
     osm_type text NOT NULL,
     osm_id bigint NOT NULL,
     tags jsonb NOT NULL,
@@ -57,9 +58,14 @@ const CREATE_STAGE_SQL = `
 
 const PRESERVE_LINKS_SQL = `
   CREATE TEMP TABLE old_city_boundary_links ON COMMIT DROP AS
-  SELECT osm_type, osm_id, city_id
-  FROM city_boundaries
-  WHERE city_id IS NOT NULL;
+  SELECT
+    osm_type,
+    osm_id,
+    city_id,
+    is_active,
+    display_name,
+    display_type
+  FROM city_boundaries;
 
   CREATE TEMP TABLE old_geometry_boundary_links ON COMMIT DROP AS
   SELECT geometry.id AS geometry_id, boundary.osm_type, boundary.osm_id
@@ -73,6 +79,7 @@ const INSERT_STAGE_SQL = `
     FROM jsonb_to_recordset($1::jsonb) AS payload(
       name text,
       "placeType" text,
+      "adminLevel" smallint,
       "osmType" text,
       "osmId" bigint,
       tags jsonb,
@@ -102,6 +109,7 @@ const INSERT_STAGE_SQL = `
   INSERT INTO osm_city_boundary_stage (
     name,
     place_type,
+    admin_level,
     osm_type,
     osm_id,
     tags,
@@ -111,6 +119,7 @@ const INSERT_STAGE_SQL = `
   SELECT
     name,
     "placeType",
+    "adminLevel",
     "osmType",
     "osmId",
     tags,
@@ -134,42 +143,87 @@ const COUNT_STAGE_SQL = `
 `;
 
 const INSERT_BOUNDARIES_SQL = `
-  WITH name_counts AS (
-    SELECT name, count(*) AS object_count
-    FROM osm_city_boundary_stage
-    GROUP BY name
-  )
   INSERT INTO city_boundaries (
     city_id,
     place_type,
+    admin_level,
     osm_type,
     osm_id,
     osm_name,
     tags,
     geom,
     bounds,
-    osm_timestamp
+    osm_timestamp,
+    is_active,
+    display_name,
+    display_type,
+    area_m2
   )
   SELECT
-    CASE
-      WHEN old_link.city_id IS NOT NULL THEN old_link.city_id
-      WHEN name_counts.object_count = 1 THEN city.id
-      ELSE NULL
-    END,
+    old_link.city_id,
     stage.place_type,
+    stage.admin_level,
     stage.osm_type,
     stage.osm_id,
     stage.name,
     stage.tags,
     stage.geom,
     stage.bounds,
-    $1::timestamptz
+    $1::timestamptz,
+    COALESCE(old_link.is_active, FALSE),
+    COALESCE(
+      old_link.display_name,
+      NULLIF(BTRIM(stage.tags ->> 'name:ru'), ''),
+      stage.name
+    ),
+    COALESCE(
+      old_link.display_type,
+      stage.place_type,
+      'administrative'
+    ),
+    ST_Area(stage.geom::geography)
   FROM osm_city_boundary_stage AS stage
-  JOIN name_counts ON name_counts.name = stage.name
   LEFT JOIN old_city_boundary_links AS old_link
     ON old_link.osm_type = stage.osm_type
    AND old_link.osm_id = stage.osm_id
-  LEFT JOIN cities AS city ON city.name = stage.name
+`;
+
+const ACTIVATE_NEW_PLACES_SQL = `
+  WITH candidates AS (
+    SELECT
+      boundary.id,
+      ROW_NUMBER() OVER (
+        PARTITION BY
+          LOWER(REGEXP_REPLACE(boundary.display_type, '[[:space:]]+', '', 'g')),
+          LOWER(REGEXP_REPLACE(boundary.display_name, '[[:space:]]+', '', 'g'))
+        ORDER BY
+          (boundary.osm_type = 'relation') DESC,
+          boundary.area_m2 DESC,
+          boundary.id
+      ) AS rn
+    FROM city_boundaries AS boundary
+    LEFT JOIN old_city_boundary_links AS old_link
+      ON old_link.osm_type = boundary.osm_type
+     AND old_link.osm_id = boundary.osm_id
+    WHERE old_link.osm_id IS NULL
+      AND boundary.place_type IN ('city', 'town')
+  )
+  UPDATE city_boundaries AS boundary
+  SET is_active = TRUE,
+      updated_at = now()
+  FROM candidates
+  WHERE candidates.id = boundary.id
+    AND candidates.rn = 1
+    AND NOT EXISTS (
+      SELECT 1
+      FROM city_boundaries AS active
+      WHERE active.is_active
+        AND active.id <> boundary.id
+        AND LOWER(REGEXP_REPLACE(active.display_type, '[[:space:]]+', '', 'g'))
+            = LOWER(REGEXP_REPLACE(boundary.display_type, '[[:space:]]+', '', 'g'))
+        AND LOWER(REGEXP_REPLACE(active.display_name, '[[:space:]]+', '', 'g'))
+            = LOWER(REGEXP_REPLACE(boundary.display_name, '[[:space:]]+', '', 'g'))
+    )
 `;
 
 const RESTORE_GEOMETRY_LINKS_SQL = `
@@ -194,10 +248,15 @@ const INSERT_RUN_SQL = `
     city_places,
     town_places,
     duplicate_names,
+    administrative_places,
+    duplicate_index_objects,
     batch_size,
     batch_count
   )
-  VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8, $9, $10, $11, $12)
+  VALUES (
+    $1, $2, $3, $4, $5, $6, $7::timestamptz,
+    $8, $9, $10, $11, $12, $13, $14
+  )
   RETURNING id::integer AS id, created_at AS "createdAt"
 `;
 
@@ -255,15 +314,15 @@ function combineIndexParts(parts) {
   const objects = [];
   const timestamps = [];
   let sourceElements = 0;
+  let duplicateIndexObjects = 0;
   for (const part of parts) {
     sourceElements += part.sourceElements;
     if (part.osmTimestamp) timestamps.push(Date.parse(part.osmTimestamp));
     for (const object of part.objects) {
       const key = objectKey(object);
       if (keys.has(key)) {
-        throw new OsmCityUpdateValidationError(
-          `OSM ID index contains duplicate object ${key} across requests`,
-        );
+        duplicateIndexObjects += 1;
+        continue;
       }
       keys.add(key);
       objects.push(object);
@@ -271,7 +330,7 @@ function combineIndexParts(parts) {
   }
   if (objects.length === 0) {
     throw new OsmCityUpdateValidationError(
-      'OSM ID index contains no named Russian place=city/town objects',
+      'OSM ID index contains no enabled named place/admin boundary objects',
     );
   }
   objects.sort((left, right) =>
@@ -279,6 +338,7 @@ function combineIndexParts(parts) {
   return {
     objects,
     sourceElements,
+    duplicateIndexObjects,
     osmTimestamp: timestamps.length > 0
       ? new Date(Math.min(...timestamps)).toISOString()
       : null,
@@ -306,6 +366,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
   const download = dependencies.download ?? downloadOsmCities;
   const parseIndex = dependencies.parseIndex ?? parseOsmPlaceIdsResponse;
   const parseBatch = dependencies.parseBatch ?? parseOsmCityResponse;
+  const settingsRepository = dependencies.settingsRepository;
   const sleep = dependencies.sleep ?? abortableDelay;
   const now = dependencies.now ?? Date.now;
   const reportProgress = dependencies.reportProgress ?? ((progress) => {
@@ -337,7 +398,29 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
      */
     async update(body, query = {}, operation = {}) {
       throwIfAdminTaskCancelled(operation.signal);
-      const options = resolveOsmCityUpdateRequest(body, query, config);
+      const savedSettings = settingsRepository
+        ? await settingsRepository.get()
+        : null;
+      const runtimeConfig = savedSettings
+        ? {
+            ...config,
+            url: savedSettings.sourceURL,
+            includeCity: savedSettings.includeCity,
+            includeTown: savedSettings.includeTown,
+            includeAdministrative: savedSettings.includeAdministrative,
+            adminLevelMin: savedSettings.adminLevelMin,
+            adminLevelMax: savedSettings.adminLevelMax,
+            batchSize: savedSettings.batchSize,
+            minDelayMs: savedSettings.minDelayMs,
+            timeoutMs: savedSettings.timeoutMs,
+            queryTimeoutSeconds: savedSettings.queryTimeoutSeconds,
+            maxBytes: savedSettings.maxBytes,
+            maxRetries: savedSettings.maxRetries,
+            retryBaseDelayMs: savedSettings.retryBaseDelayMs,
+            retryMaxDelayMs: savedSettings.retryMaxDelayMs,
+          }
+        : config;
+      const options = resolveOsmCityUpdateRequest(body, query, runtimeConfig);
       const checksumHash = crypto.createHash('sha256');
       let downloadedBytes = 0;
       let lastRequestCompletedAt = null;
@@ -438,9 +521,11 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
 
       const indexQueries = buildRussianPlaceIdOverpassQueries(
         options.queryTimeoutSeconds,
+        options,
       );
       const indexParts = [];
       const indexFinalURLs = new Set();
+      const indexedKeys = new Set();
       let indexedPlaces = 0;
       for (const [partOffset, indexQuery] of indexQueries.entries()) {
         const indexDownload = await downloadQuery(indexQuery.query, {
@@ -453,12 +538,13 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           object.osmType !== indexQuery.osmType);
         if (wrongType) {
           throw new OsmCityUpdateValidationError(
-            `OSM ${indexQuery.placeType}/${indexQuery.osmType} index returned ${objectKey(wrongType)}`,
+            `OSM ${indexQuery.kind}/${indexQuery.osmType} index returned ${objectKey(wrongType)}`,
           );
         }
         indexParts.push(parsedPart);
         indexFinalURLs.add(indexDownload.finalURL);
-        indexedPlaces += parsedPart.objects.length;
+        for (const object of parsedPart.objects) indexedKeys.add(objectKey(object));
+        indexedPlaces = indexedKeys.size;
         const progress = {
           phase: 'index',
           indexPart: partOffset + 1,
@@ -478,6 +564,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         await client.query(CREATE_STAGE_SQL);
         let cityPlaces = 0;
         let townPlaces = 0;
+        let administrativePlaces = 0;
         let ignoredElements = 0;
         let stagedPlaces = 0;
         const nameCounts = new Map();
@@ -508,6 +595,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
 
           cityPlaces += parsed.cityPlaces;
           townPlaces += parsed.townPlaces;
+          administrativePlaces += parsed.administrativePlaces ?? 0;
           ignoredElements += parsed.ignoredElements;
           stagedPlaces += parsed.places.length;
           addNameCounts(nameCounts, parsed.places);
@@ -539,8 +627,11 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           index.osmTimestamp,
         ]);
         if (boundaryResult.rowCount !== index.objects.length) {
-          throw new Error('Not every OSM place boundary was inserted');
+          throw new Error('Not every OSM boundary was inserted');
         }
+        await client.query(ACTIVATE_NEW_PLACES_SQL);
+        await client.query('SELECT rebuild_city_boundary_hierarchy()');
+        await client.query('SELECT sync_active_boundary_cities()');
         const restoredLinksResult = await client.query(
           RESTORE_GEOMETRY_LINKS_SQL,
         );
@@ -557,6 +648,8 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           importedPlaces: index.objects.length,
           cityPlaces,
           townPlaces,
+          administrativePlaces,
+          duplicateIndexObjects: index.duplicateIndexObjects,
           duplicateNames: [...nameCounts.values()]
             .filter((count) => count > 1).length,
           ignoredElements,
@@ -590,6 +683,8 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           cityPlaces,
           townPlaces,
           result.duplicateNames,
+          administrativePlaces,
+          index.duplicateIndexObjects,
           options.batchSize,
           batchCount,
         ]);
