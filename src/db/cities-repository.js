@@ -57,6 +57,9 @@ const LIST_CITIES_SQL = `
   WHERE EXISTS (
     SELECT 1
     FROM city_geometries AS geometry_presence
+    JOIN city_boundaries AS geometry_boundary
+      ON geometry_boundary.id = geometry_presence.boundary_id
+     AND geometry_boundary.is_active
     WHERE geometry_presence.city_id = city.id
   )
   ORDER BY city.is_large DESC NULLS LAST, report.rank NULLS LAST, city.name ASC
@@ -132,6 +135,9 @@ const VIEWPORT_GEOMETRIES_SQL = `
      AND EXISTS (
        SELECT 1
        FROM city_geometries AS geometry_presence
+       JOIN city_boundaries AS geometry_boundary
+         ON geometry_boundary.id = geometry_presence.boundary_id
+        AND geometry_boundary.is_active
        WHERE geometry_presence.city_id = boundary.city_id
      )
     ORDER BY ST_Area(boundary.geom::geography), boundary.city_id
