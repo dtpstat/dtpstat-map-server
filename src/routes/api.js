@@ -1,4 +1,5 @@
 import express, { Router } from 'express';
+import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import {
@@ -89,6 +90,13 @@ export function createApiRouter({
   osmCityUpdate,
 }) {
   const router = Router();
+  const streamTransfer = {
+    uploadDirectory: importApi.streamUploadDirectory ??
+      path.join(process.cwd(), 'var', 'import-staging'),
+    maxUploadBytes: importApi.maxStreamUploadBytes ?? importApi.maxBodyBytes,
+    maxJsonBytes: importApi.maxStreamJsonBytes ?? importApi.maxBodyBytes,
+    maxItemBytes: importApi.maxStreamItemBytes ?? importApi.maxBodyBytes,
+  };
   const adminStatusURL = (request, taskId) =>
     `${request.baseUrl}/admin/status/${taskId}`;
   const operationAudit = (type) => createAdminOperationAudit(securityService, type);
@@ -264,8 +272,8 @@ export function createApiRouter({
   const receivePortableUpload = async (request, response, next) => {
     try {
       return await receiveStreamUpload(request, {
-        directory: importApi.streamUploadDirectory,
-        maxUploadBytes: importApi.maxStreamUploadBytes,
+        directory: streamTransfer.uploadDirectory,
+        maxUploadBytes: streamTransfer.maxUploadBytes,
         allowedContentTypes: portableContentTypes,
       });
     } catch (error) {
@@ -298,7 +306,7 @@ export function createApiRouter({
   ) => {
     try {
       const input = await openUploadedJson(upload, {
-        maxJsonBytes: importApi.maxStreamJsonBytes,
+        maxJsonBytes: streamTransfer.maxJsonBytes,
         signal: context.signal,
       });
       context.log('Входной поток подготовлен', {
@@ -309,8 +317,8 @@ export function createApiRouter({
       });
       return await serviceMethod(input.stream, {
         ...operation,
-        maxJsonBytes: importApi.maxStreamJsonBytes,
-        maxItemBytes: importApi.maxStreamItemBytes,
+        maxJsonBytes: streamTransfer.maxJsonBytes,
+        maxItemBytes: streamTransfer.maxItemBytes,
         signal: context.signal,
         onCommit: () => context.beginCommit(),
         onProgress: (progress) => progressLog(context, progress),
