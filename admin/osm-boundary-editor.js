@@ -245,6 +245,7 @@ if (typeof document !== 'undefined') {
         population.dataset.initialValue = '';
         title.textContent = 'Выберите объект в дереве';
         meta.replaceChildren();
+        updateBranchActions(null);
         renderTree();
         return;
       }
@@ -268,6 +269,7 @@ if (typeof document !== 'undefined') {
         metaItem('Население на дату', item.populationAsOf),
         metaItem('Источник населения', item.populationSource),
       );
+      updateBranchActions(item);
       renderTree();
     }
 
