@@ -40,8 +40,10 @@ test('OSM object editor is a top-level admin section with population editing', a
   );
   assert.match(
     html,
-    /name="population"[\s\S]*<button type="submit" disabled>Сохранить объект<\/button>[\s\S]*id="osm-boundary-meta"/,
+    /name="population"[\s\S]*<button type="submit" disabled>Сохранить объект<\/button>[\s\S]*id="osm-boundary-enable-branch"[\s\S]*id="osm-boundary-disable-branch"[\s\S]*id="osm-boundary-meta"/,
   );
+  assert.match(html, /Включить ветку/);
+  assert.match(html, /Отключить ветку/);
   assert.doesNotMatch(html, /data-operation-tab="osm-objects"/);
   assert.doesNotMatch(html, /data-operation-panel="osm-objects"/);
 
@@ -63,6 +65,16 @@ test('OSM object editor is a top-level admin section with population editing', a
     /if \(!boundarySearchText\(item\)\.includes\(query\)\) continue;[\s\S]*current = byId\.get\(current\.parentId\)/,
   );
   assert.match(editor, /searchInput\.addEventListener\('input', \(\) => renderTree\(\)\)/);
+  assert.match(editor, /function subtreeItems\(rootId\)/);
+  assert.match(editor, /function updateBranchActions\(item\)/);
+  assert.match(editor, /async function setBranchActive\(nextActive\)/);
+  assert.match(
+    editor,
+    /\/api\/admin\/osm-boundaries\/\$\{encodeURIComponent\(item\.id\)\}\/subtree/,
+  );
+  assert.match(editor, /window\.confirm\(/);
+  assert.match(editor, /enableBranch\?\.addEventListener\('click'/);
+  assert.match(editor, /disableBranch\?\.addEventListener\('click'/);
   assert.match(html, /\/vendor\/mapbox-gl\/mapbox-gl\.css/);
   assert.match(html, /\/vendor\/mapbox-gl\/mapbox-gl\.js/);
   assert.doesNotMatch(html, /leaflet/i);
@@ -82,6 +94,10 @@ test('OSM object editor is a top-level admin section with population editing', a
   assert.match(styles, /#osm-boundary-form[\s\S]*flex-direction:\s*column/);
   assert.match(styles, /\.osm-boundary-tree-panel[\s\S]*flex-direction:\s*column/);
   assert.match(styles, /\.osm-boundary-tree[\s\S]*overflow:\s*auto/);
+  assert.match(
+    styles,
+    /\.osm-boundary-branch-actions[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
+  );
   assert.match(styles, /\.mapboxgl-ctrl-attrib/);
   assert.doesNotMatch(styles, /leaflet/i);
 });
