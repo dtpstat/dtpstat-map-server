@@ -1,5 +1,9 @@
 import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
-import { buildCityBoundaryGeoJsonPlan } from '../data/city-boundary-geojson-plan.js';
+import {
+  buildCityBoundaryGeoJsonPlan,
+  createCityBoundaryGeoJsonAccumulator,
+} from '../data/city-boundary-geojson-plan.js';
+import { parseStreamingJsonObject } from '../data/streaming-json.js';
 import { acquireDataImportLock } from './database-locks.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
@@ -220,6 +224,179 @@ function errorDetails(error) {
  */
 export function createCityBoundaryTransferService(pool) {
   return {
+    /**
+     * Stream a portable city GeoJSON snapshot into PostgreSQL staging while one
+     * transaction is open. Only one feature batch is materialized in JS at a
+     * time; any parser/ZIP/PostGIS error rolls the complete transaction back.
+     *
+     * @param {AsyncIterable<Buffer | Uint8Array | string>} source
+     * @param {{
+     *   dryRun?: boolean,
+     *   maxJsonBytes: number,
+     *   maxItemBytes: number,
+     *   signal?: AbortSignal,
+     *   onProgress?: (progress: object) => void,
+     *   onCommit?: () => void
+     * }} operation
+     */
+    async replaceFromGeoJsonStream(source, operation = {}) {
+      throwIfAdminTaskCancelled(operation.signal);
+      const client = await pool.connect();
+      let discardClientError;
+      try {
+        await client.query('BEGIN');
+        await acquireDataImportLock(client, pool);
+        throwIfAdminTaskCancelled(operation.signal);
+        await client.query(CREATE_STAGE_SQL);
+
+        const accumulator = createCityBoundaryGeoJsonAccumulator();
+        let stagedPlaces = 0;
+        let batchNumber = 0;
+        let batch = [];
+
+        const flush = async () => {
+          if (batch.length === 0) return;
+          const payload = JSON.stringify(batch);
+          const stageResult = await client.query(INSERT_STAGE_SQL, [payload]);
+          if (stageResult.rowCount !== batch.length) {
+            throw new Error('Not every city boundary was staged');
+          }
+          stagedPlaces += stageResult.rowCount;
+          batchNumber += 1;
+          operation.onProgress?.({
+            phase: 'stage',
+            batch: batchNumber,
+            batchPlaces: batch.length,
+            stagedPlaces,
+            payloadBytes: Buffer.byteLength(payload),
+          });
+          batch = [];
+        };
+
+        const parsed = await parseStreamingJsonObject(source, {
+          arrayKey: 'features',
+          metadataKeys: new Set([
+            'type',
+            'name',
+            'schemaVersion',
+            'exportedAt',
+          ]),
+          maxBytes: operation.maxJsonBytes,
+          maxItemBytes: operation.maxItemBytes,
+          signal: operation.signal,
+          async onItem(feature, featureIndex) {
+            throwIfAdminTaskCancelled(operation.signal);
+            batch.push(accumulator.addFeature(feature, featureIndex));
+            if (batch.length >= STAGE_BATCH_SIZE) await flush();
+          },
+          onProgress(progress) {
+            operation.onProgress?.({
+              ...progress,
+              dataSet: 'cities',
+            });
+          },
+        });
+        await flush();
+
+        const plan = accumulator.finish(parsed.metadata);
+        if (
+          stagedPlaces !== parsed.itemCount ||
+          stagedPlaces !== plan.boundaryCount
+        ) {
+          throw new Error('Not every streamed city boundary was staged');
+        }
+        operation.onProgress?.({
+          phase: 'validated',
+          places: stagedPlaces,
+          cities: plan.cities.length,
+          decodedBytes: parsed.decodedBytes,
+        });
+
+        if (plan.cities.length > 0) {
+          const cityResult = await client.query(UPSERT_CITIES_SQL, [
+            JSON.stringify(plan.cities),
+          ]);
+          if (cityResult.rowCount !== plan.cities.length) {
+            throw new Error('Not every linked city record was imported');
+          }
+        }
+
+        operation.onProgress?.({
+          phase: 'validate-stage',
+          places: stagedPlaces,
+        });
+        const invalidResult = await client.query(INVALID_STAGE_SQL);
+        if (invalidResult.rows.length > 0) {
+          const names = invalidResult.rows
+            .slice(0, 20)
+            .map((row) => `${row.osm_type}/${row.osm_id} ${row.osm_name}`)
+            .join(', ');
+          throw new Error(
+            `Imported city boundaries contain invalid polygons: ${names}`,
+          );
+        }
+
+        operation.onProgress?.({ phase: 'preserve-links' });
+        await client.query(PRESERVE_GEOMETRY_LINKS_SQL);
+        operation.onProgress?.({ phase: 'replace-boundaries' });
+        await client.query('DELETE FROM city_boundaries');
+        const inserted = await client.query(INSERT_BOUNDARIES_SQL);
+        if (inserted.rowCount !== stagedPlaces) {
+          throw new Error('Not every city boundary was imported');
+        }
+
+        await client.query('SELECT rebuild_city_boundary_hierarchy()');
+        const restored = await client.query(RESTORE_GEOMETRY_LINKS_SQL);
+        await client.query('SELECT sync_active_boundary_cities()');
+        await client.query(RECALCULATE_CITY_STATISTICS_SQL);
+        throwIfAdminTaskCancelled(operation.signal);
+
+        const linkedResult = await client.query(`
+          SELECT count(*)::integer AS count
+          FROM city_boundaries
+          WHERE city_id IS NOT NULL
+        `);
+        const result = {
+          dryRun: Boolean(operation.dryRun),
+          importedPlaces: stagedPlaces,
+          importedCities: plan.cities.length,
+          linkedCities: linkedResult.rows[0]?.count ?? 0,
+          restoredGeometryLinks: restored.rowCount,
+          decodedBytes: parsed.decodedBytes,
+          streamed: true,
+          completedAt: new Date().toISOString(),
+        };
+        operation.onProgress?.({
+          phase: 'database',
+          places: result.importedPlaces,
+          cities: result.importedCities,
+          linkedCities: result.linkedCities,
+          restoredGeometryLinks: result.restoredGeometryLinks,
+        });
+
+        if (operation.dryRun) {
+          await client.query('ROLLBACK');
+          return result;
+        }
+        operation.onCommit?.();
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        try {
+          await client.query('ROLLBACK');
+        } catch (rollbackError) {
+          discardClientError = rollbackError;
+          operation.onProgress?.({
+            phase: 'rollback-failed',
+            error: errorDetails(rollbackError),
+          });
+        }
+        throw error;
+      } finally {
+        client.release(discardClientError);
+      }
+    },
+
     /**
      * @param {unknown} collection
      * @param {{ dryRun?: boolean, signal?: AbortSignal, onProgress?: (progress: object) => void, onCommit?: () => void }} operation
