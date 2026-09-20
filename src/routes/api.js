@@ -447,6 +447,39 @@ export function createApiRouter({
     },
   );
 
+  router.get(
+    '/admin/osm-checkpoint',
+    adminAuth.requireData,
+    async (_request, response, next) => {
+      try {
+        const checkpoint = await osmCityUpdateService.checkpointStatus();
+        response.set('Cache-Control', 'no-store');
+        response.json({ checkpoint });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.delete(
+    '/admin/osm-checkpoint',
+    adminAuth.requireData,
+    rejectWhileAdminTaskActive,
+    operationAudit('data.osm-checkpoint.discard'),
+    async (_request, response, next) => {
+      try {
+        const checkpoint = await osmCityUpdateService.discardCheckpoint();
+        response.set('Cache-Control', 'no-store');
+        response.json({
+          discarded: Boolean(checkpoint),
+          checkpoint,
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   router.post(
     '/admin/update/cities',
     adminAuth.requireData,
@@ -466,12 +499,28 @@ export function createApiRouter({
           request.query,
           osmCityUpdate,
         );
+        const resume = parseBoolean(request.query.resume, false);
+        const restart = parseBoolean(request.query.restart, false);
+        if (resume === null || restart === null) {
+          response.status(400).json({
+            error: 'resume and restart must be true or false',
+          });
+          return;
+        }
+        if (resume && restart) {
+          response.status(400).json({
+            error: 'resume and restart cannot both be true',
+          });
+          return;
+        }
         startAdminTask(request, response, next, {
           type: 'osm-city-update',
           endpoint: '/api/admin/update/cities',
           recordsSuccessfulUpdate: !options.dryRun,
           parameters: {
             dryRun: options.dryRun,
+            resume,
+            restart,
             batchSize: options.batchSize,
             minDelayMs: options.minDelayMs,
             maxRetries: options.maxRetries,
