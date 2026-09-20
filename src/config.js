@@ -289,6 +289,24 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
         25 * 1024 * 1024,
         { min: 1024, max: 250 * 1024 * 1024 },
       ),
+      maxStreamUploadBytes: integerValue(
+        env,
+        'IMPORT_API_MAX_STREAM_UPLOAD_BYTES',
+        2 * 1024 * 1024 * 1024,
+        { min: 1024 * 1024, max: 0xffffffff },
+      ),
+      maxStreamJsonBytes: integerValue(
+        env,
+        'IMPORT_API_MAX_STREAM_JSON_BYTES',
+        3 * 1024 * 1024 * 1024,
+        { min: 1024 * 1024, max: 0xffffffff },
+      ),
+      maxStreamItemBytes: integerValue(
+        env,
+        'IMPORT_API_MAX_STREAM_ITEM_BYTES',
+        128 * 1024 * 1024,
+        { min: 1024 * 1024, max: 1024 * 1024 * 1024 },
+      ),
     },
     kmlUpdate: {
       ...kmlConstraints,
