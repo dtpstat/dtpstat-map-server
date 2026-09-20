@@ -31,6 +31,24 @@ function normalizeSource(value, field) {
   return value.trim();
 }
 
+function normalizeType(value, field) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string') {
+    throw new PopulationValidationError(`${field} must be a string or null`);
+  }
+  const normalized = value.trim().normalize('NFC');
+  if (!normalized || normalized.length > 80) {
+    throw new PopulationValidationError(
+      `${field} must contain 1-80 characters`,
+    );
+  }
+  return normalized;
+}
+
+function comparable(value) {
+  return String(value ?? '').replace(/\s+/gu, '').toLocaleLowerCase('ru-RU');
+}
+
 /** @param {unknown} payload */
 export function buildPopulationPlan(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -58,10 +76,14 @@ export function buildPopulationPlan(payload) {
         `Population item ${index} has an invalid name`,
       );
     }
-    if (names.has(name)) {
-      throw new PopulationValidationError(`Duplicate city: ${name}`);
+    const type = normalizeType(item.type, `Population item ${index} type`);
+    const identity = `${comparable(type)}|${comparable(name)}`;
+    if (names.has(identity)) {
+      throw new PopulationValidationError(
+        `Duplicate city identity: ${type ? `${type} / ` : ''}${name}`,
+      );
     }
-    names.add(name);
+    names.add(identity);
 
     const population = Number(item.population);
     if (
@@ -86,6 +108,7 @@ export function buildPopulationPlan(payload) {
 
     return {
       name,
+      type,
       population,
       asOf: item.asOf === undefined ? asOf : normalizeDate(item.asOf, `Population item ${index} asOf`),
       source: item.source === undefined ? source : normalizeSource(item.source, `Population item ${index} source`),

@@ -3,15 +3,67 @@ import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
 import { acquireDataImportLock } from './database-locks.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
-const FIND_UNKNOWN_CITIES_SQL = `
-  SELECT payload.name
-  FROM jsonb_to_recordset($1::jsonb) AS payload(name text)
-  LEFT JOIN cities ON cities.name = payload.name
-  WHERE cities.id IS NULL
-  ORDER BY payload.name
+const MATCH_STATUS_SQL = `
+  WITH payload AS (
+    SELECT *
+    FROM jsonb_to_recordset($1::jsonb) AS item(
+      name text,
+      type text
+    )
+  )
+  SELECT
+    payload.name,
+    payload.type,
+    COUNT(boundary.id)::integer AS match_count
+  FROM payload
+  LEFT JOIN city_boundaries AS boundary
+    ON boundary.is_active
+   AND LOWER(REGEXP_REPLACE(boundary.display_name, '[[:space:]]+', '', 'g'))
+       = LOWER(REGEXP_REPLACE(payload.name, '[[:space:]]+', '', 'g'))
+   AND (
+     payload.type IS NULL
+     OR LOWER(REGEXP_REPLACE(boundary.display_type, '[[:space:]]+', '', 'g'))
+        = LOWER(REGEXP_REPLACE(payload.type, '[[:space:]]+', '', 'g'))
+   )
+  GROUP BY payload.name, payload.type
+  HAVING COUNT(boundary.id) <> 1
+  ORDER BY payload.name, payload.type NULLS FIRST
 `;
 
 const UPSERT_POPULATIONS_SQL = `
+  WITH payload AS (
+    SELECT *
+    FROM jsonb_to_recordset($1::jsonb) AS item(
+      name text,
+      type text,
+      population integer,
+      "asOf" text,
+      source text,
+      attributes jsonb
+    )
+  ),
+  resolved AS (
+    SELECT
+      payload.*,
+      match.city_id
+    FROM payload
+    CROSS JOIN LATERAL (
+      SELECT
+        MIN(city.id) AS city_id,
+        COUNT(*)::integer AS match_count
+      FROM city_boundaries AS boundary
+      JOIN cities AS city ON city.id = boundary.city_id
+      WHERE boundary.is_active
+        AND LOWER(REGEXP_REPLACE(boundary.display_name, '[[:space:]]+', '', 'g'))
+            = LOWER(REGEXP_REPLACE(payload.name, '[[:space:]]+', '', 'g'))
+        AND (
+          payload.type IS NULL
+          OR LOWER(REGEXP_REPLACE(boundary.display_type, '[[:space:]]+', '', 'g'))
+             = LOWER(REGEXP_REPLACE(payload.type, '[[:space:]]+', '', 'g'))
+        )
+    ) AS match
+    WHERE match.match_count = 1
+  )
   INSERT INTO city_populations (
     city_id,
     population,
@@ -20,19 +72,12 @@ const UPSERT_POPULATIONS_SQL = `
     attributes
   )
   SELECT
-    cities.id,
-    payload.population,
-    payload."asOf"::date,
-    payload.source,
-    payload.attributes
-  FROM jsonb_to_recordset($1::jsonb) AS payload(
-    name text,
-    population integer,
-    "asOf" text,
-    source text,
-    attributes jsonb
-  )
-  JOIN cities ON cities.name = payload.name
+    resolved.city_id,
+    resolved.population,
+    resolved."asOf"::date,
+    resolved.source,
+    resolved.attributes
+  FROM resolved
   ON CONFLICT (city_id) DO UPDATE SET
     population = EXCLUDED.population,
     as_of = EXCLUDED.as_of,
@@ -42,20 +87,14 @@ const UPSERT_POPULATIONS_SQL = `
 `;
 
 /**
- * Update population records only for cities that currently exist in the
- * database, then recalculate all city ratings. Population entries for cities
- * absent from the database are reported as skipped rather than aborting the
- * whole import. Top-level asOf/source remain supported as defaults; portable
- * exports may preserve different values per city.
+ * Population identity follows active OSM boundary configuration. Matching
+ * removes whitespace and ignores case. Legacy records without type are accepted
+ * only when their normalized name resolves to exactly one active boundary.
  *
- * @param {{ connect: () => Promise<import('./data-import-service.js').DatabaseClient>, databaseSchema?: string }} pool
+ * @param {{ connect: () => Promise<any>, databaseSchema?: string }} pool
  */
 export function createPopulationImportService(pool) {
   return {
-    /**
-     * @param {unknown} payload
-     * @param {{ signal?: AbortSignal, onProgress?: (progress: object) => void, onCommit?: () => void }} operation
-     */
     async updateFromJson(payload, operation = {}) {
       throwIfAdminTaskCancelled(operation.signal);
       const plan = buildPopulationPlan(payload);
@@ -74,16 +113,22 @@ export function createPopulationImportService(pool) {
         throwIfAdminTaskCancelled(operation.signal);
 
         const serialized = JSON.stringify(plan.populations);
-        const unknownResult = await client.query(FIND_UNKNOWN_CITIES_SQL, [
-          serialized,
-        ]);
-        const skippedCities = unknownResult.rows.map((row) => row.name);
+        const statusResult = await client.query(MATCH_STATUS_SQL, [serialized]);
+        const skippedCities = statusResult.rows
+          .filter((row) => row.match_count === 0)
+          .map((row) => row.name);
+        const ambiguousCities = statusResult.rows
+          .filter((row) => row.match_count > 1)
+          .map((row) => row.type ? `${row.type} / ${row.name}` : row.name);
 
         const populationResult = await client.query(UPSERT_POPULATIONS_SQL, [
           serialized,
         ]);
         const updatedCities = populationResult.rowCount ?? 0;
-        if (updatedCities + skippedCities.length !== plan.populations.length) {
+        if (
+          updatedCities + skippedCities.length + ambiguousCities.length
+          !== plan.populations.length
+        ) {
           throw new Error('Population import did not account for every record');
         }
 
@@ -92,6 +137,7 @@ export function createPopulationImportService(pool) {
           phase: 'database',
           cities: updatedCities,
           skippedCities: skippedCities.length,
+          ambiguousCities: ambiguousCities.length,
         });
         throwIfAdminTaskCancelled(operation.signal);
         operation.onCommit?.();
@@ -101,6 +147,8 @@ export function createPopulationImportService(pool) {
           requestedCities: plan.populations.length,
           skippedCount: skippedCities.length,
           skippedCities,
+          ambiguousCount: ambiguousCities.length,
+          ambiguousCities,
           asOf: plan.asOf,
           source: plan.source,
           updatedAt: new Date().toISOString(),

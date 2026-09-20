@@ -44,9 +44,12 @@ const SAVE_CONFIG_SQL = `
 
 const FIELD_SQL = Object.freeze({
   'city.population': 'population.population::double precision',
-  'city.area_m2': `(SELECT ST_Area(city_boundary.geom::geography)::double precision
+  'city.area_m2': `(SELECT city_boundary.area_m2::double precision
     FROM city_boundaries AS city_boundary
-    WHERE city_boundary.city_id = city.id)`,
+    WHERE city_boundary.city_id = city.id
+      AND city_boundary.is_active
+    ORDER BY city_boundary.area_m2 DESC
+    LIMIT 1)`,
   'geometry.length_m': 'geometry.length_m::double precision',
   'geometry.lane_length_m': 'geometry.lane_length_m::double precision',
   'geometry.lanes': 'geometry.lanes::double precision',
@@ -177,6 +180,12 @@ export function compileReportMetricQuery(metric) {
           ON population.city_id = city.id
         LEFT JOIN city_geometries AS geometry
           ON geometry.city_id = city.id
+         AND EXISTS (
+           SELECT 1
+           FROM city_boundaries AS metric_boundary
+           WHERE metric_boundary.id = geometry.boundary_id
+             AND metric_boundary.is_active
+         )
         LEFT JOIN line_types AS line_type
           ON line_type.id = geometry.line_type_id
         GROUP BY city.id, population.population
@@ -259,10 +268,14 @@ async function materialize(queryable, config) {
       SELECT 1
       FROM city_boundaries AS boundary_presence
       WHERE boundary_presence.city_id = city.id
+        AND boundary_presence.is_active
     )
       AND EXISTS (
         SELECT 1
         FROM city_geometries AS geometry_presence
+        JOIN city_boundaries AS geometry_boundary
+          ON geometry_boundary.id = geometry_presence.boundary_id
+         AND geometry_boundary.is_active
         WHERE geometry_presence.city_id = city.id
       )
     ORDER BY city.id
