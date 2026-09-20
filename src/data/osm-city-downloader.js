@@ -88,6 +88,7 @@ function wrapNetworkError(error, {
   const retryable =
     RETRYABLE_NETWORK_CODES.has(networkCode) ||
     (
+      !networkCode &&
       error instanceof TypeError &&
       error.message === 'fetch failed'
     );
