@@ -455,6 +455,19 @@
                   </label>
 
                   <button type="submit" disabled>Сохранить объект</button>
+
+                  <div class="osm-boundary-branch-actions" aria-label="Действия над веткой дерева">
+                    <button class="secondary" id="osm-boundary-enable-branch"
+                            type="button" disabled>
+                      Включить ветку
+                    </button>
+                    <button class="danger" id="osm-boundary-disable-branch"
+                            type="button" disabled>
+                      Отключить ветку
+                    </button>
+                    <small>Действие применяется к выбранному объекту и всем вложенным объектам.</small>
+                  </div>
+
                   <p class="notice" id="osm-boundary-message" role="status"></p>
 
                   <dl class="osm-boundary-meta" id="osm-boundary-meta"></dl>
