@@ -19,6 +19,7 @@ import { acquireDataImportLock } from './database-locks.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 const RETRYABLE_HTTP_STATUS_CODES = new Set([429, 502, 503, 504]);
+const GEOMETRY_504_RETRIES_BEFORE_SPLIT = 3;
 
 /** @param {number} milliseconds @param {AbortSignal | undefined} signal */
 function abortableDelay(milliseconds, signal) {
@@ -387,10 +388,12 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
       return;
     }
     if (progress.phase === 'split') {
+      const reason = progress.reason === 'http-504'
+        ? `HTTP 504 after ${progress.retryCount} retries`
+        : `response exceeded ${progress.limitBytes} bytes`;
       console.warn(
-        `OSM geometry batch ${progress.batch} exceeded ` +
-        `${progress.limitBytes} bytes; split ${progress.objectCount} objects into ` +
-        `${progress.splitSizes.join('+')}`,
+        `OSM geometry batch ${progress.batch}: ${reason}; split ` +
+        `${progress.objectCount} objects into ${progress.splitSizes.join('+')}`,
       );
       return;
     }
@@ -524,16 +527,31 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
             }
 
             const retryAttempt = attempt + 1;
-            if (retryAttempt > options.maxRetries) {
+            const splitEligible504 =
+              error.statusCode === 504 &&
+              requestProgress.requestPhase === 'geometry' &&
+              (requestProgress.objectCount ?? 0) > 1;
+            const retryLimit = splitEligible504
+              ? Math.min(
+                  options.maxRetries,
+                  GEOMETRY_504_RETRIES_BEFORE_SPLIT,
+                )
+              : options.maxRetries;
+            if (retryAttempt > retryLimit) {
               const exhausted = new OsmCityDownloadError(
                 `OSM download returned HTTP ${error.statusCode} after ` +
-                `${options.maxRetries} retries`,
+                `${retryLimit} retries`,
                 {
                   statusCode: error.statusCode,
                   retryAfterMs: error.retryAfterMs,
                   finalURL: error.finalURL,
+                  code: splitEligible504
+                    ? 'geometry-504-retry-limit'
+                    : 'retry-limit',
                 },
               );
+              exhausted.retryCount = retryLimit;
+              exhausted.configuredMaxRetries = options.maxRetries;
               exhausted.cause = error;
               throw exhausted;
             }
@@ -554,7 +572,8 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
               ...requestProgress,
               statusCode: error.statusCode,
               attempt: retryAttempt,
-              maxRetries: options.maxRetries,
+              maxRetries: retryLimit,
+              configuredMaxRetries: options.maxRetries,
               waitMs,
               retryAt: new Date(now() + waitMs).toISOString(),
               retryAfterMs: error.retryAfterMs,
@@ -633,19 +652,30 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
                 requestPhase: 'geometry',
                 batch: batchNumber,
                 batchCount: geometryBatches.length,
+                objectCount: objects.length,
               },
             );
           } catch (error) {
-            if (
+            const oversizedResponse =
               error instanceof OsmCityDownloadError &&
-              error.code === 'response-size-limit'
-            ) {
+              error.code === 'response-size-limit';
+            const exhausted504 =
+              error instanceof OsmCityDownloadError &&
+              error.code === 'geometry-504-retry-limit' &&
+              error.statusCode === 504;
+
+            if (oversizedResponse || exhausted504) {
               if (objects.length === 1) {
                 const object = objects[0];
                 const objectError = new OsmCityDownloadError(
-                  `OSM object ${objectKey(object)} exceeds the configured single-response size limit`,
+                  oversizedResponse
+                    ? `OSM object ${objectKey(object)} exceeds the configured single-response size limit`
+                    : `OSM object ${objectKey(object)} still returns HTTP 504 after ${options.maxRetries} retries`,
                   {
-                    code: 'response-size-limit',
+                    code: oversizedResponse
+                      ? 'response-size-limit'
+                      : 'retry-limit',
+                    statusCode: error.statusCode,
                     limitBytes: options.maxResponseBytes,
                     receivedBytes: error.receivedBytes,
                     finalURL: error.finalURL,
@@ -654,6 +684,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
                 objectError.cause = error;
                 throw objectError;
               }
+
               const splitAt = Math.ceil(objects.length / 2);
               const left = objects.slice(0, splitAt);
               const right = objects.slice(splitAt);
@@ -661,11 +692,17 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
               const progress = {
                 phase: 'split',
                 requestPhase: 'geometry',
+                reason: exhausted504 ? 'http-504' : 'response-size-limit',
+                statusCode: exhausted504 ? 504 : undefined,
+                retryCount: exhausted504 ? error.retryCount : 0,
+                configuredMaxRetries: options.maxRetries,
                 batch: batchNumber,
                 batchCount: geometryBatches.length,
                 objectCount: objects.length,
                 splitSizes: [left.length, right.length],
-                limitBytes: options.maxResponseBytes,
+                limitBytes: oversizedResponse
+                  ? options.maxResponseBytes
+                  : undefined,
                 indexedPlaces: index.objects.length,
                 stagedPlaces,
               };
