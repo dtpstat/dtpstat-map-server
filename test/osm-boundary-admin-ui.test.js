@@ -63,12 +63,18 @@ test('OSM object editor is a top-level admin section with population editing', a
     /if \(!boundarySearchText\(item\)\.includes\(query\)\) continue;[\s\S]*current = byId\.get\(current\.parentId\)/,
   );
   assert.match(editor, /searchInput\.addEventListener\('input', \(\) => renderTree\(\)\)/);
-  assert.match(
-    editor,
-    /https:\/\/tile\.openstreetmap\.org\/\{z\}\/\{x\}\/\{y\}\.png/,
-  );
-  assert.doesNotMatch(editor, /\{s\}\.tile\.openstreetmap\.org/);
-  assert.match(editor, /openstreetmap\.org\/copyright/);
+  assert.match(html, /\/vendor\/mapbox-gl\/mapbox-gl\.css/);
+  assert.match(html, /\/vendor\/mapbox-gl\/mapbox-gl\.js/);
+  assert.doesNotMatch(html, /leaflet/i);
+  assert.match(editor, /api\('\/api\/config'\)/);
+  assert.match(editor, /new globalThis\.mapboxgl\.Map/);
+  assert.match(editor, /state\.map\.addSource\(MAP_SOURCE_ID/);
+  assert.match(editor, /type: 'fill'/);
+  assert.match(editor, /type: 'line'/);
+  assert.match(editor, /map\.getSource\(MAP_SOURCE_ID\)\.setData\(feature\)/);
+  assert.match(editor, /map\.fitBounds\(bounds/);
+  assert.match(editor, /map\.resize\(\)/);
+  assert.doesNotMatch(editor, /globalThis\.L|tile\.openstreetmap\.org|Leaflet/);
   assert.match(
     styles,
     /grid-template-columns:\s*minmax\(19rem, \.72fr\)[\s\S]*minmax\(30rem, 1\.8fr\)[\s\S]*minmax\(20rem, \.82fr\)/,
@@ -76,4 +82,6 @@ test('OSM object editor is a top-level admin section with population editing', a
   assert.match(styles, /#osm-boundary-form[\s\S]*flex-direction:\s*column/);
   assert.match(styles, /\.osm-boundary-tree-panel[\s\S]*flex-direction:\s*column/);
   assert.match(styles, /\.osm-boundary-tree[\s\S]*overflow:\s*auto/);
+  assert.match(styles, /\.mapboxgl-ctrl-attrib/);
+  assert.doesNotMatch(styles, /leaflet/i);
 });
