@@ -104,7 +104,9 @@ export function createApiRouter({
 
   const progressLog = (context, progress) => {
     let message = `Прогресс: ${progress.phase}`;
-    if (progress.phase === 'index') {
+    if (progress.phase === 'resume') {
+      message = `OSM: возобновление checkpoint ${progress.checkpointId}; уже загружено ${progress.stagedPlaces}/${progress.indexedPlaces}, осталось ${progress.remainingPlaces}`;
+    } else if (progress.phase === 'index') {
       message = `OSM: загружена часть индекса ${progress.indexPart}/${progress.indexPartCount}`;
     } else if (progress.phase === 'geometry') {
       message = `OSM: обработан пакет ${progress.batch}/${progress.batchCount}`;
