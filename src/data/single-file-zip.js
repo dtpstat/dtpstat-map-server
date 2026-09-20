@@ -102,6 +102,8 @@ function validateExportEntryName(name) {
     typeof name !== 'string' ||
     !name ||
     name.includes('\0') ||
+    name.includes('/') ||
+    name.includes('\\') ||
     name.endsWith('/') ||
     name.endsWith('\\')
   ) {
@@ -655,7 +657,7 @@ function zip64LocalHeader(nameLength) {
   extra.writeUInt16LE(16, 2);
   extra.writeBigUInt64LE(0n, 4);
   extra.writeBigUInt64LE(0n, 12);
-  return Buffer.concat([header, extra]);
+  return { header, extra };
 }
 
 function zip64DataDescriptor(crc, compressedSize, uncompressedSize) {
@@ -699,7 +701,7 @@ function zip64CentralHeader(
   extra.writeBigUInt64LE(uncompressedSize, 4);
   extra.writeBigUInt64LE(compressedSize, 12);
   extra.writeBigUInt64LE(localOffset, 20);
-  return Buffer.concat([header, extra]);
+  return { header, extra };
 }
 
 function zip64EndOfCentralDirectory(
@@ -761,8 +763,9 @@ export function createSingleFileZipStream(fileName, source, options = {}) {
 
   async function* generate() {
     const local = zip64LocalHeader(name.length);
-    yield local;
+    yield local.header;
     yield name;
+    yield local.extra;
 
     let crc = 0xffffffff;
     let uncompressedSize = 0n;
@@ -800,7 +803,9 @@ export function createSingleFileZipStream(fileName, source, options = {}) {
     );
     yield descriptor;
 
-    const localSize = BigInt(local.length + name.length);
+    const localSize = BigInt(
+      local.header.length + name.length + local.extra.length,
+    );
     const centralOffset = localSize + compressedSize + BigInt(descriptor.length);
     const central = zip64CentralHeader(
       name.length,
@@ -809,10 +814,13 @@ export function createSingleFileZipStream(fileName, source, options = {}) {
       uncompressedSize,
       0n,
     );
-    yield central;
+    yield central.header;
     yield name;
+    yield central.extra;
 
-    const centralSize = BigInt(central.length + name.length);
+    const centralSize = BigInt(
+      central.header.length + name.length + central.extra.length,
+    );
     const zip64EocdOffset = centralOffset + centralSize;
     yield zip64EndOfCentralDirectory(centralSize, centralOffset);
     yield zip64Locator(zip64EocdOffset);
