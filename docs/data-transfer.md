@@ -41,7 +41,12 @@ POST /api/admin/settings/import
 GET /api/admin/export/cities
 ```
 
-Файл: `cities.geojson`.
+Файлы:
+
+- `GET /api/admin/export/cities` → `cities.geojson`;
+- `GET /api/admin/export/cities.zip` → `cities.zip`, внутри ровно один `cities.geojson`.
+
+Оба варианта формируются потоково; полный FeatureCollection не собирается в памяти Node.
 
 Portable city snapshot содержит OSM provenance и, если boundary уже связан с application city, переносимые city fields.
 
@@ -63,6 +68,10 @@ Boundary properties schemaVersion 2 включают:
 ```text
 POST /api/admin/import/cities
 Content-Type: application/geo+json
+
+# или
+POST /api/admin/import/cities
+Content-Type: application/zip
 ```
 
 Import:
@@ -94,7 +103,12 @@ Import:
 GET /api/admin/export/lines
 ```
 
-Файл: `lines.geojson`.
+Файлы:
+
+- `GET /api/admin/export/lines` → `lines.geojson`;
+- `GET /api/admin/export/lines.zip` → `lines.zip`, внутри ровно один `lines.geojson`.
+
+JSON и ZIP формируются потоково.
 
 Canonical format содержит versioned dictionary `lineTypes` и geometry metadata.
 
@@ -134,6 +148,10 @@ Public map может показывать это значение:
 ```text
 POST /api/admin/import/lines
 Content-Type: application/geo+json
+
+# или
+POST /api/admin/import/lines
+Content-Type: application/zip
 ```
 
 Legacy alias:
@@ -196,7 +214,10 @@ Portable KML использует тот же NAME-based business-type matching,
 GET /api/admin/export/populations
 ```
 
-Файл: `populations.json`.
+Файлы:
+
+- `GET /api/admin/export/populations` → `populations.json`;
+- `GET /api/admin/export/populations.zip` → `populations.zip`, внутри ровно один `populations.json`.
 
 Для каждой записи переносятся type/name/citySlug/population/asOf/source/attributes.
 
@@ -205,6 +226,10 @@ GET /api/admin/export/populations
 ```text
 POST /api/admin/populations
 Content-Type: application/json
+
+# или
+POST /api/admin/populations
+Content-Type: application/zip
 ```
 
 Population matching выполняется только по активным OSM boundaries. Основная
@@ -229,21 +254,51 @@ Result содержит, в частности:
 
 Invalid population values, conflicts и malformed payload по-прежнему являются ошибками.
 
-# Compression и body limits
+# Streaming JSON / ZIP и body limits
 
-Application limit крупных protected imports:
+Большие portable city/line/population transfers **не проходят через
+`express.json()`**. HTTP body сначала потоково записывается как сжатый/raw
+spool-файл в `var/import-staging`, после чего background admin task читает его
+потоком. Распакованный JSON целиком ни на диск, ни в RAM не создаётся.
+
+Для raw JSON/GeoJSON по-прежнему поддерживаются HTTP `gzip`, `deflate` и
+`br`. ZIP передаётся как `Content-Type: application/zip` без дополнительного
+`Content-Encoding`.
+
+ZIP-контракт намеренно строгий:
+
+- ровно **одна** file entry;
+- каталогов и путей внутри archive быть не должно;
+- encryption и multi-volume ZIP не поддерживаются;
+- поддерживаются Store и Deflate;
+- проверяются CRC32 и declared decoded size;
+- ZIP64 не принимается: ZIP transfer ограничен ZIP32 (< 4 GiB). Для больших
+  объёмов до configured raw JSON limit можно использовать обычный streaming
+  JSON/GeoJSON без ZIP.
+
+Лимиты:
 
 ```dotenv
+# Старый лимит небольших JSON API; не используется как RAM-buffer для больших
+# portable imports.
 IMPORT_API_MAX_BODY_BYTES=26214400
+
+# Размер входящего transport body: raw JSON, HTTP-compressed JSON или ZIP.
+IMPORT_API_MAX_STREAM_UPLOAD_BYTES=2147483648
+
+# Максимальный размер JSON после HTTP/ZIP decompression.
+IMPORT_API_MAX_STREAM_JSON_BYTES=3221225472
+
+# Максимальный размер одного feature/population JSON value.
+IMPORT_API_MAX_STREAM_ITEM_BYTES=134217728
 ```
 
-Если используется nginx:
+Для nginx `client_max_body_size` должен быть **не меньше**
+`IMPORT_API_MAX_STREAM_UPLOAD_BYTES` (либо выбранного production значения).
+Например для лимита 2 GiB нужно настраивать nginx соответственно, а не оставлять
+старые `30m`.
 
-```nginx
-client_max_body_size 30m;
-```
-
-Admin exports поддерживают HTTP compression. Import body может быть gzip-compressed, например:
+Пример raw gzip:
 
 ```bash
 AUTH="$ADMIN_USERNAME:$ADMIN_PASSWORD"
@@ -256,6 +311,24 @@ gzip -c cities.geojson | curl --fail-with-body \
   --data-binary @- \
   https://target.example/api/admin/import/cities
 ```
+
+Пример ZIP:
+
+```bash
+curl --fail-with-body \
+  --user "$AUTH" \
+  -X POST \
+  -H 'Content-Type: application/zip' \
+  --data-binary @cities.zip \
+  https://target.example/api/admin/import/cities
+```
+
+После полного приёма HTTP upload сервер отвечает `202` и запускает admin task.
+Синтаксическая ошибка JSON, неправильный ZIP, schema/PostGIS ошибка или отмена
+задачи переводят task в `failed/cancelled`; DB import выполняется в одной
+транзакции и делает `ROLLBACK` целиком. Уже изменённые production rows при
+ошибке не остаются. Временный spool удаляется после завершения task, а orphan
+spools после process crash чистятся при следующем startup (старше 24 часов).
 
 # Single-task guard
 
