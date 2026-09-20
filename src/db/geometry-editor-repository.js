@@ -54,7 +54,8 @@ const CITY_SQL = `
     json_build_array(
       ST_X(ST_PointOnSurface(boundary.geom)),
       ST_Y(ST_PointOnSurface(boundary.geom))
-    ) AS center
+    ) AS center,
+    ST_AsGeoJSON(boundary.geom)::json AS "boundaryGeometry"
   FROM cities AS city
   JOIN city_boundaries AS boundary
     ON boundary.city_id = city.id
@@ -80,6 +81,9 @@ const GEOMETRIES_SQL = `
     line_type.code::integer AS "lineTypeCode",
     line_type.name AS "lineTypeName",
     line_type.title AS "lineTypeTitle",
+    line_type.color AS "lineTypeColor",
+    line_type.line_style AS "lineTypeStyle",
+    line_type.width::double precision AS "lineTypeWidth",
     geometry.lanes,
     geometry.length_m AS "lengthMeters",
     geometry.lane_length_m AS "laneLengthMeters",
@@ -123,6 +127,9 @@ const ONE_GEOMETRY_SQL = `
       line_type.code::integer AS "lineTypeCode",
       line_type.name AS "lineTypeName",
       line_type.title AS "lineTypeTitle",
+      line_type.color AS "lineTypeColor",
+      line_type.line_style AS "lineTypeStyle",
+      line_type.width::double precision AS "lineTypeWidth",
       geometry.lanes,
       geometry.length_m AS "lengthMeters",
       geometry.lane_length_m AS "laneLengthMeters",
@@ -261,6 +268,10 @@ export function createGeometryEditorRepository(pool) {
   }
 
   return {
+    async get(geometryId) {
+      return one(pool, geometryId);
+    },
+
     async listCities() {
       const result = await pool.query(CITIES_SQL);
       return result.rows;

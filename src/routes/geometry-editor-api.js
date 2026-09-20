@@ -22,6 +22,7 @@ function validationError(response, error) {
 /**
  * @param {{
  *   geometryEditorRepository: {
+ *     get: Function,
  *     listCities: Function,
  *     listCity: Function,
  *     listTags: Function,
@@ -125,9 +126,7 @@ export function createGeometryEditorRouter({
     async (request, response, next) => {
       try {
         const geometryId = normalizeGeometryId(request.params.geometryId);
-        const previous = (await geometryEditorRepository.listCity(
-          Number(request.body?.cityId ?? 0),
-        ))?.geometries?.find((item) => item.id === geometryId) ?? null;
+        const previous = await geometryEditorRepository.get(geometryId);
         const geometry = await geometryEditorRepository.update(
           geometryId,
           normalizeGeometryEditorPayload(request.body),

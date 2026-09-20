@@ -6,6 +6,14 @@ function canManageInterface(user) {
   return Boolean(user?.isSuperuser || user?.canManageInterface);
 }
 
+function canEditGeometries(user) {
+  return Boolean(user?.isSuperuser || user?.canEditGeometries);
+}
+
+function canEditOsm(user) {
+  return Boolean(user?.isSuperuser || user?.canEditOsm);
+}
+
 function canAccessSecurity(user) {
   return Boolean(
     user?.isSuperuser || user?.canManageUsers || user?.canViewAudit || user?.canManageSecurity,
@@ -233,7 +241,6 @@ async function loadDataEditors() {
   await import('./json-examples.js');
   await import('./kml-transfer-editor.js');
   await import('./admin.js');
-  await import('./osm-boundary-editor.js');
   setupDataSectionLockExtensions();
 }
 
@@ -257,7 +264,7 @@ function setupPrimarySections(user) {
     tab.hidden = !permissions[key];
   }
 
-  const available = ['data', 'osm-objects', 'interface', 'security', 'profile']
+  const available = ['data', 'geometries', 'osm-objects', 'interface', 'security', 'profile']
     .filter((key) => permissions[key]);
   const select = (key) => {
     if (!permissions[key]) return;
@@ -272,6 +279,9 @@ function setupPrimarySections(user) {
     if (key === 'osm-objects') {
       window.dispatchEvent(new CustomEvent('dtpstat:osm-boundary-editor-open'));
     }
+    if (key === 'geometries') {
+      window.dispatchEvent(new CustomEvent('dtpstat:geometry-editor-open'));
+    }
   };
 
   for (const tab of tabs) tab.addEventListener('click', () => select(tab.dataset.adminSectionTab));
@@ -285,6 +295,8 @@ function updateUserBadge(user) {
   const roles = [
     user.isSuperuser ? 'superuser' : null,
     user.canManageData ? 'данные' : null,
+    user.canEditGeometries ? 'геометрии' : null,
+    user.canEditOsm ? 'OSM' : null,
     user.canManageInterface ? 'интерфейс' : null,
     user.canManageUsers ? 'пользователи' : null,
     user.canViewAudit ? 'аудит' : null,
@@ -308,6 +320,8 @@ async function startAdminShell() {
     await import('./profile-editor.js');
     if (!user.mustChangePassword) {
       if (canManageData(user)) await loadDataEditors();
+      if (canEditOsm(user)) await import('./osm-boundary-editor.js');
+      if (canEditGeometries(user)) await import('./geometry-editor.js');
       if (canManageInterface(user)) await loadInterfaceEditors(user);
       if (canAccessSecurity(user)) await import('./security-editor-v2.js');
     }
