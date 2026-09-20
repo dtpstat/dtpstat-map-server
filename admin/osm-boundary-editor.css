@@ -59,6 +59,25 @@
 .osm-boundary-search {
   width: 100%;
 }
+.osm-boundary-state-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem .7rem;
+  align-items: center;
+  padding: .42rem .55rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .65rem;
+}
+.osm-boundary-state-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: .28rem;
+}
+.osm-boundary-state-legend .osm-boundary-active-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+}
 .osm-boundary-tree {
   min-height: 0;
   padding: .55rem;
