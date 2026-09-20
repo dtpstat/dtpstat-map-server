@@ -96,6 +96,31 @@ try {
   `);
   const boundaryId = Number(boundary.rows[0].id);
   await client.query('SELECT sync_active_boundary_cities()');
+  const preCommitState = await client.query(`
+    SELECT
+      boundary.id::bigint AS boundary_id,
+      boundary.city_id::bigint AS boundary_city_id,
+      boundary.osm_type,
+      boundary.osm_id::text AS osm_id,
+      boundary.display_name,
+      boundary.display_type,
+      COALESCE(
+        json_agg(
+          json_build_object(
+            'id', city.id,
+            'slug', city.slug,
+            'name', city.name,
+            'displayType', city.display_type
+          )
+        ) FILTER (WHERE city.id IS NOT NULL),
+        '[]'::json
+      ) AS cities
+    FROM city_boundaries AS boundary
+    LEFT JOIN cities AS city ON TRUE
+    WHERE boundary.id = $1
+    GROUP BY boundary.id
+  `, [boundaryId]);
+  console.log('pre-commit sync state', JSON.stringify(preCommitState.rows[0], null, 2));
   await client.query('COMMIT');
 
   let ownership = await client.query(`
