@@ -1,6 +1,7 @@
 import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
 import { buildCityBoundaryGeoJsonPlan } from '../data/city-boundary-geojson-plan.js';
 import { acquireDataImportLock } from './database-locks.js';
+import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 // Keep each PostgreSQL jsonb/PostGIS conversion request bounded. The portable
 // city snapshot can contain thousands of detailed MultiPolygons; sending the
@@ -298,8 +299,12 @@ export function createCityBoundaryTransferService(pool) {
           places: inserted.rowCount,
         });
         await client.query('SELECT rebuild_city_boundary_hierarchy()');
-        await client.query('SELECT sync_active_boundary_cities()');
         const restored = await client.query(RESTORE_GEOMETRY_LINKS_SQL);
+        // Restore boundary_id first: synchronizing active boundaries may
+        // reassign their application city and must update existing line rows
+        // against the restored exact OSM object.
+        await client.query('SELECT sync_active_boundary_cities()');
+        await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
 
         const linkedResult = await client.query(`
