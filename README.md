@@ -13,7 +13,7 @@ Node.js/Express + PostgreSQL/PostGIS сервер интерактивной к�
 - публичная Mapbox-карта с viewport-загрузкой линий;
 - города и административные границы из OSM/Overpass;
 - пакетная загрузка `place=city/town` и настраиваемого диапазона `boundary=administrative`;
-- дерево вложенности OSM-полигонов, ручные active/displayName/displayType и Leaflet-preview;
+- дерево вложенности OSM-полигонов, ручные active/displayName/displayType и Mapbox-preview;
 - импорт GeoJSON, KML и Google My Maps;
 - переносимый GeoJSON/KML со словарём `LINE_TYPES`;
 - сохранение `<Placemark><name>` как `properties.placemarkName`;
@@ -123,14 +123,16 @@ HTTP_PORT=3002
 ## Большие portable JSON / ZIP transfers
 
 Admin transfer для OSM boundaries, линий и населения поддерживает raw
-JSON/GeoJSON и single-file ZIP. Экспорт формируется потоково; импорт spooled на
-диск и затем разбирается по элементам без materialization всего JSON в heap
-Node. ZIP обязан содержать ровно одну JSON/GeoJSON entry без каталогов.
+JSON/GeoJSON и single-entry ZIP/ZIP64. Экспорт формируется потоково; импорт
+принимает в том числе chunked ZIP из pipe/stdin и затем разбирает JSON по
+элементам без materialization всего документа в heap Node. Directory entries
+игнорируются, после них должна остаться ровно одна data entry; её имя и
+расширение не используются для определения JSON schema.
 
 DB import выполняется одной транзакцией: malformed JSON/ZIP, schema/PostGIS
 ошибка или cancellation приводят к полному `ROLLBACK`. Лимиты streaming
-transport/decoded JSON/item задаются через
-`IMPORT_API_MAX_STREAM_*_BYTES`. Подробнее:
+transport/decoded JSON/item, ZIP ratio/entry count и JSON depth/record count
+задаются через `IMPORT_API_MAX_STREAM_*`. Подробнее:
 [docs/data-transfer.md](docs/data-transfer.md).
 
 ## OSM геометрии
