@@ -115,6 +115,13 @@ async function main() {
     {details: {schema: config.database.schema}},
   );
   await runServiceOperation(
+    'osm-import-settings.bootstrap',
+    () => osmImportSettingsRepository.bootstrap(config.osmCityUpdate),
+    {
+      successDetails: (result) => result,
+    },
+  );
+  await runServiceOperation(
     'admin-security.bootstrap',
     () => securityService.bootstrap({
       username: config.importApi.bootstrapUsername,
