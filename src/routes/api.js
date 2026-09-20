@@ -40,6 +40,7 @@ import {
  * @typedef {{
  *   exportCityBoundaries: () => Promise<object>,
  *   exportLines: () => Promise<object>,
+ *   exportGeometries: () => Promise<object>,
  *   exportPopulations: () => Promise<object>
  * }} DataExportRepository
  */
@@ -438,6 +439,7 @@ export function createApiRouter({
     exportRepository,
   );
   const lineStream = exportRepository?.streamLines?.bind(exportRepository);
+  const geometryStream = exportRepository?.streamGeometries?.bind(exportRepository);
   const populationStream = exportRepository?.streamPopulations?.bind(
     exportRepository,
   );
@@ -488,6 +490,30 @@ export function createApiRouter({
       true,
     ),
   );
+  router.get(
+    '/admin/export/geometries',
+    adminAuth.requireGeometryEditor,
+    operationAudit('geometry.export'),
+    streamingExportRoute(
+      'geometries.geojson',
+      'application/geo+json',
+      geometryStream,
+      () => exportRepository.exportGeometries(),
+    ),
+  );
+  router.get(
+    '/admin/export/geometries.zip',
+    adminAuth.requireGeometryEditor,
+    operationAudit('geometry.export-zip'),
+    streamingExportRoute(
+      'geometries.geojson',
+      'application/geo+json',
+      geometryStream,
+      () => exportRepository.exportGeometries(),
+      true,
+    ),
+  );
+
   router.get(
     '/admin/export/populations',
     adminAuth.requireData,

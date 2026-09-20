@@ -96,11 +96,80 @@ const EXPORT_LINES_SQL = `
     )
   ) AS payload
   FROM city_geometries AS geometry
-  JOIN city_boundaries AS boundary
+  LEFT JOIN city_boundaries AS boundary
     ON boundary.id = geometry.boundary_id
-   AND boundary.is_active
   JOIN line_types AS line_type ON line_type.id = geometry.line_type_id
   LEFT JOIN cities AS city ON city.id = geometry.city_id
+  WHERE GeometryType(geometry.geom) IN ('LINESTRING', 'MULTILINESTRING')
+`;
+
+const EXPORT_GEOMETRIES_SQL = `
+  SELECT json_build_object(
+    'type', 'FeatureCollection',
+    'name', 'dtpstat-project-geometries',
+    'schemaVersion', 4,
+    'exportedAt', now(),
+    'lineTypes', COALESCE(
+      (
+        SELECT json_agg(
+          json_build_object(
+            'code', line_type.code,
+            'name', line_type.name,
+            'title', line_type.title,
+            'color', line_type.color,
+            'style', line_type.line_style,
+            'width', line_type.width
+          )
+          ORDER BY line_type.code
+        )
+        FROM line_types AS line_type
+      ),
+      '[]'::json
+    ),
+    'features', COALESCE(
+      json_agg(
+        json_build_object(
+          'type', 'Feature',
+          'id', geometry.id,
+          'geometry', ST_AsGeoJSON(geometry.geom)::json,
+          'properties', geometry.properties || jsonb_strip_nulls(
+            jsonb_build_object(
+              'geometryFamily', CASE
+                WHEN GeometryType(geometry.geom) = 'POINT' THEN 'point'
+                WHEN GeometryType(geometry.geom) IN ('LINESTRING', 'MULTILINESTRING') THEN 'line'
+                WHEN GeometryType(geometry.geom) IN ('POLYGON', 'MULTIPOLYGON') THEN 'polygon'
+              END,
+              'displayName', geometry.display_name,
+              'tooltip', geometry.tooltip,
+              'tags', geometry.tags,
+              'sourceTags', geometry.source_tags,
+              'isVisible', geometry.is_visible,
+              'wasEdited', geometry.was_edited,
+              'lanes', geometry.lanes,
+              'length', geometry.length_m,
+              'lanes_length', geometry.lane_length_m,
+              '_dtpstat', jsonb_strip_nulls(
+                jsonb_build_object(
+                  'citySlug', city.slug,
+                  'boundaryOsmType', boundary.osm_type,
+                  'boundaryOsmId', boundary.osm_id,
+                  'businessTypeCode', line_type.code,
+                  'createdAt', geometry.created_at,
+                  'updatedAt', geometry.updated_at
+                )
+              )
+            )
+          )
+        )
+        ORDER BY geometry.id
+      ),
+      '[]'::json
+    )
+  ) AS payload
+  FROM city_geometries AS geometry
+  JOIN cities AS city ON city.id = geometry.city_id
+  LEFT JOIN city_boundaries AS boundary ON boundary.id = geometry.boundary_id
+  LEFT JOIN line_types AS line_type ON line_type.id = geometry.line_type_id
 `;
 
 const EXPORT_POPULATIONS_SQL = `
@@ -200,11 +269,52 @@ const STREAM_LINES_SQL = `
     )
   )::text AS item
   FROM city_geometries AS geometry
-  JOIN city_boundaries AS boundary
+  LEFT JOIN city_boundaries AS boundary
     ON boundary.id = geometry.boundary_id
-   AND boundary.is_active
   JOIN line_types AS line_type ON line_type.id = geometry.line_type_id
   LEFT JOIN cities AS city ON city.id = geometry.city_id
+  WHERE GeometryType(geometry.geom) IN ('LINESTRING', 'MULTILINESTRING')
+  ORDER BY geometry.id
+`;
+
+const STREAM_GEOMETRIES_SQL = `
+  SELECT json_build_object(
+    'type', 'Feature',
+    'id', geometry.id,
+    'geometry', ST_AsGeoJSON(geometry.geom)::json,
+    'properties', geometry.properties || jsonb_strip_nulls(
+      jsonb_build_object(
+        'geometryFamily', CASE
+          WHEN GeometryType(geometry.geom) = 'POINT' THEN 'point'
+          WHEN GeometryType(geometry.geom) IN ('LINESTRING', 'MULTILINESTRING') THEN 'line'
+          WHEN GeometryType(geometry.geom) IN ('POLYGON', 'MULTIPOLYGON') THEN 'polygon'
+        END,
+        'displayName', geometry.display_name,
+        'tooltip', geometry.tooltip,
+        'tags', geometry.tags,
+        'sourceTags', geometry.source_tags,
+        'isVisible', geometry.is_visible,
+        'wasEdited', geometry.was_edited,
+        'lanes', geometry.lanes,
+        'length', geometry.length_m,
+        'lanes_length', geometry.lane_length_m,
+        '_dtpstat', jsonb_strip_nulls(
+          jsonb_build_object(
+            'citySlug', city.slug,
+            'boundaryOsmType', boundary.osm_type,
+            'boundaryOsmId', boundary.osm_id,
+            'businessTypeCode', line_type.code,
+            'createdAt', geometry.created_at,
+            'updatedAt', geometry.updated_at
+          )
+        )
+      )
+    )
+  )::text AS item
+  FROM city_geometries AS geometry
+  JOIN cities AS city ON city.id = geometry.city_id
+  LEFT JOIN city_boundaries AS boundary ON boundary.id = geometry.boundary_id
+  LEFT JOIN line_types AS line_type ON line_type.id = geometry.line_type_id
   ORDER BY geometry.id
 `;
 
@@ -322,6 +432,43 @@ export function createDataExportRepository(database) {
       }
     },
 
+    async *streamGeometries() {
+      if (typeof database.connect !== 'function') {
+        yield JSON.stringify(await payload(EXPORT_GEOMETRIES_SQL));
+        yield '\n';
+        return;
+      }
+      const client = await database.connect();
+      try {
+        await client.query('BEGIN READ ONLY');
+        const timestamp = await client.query(
+          'SELECT now() AS "exportedAt"',
+        );
+        yield '{"type":"FeatureCollection","name":"dtpstat-project-geometries","schemaVersion":4,"exportedAt":';
+        yield JSON.stringify(timestamp.rows[0]?.exportedAt ?? new Date());
+        yield ',"lineTypes":[';
+        const lineTypes = await client.query(STREAM_LINE_TYPES_SQL);
+        let firstType = true;
+        for (const row of lineTypes.rows) {
+          if (!firstType) yield ',';
+          firstType = false;
+          yield row.item;
+        }
+        yield '],"features":[';
+        yield* jsonArray(
+          cursorItems(
+            client,
+            'portable_geometry_export',
+            STREAM_GEOMETRIES_SQL,
+          ),
+        );
+        yield ']}\n';
+      } finally {
+        await client.query('ROLLBACK').catch(() => {});
+        client.release();
+      }
+    },
+
     async *streamPopulations() {
       if (typeof database.connect !== 'function') {
         yield JSON.stringify(await payload(EXPORT_POPULATIONS_SQL));
@@ -356,6 +503,9 @@ export function createDataExportRepository(database) {
     },
     exportLines() {
       return payload(EXPORT_LINES_SQL);
+    },
+    exportGeometries() {
+      return payload(EXPORT_GEOMETRIES_SQL);
     },
     exportPopulations() {
       return payload(EXPORT_POPULATIONS_SQL);
