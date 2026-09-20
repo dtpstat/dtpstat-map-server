@@ -39,3 +39,107 @@ jobs:
       - run: npm run check
       - run: npm run db:init
       - run: npm run db:migrate
+      - name: Smoke-test durable OSM checkpoint repository
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import pg from 'pg';
+          import {
+            createOsmCityCheckpointRepository,
+          } from './src/db/osm-city-checkpoint-repository.js';
+
+          const { Pool } = pg;
+          const pool = new Pool({
+            host: process.env.DATABASE_HOST,
+            port: Number(process.env.DATABASE_PORT),
+            database: process.env.DATABASE_NAME,
+            user: process.env.DATABASE_ROLE,
+            password: process.env.DATABASE_ROLE_PASSWORD,
+            ssl: false,
+            max: 4,
+            options: '-c search_path=' + process.env.DATABASE_SCHEMA + ',public',
+          });
+
+          const value = (suffix = 'a') => ({
+            sourceURL: 'https://overpass-api.de/api/interpreter',
+            settingsFingerprint: 'settings-' + suffix,
+            indexFingerprint: 'index-' + suffix,
+            options: { formatVersion: 1, batchSize: 50 },
+            indexObjects: [{ osmType: 'relation', osmId: suffix === 'a' ? 1001 : 1002 }],
+            sourceElements: 1,
+            duplicateIndexObjects: 0,
+            osmTimestamp: '2026-09-20T12:00:00.000Z',
+            downloadedBytes: 10,
+            requestAttemptCount: 1,
+            retryCount: 0,
+            retryWaitMs: 0,
+            throttleWaitMs: 0,
+          });
+
+          const place = {
+            name: 'Checkpoint Test',
+            placeType: 'city',
+            adminLevel: null,
+            osmType: 'relation',
+            osmId: 1001,
+            tags: { name: 'Checkpoint Test', place: 'city' },
+            linework: {
+              type: 'MultiLineString',
+              coordinates: [[
+                [30, 60], [31, 60], [31, 61], [30, 61], [30, 60],
+              ]],
+            },
+            contentChecksum: 'content-a',
+          };
+
+          try {
+            const repository1 = createOsmCityCheckpointRepository(pool);
+            const first = await repository1.create(value('a'));
+            await repository1.stageBatch(first.id, [place], {
+              downloadedBytes: 100,
+              requestAttemptCount: 1,
+            });
+
+            const persisted = await repository1.getResumable();
+            assert.equal(persisted.id, first.id);
+            assert.equal(persisted.stagedObjects, 1);
+            assert.equal(persisted.totalObjects, 1);
+            assert.equal(persisted.remainingObjects, 0);
+
+            // A fresh repository instance sees the same state: this simulates
+            // application restart without relying on process-local memory.
+            const repository2 = createOsmCityCheckpointRepository(pool);
+            const afterRestart = await repository2.getResumable();
+            assert.equal(afterRestart.id, first.id);
+            assert.equal(afterRestart.stagedObjects, 1);
+            assert.deepEqual(
+              [...await repository2.getStagedKeys(first.id)],
+              ['relation/1001'],
+            );
+
+            // Invalid replacement must roll the whole transaction back,
+            // preserving both the old resumable row and its staged geometry.
+            await assert.rejects(
+              repository2.replaceResumable(first.id, {
+                ...value('bad'),
+                options: [],
+              }),
+            );
+            const afterFailedReplace = await repository2.getResumable();
+            assert.equal(afterFailedReplace.id, first.id);
+            assert.equal(afterFailedReplace.stagedObjects, 1);
+
+            const second = await repository2.replaceResumable(
+              first.id,
+              value('b'),
+            );
+            assert.notEqual(second.id, first.id);
+            assert.equal(second.stagedObjects, 0);
+            assert.equal(second.totalObjects, 1);
+
+            await repository2.discard(second.id);
+            assert.equal(await repository2.getResumable(), null);
+          } finally {
+            await pool.end();
+          }
+          NODE
