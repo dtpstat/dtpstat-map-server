@@ -61,13 +61,14 @@ export function createGeometryEditorRouter({
     adminAuth.requireGeometryEditor,
     async (_request, response, next) => {
       try {
-        const [cities, lineTypes, tags] = await Promise.all([
+        const [cityResult, lineTypes, tags] = await Promise.all([
           geometryEditorRepository.listCities(),
           lineTypesRepository.list(),
           geometryEditorRepository.listTags(),
         ]);
         response.set('Cache-Control', 'no-store').json({
-          cities,
+          cities: cityResult.cities,
+          cityLinkState: cityResult.linkState,
           lineTypes,
           tags,
         });

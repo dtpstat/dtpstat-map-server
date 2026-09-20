@@ -73,3 +73,11 @@ test('geometry editor exposes visual staged-import conflict decisions', async ()
   assert.match(editor, /geometry-editor-import-incoming/);
   assert.match(editor, /geometry-editor-import-existing/);
 });
+
+
+test('geometry editor explains an actually empty active-city catalog', async () => {
+  const editor = await read('admin/geometry-editor.js');
+  assert.match(editor, /Нет активных городов в OSM-дереве/);
+  assert.match(editor, /Проверьте активность объектов в OSM-дереве/);
+  assert.match(editor, /cityLinkState/);
+});

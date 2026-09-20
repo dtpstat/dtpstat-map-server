@@ -1149,12 +1149,24 @@ if (section) {
     state.cities = payload.cities ?? [];
     state.lineTypes = payload.lineTypes ?? [];
     state.knownTags = payload.tags ?? [];
-    citySelect.replaceChildren(...state.cities.map((city) => {
+
+    if (state.cities.length === 0) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = Number(payload.cityLinkState?.activeBoundaries ?? 0) === 0
+        ? 'Нет активных городов в OSM-дереве'
+        : 'Активные OSM-объекты не удалось связать с городами';
+      option.disabled = true;
+      option.selected = true;
+      citySelect.replaceChildren(option);
+    } else {
+      citySelect.replaceChildren(...state.cities.map((city) => {
       const option = document.createElement('option');
       option.value = String(city.id);
-      option.textContent = `${city.name} (${city.geometryCount})`;
-      return option;
-    }));
+        option.textContent = `${city.name} (${city.geometryCount})`;
+        return option;
+      }));
+    }
     form.elements.lineTypeId.replaceChildren(...state.lineTypes.map((lineType) => {
       const option = document.createElement('option');
       option.value = String(lineType.id);
@@ -1201,9 +1213,16 @@ if (section) {
       const resolvedId = Number.isSafeInteger(cityId) && cityId > 0
         ? cityId
         : state.cities[0]?.id;
-      if (resolvedId) await loadCity(resolvedId, { keepSelection, fit });
+      if (resolvedId) {
+        await loadCity(resolvedId, { keepSelection, fit });
+        setMessage('');
+      } else {
+        setMessage(
+          'В редакторе нет активных городов. Проверьте активность объектов в OSM-дереве.',
+          'error',
+        );
+      }
       window.setTimeout(() => state.map?.resize(), 0);
-      setMessage('');
     } catch (error) {
       setMessage(error.message, 'error');
     }

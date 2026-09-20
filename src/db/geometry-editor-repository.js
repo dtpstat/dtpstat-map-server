@@ -11,6 +11,14 @@ const FAMILY_SQL = `
   END
 `;
 
+const ACTIVE_BOUNDARY_LINK_STATE_SQL = `
+  SELECT
+    COUNT(*)::integer AS "activeBoundaries",
+    COUNT(*) FILTER (WHERE city_id IS NULL)::integer AS "unlinkedBoundaries"
+  FROM city_boundaries
+  WHERE is_active
+`;
+
 const CITIES_SQL = `
   SELECT
     city.id::integer AS id,
@@ -172,6 +180,38 @@ async function rollbackQuietly(client) {
 
 /** @param {{ connect: Function, query: Function, databaseSchema?: string }} pool */
 export function createGeometryEditorRepository(pool) {
+  async function ensureActiveBoundaryCities() {
+    const stateResult = await pool.query(ACTIVE_BOUNDARY_LINK_STATE_SQL);
+    const state = stateResult.rows[0] ?? {
+      activeBoundaries: 0,
+      unlinkedBoundaries: 0,
+    };
+    if (Number(state.unlinkedBoundaries ?? 0) === 0) return state;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await acquireDataImportLock(client, pool);
+
+      // Recheck after the lock: an OSM/admin operation may have repaired the
+      // links while this request was waiting.
+      const lockedStateResult = await client.query(ACTIVE_BOUNDARY_LINK_STATE_SQL);
+      const lockedState = lockedStateResult.rows[0] ?? state;
+      if (Number(lockedState.unlinkedBoundaries ?? 0) > 0) {
+        await client.query('SELECT sync_active_boundary_cities()');
+      }
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await rollbackQuietly(client);
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    return (await pool.query(ACTIVE_BOUNDARY_LINK_STATE_SQL)).rows[0] ?? state;
+  }
+
   async function one(queryable, geometryId) {
     const result = await queryable.query(ONE_GEOMETRY_SQL, [geometryId]);
     return result.rows[0] ?? null;
@@ -273,11 +313,16 @@ export function createGeometryEditorRepository(pool) {
     },
 
     async listCities() {
+      const linkState = await ensureActiveBoundaryCities();
       const result = await pool.query(CITIES_SQL);
-      return result.rows;
+      return {
+        cities: result.rows,
+        linkState,
+      };
     },
 
     async listCity(cityId) {
+      await ensureActiveBoundaryCities();
       const [cityResult, geometries] = await Promise.all([
         pool.query(CITY_SQL, [cityId]),
         pool.query(GEOMETRIES_SQL, [cityId]),
