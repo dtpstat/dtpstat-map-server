@@ -165,6 +165,27 @@ export function resolveOsmCityUpdateRequest(body, query, config) {
     );
   }
 
+  const maxResponseBytesLimit =
+    config.maxResponseBytes ?? Math.min(config.maxBytes, 128 * 1024 * 1024);
+  const maxTotalBytesLimit = config.maxTotalBytes ?? config.maxBytes;
+  const maxResponseBytes = boundedQueryInteger(
+    query.maxResponseBytes,
+    'maxResponseBytes',
+    maxResponseBytesLimit,
+    maxResponseBytesLimit,
+  );
+  const maxTotalBytes = boundedQueryInteger(
+    query.maxTotalBytes ?? query.maxBytes,
+    query.maxTotalBytes === undefined ? 'maxBytes' : 'maxTotalBytes',
+    maxTotalBytesLimit,
+    maxTotalBytesLimit,
+  );
+  if (maxResponseBytes > maxTotalBytes) {
+    throw new OsmCityUpdateValidationError(
+      'maxResponseBytes must not exceed maxTotalBytes',
+    );
+  }
+
   const retryMaxDelayMs = rangedQueryInteger(
     query.retryMaxDelayMs,
     'retryMaxDelayMs',
@@ -202,7 +223,10 @@ export function resolveOsmCityUpdateRequest(body, query, config) {
       'queryTimeoutSeconds',
       config.queryTimeoutSeconds,
     ),
-    maxBytes: boundedQueryInteger(query.maxBytes, 'maxBytes', config.maxBytes),
+    maxResponseBytes,
+    maxTotalBytes,
+    // Deprecated compatibility alias.
+    maxBytes: maxTotalBytes,
     batchSize: boundedQueryInteger(
       query.batchSize,
       'batchSize',
