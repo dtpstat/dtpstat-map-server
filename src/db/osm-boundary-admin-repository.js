@@ -143,33 +143,39 @@ export function createOsmBoundaryAdminRepository(pool) {
           displayName: normalized.displayName ?? current.rows[0].displayName,
           displayType: normalized.displayType ?? current.rows[0].displayType,
         };
-        const result = await client.query(
+        await client.query(
           `UPDATE city_boundaries
               SET is_active = $2,
                   display_name = $3,
                   display_type = $4,
                   updated_at = now()
-            WHERE id = $1
-            RETURNING id::integer AS id,
-                      parent_id::integer AS "parentId",
-                      osm_type AS "osmType",
-                      osm_id::text AS "osmId",
-                      osm_name AS "osmName",
-                      place_type AS "placeType",
-                      admin_level::integer AS "adminLevel",
-                      is_active AS active,
-                      display_name AS "displayName",
-                      display_type AS "displayType",
-                      area_m2 / 1000000.0 AS "areaKm2",
-                      city_id::integer AS "cityId",
-                      tags,
-                      updated_at AS "updatedAt"`,
+            WHERE id = $1`,
           [id, next.active, next.displayName, next.displayType],
         );
         await client.query('SELECT sync_active_boundary_cities()');
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
+        const finalResult = await client.query(
+          `SELECT
+             boundary.id::integer AS id,
+             boundary.parent_id::integer AS "parentId",
+             boundary.osm_type AS "osmType",
+             boundary.osm_id::text AS "osmId",
+             boundary.osm_name AS "osmName",
+             boundary.place_type AS "placeType",
+             boundary.admin_level::integer AS "adminLevel",
+             boundary.is_active AS active,
+             boundary.display_name AS "displayName",
+             boundary.display_type AS "displayType",
+             boundary.area_m2 / 1000000.0 AS "areaKm2",
+             boundary.city_id::integer AS "cityId",
+             boundary.tags,
+             boundary.updated_at AS "updatedAt"
+           FROM city_boundaries AS boundary
+           WHERE boundary.id = $1`,
+          [id],
+        );
         await client.query('COMMIT');
-        return result.rows[0];
+        return finalResult.rows[0];
       } catch (error) {
         await client.query('ROLLBACK').catch(() => {});
         if (error?.code === '23505') {
