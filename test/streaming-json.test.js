@@ -153,3 +153,42 @@ test('streaming JSON parser rejects malformed JSON after previously delivered it
   );
   assert.deepEqual(seen, [1, 2]);
 });
+
+
+test('streaming JSON parser rejects excessive nesting depth', async () => {
+  const text = '{"features":[{"a":{"b":{"c":1}}}]}';
+  await assert.rejects(
+    parseStreamingJsonObject(chunked(Buffer.from(text)), {
+      arrayKey: 'features',
+      maxBytes: 4096,
+      maxItemBytes: 4096,
+      maxDepth: 2,
+      maxItems: 10,
+      onItem() {},
+    }),
+    (error) =>
+      error instanceof StreamingJsonError &&
+      /nesting depth/.test(error.message),
+  );
+});
+
+test('streaming JSON parser rejects excessive selected-array item count', async () => {
+  const seen = [];
+  const text = '{"populations":[{"id":1},{"id":2},{"id":3}]}';
+  await assert.rejects(
+    parseStreamingJsonObject(chunked(Buffer.from(text)), {
+      arrayKey: 'populations',
+      maxBytes: 4096,
+      maxItemBytes: 4096,
+      maxDepth: 16,
+      maxItems: 2,
+      onItem(item) {
+        seen.push(item);
+      },
+    }),
+    (error) =>
+      error instanceof StreamingJsonError &&
+      /more than the configured 2 items/.test(error.message),
+  );
+  assert.deepEqual(seen, [{ id: 1 }, { id: 2 }]);
+});
