@@ -43,6 +43,12 @@ test('OSM object editor is a top-level admin section with population editing', a
   assert.match(editor, /population\.dataset\.initialValue/);
   assert.match(editor, /changes\.population/);
   assert.match(
+    editor,
+    /https:\/\/tile\.openstreetmap\.org\/\{z\}\/\{x\}\/\{y\}\.png/,
+  );
+  assert.doesNotMatch(editor, /\{s\}\.tile\.openstreetmap\.org/);
+  assert.match(editor, /openstreetmap\.org\/copyright/);
+  assert.match(
     styles,
     /grid-template-columns:\s*minmax\(19rem, \.72fr\)[\s\S]*minmax\(30rem, 1\.8fr\)[\s\S]*minmax\(20rem, \.82fr\)/,
   );
