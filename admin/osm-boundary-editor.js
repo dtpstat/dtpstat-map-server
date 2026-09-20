@@ -14,7 +14,7 @@ if (typeof document !== 'undefined') {
       boundaries: [],
       selectedId: null,
       map: null,
-      layer: null,
+      mapReady: null,
     };
 
     const field = (name) => form.elements.namedItem(name);
@@ -225,35 +225,135 @@ if (typeof document !== 'undefined') {
       renderTree();
     }
 
-    function ensureMap() {
-      if (state.map || !globalThis.L) return;
-      state.map = globalThis.L.map(mapHost, { preferCanvas: true }).setView([55.75, 37.62], 4);
-      globalThis.L.tileLayer(
-        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-        {
-          maxZoom: 19,
-          attribution:
-            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        },
-      ).addTo(state.map);
+    const MAP_SOURCE_ID = 'osm-boundary-selection';
+    const MAP_FILL_LAYER_ID = 'osm-boundary-selection-fill';
+    const MAP_LINE_LAYER_ID = 'osm-boundary-selection-line';
+
+    function geometryBounds(feature) {
+      let west = Infinity;
+      let south = Infinity;
+      let east = -Infinity;
+      let north = -Infinity;
+
+      const visitCoordinates = (coordinates) => {
+        if (!Array.isArray(coordinates)) return;
+        if (
+          coordinates.length >= 2 &&
+          Number.isFinite(coordinates[0]) &&
+          Number.isFinite(coordinates[1])
+        ) {
+          west = Math.min(west, coordinates[0]);
+          south = Math.min(south, coordinates[1]);
+          east = Math.max(east, coordinates[0]);
+          north = Math.max(north, coordinates[1]);
+          return;
+        }
+        for (const coordinate of coordinates) visitCoordinates(coordinate);
+      };
+
+      const visitGeometry = (geometry) => {
+        if (!geometry) return;
+        if (geometry.type === 'GeometryCollection') {
+          for (const child of geometry.geometries ?? []) visitGeometry(child);
+          return;
+        }
+        visitCoordinates(geometry.coordinates);
+      };
+
+      visitGeometry(feature?.geometry);
+      return [west, south, east, north].every(Number.isFinite)
+        ? [[west, south], [east, north]]
+        : null;
+    }
+
+    async function ensureMap() {
+      if (state.mapReady) return state.mapReady;
+      if (!globalThis.mapboxgl) {
+        throw new Error('Mapbox GL не загрузился.');
+      }
+
+      state.mapReady = (async () => {
+        const payload = await api('/api/config');
+        const config = payload?.map;
+        if (!config?.accessToken || !config?.styleUrl) {
+          throw new Error('Настройки Mapbox для проекта не заданы.');
+        }
+
+        globalThis.mapboxgl.accessToken = config.accessToken;
+        state.map = new globalThis.mapboxgl.Map({
+          container: mapHost,
+          style: config.styleUrl,
+          center: config.initialCenter ?? [37.6173, 55.7558],
+          zoom: config.initialZoom ?? 4,
+        });
+        state.map.addControl(
+          new globalThis.mapboxgl.NavigationControl(),
+          'top-right',
+        );
+
+        await new Promise((resolve, reject) => {
+          const onLoad = () => {
+            state.map.off('error', onError);
+            resolve();
+          };
+          const onError = (event) => {
+            if (state.map.loaded()) return;
+            state.map.off('load', onLoad);
+            reject(event?.error ?? new Error('Mapbox GL не смог загрузить стиль.'));
+          };
+          state.map.once('load', onLoad);
+          state.map.on('error', onError);
+        });
+
+        state.map.addSource(MAP_SOURCE_ID, {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] },
+        });
+        state.map.addLayer({
+          id: MAP_FILL_LAYER_ID,
+          type: 'fill',
+          source: MAP_SOURCE_ID,
+          paint: {
+            'fill-color': '#3388ff',
+            'fill-opacity': 0.18,
+          },
+        });
+        state.map.addLayer({
+          id: MAP_LINE_LAYER_ID,
+          type: 'line',
+          source: MAP_SOURCE_ID,
+          paint: {
+            'line-color': '#3388ff',
+            'line-width': 3,
+          },
+        });
+        return state.map;
+      })();
+
+      try {
+        return await state.mapReady;
+      } catch (error) {
+        state.mapReady = null;
+        state.map?.remove();
+        state.map = null;
+        throw error;
+      }
     }
 
     async function showGeometry(id) {
-      ensureMap();
-      if (!state.map) {
-        setMessage('Leaflet не загрузился.', 'error');
-        return;
+      const [map, feature] = await Promise.all([
+        ensureMap(),
+        api(`/api/admin/osm-boundaries/${encodeURIComponent(id)}/geometry`),
+      ]);
+      map.getSource(MAP_SOURCE_ID).setData(feature);
+      const bounds = geometryBounds(feature);
+      if (bounds) {
+        map.fitBounds(bounds, {
+          padding: 32,
+          maxZoom: 15,
+        });
       }
-      const feature = await api(
-        `/api/admin/osm-boundaries/${encodeURIComponent(id)}/geometry`,
-      );
-      if (state.layer) state.map.removeLayer(state.layer);
-      state.layer = globalThis.L.geoJSON(feature, {
-        style: { weight: 3, fillOpacity: 0.18 },
-      }).addTo(state.map);
-      const bounds = state.layer.getBounds();
-      if (bounds.isValid()) state.map.fitBounds(bounds, { padding: [20, 20] });
-      window.setTimeout(() => state.map.invalidateSize(), 0);
+      window.setTimeout(() => map.resize(), 0);
     }
 
     async function selectBoundary(id) {
@@ -336,7 +436,7 @@ if (typeof document !== 'undefined') {
     refreshButton.addEventListener('click', () => void load());
     window.addEventListener('dtpstat:osm-boundary-editor-open', () => {
       void load();
-      window.setTimeout(() => state.map?.invalidateSize(), 0);
+      window.setTimeout(() => state.map?.resize(), 0);
     });
     window.addEventListener('dtpstat:osm-boundaries-reloaded', () => void load());
     void load({ keepSelection: false });
