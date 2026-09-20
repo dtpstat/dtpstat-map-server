@@ -283,6 +283,8 @@ export function createCityBoundaryTransferService(pool) {
           ]),
           maxBytes: operation.maxJsonBytes,
           maxItemBytes: operation.maxItemBytes,
+          maxDepth: operation.maxJsonDepth,
+          maxItems: operation.maxJsonItems,
           signal: operation.signal,
           async onItem(feature, featureIndex) {
             throwIfAdminTaskCancelled(operation.signal);
