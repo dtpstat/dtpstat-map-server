@@ -476,10 +476,65 @@ if (typeof document !== 'undefined') {
       }
     });
 
+    async function setBranchActive(nextActive) {
+      const item = state.boundaries.find(
+        (candidate) => candidate.id === state.selectedId,
+      );
+      if (!item) return;
+
+      const items = subtreeItems(item.id);
+      const changedCount = items.filter(
+        (entry) => entry.active !== nextActive,
+      ).length;
+      if (changedCount === 0) return;
+
+      const verb = nextActive ? 'Включить' : 'Отключить';
+      const confirmed = window.confirm(
+        `${verb} выбранный объект «${item.displayName}» и всю его ветку? ` +
+        `Объектов в ветке: ${items.length}; изменится: ${changedCount}.`,
+      );
+      if (!confirmed) return;
+
+      for (const control of [save, enableBranch, disableBranch]) {
+        if (control) control.disabled = true;
+      }
+      setMessage(nextActive ? 'Включаем ветку…' : 'Отключаем ветку…');
+
+      try {
+        const payload = await api(
+          `/api/admin/osm-boundaries/${encodeURIComponent(item.id)}/subtree`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ active: nextActive }),
+          },
+        );
+        await load();
+        const updated = state.boundaries.find(
+          (candidate) => candidate.id === item.id,
+        );
+        if (updated) applySelection(updated);
+        const result = payload.subtree;
+        setMessage(
+          `${nextActive ? 'Включено' : 'Отключено'} объектов: ` +
+          `${result.changedCount} из ${result.affectedCount}.`,
+          'success',
+        );
+        window.dispatchEvent(new CustomEvent('dtpstat:osm-boundary-changed'));
+      } catch (error) {
+        setMessage(error.message, 'error');
+        updateBranchActions(item);
+      } finally {
+        save.disabled = !state.selectedId;
+      }
+    }
+
     active.addEventListener('change', () => {
       population.disabled = !state.selectedId || !active.checked;
     });
 
+    enableBranch?.addEventListener('click', () => void setBranchActive(true));
+    disableBranch?.addEventListener('click', () => void setBranchActive(false));
     searchInput.addEventListener('input', () => renderTree());
     refreshButton.addEventListener('click', () => void load());
     window.addEventListener('dtpstat:osm-boundary-editor-open', () => {
