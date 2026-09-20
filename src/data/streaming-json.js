@@ -131,7 +131,7 @@ async function readStringRaw(reader, limit) {
   }
 }
 
-async function readValueRaw(reader, limit) {
+async function readValueRaw(reader, limit, maxDepth) {
   await reader.whitespace();
   const first = await reader.peek();
   if (first === null) {
@@ -180,6 +180,11 @@ async function readValueRaw(reader, limit) {
       }
       if (value === '{' || value === '[') {
         stack.push(value);
+        if (stack.length > maxDepth) {
+          throw new StreamingJsonError(
+            `JSON nesting depth exceeds the configured limit of ${maxDepth}`,
+          );
+        }
         continue;
       }
       if (value === '}' || value === ']') {
@@ -235,6 +240,8 @@ function parseRaw(raw, label) {
  *   metadataKeys?: Set<string>,
  *   maxBytes: number,
  *   maxItemBytes: number,
+ *   maxDepth?: number,
+ *   maxItems?: number,
  *   signal?: AbortSignal,
  *   onItem: (item: unknown, index: number) => Promise<void> | void,
  *   onProgress?: (progress: object) => Promise<void> | void
@@ -244,8 +251,17 @@ export async function parseStreamingJsonObject(source, options) {
   const reader = new AsyncCharReader(source, options);
   const metadata = {};
   const seenKeys = new Set();
+  const maxDepth = options.maxDepth ?? 128;
+  const maxItems = options.maxItems ?? 5_000_000;
   let arraySeen = false;
   let itemCount = 0;
+
+  if (!Number.isInteger(maxDepth) || maxDepth < 1) {
+    throw new StreamingJsonError('maxDepth must be a positive integer');
+  }
+  if (!Number.isInteger(maxItems) || maxItems < 1) {
+    throw new StreamingJsonError('maxItems must be a positive integer');
+  }
 
   await expect(reader, '{', 'JSON document must be a top-level object');
   await reader.whitespace();
@@ -271,7 +287,16 @@ export async function parseStreamingJsonObject(source, options) {
         await reader.whitespace();
         if (await reader.peek() !== ']') {
           for (;;) {
-            const raw = await readValueRaw(reader, options.maxItemBytes);
+            if (itemCount >= maxItems) {
+              throw new StreamingJsonError(
+                `JSON ${options.arrayKey} contains more than the configured ${maxItems} items`,
+              );
+            }
+            const raw = await readValueRaw(
+              reader,
+              options.maxItemBytes,
+              maxDepth,
+            );
             const item = parseRaw(
               raw,
               `JSON ${options.arrayKey} item ${itemCount}`,
@@ -298,7 +323,11 @@ export async function parseStreamingJsonObject(source, options) {
           await reader.next();
         }
       } else {
-        const raw = await readValueRaw(reader, options.maxItemBytes);
+        const raw = await readValueRaw(
+          reader,
+          options.maxItemBytes,
+          maxDepth,
+        );
         const value = parseRaw(raw, `JSON property ${key}`);
         if (options.metadataKeys?.has(key)) metadata[key] = value;
       }
