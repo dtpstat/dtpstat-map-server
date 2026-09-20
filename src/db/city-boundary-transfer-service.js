@@ -165,7 +165,12 @@ const INSERT_BOUNDARIES_SQL = `
   SELECT
     COALESCE(
       (SELECT city.id FROM cities AS city WHERE city.slug = stage.city_slug LIMIT 1),
-      (SELECT city.id FROM cities AS city WHERE city.name = stage.city_name LIMIT 1)
+      (
+        SELECT MIN(city.id)
+        FROM cities AS city
+        WHERE city.name = stage.city_name
+        HAVING COUNT(*) = 1
+      )
     ),
     stage.place_type,
     stage.admin_level,
