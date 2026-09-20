@@ -14,6 +14,7 @@ import {createDataImportService} from './db/data-import-service.js';
 import {createKmlUpdateService} from './db/kml-update-service.js';
 import {createLineTypesRepository} from './db/line-types-repository.js';
 import {createOsmCityUpdateService} from './db/osm-city-update-service.js';
+import {createOsmCityCheckpointRepository} from './db/osm-city-checkpoint-repository.js';
 import {createOsmImportSettingsRepository} from './db/osm-import-settings-repository.js';
 import {createOsmBoundaryAdminRepository} from './db/osm-boundary-admin-repository.js';
 import {createPopulationImportService} from './db/population-import-service.js';
@@ -79,10 +80,14 @@ async function main() {
   const kmlUpdateService = createKmlUpdateService(pool, config.kmlUpdate);
   const osmImportSettingsRepository = createOsmImportSettingsRepository(pool);
   const osmBoundaryAdminRepository = createOsmBoundaryAdminRepository(pool);
+  const osmCityCheckpointRepository = createOsmCityCheckpointRepository(pool);
   const osmCityUpdateService = createOsmCityUpdateService(
     pool,
     config.osmCityUpdate,
-    {settingsRepository: osmImportSettingsRepository},
+    {
+      settingsRepository: osmImportSettingsRepository,
+      checkpointRepository: osmCityCheckpointRepository,
+    },
   );
   const adminTaskSuccessRepository = createAdminTaskSuccessRepository(pool);
   const adminSecurityRepository = createAdminSecurityRepository(pool);
