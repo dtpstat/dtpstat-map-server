@@ -57,9 +57,6 @@ const LIST_CITIES_SQL = `
   WHERE EXISTS (
     SELECT 1
     FROM city_geometries AS geometry_presence
-    JOIN city_boundaries AS geometry_boundary
-      ON geometry_boundary.id = geometry_presence.boundary_id
-     AND geometry_boundary.is_active
     WHERE geometry_presence.city_id = city.id
   )
   ORDER BY city.is_large DESC NULLS LAST, report.rank NULLS LAST, city.name ASC
@@ -99,12 +96,6 @@ const CITY_GEOMETRIES_SQL = `
   LEFT JOIN city_geometries
     ON city_geometries.city_id = cities.id
    AND city_geometries.is_visible
-   AND EXISTS (
-     SELECT 1
-     FROM city_boundaries AS active_boundary
-     WHERE active_boundary.id = city_geometries.boundary_id
-       AND active_boundary.is_active
-   )
   LEFT JOIN line_types AS line_type ON line_type.id = city_geometries.line_type_id
   WHERE cities.id = $1
   GROUP BY cities.id
@@ -135,7 +126,7 @@ const VIEWPORT_GEOMETRIES_SQL = `
      AND geometry.geom && viewport.geom
      AND ST_Intersects(geometry.geom, viewport.geom)
     JOIN city_boundaries AS active_boundary
-      ON active_boundary.id = geometry.boundary_id
+      ON active_boundary.city_id = geometry.city_id
      AND active_boundary.is_active
     LEFT JOIN line_types AS line_type ON line_type.id = geometry.line_type_id
   ),
@@ -150,9 +141,6 @@ const VIEWPORT_GEOMETRIES_SQL = `
      AND EXISTS (
        SELECT 1
        FROM city_geometries AS geometry_presence
-       JOIN city_boundaries AS geometry_boundary
-         ON geometry_boundary.id = geometry_presence.boundary_id
-        AND geometry_boundary.is_active
        WHERE geometry_presence.city_id = boundary.city_id
      )
     ORDER BY ST_Area(boundary.geom::geography), boundary.city_id

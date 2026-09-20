@@ -219,12 +219,6 @@ export function compileReportMetricQuery(metric) {
           ON population.city_id = city.id
         LEFT JOIN city_geometries AS geometry
           ON geometry.city_id = city.id
-         AND EXISTS (
-           SELECT 1
-           FROM city_boundaries AS metric_boundary
-           WHERE metric_boundary.id = geometry.boundary_id
-             AND metric_boundary.is_active
-         )
         LEFT JOIN line_types AS line_type
           ON line_type.id = geometry.line_type_id
         GROUP BY city.id, population.population

@@ -81,6 +81,24 @@ const DELETE_OMITTED_LINE_TYPES_SQL = `
       FROM payload
       WHERE LOWER(BTRIM(payload.name)) = LOWER(BTRIM(line_type.name))
     )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM city_geometries AS geometry
+      WHERE geometry.line_type_id = line_type.id
+    )
+`;
+
+const ASSERT_LEGACY_LINE_REPLACE_SAFE_SQL = `
+  SELECT COUNT(*)::integer AS count
+  FROM city_geometries
+  WHERE GeometryType(geom) IN ('LINESTRING', 'MULTILINESTRING')
+    AND was_edited
+`;
+
+const DELETE_REPLACEABLE_LINES_SQL = `
+  DELETE FROM city_geometries
+  WHERE GeometryType(geom) IN ('LINESTRING', 'MULTILINESTRING')
+    AND NOT was_edited
 `;
 
 const FIND_UNKNOWN_BOUNDARIES_SQL = `
@@ -301,7 +319,7 @@ const INSERT_STREAM_GEOMETRIES_SQL = `
     source_tags
   )
   SELECT
-    city.id,
+    COALESCE(city.id, boundary.city_id),
     boundary.id,
     line_type.id,
     stage.lanes,
@@ -359,7 +377,7 @@ const INSERT_GEOMETRIES_SQL = `
     source_tags
   )
   SELECT
-    city.id,
+    COALESCE(city.id, boundary.city_id),
     boundary.id,
     line_type.id,
     prepared.lanes,
@@ -393,6 +411,7 @@ export function createDataImportService(pool) {
       try {
         await client.query('BEGIN');
         await acquireDataImportLock(client, pool);
+        await client.query('SELECT assert_no_pending_geometry_import()');
         throwIfAdminTaskCancelled(operation.signal);
         await client.query(CREATE_STREAM_RAW_SQL);
 
@@ -537,7 +556,13 @@ export function createDataImportService(pool) {
         }
         await client.query(LINK_STREAM_BOUNDARIES_SQL);
 
-        await client.query('DELETE FROM city_geometries');
+        const editedLines = await client.query(ASSERT_LEGACY_LINE_REPLACE_SAFE_SQL);
+        if (Number(editedLines.rows[0]?.count ?? 0) > 0) {
+          throw new GeoJsonValidationError(
+            'Legacy line replacement import is blocked because manually edited lines exist. Resolve/import them through the geometry conflict workflow instead.',
+          );
+        }
+        await client.query(DELETE_REPLACEABLE_LINES_SQL);
         if (plan.lineTypes.length > 0) {
           const dictionary = JSON.stringify(plan.lineTypes);
           await client.query(DELETE_OMITTED_LINE_TYPES_SQL, [dictionary]);
@@ -610,6 +635,7 @@ export function createDataImportService(pool) {
       try {
         await client.query('BEGIN');
         await acquireDataImportLock(client, pool);
+        await client.query('SELECT assert_no_pending_geometry_import()');
         throwIfAdminTaskCancelled(operation.signal);
 
         await client.query(UPSERT_CITIES_SQL, [JSON.stringify(plan.cities)]);
@@ -643,7 +669,13 @@ export function createDataImportService(pool) {
         }
         await client.query(LINK_BOUNDARIES_SQL, [serializedGeometries]);
 
-        await client.query('DELETE FROM city_geometries');
+        const editedLines = await client.query(ASSERT_LEGACY_LINE_REPLACE_SAFE_SQL);
+        if (Number(editedLines.rows[0]?.count ?? 0) > 0) {
+          throw new GeoJsonValidationError(
+            'Legacy line replacement import is blocked because manually edited lines exist. Resolve/import them through the geometry conflict workflow instead.',
+          );
+        }
+        await client.query(DELETE_REPLACEABLE_LINES_SQL);
         if (plan.lineTypes.length > 0) {
           const dictionary = JSON.stringify(plan.lineTypes);
           await client.query(DELETE_OMITTED_LINE_TYPES_SQL, [dictionary]);
