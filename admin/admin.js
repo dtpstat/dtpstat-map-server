@@ -44,6 +44,7 @@ const state = {
   task: null,
   adminConfig: null,
   osmSettings: null,
+  osmCheckpoint: null,
   lastSuccessfulUpdates: {},
   selected: 'osm',
   selectedOperations: {
@@ -75,6 +76,10 @@ const elements = {
   osmURL: document.querySelector('#osm-url'),
   osmDefaults: document.querySelector('#osm-defaults'),
   osmSettingsSave: document.querySelector('#osm-settings-save'),
+  osmCheckpoint: document.querySelector('#osm-checkpoint'),
+  osmCheckpointSummary: document.querySelector('#osm-checkpoint-summary'),
+  osmResume: document.querySelector('#osm-resume'),
+  osmCheckpointDiscard: document.querySelector('#osm-checkpoint-discard'),
   cityGeoJsonForm: document.querySelector('#city-geojson-form'),
   kmlForm: document.querySelector('#kml-form'),
   lineGeoJsonForm: document.querySelector('#line-geojson-form'),
@@ -264,6 +269,56 @@ function latestSuccessfulUpdate(key) {
   return updates[0] ?? null;
 }
 
+function renderOsmCheckpoint() {
+  const checkpoint = state.osmCheckpoint;
+  if (!elements.osmCheckpoint) return;
+
+  elements.osmCheckpoint.hidden = !checkpoint;
+  const startButton = elements.osmForm.querySelector(
+    '[data-task-type="osm-city-update"]',
+  );
+  if (startButton) {
+    startButton.dataset.startLabel = checkpoint
+      ? 'Запустить OSM заново'
+      : 'Запустить OSM';
+    if (!active(state.task)) {
+      startButton.textContent = startButton.dataset.startLabel;
+    }
+  }
+
+  if (!checkpoint) return;
+
+  const percent = checkpoint.totalObjects > 0
+    ? Math.floor(checkpoint.stagedObjects * 100 / checkpoint.totalObjects)
+    : 0;
+  const checkpointStatusLabels = {
+    downloading: 'загрузка прервана/может быть продолжена',
+    failed: 'последняя попытка завершилась ошибкой',
+    cancelled: 'последняя попытка отменена',
+    ready: 'все геометрии загружены, можно применить',
+  };
+  const updatedAt = checkpoint.updatedAt
+    ? new Date(checkpoint.updatedAt).toLocaleString('ru-RU')
+    : '—';
+  elements.osmCheckpointSummary.textContent =
+    checkpoint.stagedObjects + ' из ' + checkpoint.totalObjects +
+    ' объектов (' + percent + '%), осталось ' +
+    checkpoint.remainingObjects + '. Статус: ' +
+    (checkpointStatusLabels[checkpoint.status] ?? checkpoint.status) +
+    '. Обновлён: ' + updatedAt + '.';
+
+  const locked = Boolean(active(state.task));
+  elements.osmResume.disabled = locked;
+  elements.osmCheckpointDiscard.disabled = locked;
+}
+
+async function loadOsmCheckpoint() {
+  const payload = await api('/api/admin/osm-checkpoint');
+  state.osmCheckpoint = payload.checkpoint ?? null;
+  renderOsmCheckpoint();
+  return state.osmCheckpoint;
+}
+
 function renderSuccessfulUpdates() {
   for (const element of elements.successfulUpdates) {
     const update = latestSuccessfulUpdate(element.dataset.lastSuccess);
@@ -302,6 +357,7 @@ function render() {
   renderResult(task);
   renderControls(task);
   renderSuccessfulUpdates();
+  renderOsmCheckpoint();
 }
 
 function applyTask(task, announce = false) {
