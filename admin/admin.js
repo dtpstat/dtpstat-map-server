@@ -405,7 +405,9 @@ async function api(path, options = {}) {
 }
 
 function portableFileOptions(file, jsonContentType) {
-  const zip = file.name.toLocaleLowerCase('en-US').endsWith('.zip');
+  const zip =
+    file.type === 'application/zip' ||
+    file.name.toLocaleLowerCase('en-US').endsWith('.zip');
   return {
     headers: {
       'Content-Type': zip ? 'application/zip' : jsonContentType,
