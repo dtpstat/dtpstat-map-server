@@ -141,6 +141,114 @@ export function createOsmBoundaryAdminRepository(pool) {
       return result.rows[0]?.feature ?? null;
     },
 
+    async setSubtreeActive(boundaryId, active) {
+      const id = positiveId(boundaryId);
+      if (typeof active !== 'boolean') {
+        throw new OsmBoundaryAdminValidationError('active must be boolean');
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await acquireDataImportLock(client, pool);
+
+        const subtree = await client.query(
+          `WITH RECURSIVE subtree AS (
+             SELECT boundary.id, boundary.is_active
+             FROM city_boundaries AS boundary
+             WHERE boundary.id = $1
+
+             UNION ALL
+
+             SELECT child.id, child.is_active
+             FROM city_boundaries AS child
+             JOIN subtree AS parent
+               ON child.parent_id = parent.id
+           )
+           SELECT boundary.id::integer AS id,
+                  boundary.is_active AS active
+           FROM city_boundaries AS boundary
+           JOIN subtree
+             ON subtree.id = boundary.id
+           ORDER BY boundary.id
+           FOR UPDATE OF boundary`,
+          [id],
+        );
+
+        if (subtree.rowCount === 0) {
+          await client.query('ROLLBACK');
+          return null;
+        }
+
+        const ids = subtree.rows.map((row) => row.id);
+        const previousActiveCount = subtree.rows.filter((row) => row.active).length;
+        const previousInactiveCount = subtree.rowCount - previousActiveCount;
+        const changedCount = active
+          ? previousInactiveCount
+          : previousActiveCount;
+
+        if (changedCount > 0) {
+          await client.query(
+            `UPDATE city_boundaries
+                SET is_active = $2,
+                    updated_at = now()
+              WHERE id = ANY($1::integer[])
+                AND is_active IS DISTINCT FROM $2`,
+            [ids, active],
+          );
+          await client.query('SELECT sync_active_boundary_cities()');
+          await client.query(RECALCULATE_CITY_STATISTICS_SQL);
+        }
+
+        const rootResult = await client.query(
+          `SELECT
+             boundary.id::integer AS id,
+             boundary.parent_id::integer AS "parentId",
+             boundary.osm_type AS "osmType",
+             boundary.osm_id::text AS "osmId",
+             boundary.osm_name AS "osmName",
+             boundary.place_type AS "placeType",
+             boundary.admin_level::integer AS "adminLevel",
+             boundary.is_active AS active,
+             boundary.display_name AS "displayName",
+             boundary.display_type AS "displayType",
+             boundary.area_m2 / 1000000.0 AS "areaKm2",
+             boundary.city_id::integer AS "cityId",
+             population.population::integer AS population,
+             population.as_of AS "populationAsOf",
+             population.source AS "populationSource",
+             boundary.tags,
+             boundary.updated_at AS "updatedAt"
+           FROM city_boundaries AS boundary
+           LEFT JOIN city_populations AS population
+             ON population.city_id = boundary.city_id
+           WHERE boundary.id = $1`,
+          [id],
+        );
+
+        await client.query('COMMIT');
+        return {
+          root: rootResult.rows[0],
+          active,
+          affectedCount: subtree.rowCount,
+          changedCount,
+          previousActiveCount,
+          previousInactiveCount,
+        };
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        if (error?.code === '23505') {
+          throw new OsmBoundaryAdminValidationError(
+            'Cannot activate the whole branch because active OSM objects would have duplicate normalized type and name',
+            409,
+          );
+        }
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
     async update(boundaryId, changes) {
       const id = positiveId(boundaryId);
       const normalized = normalizePayload(changes);
