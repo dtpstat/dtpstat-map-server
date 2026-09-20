@@ -8,6 +8,7 @@ import {
   validateReportConfig,
 } from '../data/report-config.js';
 import { acquireDataImportLock } from './database-locks.js';
+import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 import {
   compileReportMetricQuery,
   compileReportRankQuery,
@@ -412,6 +413,7 @@ export function createProjectSettingsTransferService(pool) {
           securitySettings.auditRetentionDays,
         ]);
 
+        await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         const materializedCities = await materializeReport(client, reportConfig);
         await client.query('COMMIT');
         return {
