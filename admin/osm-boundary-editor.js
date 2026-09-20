@@ -1,6 +1,7 @@
 if (typeof document !== 'undefined') {
   const panel = document.querySelector('#admin-section-osm-objects');
   const treeHost = document.querySelector('#osm-boundary-tree');
+  const searchInput = document.querySelector('#osm-boundary-search');
   const refreshButton = document.querySelector('#osm-boundary-refresh');
   const form = document.querySelector('#osm-boundary-form');
   const title = document.querySelector('#osm-boundary-selected-title');
@@ -8,7 +9,7 @@ if (typeof document !== 'undefined') {
   const message = document.querySelector('#osm-boundary-message');
   const mapHost = document.querySelector('#osm-boundary-map');
 
-  if (panel && treeHost && refreshButton && form && mapHost) {
+  if (panel && treeHost && searchInput && refreshButton && form && mapHost) {
     const state = {
       boundaries: [],
       selectedId: null,
@@ -48,6 +49,39 @@ if (typeof document !== 'undefined') {
           ? `admin_level=${item.adminLevel}`
           : 'OSM';
       return `${classification} · ${item.osmType}/${item.osmId}`;
+    }
+
+    function normalizeSearchText(value) {
+      return String(value ?? '')
+        .toLocaleLowerCase('ru-RU')
+        .replace(/\s+/gu, '');
+    }
+
+    function boundarySearchText(item) {
+      return normalizeSearchText([
+        item.displayName,
+        item.osmName,
+        item.displayType,
+        item.placeType,
+        item.adminLevel === null ? '' : `admin_level=${item.adminLevel}`,
+        item.osmType,
+        item.osmId,
+        `${item.osmType}/${item.osmId}`,
+        item.placeType ? `place=${item.placeType}` : 'administrative',
+      ].join(' '));
+    }
+
+    function compareBoundaries(a, b) {
+      const compareText = (left, right) => String(left ?? '').localeCompare(
+        String(right ?? ''),
+        'ru-RU',
+        { sensitivity: 'base', numeric: true },
+      );
+      return compareText(a.displayName, b.displayName) ||
+        compareText(a.displayType, b.displayType) ||
+        compareText(a.osmType, b.osmType) ||
+        compareText(a.osmId, b.osmId) ||
+        a.id - b.id;
     }
 
     function node(item, childrenByParent) {
@@ -94,24 +128,41 @@ if (typeof document !== 'undefined') {
     function renderTree() {
       treeHost.replaceChildren();
       const byId = new Map(state.boundaries.map((item) => [item.id, item]));
+      const query = normalizeSearchText(searchInput.value);
+      const visibleIds = new Set();
+
+      if (query) {
+        for (const item of state.boundaries) {
+          if (!boundarySearchText(item).includes(query)) continue;
+          let current = item;
+          while (current && !visibleIds.has(current.id)) {
+            visibleIds.add(current.id);
+            current = byId.get(current.parentId);
+          }
+        }
+      } else {
+        for (const item of state.boundaries) visibleIds.add(item.id);
+      }
+
       const childrenByParent = new Map();
       for (const item of state.boundaries) {
-        const parentId = byId.has(item.parentId) ? item.parentId : null;
+        if (!visibleIds.has(item.id)) continue;
+        const parentId = visibleIds.has(item.parentId) ? item.parentId : null;
         const list = childrenByParent.get(parentId) ?? [];
         list.push(item);
         childrenByParent.set(parentId, list);
       }
-      const sort = (items) => items.sort((a, b) =>
-        Number(b.active) - Number(a.active) ||
-        a.displayName.localeCompare(b.displayName, 'ru-RU') ||
-        a.id - b.id);
-      for (const items of childrenByParent.values()) sort(items);
+      for (const items of childrenByParent.values()) {
+        items.sort(compareBoundaries);
+      }
 
       const roots = childrenByParent.get(null) ?? [];
       if (!roots.length) {
         const empty = document.createElement('p');
         empty.className = 'empty-state';
-        empty.textContent = 'OSM-объекты ещё не загружены.';
+        empty.textContent = query
+          ? 'По запросу ничего не найдено.'
+          : 'OSM-объекты ещё не загружены.';
         treeHost.append(empty);
         return;
       }
@@ -281,6 +332,7 @@ if (typeof document !== 'undefined') {
       population.disabled = !state.selectedId || !active.checked;
     });
 
+    searchInput.addEventListener('input', () => renderTree());
     refreshButton.addEventListener('click', () => void load());
     window.addEventListener('dtpstat:osm-boundary-editor-open', () => {
       void load();
