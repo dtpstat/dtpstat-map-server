@@ -292,20 +292,50 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
       maxStreamUploadBytes: integerValue(
         env,
         'IMPORT_API_MAX_STREAM_UPLOAD_BYTES',
-        2 * 1024 * 1024 * 1024,
-        { min: 1024 * 1024, max: 0xffffffff },
+        8 * 1024 * 1024 * 1024,
+        {
+          min: 1024 * 1024,
+          max: 64 * 1024 * 1024 * 1024,
+        },
       ),
       maxStreamJsonBytes: integerValue(
         env,
         'IMPORT_API_MAX_STREAM_JSON_BYTES',
-        3 * 1024 * 1024 * 1024,
-        { min: 1024 * 1024, max: 0xffffffff },
+        32 * 1024 * 1024 * 1024,
+        {
+          min: 1024 * 1024,
+          max: 128 * 1024 * 1024 * 1024,
+        },
       ),
       maxStreamItemBytes: integerValue(
         env,
         'IMPORT_API_MAX_STREAM_ITEM_BYTES',
         128 * 1024 * 1024,
         { min: 1024 * 1024, max: 1024 * 1024 * 1024 },
+      ),
+      maxStreamZipCompressionRatio: integerValue(
+        env,
+        'IMPORT_API_MAX_STREAM_ZIP_RATIO',
+        1000,
+        { min: 1, max: 100000 },
+      ),
+      maxStreamZipEntries: integerValue(
+        env,
+        'IMPORT_API_MAX_STREAM_ZIP_ENTRIES',
+        64,
+        { min: 1, max: 10000 },
+      ),
+      maxStreamJsonDepth: integerValue(
+        env,
+        'IMPORT_API_MAX_STREAM_JSON_DEPTH',
+        128,
+        { min: 4, max: 4096 },
+      ),
+      maxStreamJsonItems: integerValue(
+        env,
+        'IMPORT_API_MAX_STREAM_JSON_ITEMS',
+        5_000_000,
+        { min: 1, max: 100_000_000 },
       ),
       streamUploadDirectory: path.join(
         projectRoot,
