@@ -363,7 +363,7 @@ test('OSM total byte budget is reported separately from one-response limit', asy
   const base = createDependencies();
   const service = createOsmCityUpdateService(pool, {
     ...config,
-    maxResponseBytes: 1000,
+    maxResponseBytes: 40,
     maxTotalBytes: 45,
   }, {
     ...base,
