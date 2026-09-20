@@ -39,3 +39,171 @@ jobs:
       - run: npm run check
       - run: npm run db:init
       - run: npm run db:migrate
+      - name: Smoke-test streaming JSON imports and exports against PostGIS
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import pg from 'pg';
+          import { Readable } from 'node:stream';
+          import { createCityBoundaryTransferService } from './src/db/city-boundary-transfer-service.js';
+          import { createDataImportService } from './src/db/data-import-service.js';
+          import { createPopulationImportService } from './src/db/population-import-service.js';
+          import { createDataExportRepository } from './src/db/data-export-repository.js';
+
+          const { Pool } = pg;
+          const pool = new Pool({
+            host: process.env.DATABASE_HOST,
+            port: Number(process.env.DATABASE_PORT),
+            database: process.env.DATABASE_NAME,
+            user: process.env.DATABASE_ROLE,
+            password: process.env.DATABASE_ROLE_PASSWORD,
+            ssl: false,
+            max: 4,
+            options: '-c search_path=' + process.env.DATABASE_SCHEMA + ',public',
+          });
+          pool.databaseSchema = process.env.DATABASE_SCHEMA;
+
+          const streamOptions = {
+            maxJsonBytes: 16 * 1024 * 1024,
+            maxItemBytes: 4 * 1024 * 1024,
+          };
+          const jsonStream = (value) => Readable.from([
+            Buffer.from(JSON.stringify(value)),
+          ]);
+
+          const boundaryId = 991234567;
+          const citySnapshot = {
+            type: 'FeatureCollection',
+            schemaVersion: 2,
+            features: [{
+              type: 'Feature',
+              geometry: {
+                type: 'Polygon',
+                coordinates: [[
+                  [30, 60], [30.2, 60], [30.2, 60.2],
+                  [30, 60.2], [30, 60],
+                ]],
+              },
+              properties: {
+                placeType: 'city',
+                adminLevel: null,
+                active: true,
+                displayName: 'Streaming Test City',
+                displayType: 'city',
+                osmType: 'relation',
+                osmId: boundaryId,
+                osmName: 'Streaming Test City',
+                tags: { name: 'Streaming Test City', place: 'city' },
+                osmTimestamp: '2026-09-20T12:00:00.000Z',
+                updatedAt: '2026-09-20T12:00:00.000Z',
+                city: {
+                  slug: 'streaming-test-city',
+                  name: 'Streaming Test City',
+                  fullName: 'Streaming Test City',
+                  displayType: 'city',
+                  attributes: { smoke: true },
+                },
+              },
+            }],
+          };
+
+          try {
+            const cityService = createCityBoundaryTransferService(pool);
+            const cityResult = await cityService.replaceFromGeoJsonStream(
+              jsonStream(citySnapshot),
+              streamOptions,
+            );
+            assert.equal(cityResult.importedPlaces, 1);
+            assert.equal(cityResult.streamed, true);
+
+            const lineSnapshot = {
+              type: 'FeatureCollection',
+              schemaVersion: 3,
+              lineTypes: [{
+                code: 0,
+                name: 'default',
+                title: 'Обычные',
+                color: '#045b69',
+                style: 'solid',
+                width: 4,
+              }],
+              features: [{
+                type: 'Feature',
+                geometry: {
+                  type: 'LineString',
+                  coordinates: [[30.02, 60.02], [30.15, 60.15]],
+                },
+                properties: {
+                  short_name: 'Streaming Test City',
+                  name: 'Streaming Test City',
+                  lanes: 1,
+                  _dtpstat: {
+                    citySlug: 'streaming-test-city',
+                    boundaryOsmType: 'relation',
+                    boundaryOsmId: boundaryId,
+                    businessTypeCode: 0,
+                  },
+                },
+              }],
+            };
+            const lineService = createDataImportService(pool);
+            const lineResult = await lineService.replaceFromGeoJsonStream(
+              jsonStream(lineSnapshot),
+              streamOptions,
+            );
+            assert.equal(lineResult.geometries, 1);
+            assert.equal(lineResult.streamed, true);
+
+            const populationService = createPopulationImportService(pool);
+            const populationResult = await populationService.updateFromJsonStream(
+              jsonStream({
+                schemaVersion: 1,
+                populations: [{
+                  name: 'Streaming Test City',
+                  type: 'city',
+                  population: 12345,
+                  asOf: '2026-09-20',
+                  source: 'CI',
+                }],
+              }),
+              streamOptions,
+            );
+            assert.equal(populationResult.cities, 1);
+            assert.equal(populationResult.streamed, true);
+
+            const exportRepository = createDataExportRepository(pool);
+            const collect = async (source) => {
+              let text = '';
+              for await (const chunk of source) text += chunk;
+              return JSON.parse(text);
+            };
+            const cities = await collect(exportRepository.streamCityBoundaries());
+            const lines = await collect(exportRepository.streamLines());
+            const populations = await collect(exportRepository.streamPopulations());
+            assert.equal(cities.features.length, 1);
+            assert.equal(lines.features.length, 1);
+            assert.equal(populations.populations.length, 1);
+
+            const before = await pool.query(
+              'SELECT count(*)::integer AS count FROM city_boundaries',
+            );
+            await assert.rejects(
+              cityService.replaceFromGeoJsonStream(
+                Readable.from([
+                  Buffer.from(
+                    '{"type":"FeatureCollection","features":[' +
+                    JSON.stringify(citySnapshot.features[0]) +
+                    '],"broken":',
+                  ),
+                ]),
+                streamOptions,
+              ),
+            );
+            const after = await pool.query(
+              'SELECT count(*)::integer AS count FROM city_boundaries',
+            );
+            assert.equal(after.rows[0].count, before.rows[0].count);
+          } finally {
+            await pool.end();
+          }
+          NODE
