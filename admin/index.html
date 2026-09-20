@@ -243,7 +243,7 @@
                   <label>GeoJSON OSM-границ
                     <input name="file" type="file"
                            accept=".json,.geojson,.zip,application/json,application/geo+json,application/zip" required>
-                    <small>FeatureCollection schemaVersion 2 переносит place/admin признаки, OSM type/id, active/displayName/displayType и Polygon/MultiPolygon.</small>
+                    <small>Принимается GeoJSON или ZIP ровно с одним GeoJSON/JSON-файлом. FeatureCollection schemaVersion 2 переносит place/admin признаки, OSM type/id, active/displayName/displayType и Polygon/MultiPolygon.</small>
                   </label>
                   <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
                 </div>
@@ -323,7 +323,7 @@
                   <label>GeoJSON линий
                     <input name="file" type="file"
                            accept=".json,.geojson,.zip,application/json,application/geo+json,application/zip" required>
-                    <small>Канонический schemaVersion 3 переносит lineTypes и _dtpstat.businessTypeCode. Сопоставление на целевой БД идёт по NAME; локальные CODE могут отличаться.</small>
+                    <small>Принимается GeoJSON или ZIP ровно с одним GeoJSON/JSON-файлом. Канонический schemaVersion 3 переносит lineTypes и _dtpstat.businessTypeCode. Сопоставление на целевой БД идёт по NAME; локальные CODE могут отличаться.</small>
                   </label>
                 </div>
                 <button class="task-action" type="submit" data-task-action="kml"
@@ -366,7 +366,7 @@
                 <div class="form-fields">
                   <label>JSON-файл
                     <input name="file" type="file" accept=".json,.zip,application/json,application/zip">
-                    <small>Файл собственного экспорта принимается без преобразования, включая schemaVersion/exportedAt и индивидуальные asOf/source.</small>
+                    <small>Принимается JSON или ZIP ровно с одним JSON-файлом. Файл собственного экспорта принимается без преобразования, включая schemaVersion/exportedAt и индивидуальные asOf/source.</small>
                   </label>
                   <label>Или данные JSON
                     <textarea name="payload" rows="16" placeholder="Загрузка актуального примера…"></textarea>
