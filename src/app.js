@@ -17,6 +17,7 @@ import { createBasicAuth } from './http/basic-auth.js';
 import { projectManifest, renderProjectPage } from './http/project-page.js';
 import { createAdminSecurityRouter } from './routes/admin-security-api.js';
 import { createApiRouter } from './routes/api.js';
+import { createGeometryEditorRouter } from './routes/geometry-editor-api.js';
 import { createKmlTransferRouter } from './routes/kml-transfer-api.js';
 import { createLineTypesRouter } from './routes/line-types-api.js';
 import { createOsmBoundariesRouter } from './routes/osm-boundaries-api.js';
@@ -308,7 +309,9 @@ function testSecurity(config) {
  *   refreshPublicDownloadsAfterSettingsImport?: () => Promise<any>,
  *   refreshProjectDerived?: () => Promise<any>,
  *   refreshOsmBoundaryDerived?: () => Promise<any>,
+ *   refreshGeometryDerived?: (details?: object) => Promise<any>,
  *   osmImportSettingsRepository?: { get: Function, save: Function },
+ *   geometryEditorRepository?: { listCities: Function, listCity: Function },
  *   osmBoundaryAdminRepository?: { list: Function, getGeometry: Function, update: Function },
  *   exportRepository: import('./routes/api.js').DataExportRepository,
  *   importService: import('./routes/api.js').DataImportService,
@@ -332,8 +335,10 @@ export function createApp({
   refreshPublicDownloadsAfterSettingsImport,
   refreshProjectDerived,
   refreshOsmBoundaryDerived,
+  refreshGeometryDerived,
   osmImportSettingsRepository,
   osmBoundaryAdminRepository,
+  geometryEditorRepository,
   exportRepository,
   importService,
   cityBoundaryTransferService,
@@ -473,6 +478,16 @@ export function createApp({
     afterPublicDownloadNameSave: async () => refreshPublicDownloads?.(),
     afterSettingsSave: async () => refreshProjectDerived?.(),
   }));
+  if (geometryEditorRepository) {
+    app.use('/api', createGeometryEditorRouter({
+      geometryEditorRepository,
+      lineTypesRepository: effectiveLineTypesRepository,
+      adminAuth: effectiveAdminAuth,
+      securityService: effectiveSecurityService,
+      maxBodyBytes: config.importApi.maxBodyBytes,
+      afterChange: async (details) => refreshGeometryDerived?.(details),
+    }));
+  }
   if (osmImportSettingsRepository && osmBoundaryAdminRepository) {
     app.use('/api', createOsmBoundariesRouter({
       settingsRepository: osmImportSettingsRepository,

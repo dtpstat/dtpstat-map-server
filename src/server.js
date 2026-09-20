@@ -11,6 +11,7 @@ import {createCitiesRepository} from './db/cities-repository.js';
 import {createCityBoundaryTransferService} from './db/city-boundary-transfer-service.js';
 import {createDataExportRepository} from './db/data-export-repository.js';
 import {createDataImportService} from './db/data-import-service.js';
+import {createGeometryEditorRepository} from './db/geometry-editor-repository.js';
 import {createKmlUpdateService} from './db/kml-update-service.js';
 import {createLineTypesRepository} from './db/line-types-repository.js';
 import {createOsmCityUpdateService} from './db/osm-city-update-service.js';
@@ -76,6 +77,7 @@ async function main() {
     directory: path.join(config.projectRoot, 'var', 'public-downloads'),
   });
   const importService = createDataImportService(pool);
+  const geometryEditorRepository = createGeometryEditorRepository(pool);
   const cityBoundaryTransferService = createCityBoundaryTransferService(pool);
   const populationService = createPopulationImportService(pool);
   const kmlUpdateService = createKmlUpdateService(pool, config.kmlUpdate);
@@ -213,8 +215,13 @@ async function main() {
       await refreshReportValues({reason: 'osm-boundary-settings'});
       return refreshPublicDownloads({reason: 'osm-boundary-settings'});
     },
+    refreshGeometryDerived: async (details = {}) => {
+      await refreshReportValues({reason: 'geometry-editor', ...details});
+      return refreshPublicDownloads({reason: 'geometry-editor', ...details});
+    },
     osmImportSettingsRepository,
     osmBoundaryAdminRepository,
+    geometryEditorRepository,
     exportRepository,
     importService,
     cityBoundaryTransferService,
