@@ -73,7 +73,7 @@ MAPBOX_ACCESS_TOKEN=pk....
 
 ## Миграции
 
-Текущий набор: `V001…V028`.
+Текущий набор: `V001…V030`.
 
 Последние migrations:
 
@@ -89,18 +89,22 @@ V025__public_download_name.sql
 V026__dynamic_public_download_links.sql
 V027__osm_boundary_management.sql
 V028__osm_download_size_limits.sql
+V029__resumable_osm_updates.sql
+V030__osm_checkpoint_batch_count.sql
 ```
 
-Назначение `V023…V028`:
+Назначение `V023…V030`:
 
 - `V023` — logical `FULL_NAME` OSM boundary, merge relation fragments по `PLACE_TYPE + FULL_NAME`, sync `CITIES.FULL_NAME`;
 - `V024` — ordered `REPORT_CONFIG.RANK_SORT`;
 - `V025` — configurable `PROJECT_SETTINGS.PUBLIC_DOWNLOAD_NAME`;
 - `V026` — dynamic footer placeholders для GeoJSON/CSV URLs;
 - `V027` — отмена name-based relation merge, active/display OSM identity, containment hierarchy, DB-backed import settings и large/small thresholds;
-- `V028` — отдельные single-response/total byte limits для OSM и adaptive split слишком крупных geometry batches.
+- `V028` — отдельные single-response/total byte limits для OSM и adaptive split слишком крупных geometry batches;
+- `V029` — persistent OSM checkpoint/index/stage для resume после failure/cancel/Node restart;
+- `V030` — cumulative staged batch count для resumable OSM update.
 
-Следующая migration: **V029+**. Опубликованные migration files не изменяются задним числом.
+Следующая migration: **V031+**. Опубликованные migration files не изменяются задним числом.
 
 ## Production за nginx
 
@@ -256,6 +260,18 @@ Runtime OSM settings (`place=city/town`, administrative admin_level range,
 batch size, throttling, timeout/retry limits, max response bytes и max total
 bytes) хранятся в `OSM_IMPORT_SETTINGS`. Большой geometry batch автоматически
 дробится, если один Overpass response превышает single-response limit.
+
+С V029 успешные geometry batches не являются process-local: индекс и stage
+сохраняются в `OSM_CITY_UPDATE_CHECKPOINTS` /
+`OSM_CITY_UPDATE_CHECKPOINT_STAGE`. Ошибка задачи или restart Node не удаляют
+этот прогресс. Resume разрешён только при совпадении fingerprint source URL,
+selectors, admin_level range, Overpass query timeout и batch semantics с
+checkpoint. Retry/throttle/network limits можно менять между попытками.
+Production boundaries заменяются только после полного stage одной транзакцией.
+Completed/discarded checkpoint metadata очищается автоматически через 7 дней,
+failed/cancelled — через 90 дней; `downloading` после crash и `ready` не
+удаляются автоматически.
+
 Deployment allowlists
 `OSM_CITY_UPDATE_ALLOWED_HOSTS/URLS` остаются в ENV как security boundary.
 
