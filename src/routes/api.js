@@ -278,6 +278,18 @@ export function createApiRouter({
     }
   };
 
+  const portableServiceMethod = (service, streamingName, legacyName) => {
+    if (typeof service[streamingName] === 'function') {
+      return service[streamingName].bind(service);
+    }
+    return async (source, operation) => {
+      const chunks = [];
+      for await (const chunk of source) chunks.push(Buffer.from(chunk));
+      const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      return service[legacyName](payload, operation);
+    };
+  };
+
   const executePortableUpload = async (
     upload,
     context,
@@ -479,80 +491,77 @@ export function createApiRouter({
     ),
   );
 
-  const lineImportMiddleware = [
-    adminAuth.requireData,
-    rejectWhileAdminTaskActive,
-    jsonBody(
-      importApi.maxBodyBytes,
-      ['application/json', 'application/geo+json'],
-    ),
-  ];
-  const importLines = (request, response, next) => {
-    if (request.body === undefined) {
-      response.status(415).json({
-        error: 'Content-Type must be application/json or application/geo+json',
-      });
-      return;
-    }
-    startAdminTask(request, response, next, {
+  const importLines = async (request, response, next) => {
+    const upload = await receivePortableUpload(request, response, next);
+    if (!upload) return;
+    const task = startAdminTask(request, response, next, {
       type: 'geojson-import',
       endpoint: '/api/admin/import/lines',
       recordsSuccessfulUpdate: true,
       parameters: {
-        featureCount: Array.isArray(request.body?.features) ? request.body.features.length : null,
-        businessLineTypes: Array.isArray(request.body?.lineTypes) ? request.body.lineTypes.length : null,
-        payload: adminAuditPayloadFingerprint(request.body),
+        transport: upload.contentType,
+        contentEncoding: upload.contentEncoding,
+        uploadBytes: upload.bytes,
+        uploadSha256: upload.sha256,
       },
-    }, async (context) => importService.replaceFromGeoJson(
-      request.body,
-      {
-        signal: context.signal,
-        onCommit: () => context.beginCommit(),
-        onProgress: (progress) => progressLog(context, progress),
-      },
+    }, async (context) => executePortableUpload(
+      upload,
+      context,
+      portableServiceMethod(
+        importService,
+        'replaceFromGeoJsonStream',
+        'replaceFromGeoJson',
+      ),
     ));
+    if (!task) await removeStreamUpload(upload).catch(() => {});
   };
-  router.post('/admin/import', ...lineImportMiddleware, importLines);
-  router.post('/admin/import/lines', ...lineImportMiddleware, importLines);
+  router.post(
+    '/admin/import',
+    adminAuth.requireData,
+    rejectWhileAdminTaskActive,
+    importLines,
+  );
+  router.post(
+    '/admin/import/lines',
+    adminAuth.requireData,
+    rejectWhileAdminTaskActive,
+    importLines,
+  );
 
   router.post(
     '/admin/import/cities',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
-    jsonBody(
-      importApi.maxBodyBytes,
-      ['application/json', 'application/geo+json'],
-    ),
-    (request, response, next) => {
-      if (request.body === undefined) {
-        response.status(415).json({
-          error: 'Content-Type must be application/json or application/geo+json',
-        });
-        return;
-      }
+    async (request, response, next) => {
       const dryRun = parseBoolean(request.query.dryRun, false);
       if (dryRun === null) {
         response.status(400).json({ error: 'dryRun must be true or false' });
         return;
       }
-      startAdminTask(request, response, next, {
+      const upload = await receivePortableUpload(request, response, next);
+      if (!upload) return;
+      const task = startAdminTask(request, response, next, {
         type: 'city-geojson-import',
         endpoint: '/api/admin/import/cities',
         recordsSuccessfulUpdate: !dryRun,
         parameters: {
           dryRun,
-          featureCount: Array.isArray(request.body?.features) ? request.body.features.length : null,
-          payload: adminAuditPayloadFingerprint(request.body),
+          transport: upload.contentType,
+          contentEncoding: upload.contentEncoding,
+          uploadBytes: upload.bytes,
+          uploadSha256: upload.sha256,
         },
-      }, async (context) => cityBoundaryTransferService.replaceFromGeoJson(
-        request.body,
-        {
-          dryRun,
-          signal: context.signal,
-          onCommit: () => context.beginCommit(),
-          onProgress: (progress) => progressLog(context, progress),
-        },
+      }, async (context) => executePortableUpload(
+        upload,
+        context,
+        portableServiceMethod(
+          cityBoundaryTransferService,
+          'replaceFromGeoJsonStream',
+          'replaceFromGeoJson',
+        ),
+        { dryRun },
       ));
+      if (!task) await removeStreamUpload(upload).catch(() => {});
     },
   );
 
@@ -838,30 +847,29 @@ export function createApiRouter({
     '/admin/populations',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
-    jsonBody(importApi.maxBodyBytes, 'application/json'),
-    (request, response, next) => {
-      if (request.body === undefined) {
-        response.status(415).json({ error: 'Content-Type must be application/json' });
-        return;
-      }
-      startAdminTask(request, response, next, {
+    async (request, response, next) => {
+      const upload = await receivePortableUpload(request, response, next);
+      if (!upload) return;
+      const task = startAdminTask(request, response, next, {
         type: 'population-update',
         endpoint: '/api/admin/populations',
         recordsSuccessfulUpdate: true,
         parameters: {
-          recordCount: Array.isArray(request.body?.populations) ? request.body.populations.length : null,
-          asOf: request.body?.asOf ?? null,
-          source: request.body?.source ?? null,
-          payload: adminAuditPayloadFingerprint(request.body),
+          transport: upload.contentType,
+          contentEncoding: upload.contentEncoding,
+          uploadBytes: upload.bytes,
+          uploadSha256: upload.sha256,
         },
-      }, async (context) => populationService.updateFromJson(
-        request.body,
-        {
-          signal: context.signal,
-          onCommit: () => context.beginCommit(),
-          onProgress: (progress) => progressLog(context, progress),
-        },
+      }, async (context) => executePortableUpload(
+        upload,
+        context,
+        portableServiceMethod(
+          populationService,
+          'updateFromJsonStream',
+          'updateFromJson',
+        ),
       ));
+      if (!task) await removeStreamUpload(upload).catch(() => {});
     },
   );
 
