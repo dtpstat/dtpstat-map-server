@@ -95,6 +95,23 @@ function repository() {
   };
 }
 
+async function readJsonStream(source) {
+  const chunks = [];
+  for await (const chunk of source) chunks.push(Buffer.from(chunk));
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+function withStreamingMethod(service, streamingName, legacyName) {
+  if (typeof service?.[streamingName] === 'function') return service;
+  if (typeof service?.[legacyName] !== 'function') return service;
+  return {
+    ...service,
+    async [streamingName](source, operation) {
+      return service[legacyName](await readJsonStream(source), operation);
+    },
+  };
+}
+
 async function withServer(callback, overrides = {}) {
   const app = createApp({
     repository: repository(),
@@ -103,15 +120,27 @@ async function withServer(callback, overrides = {}) {
       async exportLines() { return lineSnapshot; },
       async exportPopulations() { return populationSnapshot; },
     },
-    importService: overrides.importService ?? {
-      async replaceFromGeoJson() { return { geometries: 0 }; },
-    },
-    cityBoundaryTransferService: overrides.cityBoundaryTransferService ?? {
-      async replaceFromGeoJson() { return { importedPlaces: 0 }; },
-    },
-    populationService: overrides.populationService ?? {
-      async updateFromJson() { return { cities: 0 }; },
-    },
+    importService: withStreamingMethod(
+      overrides.importService ?? {
+        async replaceFromGeoJson() { return { geometries: 0 }; },
+      },
+      'replaceFromGeoJsonStream',
+      'replaceFromGeoJson',
+    ),
+    cityBoundaryTransferService: withStreamingMethod(
+      overrides.cityBoundaryTransferService ?? {
+        async replaceFromGeoJson() { return { importedPlaces: 0 }; },
+      },
+      'replaceFromGeoJsonStream',
+      'replaceFromGeoJson',
+    ),
+    populationService: withStreamingMethod(
+      overrides.populationService ?? {
+        async updateFromJson() { return { cities: 0 }; },
+      },
+      'updateFromJsonStream',
+      'updateFromJson',
+    ),
     kmlUpdateService: { async update() { return {}; } },
     osmCityUpdateService: { async update() { return {}; } },
     config: config(),
