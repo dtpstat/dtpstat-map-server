@@ -264,7 +264,10 @@ function createCheckpointRepositoryMock() {
         cityPlaces: values.filter((item) => item.placeType === 'city').length,
         townPlaces: values.filter((item) => item.placeType === 'town').length,
         administrativePlaces: values.filter(
-          (item) => item.adminLevel != null && item.placeType == null,
+          (item) =>
+            item.adminLevel !== null &&
+            item.adminLevel !== undefined &&
+            (item.placeType === null || item.placeType === undefined),
         ).length,
         duplicateNames: [...names.values()].filter((count) => count > 1).length,
       };
