@@ -1,4 +1,6 @@
 import express, { Router } from 'express';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import {
   AdminTaskAlreadyRunningError,
 } from '../data/admin-task-manager.js';
@@ -11,6 +13,13 @@ import {
   OsmCityUpdateValidationError,
   resolveOsmCityUpdateRequest,
 } from '../data/osm-city-update-options.js';
+import { createSingleFileZipStream } from '../data/single-file-zip.js';
+import {
+  openUploadedJson,
+  receiveStreamUpload,
+  removeStreamUpload,
+  StreamUploadError,
+} from '../http/stream-upload.js';
 import {
   adminClientIp,
   createAdminOperationAudit,
@@ -52,7 +61,13 @@ import {
  *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
  *   securityService: ReturnType<import('../data/admin-security.js').createAdminSecurityService>,
  *   publicMap: object,
- *   importApi: { maxBodyBytes: number },
+ *   importApi: {
+ *     maxBodyBytes: number,
+ *     maxStreamUploadBytes: number,
+ *     maxStreamJsonBytes: number,
+ *     maxStreamItemBytes: number,
+ *     streamUploadDirectory: string
+ *   },
  *   kmlUpdate: { maxRequestBodyBytes: number, cityBufferMeters: number, cityBufferMaxMeters: number },
  *   osmCityUpdate: any
  * }} dependencies
@@ -172,12 +187,14 @@ export function createApiRouter({
         taskId: task.id,
         task: { ...task, statusURL },
       });
+      return task;
     } catch (error) {
       if (error instanceof AdminTaskAlreadyRunningError) {
         respondWithActiveTask(request, response, error.task);
-        return;
+        return null;
       }
       next(error);
+      return null;
     }
   };
 
@@ -203,6 +220,99 @@ export function createApiRouter({
         next(error);
       }
     };
+
+  const streamingExportRoute = (
+    fileName,
+    contentType,
+    streamLoader,
+    fallbackLoader,
+    zip = false,
+  ) => async (request, response, next) => {
+    try {
+      const source = typeof streamLoader === 'function'
+        ? streamLoader()
+        : [JSON.stringify(await fallbackLoader()), '\n'];
+      const output = zip
+        ? createSingleFileZipStream(fileName, source, {
+            signal: request.signal,
+          })
+        : Readable.from(source);
+      const downloadName = zip ? `${fileName}.zip` : fileName;
+      response
+        .set('Cache-Control', 'no-store')
+        .set(
+          'Content-Disposition',
+          `attachment; filename="${downloadName}"`,
+        )
+        .type(zip ? 'application/zip' : contentType);
+      await pipeline(output, response);
+    } catch (error) {
+      if (response.headersSent) {
+        response.destroy(error);
+        return;
+      }
+      next(error);
+    }
+  };
+
+  const portableContentTypes = new Set([
+    'application/json',
+    'application/geo+json',
+    'application/zip',
+  ]);
+
+  const receivePortableUpload = async (request, response, next) => {
+    try {
+      return await receiveStreamUpload(request, {
+        directory: importApi.streamUploadDirectory,
+        maxUploadBytes: importApi.maxStreamUploadBytes,
+        allowedContentTypes: portableContentTypes,
+      });
+    } catch (error) {
+      if (error instanceof StreamUploadError) {
+        response.status(error.statusCode).json({ error: error.message });
+        return null;
+      }
+      next(error);
+      return null;
+    }
+  };
+
+  const executePortableUpload = async (
+    upload,
+    context,
+    serviceMethod,
+    operation = {},
+  ) => {
+    try {
+      const input = await openUploadedJson(upload, {
+        maxJsonBytes: importApi.maxStreamJsonBytes,
+        signal: context.signal,
+      });
+      context.log('Входной поток подготовлен', {
+        transport: input.transport,
+        archiveEntry: input.fileName,
+        uploadBytes: upload.bytes,
+        expectedJsonBytes: input.expectedJsonBytes,
+      });
+      return await serviceMethod(input.stream, {
+        ...operation,
+        maxJsonBytes: importApi.maxStreamJsonBytes,
+        maxItemBytes: importApi.maxStreamItemBytes,
+        signal: context.signal,
+        onCommit: () => context.beginCommit(),
+        onProgress: (progress) => progressLog(context, progress),
+      });
+    } finally {
+      await removeStreamUpload(upload).catch((error) => {
+        context.log(
+          'Не удалось удалить временный upload-файл',
+          { message: error.message },
+          'warning',
+        );
+      });
+    }
+  };
 
   router.get('/config', (_request, response) => {
     response.set('Cache-Control', 'public, max-age=300');
@@ -291,34 +401,81 @@ export function createApiRouter({
     }
   });
 
+  const cityStream = exportRepository.streamCityBoundaries?.bind(
+    exportRepository,
+  );
+  const lineStream = exportRepository.streamLines?.bind(exportRepository);
+  const populationStream = exportRepository.streamPopulations?.bind(
+    exportRepository,
+  );
+
   router.get(
     '/admin/export/cities',
     adminAuth.requireData,
     operationAudit('data.export.cities'),
-    exportRoute(
+    streamingExportRoute(
       'cities.geojson',
       'application/geo+json',
+      cityStream,
       () => exportRepository.exportCityBoundaries(),
+    ),
+  );
+  router.get(
+    '/admin/export/cities.zip',
+    adminAuth.requireData,
+    operationAudit('data.export.cities-zip'),
+    streamingExportRoute(
+      'cities.geojson',
+      'application/geo+json',
+      cityStream,
+      () => exportRepository.exportCityBoundaries(),
+      true,
     ),
   );
   router.get(
     '/admin/export/lines',
     adminAuth.requireData,
     operationAudit('data.export.lines'),
-    exportRoute(
+    streamingExportRoute(
       'lines.geojson',
       'application/geo+json',
+      lineStream,
       () => exportRepository.exportLines(),
+    ),
+  );
+  router.get(
+    '/admin/export/lines.zip',
+    adminAuth.requireData,
+    operationAudit('data.export.lines-zip'),
+    streamingExportRoute(
+      'lines.geojson',
+      'application/geo+json',
+      lineStream,
+      () => exportRepository.exportLines(),
+      true,
     ),
   );
   router.get(
     '/admin/export/populations',
     adminAuth.requireData,
     operationAudit('data.export.populations'),
-    exportRoute(
+    streamingExportRoute(
       'populations.json',
       'application/json',
+      populationStream,
       () => exportRepository.exportPopulations(),
+    ),
+  );
+  router.get(
+    '/admin/export/populations.zip',
+    adminAuth.requireData,
+    operationAudit('data.export.populations-zip'),
+    streamingExportRoute(
+      'populations.json',
+      'application/json',
+      populationStream,
+      () => exportRepository.exportPopulations(),
+      true,
     ),
   );
 
