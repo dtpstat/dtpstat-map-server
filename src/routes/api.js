@@ -67,6 +67,10 @@ import {
  *     maxStreamUploadBytes: number,
  *     maxStreamJsonBytes: number,
  *     maxStreamItemBytes: number,
+ *     maxStreamZipCompressionRatio?: number,
+ *     maxStreamZipEntries?: number,
+ *     maxStreamJsonDepth?: number,
+ *     maxStreamJsonItems?: number,
  *     streamUploadDirectory: string
  *   },
  *   kmlUpdate: { maxRequestBodyBytes: number, cityBufferMeters: number, cityBufferMaxMeters: number },
@@ -96,6 +100,11 @@ export function createApiRouter({
     maxUploadBytes: importApi.maxStreamUploadBytes ?? importApi.maxBodyBytes,
     maxJsonBytes: importApi.maxStreamJsonBytes ?? importApi.maxBodyBytes,
     maxItemBytes: importApi.maxStreamItemBytes ?? importApi.maxBodyBytes,
+    maxZipCompressionRatio:
+      importApi.maxStreamZipCompressionRatio ?? 1000,
+    maxZipEntries: importApi.maxStreamZipEntries ?? 64,
+    maxJsonDepth: importApi.maxStreamJsonDepth ?? 128,
+    maxJsonItems: importApi.maxStreamJsonItems ?? 5_000_000,
   };
   const adminStatusURL = (request, taskId) =>
     `${request.baseUrl}/admin/status/${taskId}`;
@@ -290,6 +299,8 @@ export function createApiRouter({
     try {
       const input = await openUploadedJson(upload, {
         maxJsonBytes: streamTransfer.maxJsonBytes,
+        maxZipCompressionRatio: streamTransfer.maxZipCompressionRatio,
+        maxZipEntries: streamTransfer.maxZipEntries,
         signal: context.signal,
       });
       context.log('Входной поток подготовлен', {
@@ -302,6 +313,8 @@ export function createApiRouter({
         ...operation,
         maxJsonBytes: streamTransfer.maxJsonBytes,
         maxItemBytes: streamTransfer.maxItemBytes,
+        maxJsonDepth: streamTransfer.maxJsonDepth,
+        maxJsonItems: streamTransfer.maxJsonItems,
         signal: context.signal,
         onCommit: () => context.beginCommit(),
         onProgress: (progress) => progressLog(context, progress),
