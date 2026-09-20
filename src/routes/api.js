@@ -213,22 +213,6 @@ export function createApiRouter({
     type,
   });
 
-  const sendDownload = (response, fileName, contentType, payload) => {
-    response.set('Cache-Control', 'no-store');
-    response.set('Content-Disposition', `attachment; filename="${fileName}"`);
-    response.type(contentType).send(JSON.stringify(payload));
-  };
-
-  const exportRoute = (fileName, contentType, loader) =>
-    async (_request, response, next) => {
-      try {
-        const payload = await loader();
-        sendDownload(response, fileName, contentType, payload);
-      } catch (error) {
-        next(error);
-      }
-    };
-
   const streamingExportRoute = (
     fileName,
     contentType,
