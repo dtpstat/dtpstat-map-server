@@ -793,41 +793,117 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         options.queryTimeoutSeconds,
         options,
       );
-      const indexParts = [];
       const indexFinalURLs = new Set();
-      const indexedKeys = new Set();
-      let indexedPlaces = 0;
-      for (const [partOffset, indexQuery] of indexQueries.entries()) {
-        const indexDownload = await downloadQuery(indexQuery.query, {
-          requestPhase: 'index',
-          indexPart: partOffset + 1,
-          indexPartCount: indexQueries.length,
-        });
-        const parsedPart = parseIndex(indexDownload.jsonText);
-        const wrongType = parsedPart.objects.find((object) =>
-          object.osmType !== indexQuery.osmType);
-        if (wrongType) {
+      let index;
+
+      if (mode.resume) {
+        const objects = await checkpointRepository.getIndexObjects(checkpoint.id);
+        if (!Array.isArray(objects) || objects.length === 0) {
           throw new OsmCityUpdateValidationError(
-            `OSM ${indexQuery.kind}/${indexQuery.osmType} index returned ${objectKey(wrongType)}`,
+            'Saved OSM checkpoint has no reusable object index',
           );
         }
-        indexParts.push(parsedPart);
-        indexFinalURLs.add(indexDownload.finalURL);
-        for (const object of parsedPart.objects) indexedKeys.add(objectKey(object));
-        indexedPlaces = indexedKeys.size;
+        const actualIndexFingerprint = checkpointIndexFingerprint(objects);
+        if (actualIndexFingerprint !== checkpoint.indexFingerprint) {
+          throw new OsmCityUpdateValidationError(
+            'Saved OSM checkpoint index fingerprint does not match its stored object index',
+          );
+        }
+        index = {
+          objects,
+          sourceElements: checkpoint.sourceElements,
+          duplicateIndexObjects: checkpoint.duplicateIndexObjects,
+          osmTimestamp: checkpoint.osmTimestamp,
+        };
+        indexFinalURLs.add(checkpoint.sourceURL);
+      } else {
+        const indexParts = [];
+        const indexedKeys = new Set();
+        let indexedPlaces = 0;
+        for (const [partOffset, indexQuery] of indexQueries.entries()) {
+          const indexDownload = await downloadQuery(indexQuery.query, {
+            requestPhase: 'index',
+            indexPart: partOffset + 1,
+            indexPartCount: indexQueries.length,
+          });
+          const parsedPart = parseIndex(indexDownload.jsonText);
+          const wrongType = parsedPart.objects.find((object) =>
+            object.osmType !== indexQuery.osmType);
+          if (wrongType) {
+            throw new OsmCityUpdateValidationError(
+              `OSM ${indexQuery.kind}/${indexQuery.osmType} index returned ${objectKey(wrongType)}`,
+            );
+          }
+          indexParts.push(parsedPart);
+          indexFinalURLs.add(indexDownload.finalURL);
+          for (const object of parsedPart.objects) {
+            indexedKeys.add(objectKey(object));
+          }
+          indexedPlaces = indexedKeys.size;
+          const progress = {
+            phase: 'index',
+            indexPart: partOffset + 1,
+            indexPartCount: indexQueries.length,
+            indexedPlaces,
+          };
+          reportProgress(progress);
+          operation.onProgress?.(progress);
+        }
+        index = combineIndexParts(indexParts);
+
+        if (checkpointRepository) {
+          if (checkpoint && mode.restart) {
+            await checkpointRepository.discard(checkpoint.id);
+            checkpoint = null;
+          }
+          checkpoint = await checkpointRepository.create({
+            sourceURL: options.url,
+            settingsFingerprint,
+            indexFingerprint: checkpointIndexFingerprint(index.objects),
+            options: checkpointOptionSnapshot(options),
+            indexObjects: index.objects.map((object) => ({
+              osmType: object.osmType,
+              osmId: object.osmId,
+            })),
+            sourceElements: index.sourceElements,
+            duplicateIndexObjects: index.duplicateIndexObjects,
+            osmTimestamp: index.osmTimestamp,
+            downloadedBytes,
+            requestAttemptCount,
+            retryCount,
+            retryWaitMs,
+            throttleWaitMs,
+          });
+          rememberPersistedMetrics();
+        }
+      }
+
+      const stagedKeys = checkpointRepository
+        ? await checkpointRepository.getStagedKeys(checkpoint.id)
+        : new Set();
+      let stagedPlaces = stagedKeys.size;
+      const pendingObjects = checkpointRepository
+        ? index.objects.filter((object) => !stagedKeys.has(objectKey(object)))
+        : index.objects;
+
+      if (mode.resume) {
         const progress = {
-          phase: 'index',
-          indexPart: partOffset + 1,
-          indexPartCount: indexQueries.length,
-          indexedPlaces,
+          phase: 'resume',
+          checkpointId: checkpoint.id,
+          checkpointStatus: checkpoint.status,
+          stagedPlaces,
+          indexedPlaces: index.objects.length,
+          remainingPlaces: pendingObjects.length,
         };
         reportProgress(progress);
         operation.onProgress?.(progress);
       }
-      const index = combineIndexParts(indexParts);
+
       const geometryBatches = [];
-      for (let offset = 0; offset < index.objects.length; offset += options.batchSize) {
-        geometryBatches.push(index.objects.slice(offset, offset + options.batchSize));
+      for (let offset = 0; offset < pendingObjects.length; offset += options.batchSize) {
+        geometryBatches.push(
+          pendingObjects.slice(offset, offset + options.batchSize),
+        );
       }
       const client = await pool.connect();
       let inTransaction = false;
