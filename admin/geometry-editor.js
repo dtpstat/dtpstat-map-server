@@ -936,7 +936,15 @@ if (section) {
     conflictTitle.textContent = conflict.displayName || ('Incoming #' + conflict.incomingId);
     conflictDescription.textContent =
       conflict.cityName + '; тип линии: ' + conflict.lineTypeName +
-      '; sourceTags incoming: ' + JSON.stringify(conflict.sourceTags || {});
+      '; sourceTags incoming: ' + JSON.stringify(conflict.sourceTags || {}) +
+      (conflict.autoExistingId
+        ? '; точное совпадение уже существует: geometry #' + conflict.autoExistingId
+        : '');
+
+    conflictAdd.disabled = Boolean(conflict.autoExistingId);
+    conflictAdd.title = conflict.autoExistingId
+      ? 'Нельзя создать дубль: incoming уже имеет точное совпадение с теми же source_tags'
+      : '';
 
     const decision = state.conflictDecisions.get(conflict.incomingId);
     const selectedIds = new Set((decision && decision.replaceExistingIds) || []);
@@ -1025,6 +1033,14 @@ if (section) {
   function setConflictDecision(action) {
     const conflict = activeConflict();
     if (!conflict) return;
+    if (action === 'add-new' && conflict.autoExistingId) {
+      setMessage(
+        'Новая запись не создаётся: incoming уже имеет точное совпадение с теми же source_tags.',
+        'error',
+      );
+      return;
+    }
+
     let replaceExistingIds = [];
     if (action === 'replace') {
       replaceExistingIds = Array.from(

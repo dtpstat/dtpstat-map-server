@@ -402,6 +402,26 @@ async function loadConflictSets(client, sessionId) {
   return candidates;
 }
 
+async function loadConflictAutoMatches(client, sessionId) {
+  const result = await client.query(`
+    SELECT
+      stage.id::integer AS "incomingId",
+      stage.auto_existing_id::integer AS "existingId"
+    FROM geometry_import_stage AS stage
+    WHERE stage.session_id = $1
+      AND stage.auto_existing_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM geometry_import_conflicts AS conflict
+        WHERE conflict.session_id = stage.session_id
+          AND conflict.incoming_id = stage.id
+      )
+  `, [sessionId]);
+  return new Map(
+    result.rows.map((row) => [Number(row.incomingId), Number(row.existingId)]),
+  );
+}
+
 async function protectExisting(client, sessionId) {
   await client.query(`
     CREATE TEMP TABLE geometry_import_preserve_existing (
@@ -439,6 +459,7 @@ async function applyStaged(client, sessionId, rawDecisions = []) {
   }
 
   const conflictSets = await loadConflictSets(client, sessionId);
+  const conflictAutoMatches = await loadConflictAutoMatches(client, sessionId);
   const decisions = decisionMap(rawDecisions);
   for (const incomingId of conflictSets.keys()) {
     if (!decisions.has(incomingId)) {
@@ -453,6 +474,13 @@ async function applyStaged(client, sessionId, rawDecisions = []) {
     if (!candidates) {
       throw new GeometryImportSessionError(
         `Incoming geometry ${decision.incomingId} has no conflict requiring a decision`,
+        400,
+      );
+    }
+    const autoExistingId = conflictAutoMatches.get(decision.incomingId) ?? null;
+    if (decision.action === 'add-new' && autoExistingId !== null) {
+      throw new GeometryImportSessionError(
+        `Incoming geometry ${decision.incomingId} already has exact existing match ${autoExistingId}; add-new would create a duplicate`,
         400,
       );
     }
@@ -521,8 +549,34 @@ async function applyStaged(client, sessionId, rawDecisions = []) {
   let keptConflicts = 0;
   let addedConflicts = 0;
   let replacedExisting = 0;
+  let conflictAutoMatched = 0;
   for (const [incomingId] of conflictSets) {
     const decision = decisions.get(incomingId);
+    const autoExistingId = conflictAutoMatches.get(incomingId) ?? null;
+
+    if (autoExistingId !== null) {
+      // The incoming object already has an exact, same-source-tags identity.
+      // Refresh that canonical row once; conflict decisions only decide what
+      // to do with the additional spatial candidates.
+      await client.query(
+        UPDATE_EXISTING_FROM_STAGE_SQL,
+        [autoExistingId, incomingId],
+      );
+      conflictAutoMatched += 1;
+
+      if (decision.action === 'keep-existing') {
+        keptConflicts += 1;
+        continue;
+      }
+
+      const deleted = await client.query(
+        'DELETE FROM city_geometries WHERE id = ANY($1::bigint[]) RETURNING id',
+        [decision.replaceExistingIds],
+      );
+      replacedExisting += deleted.rowCount;
+      continue;
+    }
+
     if (decision.action === 'keep-existing') {
       keptConflicts += 1;
       continue;
@@ -591,7 +645,8 @@ async function applyStaged(client, sessionId, rawDecisions = []) {
     completedAt: asIso(runResult.rows[0].createdAt),
     stagedGeometries: Number(metadata.importedGeometries ?? 0),
     insertedGeometries: inserted,
-    automaticallyMatched: autoRows.rows.length,
+    automaticallyMatched: autoRows.rows.length + conflictAutoMatched,
+    conflictAutoMatched,
     removedObsoleteSourceGeometries: removed.rowCount,
     keptConflictGeometries: keptConflicts,
     addedConflictGeometries: addedConflicts,
