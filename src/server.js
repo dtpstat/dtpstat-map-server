@@ -25,6 +25,7 @@ import {createReportConfigService} from './db/report-config-service.js';
 import {createPool} from './db/pool.js';
 import {createAdminAuthorization} from './http/admin-auth.js';
 import {createAdminWebSocketGateway} from './http/admin-websocket.js';
+import {cleanupStreamUploads} from './http/stream-upload.js';
 import {closeServer, startServers} from './http/start-servers.js';
 import {
   runServiceOperation,
@@ -118,6 +119,16 @@ async function main() {
     'database.health',
     () => repository.health(),
     {details: {schema: config.database.schema}},
+  );
+  await runServiceOperation(
+    'portable-import-spool.cleanup',
+    () => cleanupStreamUploads(config.importApi.streamUploadDirectory),
+    {
+      successDetails: (removed) => ({
+        directory: config.importApi.streamUploadDirectory,
+        removed,
+      }),
+    },
   );
   await runServiceOperation(
     'osm-import-settings.bootstrap',
