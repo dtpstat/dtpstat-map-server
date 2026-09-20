@@ -515,9 +515,11 @@ test('HTTP 429 waits and retries the same OSM request without advancing the batc
       requestPhase: 'geometry',
       batch: 1,
       batchCount: 2,
+      objectCount: 2,
       statusCode: 429,
       attempt: 1,
       maxRetries: 3,
+      configuredMaxRetries: 3,
       waitMs: 60,
       retryAt: '1970-01-01T00:00:00.080Z',
       retryAfterMs: 60,
@@ -609,7 +611,7 @@ test('repeated HTTP 504 splits a multi-object geometry batch instead of exhausti
 
   assert.equal(result.importedPlaces, 3);
   assert.equal(result.batchCount, 3);
-  assert.equal(geometryAttempts, 6);
+  assert.equal(geometryAttempts, 7);
   assert.deepEqual(delays, [1, 1, 1]);
   assert.deepEqual(
     progress.filter((item) => item.phase === 'retry')
