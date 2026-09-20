@@ -43,6 +43,7 @@ const statusOrder = Object.freeze({
 const state = {
   task: null,
   adminConfig: null,
+  osmSettings: null,
   lastSuccessfulUpdates: {},
   selected: 'osm',
   selectedOperations: {
@@ -73,6 +74,7 @@ const elements = {
   osmForm: document.querySelector('#osm-form'),
   osmURL: document.querySelector('#osm-url'),
   osmDefaults: document.querySelector('#osm-defaults'),
+  osmSettingsSave: document.querySelector('#osm-settings-save'),
   cityGeoJsonForm: document.querySelector('#city-geojson-form'),
   kmlForm: document.querySelector('#kml-form'),
   lineGeoJsonForm: document.querySelector('#line-geojson-form'),
@@ -371,66 +373,101 @@ function applyNumericDefault(form, name, value, limits) {
   input.max = String(limits.max);
 }
 
-function applyOsmDefaults() {
-  const config = state.adminConfig?.osmCityUpdate;
-  if (!config) return;
-  elements.osmURL.value = config.defaults.URL;
-  for (const name of [
-    'batchSize',
-    'minDelayMs',
-    'maxRetries',
-    'retryBaseDelayMs',
-    'retryMaxDelayMs',
-  ]) {
-    applyNumericDefault(
-      elements.osmForm,
-      name,
-      config.defaults[name],
-      config.limits[name],
-    );
-  }
-}
-
 function populateOsmURLs(config) {
-  const envOption = document.createElement('option');
-  envOption.value = '';
-  envOption.textContent = `Из ENV: ${config.defaults.URL}`;
+  const current = config.settings.sourceURL;
   const options = config.allowedURLs.map((URL) => {
     const option = document.createElement('option');
     option.value = URL;
     option.textContent = URL;
+    option.selected = URL === current;
     return option;
   });
-  elements.osmURL.replaceChildren(envOption, ...options);
+  if (!options.some((option) => option.value === current)) {
+    const option = document.createElement('option');
+    option.value = current;
+    option.textContent = current;
+    option.selected = true;
+    options.unshift(option);
+  }
+  elements.osmURL.replaceChildren(...options);
 }
 
-async function loadAdminConfig({ announce = false } = {}) {
-  try {
-    state.adminConfig = await api('/api/admin/config');
-    populateOsmURLs(state.adminConfig.osmCityUpdate);
-    applyOsmDefaults();
-    const kml = state.adminConfig.kmlUpdate;
-    applyNumericDefault(
-      elements.kmlForm,
-      'cityBufferMeters',
-      kml.defaults.cityBufferMeters,
-      kml.limits.cityBufferMeters,
-    );
-    if (announce) setTaskNotice('osm', 'значения ENV восстановлены.', 'success');
-  } catch (error) {
-    setTaskNotice('osm', `не удалось загрузить настройки: ${error.message}`, 'error');
+function applyOsmSettings(config) {
+  if (!config?.settings) return;
+  state.osmSettings = config;
+  populateOsmURLs(config);
+  const settings = config.settings;
+  const form = elements.osmForm;
+
+  for (const name of ['includeCity', 'includeTown', 'includeAdministrative']) {
+    const input = form.elements.namedItem(name);
+    if (input instanceof HTMLInputElement) input.checked = Boolean(settings[name]);
   }
+  for (const name of [
+    'adminLevelMin',
+    'adminLevelMax',
+    'batchSize',
+    'minDelayMs',
+    'timeoutMs',
+    'queryTimeoutSeconds',
+    'maxBytes',
+    'maxRetries',
+    'retryBaseDelayMs',
+    'retryMaxDelayMs',
+  ]) {
+    const input = form.elements.namedItem(name);
+    if (input instanceof HTMLInputElement) input.value = String(settings[name]);
+  }
+
+  const limits = config.limits ?? {};
+  const maxByName = {
+    batchSize: limits.maxBatchSize,
+    timeoutMs: limits.timeoutMs,
+    queryTimeoutSeconds: limits.queryTimeoutSeconds,
+    maxBytes: limits.maxBytes,
+    maxRetries: limits.maxRetries,
+  };
+  for (const [name, maximum] of Object.entries(maxByName)) {
+    const input = form.elements.namedItem(name);
+    if (input instanceof HTMLInputElement && Number.isFinite(maximum)) {
+      input.max = String(maximum);
+    }
+  }
+}
+
+function osmSettingsPayload(form = elements.osmForm) {
+  const data = new FormData(form);
+  const number = (name) => Number(data.get(name));
+  return {
+    sourceURL: String(data.get('URL')).trim(),
+    includeCity: data.get('includeCity') === 'on',
+    includeTown: data.get('includeTown') === 'on',
+    includeAdministrative: data.get('includeAdministrative') === 'on',
+    adminLevelMin: number('adminLevelMin'),
+    adminLevelMax: number('adminLevelMax'),
+    batchSize: number('batchSize'),
+    minDelayMs: number('minDelayMs'),
+    timeoutMs: number('timeoutMs'),
+    queryTimeoutSeconds: number('queryTimeoutSeconds'),
+    maxBytes: number('maxBytes'),
+    maxRetries: number('maxRetries'),
+    retryBaseDelayMs: number('retryBaseDelayMs'),
+    retryMaxDelayMs: number('retryMaxDelayMs'),
+  };
 }
 
 function validateOsmForm(form) {
   if (!form.reportValidity()) return false;
-  const defaults = state.adminConfig?.osmCityUpdate?.defaults;
-  if (!defaults) return true;
-  const value = (name) => {
-    const raw = String(new FormData(form).get(name)).trim();
-    return raw === '' ? defaults[name] : Number(raw);
-  };
-  if (value('retryBaseDelayMs') > value('retryMaxDelayMs')) {
+  const settings = osmSettingsPayload(form);
+  if (!settings.includeCity && !settings.includeTown && !settings.includeAdministrative) {
+    setTaskNotice('osm', 'выберите хотя бы один класс OSM-объектов.', 'error');
+    return false;
+  }
+  if (settings.adminLevelMin > settings.adminLevelMax) {
+    setTaskNotice('osm', 'минимальный admin_level не может превышать максимальный.', 'error');
+    return false;
+  }
+  if (settings.retryBaseDelayMs > settings.retryMaxDelayMs) {
     setTaskNotice(
       'osm',
       'начальная пауза повтора не может превышать предел backoff.',
@@ -439,6 +476,42 @@ function validateOsmForm(form) {
     return false;
   }
   return true;
+}
+
+async function saveOsmSettings({ announce = true } = {}) {
+  if (!validateOsmForm(elements.osmForm)) return false;
+  const payload = await api('/api/admin/osm-settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(osmSettingsPayload()),
+  });
+  state.osmSettings = { ...state.osmSettings, settings: payload.settings };
+  applyOsmSettings(state.osmSettings);
+  if (announce) {
+    setTaskNotice('osm', 'настройки OSM-загрузки сохранены.', 'success');
+  }
+  return true;
+}
+
+async function loadAdminConfig({ announce = false } = {}) {
+  try {
+    const [adminConfig, osmSettings] = await Promise.all([
+      api('/api/admin/config'),
+      api('/api/admin/osm-settings'),
+    ]);
+    state.adminConfig = adminConfig;
+    applyOsmSettings(osmSettings);
+    const kml = state.adminConfig.kmlUpdate;
+    applyNumericDefault(
+      elements.kmlForm,
+      'cityBufferMeters',
+      kml.defaults.cityBufferMeters,
+      kml.limits.cityBufferMeters,
+    );
+    if (announce) setTaskNotice('osm', 'сохранённые настройки загружены.', 'success');
+  } catch (error) {
+    setTaskNotice('osm', `не удалось загрузить настройки: ${error.message}`, 'error');
+  }
 }
 
 async function refresh({ quiet = false } = {}) {
@@ -524,29 +597,28 @@ elements.osmForm.addEventListener('submit', async (event) => {
   const form = event.currentTarget;
   if (await cancelActiveTask()) return;
   if (!validateOsmForm(form)) return;
-  const data = new FormData(form);
-  const query = new URLSearchParams({
-    dryRun: String(data.get('dryRun') === 'on'),
-  });
-  for (const name of [
-    'batchSize',
-    'minDelayMs',
-    'maxRetries',
-    'retryBaseDelayMs',
-    'retryMaxDelayMs',
-  ]) {
-    const value = String(data.get(name)).trim();
-    if (value) query.set(name, value);
+
+  const dryRun = new FormData(form).get('dryRun') === 'on';
+  try {
+    if (!await saveOsmSettings({ announce: false })) return;
+    await start(
+      `/api/admin/update/cities?dryRun=${encodeURIComponent(String(dryRun))}`,
+      {},
+      'osm',
+    );
+  } catch (error) {
+    setTaskNotice('osm', error.message, 'error');
   }
-  const URL = String(data.get('URL')).trim();
-  const options = URL
-    ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ URL }) }
-    : {};
-  await start(`/api/admin/update/cities?${query}`, options, 'osm');
 });
 
 elements.osmDefaults.addEventListener('click', () => {
   void loadAdminConfig({ announce: true });
+});
+
+elements.osmSettingsSave?.addEventListener('click', () => {
+  void saveOsmSettings().catch((error) => {
+    setTaskNotice('osm', error.message, 'error');
+  });
 });
 
 elements.cityGeoJsonForm.addEventListener('submit', async (event) => {
