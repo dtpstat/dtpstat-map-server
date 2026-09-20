@@ -117,3 +117,31 @@ test('OSM object editor is a top-level admin section with population editing', a
   assert.match(styles, /\.mapboxgl-ctrl-attrib/);
   assert.doesNotMatch(styles, /leaflet/i);
 });
+
+
+test('OSM update UI exposes explicit resume restart and discard controls', async () => {
+  const [html, admin, styles] = await Promise.all([
+    read('admin/index.html'),
+    read('admin/admin.js'),
+    read('admin/admin.css'),
+  ]);
+
+  assert.match(html, /id="osm-checkpoint"[^>]*hidden/);
+  assert.match(html, /id="osm-checkpoint-summary"/);
+  assert.match(html, /id="osm-resume"/);
+  assert.match(html, /Возобновить/);
+  assert.match(html, /id="osm-checkpoint-discard"/);
+  assert.match(html, /Удалить сохранённый прогресс/);
+
+  assert.match(admin, /osmCheckpoint:\s*null/);
+  assert.match(admin, /async function loadOsmCheckpoint\(\)/);
+  assert.match(admin, /\/api\/admin\/osm-checkpoint/);
+  assert.match(admin, /resume:\s*'true'/);
+  assert.match(admin, /restart:\s*String\(restart\)/);
+  assert.match(admin, /Запустить OSM заново/);
+  assert.match(admin, /window\.confirm\([\s\S]*сохранённый прогресс OSM/i);
+  assert.match(admin, /method:\s*'DELETE'/);
+
+  assert.match(styles, /\.osm-checkpoint\s*\{/);
+  assert.match(styles, /\.osm-checkpoint-actions/);
+});
