@@ -73,7 +73,7 @@ MAPBOX_ACCESS_TOKEN=pk....
 
 ## Миграции
 
-Текущий набор: `V001…V026`.
+Текущий набор: `V001…V027`.
 
 Последние migrations:
 
@@ -87,16 +87,18 @@ V023__merge_osm_relation_city_parts.sql
 V024__multi_column_report_ranking.sql
 V025__public_download_name.sql
 V026__dynamic_public_download_links.sql
+V027__osm_boundary_management.sql
 ```
 
-Назначение `V023…V026`:
+Назначение `V023…V027`:
 
 - `V023` — logical `FULL_NAME` OSM boundary, merge relation fragments по `PLACE_TYPE + FULL_NAME`, sync `CITIES.FULL_NAME`;
 - `V024` — ordered `REPORT_CONFIG.RANK_SORT`;
 - `V025` — configurable `PROJECT_SETTINGS.PUBLIC_DOWNLOAD_NAME`;
-- `V026` — dynamic footer placeholders для GeoJSON/CSV URLs.
+- `V026` — dynamic footer placeholders для GeoJSON/CSV URLs;
+- `V027` — отмена name-based relation merge, active/display OSM identity, containment hierarchy, DB-backed import settings и large/small thresholds.
 
-Следующая migration: **V027+**. Опубликованные migration files не изменяются задним числом.
+Следующая migration: **V028+**. Опубликованные migration files не изменяются задним числом.
 
 ## Production за nginx
 
@@ -236,23 +238,26 @@ var/public-downloads/tram-lines.csv
 
 `var/` — runtime state, не backup/source bundle.
 
-## OSM city normalization
+## OSM boundary model
 
-После `V023` relation fragments одного логического города объединяются по:
+`V027` отменяет ошибочную V023-нормализацию разных relations по имени.
+Исторический migration V023 не переписывается, но его trigger/function и
+`CITY_BOUNDARIES.FULL_NAME` удаляются.
 
-```text
-OSM_TYPE = relation
-PLACE_TYPE
-FULL_NAME
-```
-
-`FULL_NAME` вычисляется как:
+Source identity:
 
 ```text
-addr:district → name:ru → osm_name
+OSM_TYPE + OSM_ID
 ```
 
-В результате одна логическая city/town boundary может быть `MultiPolygon`, даже если OSM source отдал несколько relation objects.
+Runtime OSM settings (`place=city/town`, administrative admin_level range,
+batch size, throttling, timeout/retry limits) хранятся в
+`OSM_IMPORT_SETTINGS`. Deployment allowlists
+`OSM_CITY_UPDATE_ALLOWED_HOSTS/URLS` остаются в ENV как security boundary.
+
+После полного snapshot строится hierarchy: непосредственный parent — самый
+маленький больший polygon, полностью покрывающий child через `ST_Covers`.
+Пересечение без containment не создаёт связь.
 
 ## Project settings
 
@@ -264,9 +269,12 @@ DB-backed `PROJECT_SETTINGS` включает:
 - line labels/popups;
 - public Mapbox token;
 - custom city marker;
-- public download base name.
+- public download base name;
+- large-city population threshold;
+- large-city area threshold, используемый только при отсутствии населения.
 
-Настройки меняются в **Настройка интерфейса → Проект**.
+Настройки меняются в **Настройка интерфейса → Проект**. Параметры OSM-загрузки
+редактируются отдельно в **Управление данными → OSM геометрии → Обновление**.
 
 ## Settings transfer
 
@@ -281,10 +289,11 @@ Current format:
 
 ```text
 kind = project-settings
-schemaVersion = 6
+schemaVersion = 7
 ```
 
-Import принимает v1-v6. V5 добавляет `rank.sort`, V6 — `publicDownloadName`.
+Import принимает v1-v7. V5 добавляет `rank.sort`, V6 — `publicDownloadName`,
+V7 — large-city population/area thresholds.
 
 После import report values и public snapshots перестраиваются на target data.
 
