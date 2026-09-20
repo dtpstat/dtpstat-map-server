@@ -20,6 +20,75 @@ import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.j
 
 const RETRYABLE_HTTP_STATUS_CODES = new Set([429, 502, 503, 504]);
 const GEOMETRY_504_RETRIES_BEFORE_SPLIT = 3;
+const OSM_CHECKPOINT_FORMAT_VERSION = 1;
+
+function checkpointOptionSnapshot(options) {
+  return {
+    formatVersion: OSM_CHECKPOINT_FORMAT_VERSION,
+    sourceURL: options.url,
+    includeCity: options.includeCity,
+    includeTown: options.includeTown,
+    includeAdministrative: options.includeAdministrative,
+    adminLevelMin: options.adminLevelMin,
+    adminLevelMax: options.adminLevelMax,
+    queryTimeoutSeconds: options.queryTimeoutSeconds,
+    batchSize: options.batchSize,
+  };
+}
+
+function sha256Json(value) {
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(value))
+    .digest('hex');
+}
+
+function checkpointSettingsFingerprint(options) {
+  return sha256Json(checkpointOptionSnapshot(options));
+}
+
+function checkpointIndexFingerprint(objects) {
+  return sha256Json(objects.map((object) => ({
+    osmType: object.osmType,
+    osmId: object.osmId,
+  })));
+}
+
+function checkpointMode(query) {
+  const resume = query.resume === 'true';
+  const restart = query.restart === 'true';
+  if (
+    (query.resume !== undefined && query.resume !== 'true' && query.resume !== 'false') ||
+    (query.restart !== undefined && query.restart !== 'true' && query.restart !== 'false')
+  ) {
+    throw new OsmCityUpdateValidationError(
+      'resume and restart must equal true or false',
+    );
+  }
+  if (resume && restart) {
+    throw new OsmCityUpdateValidationError(
+      'resume and restart cannot both be true',
+    );
+  }
+  return { resume, restart };
+}
+
+function checkpointErrorDetails(error) {
+  return {
+    name: error instanceof Error ? error.name : 'Error',
+    message: error instanceof Error ? error.message : String(error),
+    code: error?.code ?? null,
+    statusCode: error?.statusCode ?? null,
+    networkCode: error?.networkCode ?? null,
+  };
+}
+
+function addContentChecksums(places) {
+  return places.map((place) => ({
+    ...place,
+    contentChecksum: sha256Json(place),
+  }));
+}
 
 /** @param {number} milliseconds @param {AbortSignal | undefined} signal */
 function abortableDelay(milliseconds, signal) {
@@ -44,6 +113,23 @@ function abortableDelay(milliseconds, signal) {
 }
 
 const DROP_STAGE_SQL = 'DROP TABLE IF EXISTS osm_city_boundary_stage';
+
+const MATERIALIZE_CHECKPOINT_STAGE_SQL = `
+  CREATE TEMP TABLE osm_city_boundary_stage
+  ON COMMIT PRESERVE ROWS
+  AS
+  SELECT
+    name,
+    place_type,
+    admin_level,
+    osm_type,
+    osm_id,
+    tags,
+    geom,
+    bounds
+  FROM osm_city_update_checkpoint_stage
+  WHERE checkpoint_id = $1
+`;
 
 const CREATE_STAGE_SQL = `
   CREATE TEMP TABLE osm_city_boundary_stage (
