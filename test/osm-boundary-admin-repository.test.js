@@ -33,7 +33,7 @@ function createPool({
         return {
           rows: [{
             id: 5,
-            active: finalActive,
+            active: currentActive,
             displayName: 'Тестоград',
             displayType: 'city',
             cityId: currentCityId,
@@ -60,7 +60,7 @@ function createPool({
             osmName: 'Тестоград',
             placeType: 'city',
             adminLevel: null,
-            active: currentActive,
+            active: finalActive,
             displayName: 'Тестоград',
             displayType: 'city',
             areaKm2: 100,
