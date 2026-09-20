@@ -67,6 +67,34 @@
 }
 .osm-boundary-children { margin-left: 1rem; padding-left: .55rem; border-left: 1px solid #294047; }
 .osm-boundary-node { margin: .15rem 0; }
+.osm-boundary-node-row {
+  display: grid;
+  grid-template-columns: 1.35rem minmax(0, 1fr);
+  align-items: stretch;
+}
+.osm-boundary-toggle,
+.osm-boundary-toggle-spacer {
+  width: 1.35rem;
+  min-width: 1.35rem;
+}
+.osm-boundary-toggle {
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  color: var(--muted);
+  background: transparent;
+  font-size: .9rem;
+  line-height: 1;
+}
+.osm-boundary-toggle:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--panel-2);
+  filter: none !important;
+}
+.osm-boundary-toggle:disabled {
+  opacity: .55;
+  cursor: default;
+}
 .osm-boundary-node-button {
   width: 100%;
   padding: .45rem .55rem;
@@ -88,7 +116,18 @@
   border: 1px solid #587079;
   background: transparent;
 }
-.osm-boundary-active-dot.is-active { border-color: var(--success); background: var(--success); }
+.osm-boundary-active-dot.is-active {
+  border-color: var(--success);
+  background: var(--success);
+}
+.osm-boundary-active-dot.is-inactive {
+  border-color: #587079;
+  background: transparent;
+}
+.osm-boundary-active-dot.is-partial {
+  border-color: #d6a84b;
+  background: linear-gradient(90deg, #d6a84b 50%, transparent 50%);
+}
 .osm-boundary-node-copy { min-width: 0; }
 .osm-boundary-node-name,
 .osm-boundary-node-source { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
