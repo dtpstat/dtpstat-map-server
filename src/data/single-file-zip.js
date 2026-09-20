@@ -504,6 +504,9 @@ export async function openSingleFileZip(zipPath, options) {
           compressedSize: values.compressedSize,
           uncompressedSize: values.uncompressedSize,
           localOffset: values.localOffset,
+          zip64Sizes:
+            compressed32 === MAX_UINT32 ||
+            uncompressed32 === MAX_UINT32,
         };
       }
 
@@ -559,13 +562,79 @@ export async function openSingleFileZip(zipPath, options) {
       30 +
       localNameLength +
       localExtraLength;
-    if (
-      dataOffset + selectedEntry.compressedSize >
-      directory.centralOffset
-    ) {
+    const dataEnd = dataOffset + selectedEntry.compressedSize;
+    if (dataEnd > directory.centralOffset) {
       throw new SingleFileZipError(
         'ZIP compressed payload overlaps archive metadata',
       );
+    }
+
+    if ((localFlags & 0x0008) !== 0) {
+      if (dataEnd + 4 > directory.centralOffset) {
+        throw new SingleFileZipError(
+          'ZIP data descriptor is truncated',
+        );
+      }
+      const prefix = await readExactly(handle, 4, dataEnd);
+      const hasSignature = prefix.readUInt32LE(0) === DATA_DESCRIPTOR;
+      const descriptorLength = selectedEntry.zip64Sizes
+        ? (hasSignature ? 24 : 20)
+        : (hasSignature ? 16 : 12);
+      if (dataEnd + descriptorLength > directory.centralOffset) {
+        throw new SingleFileZipError(
+          'ZIP data descriptor is truncated',
+        );
+      }
+      const descriptor = await readExactly(
+        handle,
+        descriptorLength,
+        dataEnd,
+      );
+      let offset = hasSignature ? 4 : 0;
+      const descriptorCrc = descriptor.readUInt32LE(offset);
+      offset += 4;
+      const descriptorCompressed = selectedEntry.zip64Sizes
+        ? safeNumber(
+            descriptor.readBigUInt64LE(offset),
+            'data-descriptor compressed size',
+          )
+        : descriptor.readUInt32LE(offset);
+      offset += selectedEntry.zip64Sizes ? 8 : 4;
+      const descriptorUncompressed = selectedEntry.zip64Sizes
+        ? safeNumber(
+            descriptor.readBigUInt64LE(offset),
+            'data-descriptor uncompressed size',
+          )
+        : descriptor.readUInt32LE(offset);
+
+      if (
+        descriptorCrc !== selectedEntry.expectedCrc ||
+        descriptorCompressed !== selectedEntry.compressedSize ||
+        descriptorUncompressed !== selectedEntry.uncompressedSize
+      ) {
+        throw new SingleFileZipError(
+          'ZIP data descriptor does not match the central directory',
+        );
+      }
+    } else {
+      const localCrc = local.readUInt32LE(14);
+      const localCompressed = local.readUInt32LE(18);
+      const localUncompressed = local.readUInt32LE(22);
+      if (
+        localCrc !== selectedEntry.expectedCrc ||
+        (
+          localCompressed !== MAX_UINT32 &&
+          localCompressed !== selectedEntry.compressedSize
+        ) ||
+        (
+          localUncompressed !== MAX_UINT32 &&
+          localUncompressed !== selectedEntry.uncompressedSize
+        )
+      ) {
+        throw new SingleFileZipError(
+          'ZIP local file sizes/CRC do not match the central directory',
+        );
+      }
     }
     selectedEntry.dataOffset = dataOffset;
   } finally {
