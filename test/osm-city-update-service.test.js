@@ -9,6 +9,8 @@ const config = {
   dryRun: false,
   timeoutMs: 180000,
   queryTimeoutSeconds: 120,
+  maxResponseBytes: 1000000,
+  maxTotalBytes: 1000000,
   maxBytes: 1000000,
   batchSize: 2,
   maxBatchSize: 10,
@@ -255,6 +257,71 @@ test('OSM dry run validates the complete staged replacement and rolls it back', 
     pool.queries.some((query) => query.startsWith('INSERT INTO osm_city_update_runs')),
     false,
   );
+});
+
+test('oversized OSM geometry batch is split and retried sequentially', async () => {
+  const pool = createPool();
+  const progress = [];
+  let call = 0;
+  const service = createOsmCityUpdateService(pool, config, {
+    async download(_url, query) {
+      call += 1;
+      if (call === 5) {
+        throw new OsmCityDownloadError(
+          'OSM response exceeds the configured size limit',
+          {
+            code: 'response-size-limit',
+            limitBytes: config.maxResponseBytes,
+            receivedBytes: config.maxResponseBytes + 1,
+          },
+        );
+      }
+      return {
+        jsonText: call <= 4 ? `index-${call}` : `geometry-${call}`,
+        bytes: 10,
+        finalURL: config.url,
+        query,
+      };
+    },
+    parseIndex() {
+      const parsed = indexParts[call - 1];
+      return parsed;
+    },
+    parseBatch(jsonText) {
+      if (jsonText === 'geometry-6') {
+        return { ...batches[0], places: [batches[0].places[0]], cityPlaces: 1, townPlaces: 0 };
+      }
+      if (jsonText === 'geometry-7') {
+        return { ...batches[0], places: [batches[0].places[1]], cityPlaces: 0, townPlaces: 1 };
+      }
+      return batches[1];
+    },
+    reportProgress(value) {
+      progress.push(value);
+    },
+  });
+
+  const result = await service.update(undefined, {});
+
+  assert.equal(result.importedPlaces, 3);
+  assert.equal(result.batchCount, 3);
+  assert.equal(result.requestAttemptCount, 8);
+  assert.equal(result.downloadedBytes, 70);
+  assert.deepEqual(
+    progress.filter((item) => item.phase === 'split')
+      .map((item) => ({
+        objectCount: item.objectCount,
+        splitSizes: item.splitSizes,
+        batchCount: item.batchCount,
+      })),
+    [{
+      objectCount: 2,
+      splitSizes: [1, 1],
+      batchCount: 3,
+    }],
+  );
+  assert.equal(pool.queries.filter((query) =>
+    query.startsWith('WITH payload_rows AS')).length, 3);
 });
 
 test('a later OSM batch failure leaves production boundaries untouched', async () => {
@@ -529,7 +596,8 @@ test('saved OSM source is rejected when deployment allowlist no longer permits i
           minDelayMs: 0,
           timeoutMs: 180000,
           queryTimeoutSeconds: 120,
-          maxBytes: 1000000,
+          maxResponseBytes: 1000000,
+          maxTotalBytes: 1000000,
           maxRetries: 6,
           retryBaseDelayMs: 30000,
           retryMaxDelayMs: 240000,
