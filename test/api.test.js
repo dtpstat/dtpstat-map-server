@@ -71,6 +71,23 @@ const osmCityUpdateResult = {
   completedAt: '2026-08-31T12:00:00.000Z',
 };
 
+async function readJsonStream(source) {
+  const chunks = [];
+  for await (const chunk of source) chunks.push(Buffer.from(chunk));
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+function withStreamingMethod(service, streamingName, legacyName) {
+  if (typeof service?.[streamingName] === 'function') return service;
+  if (typeof service?.[legacyName] !== 'function') return service;
+  return {
+    ...service,
+    async [streamingName](source, operation) {
+      return service[legacyName](await readJsonStream(source), operation);
+    },
+  };
+}
+
 function createTestRepository() {
   return {
     async health() {},
@@ -91,20 +108,24 @@ function createTestRepository() {
 }
 
 async function withServer(callback, options = {}) {
-  const importService =
-    options.importService ??
-    ({
+  const importService = withStreamingMethod(
+    options.importService ?? {
       async replaceFromGeoJson() {
         return importResult;
       },
-    });
-  const populationService =
-    options.populationService ??
-    ({
+    },
+    'replaceFromGeoJsonStream',
+    'replaceFromGeoJson',
+  );
+  const populationService = withStreamingMethod(
+    options.populationService ?? {
       async updateFromJson() {
         return populationResult;
       },
-    });
+    },
+    'updateFromJsonStream',
+    'updateFromJson',
+  );
   const kmlUpdateService =
     options.kmlUpdateService ??
     ({
