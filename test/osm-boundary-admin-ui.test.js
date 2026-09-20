@@ -66,6 +66,12 @@ test('OSM object editor is a top-level admin section with population editing', a
   );
   assert.match(editor, /searchInput\.addEventListener\('input', \(\) => renderTree\(\)\)/);
   assert.match(editor, /function subtreeItems\(rootId\)/);
+  assert.match(editor, /expandedIds:\s*new Set\(\)/);
+  assert.match(editor, /aggregateBoundaryBranchStatus/);
+  assert.match(editor, /is-\$\{aggregate\.status\}/);
+  assert.match(editor, /searchMode \|\| state\.expandedIds\.has\(item\.id\)/);
+  assert.match(editor, /toggle\.disabled = searchMode/);
+  assert.match(editor, /aria-expanded/);
   assert.match(editor, /function updateBranchActions\(item\)/);
   assert.match(editor, /async function setBranchActive\(nextActive\)/);
   assert.match(
@@ -98,6 +104,11 @@ test('OSM object editor is a top-level admin section with population editing', a
     styles,
     /\.osm-boundary-branch-actions[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
   );
+  assert.match(styles, /\.osm-boundary-node-row/);
+  assert.match(styles, /\.osm-boundary-toggle/);
+  assert.match(styles, /\.osm-boundary-active-dot\.is-active/);
+  assert.match(styles, /\.osm-boundary-active-dot\.is-inactive/);
+  assert.match(styles, /\.osm-boundary-active-dot\.is-partial/);
   assert.match(styles, /\.mapboxgl-ctrl-attrib/);
   assert.doesNotMatch(styles, /leaflet/i);
 });
