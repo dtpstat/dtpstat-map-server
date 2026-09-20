@@ -2,7 +2,7 @@ const EXPORT_CITY_BOUNDARIES_SQL = `
   SELECT json_build_object(
     'type', 'FeatureCollection',
     'name', 'dtpstat-buslines-cities',
-    'schemaVersion', 1,
+    'schemaVersion', 2,
     'exportedAt', now(),
     'features', COALESCE(
       json_agg(
@@ -11,6 +11,10 @@ const EXPORT_CITY_BOUNDARIES_SQL = `
           'geometry', ST_AsGeoJSON(boundary.geom)::json,
           'properties', jsonb_build_object(
             'placeType', boundary.place_type,
+            'adminLevel', boundary.admin_level,
+            'active', boundary.is_active,
+            'displayName', boundary.display_name,
+            'displayType', boundary.display_type,
             'osmType', boundary.osm_type,
             'osmId', boundary.osm_id,
             'osmName', boundary.osm_name,
@@ -25,6 +29,7 @@ const EXPORT_CITY_BOUNDARIES_SQL = `
                 'slug', city.slug,
                 'name', city.name,
                 'fullName', city.full_name,
+                'displayType', city.display_type,
                 'attributes', city.attributes
               )
             END
@@ -104,6 +109,7 @@ const EXPORT_POPULATIONS_SQL = `
       json_agg(
         json_build_object(
           'name', city.name,
+          'type', city.display_type,
           'citySlug', city.slug,
           'population', population.population,
           'asOf', population.as_of,

@@ -13,6 +13,7 @@ const UPSERT_CITIES_SQL = `
     slug,
     name,
     full_name,
+    display_type,
     lane_length_m,
     attributes
   )
@@ -20,24 +21,31 @@ const UPSERT_CITIES_SQL = `
     payload.slug,
     payload.name,
     payload."fullName",
+    payload."displayType",
     0,
     payload.attributes
   FROM jsonb_to_recordset($1::jsonb) AS payload(
     slug text,
     name text,
     "fullName" text,
+    "displayType" text,
     attributes jsonb
   )
-  ON CONFLICT (name) DO UPDATE SET
-    slug = EXCLUDED.slug,
+  ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
     full_name = EXCLUDED.full_name,
+    display_type = EXCLUDED.display_type,
     attributes = EXCLUDED.attributes,
     updated_at = now()
 `;
 
 const CREATE_STAGE_SQL = `
   CREATE TEMP TABLE city_boundary_transfer_stage (
-    place_type text NOT NULL,
+    place_type text,
+    admin_level smallint,
+    active boolean NOT NULL,
+    display_name text NOT NULL,
+    display_type text NOT NULL,
     osm_type text NOT NULL,
     osm_id bigint NOT NULL,
     osm_name text NOT NULL,
@@ -57,6 +65,10 @@ const INSERT_STAGE_SQL = `
     SELECT *
     FROM jsonb_to_recordset($1::jsonb) AS payload(
       "placeType" text,
+      "adminLevel" smallint,
+      active boolean,
+      "displayName" text,
+      "displayType" text,
       "osmType" text,
       "osmId" bigint,
       "osmName" text,
@@ -81,6 +93,10 @@ const INSERT_STAGE_SQL = `
   )
   INSERT INTO city_boundary_transfer_stage (
     place_type,
+    admin_level,
+    active,
+    display_name,
+    display_type,
     osm_type,
     osm_id,
     osm_name,
@@ -94,6 +110,10 @@ const INSERT_STAGE_SQL = `
   )
   SELECT
     "placeType",
+    "adminLevel",
+    active,
+    "displayName",
+    "displayType",
     "osmType",
     "osmId",
     "osmName",
@@ -127,6 +147,7 @@ const INSERT_BOUNDARIES_SQL = `
   INSERT INTO city_boundaries (
     city_id,
     place_type,
+    admin_level,
     osm_type,
     osm_id,
     osm_name,
@@ -134,7 +155,11 @@ const INSERT_BOUNDARIES_SQL = `
     geom,
     bounds,
     osm_timestamp,
-    updated_at
+    updated_at,
+    is_active,
+    display_name,
+    display_type,
+    area_m2
   )
   SELECT
     COALESCE(
@@ -142,6 +167,7 @@ const INSERT_BOUNDARIES_SQL = `
       (SELECT city.id FROM cities AS city WHERE city.name = stage.city_name LIMIT 1)
     ),
     stage.place_type,
+    stage.admin_level,
     stage.osm_type,
     stage.osm_id,
     stage.osm_name,
@@ -149,7 +175,11 @@ const INSERT_BOUNDARIES_SQL = `
     stage.geom,
     stage.bounds,
     stage.osm_timestamp,
-    COALESCE(stage.updated_at, now())
+    COALESCE(stage.updated_at, now()),
+    stage.active,
+    stage.display_name,
+    stage.display_type,
+    ST_Area(stage.geom::geography)
   FROM city_boundary_transfer_stage AS stage
   ORDER BY stage.osm_type, stage.osm_id
 `;
@@ -267,6 +297,8 @@ export function createCityBoundaryTransferService(pool) {
           phase: 'restore-links',
           places: inserted.rowCount,
         });
+        await client.query('SELECT rebuild_city_boundary_hierarchy()');
+        await client.query('SELECT sync_active_boundary_cities()');
         const restored = await client.query(RESTORE_GEOMETRY_LINKS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
 

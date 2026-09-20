@@ -111,7 +111,12 @@ function linkedCity(properties, featureIndex) {
       `City GeoJSON feature ${featureIndex} has invalid city.attributes`,
     );
   }
-  return { slug, name, fullName, attributes };
+  const displayType = optionalString(
+    city.displayType ?? city.display_type,
+    'city.displayType',
+    featureIndex,
+  ) ?? 'city';
+  return { slug, name, fullName, displayType, attributes };
 }
 
 /**
@@ -159,10 +164,30 @@ export function buildCityBoundaryGeoJsonPlan(collection) {
     validatePositions(feature.geometry.coordinates, featureIndex);
 
     const properties = feature.properties;
-    const placeType = properties.placeType ?? properties.place_type;
-    if (!['city', 'town'].includes(placeType)) {
+    const rawPlaceType = properties.placeType ?? properties.place_type ?? null;
+    const placeType = rawPlaceType === null || rawPlaceType === ''
+      ? null
+      : rawPlaceType;
+    if (placeType !== null && !['city', 'town'].includes(placeType)) {
       throw new CityBoundaryGeoJsonValidationError(
-        `City GeoJSON feature ${featureIndex} must have placeType city or town`,
+        `City GeoJSON feature ${featureIndex} has invalid placeType`,
+      );
+    }
+    const rawAdminLevel = properties.adminLevel ?? properties.admin_level ?? null;
+    const adminLevel = rawAdminLevel === null || rawAdminLevel === ''
+      ? null
+      : Number(rawAdminLevel);
+    if (
+      adminLevel !== null &&
+      (!Number.isInteger(adminLevel) || adminLevel < 1 || adminLevel > 20)
+    ) {
+      throw new CityBoundaryGeoJsonValidationError(
+        `City GeoJSON feature ${featureIndex} has invalid adminLevel`,
+      );
+    }
+    if (placeType === null && adminLevel === null) {
+      throw new CityBoundaryGeoJsonValidationError(
+        `City GeoJSON feature ${featureIndex} must describe a place or administrative boundary`,
       );
     }
     const osmType = properties.osmType ?? properties.osm_type;
@@ -201,6 +226,25 @@ export function buildCityBoundaryGeoJsonPlan(collection) {
         `City GeoJSON feature ${featureIndex} has invalid osmTimestamp`,
       );
     }
+    const active = properties.active === undefined
+      ? placeType !== null
+      : properties.active;
+    if (typeof active !== 'boolean') {
+      throw new CityBoundaryGeoJsonValidationError(
+        `City GeoJSON feature ${featureIndex} has invalid active flag`,
+      );
+    }
+    const displayName = optionalString(
+      properties.displayName ?? properties.display_name ?? osmName,
+      'displayName',
+      featureIndex,
+    );
+    const displayType = optionalString(
+      properties.displayType ?? properties.display_type ?? placeType ?? 'administrative',
+      'displayType',
+      featureIndex,
+    );
+
     const updatedAt = validTimestamp(
       properties.updatedAt ?? properties.updated_at,
     );
@@ -231,6 +275,10 @@ export function buildCityBoundaryGeoJsonPlan(collection) {
 
     return {
       placeType,
+      adminLevel,
+      active,
+      displayName,
+      displayType,
       osmType,
       osmId,
       osmName,

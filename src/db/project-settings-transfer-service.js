@@ -13,7 +13,7 @@ import {
   compileReportRankQuery,
 } from './report-config-service.js';
 
-const SETTINGS_TRANSFER_SCHEMA_VERSION = 6;
+const SETTINGS_TRANSFER_SCHEMA_VERSION = 7;
 const SETTINGS_TRANSFER_KIND = 'project-settings';
 const LEGACY_SECURITY_DEFAULTS = Object.freeze({
   ipMaxFailedAttempts: 20,
@@ -54,9 +54,9 @@ function validateEnvelope(payload) {
   if (metadata.kind !== SETTINGS_TRANSFER_KIND) {
     throw new ProjectSettingsTransferValidationError(`_dtpstat.kind must be ${SETTINGS_TRANSFER_KIND}`);
   }
-  if (![1, 2, 3, 4, 5, SETTINGS_TRANSFER_SCHEMA_VERSION].includes(metadata.schemaVersion)) {
+  if (![1, 2, 3, 4, 5, 6, SETTINGS_TRANSFER_SCHEMA_VERSION].includes(metadata.schemaVersion)) {
     throw new ProjectSettingsTransferValidationError(
-      `_dtpstat.schemaVersion must be 1, 2, 3, 4, 5 or ${SETTINGS_TRANSFER_SCHEMA_VERSION}`,
+      `_dtpstat.schemaVersion must be 1, 2, 3, 4, 5, 6 or ${SETTINGS_TRANSFER_SCHEMA_VERSION}`,
     );
   }
   return { input, schemaVersion: metadata.schemaVersion };
@@ -67,11 +67,15 @@ function normalizeProjectSettings(payload) {
   const hasMapboxAccessToken = Object.hasOwn(input, 'mapboxAccessToken');
   const hasShowLinePopups = Object.hasOwn(input, 'showLinePopups');
   const hasPublicDownloadName = Object.hasOwn(input, 'publicDownloadName');
+  const hasPopulationThreshold = Object.hasOwn(input, 'largeCityPopulationThreshold');
+  const hasAreaThreshold = Object.hasOwn(input, 'largeCityAreaKm2Threshold');
   const {
     showLineLabels = false,
     showLinePopups: rawShowLinePopups,
     publicDownloadName: rawPublicDownloadName,
     mapboxAccessToken: rawMapboxAccessToken,
+    largeCityPopulationThreshold: rawPopulationThreshold,
+    largeCityAreaKm2Threshold: rawAreaThreshold,
     ...base
   } = input;
   if (typeof showLineLabels !== 'boolean') {
@@ -80,8 +84,26 @@ function normalizeProjectSettings(payload) {
   if (hasShowLinePopups && typeof rawShowLinePopups !== 'boolean') {
     throw new ProjectSettingsValidationError('showLinePopups must be boolean');
   }
+  const populationThreshold = hasPopulationThreshold
+    ? Number(rawPopulationThreshold)
+    : 400000;
+  if (!Number.isSafeInteger(populationThreshold) || populationThreshold <= 0) {
+    throw new ProjectSettingsValidationError(
+      'largeCityPopulationThreshold must be a positive integer',
+    );
+  }
+  const areaThreshold = !hasAreaThreshold || rawAreaThreshold === null || rawAreaThreshold === ''
+    ? null
+    : Number(rawAreaThreshold);
+  if (areaThreshold !== null && (!Number.isFinite(areaThreshold) || areaThreshold < 0)) {
+    throw new ProjectSettingsValidationError(
+      'largeCityAreaKm2Threshold must be non-negative or null',
+    );
+  }
   return {
     ...buildProjectSettingsPlan(base),
+    largeCityPopulationThreshold: populationThreshold,
+    largeCityAreaKm2Threshold: areaThreshold,
     showLineLabels,
     // Transfer schemas 1-3 predate this field. Their effective behaviour was
     // always to show hover popups, so missing values intentionally normalize
@@ -112,6 +134,8 @@ const EXPORT_PROJECT_SETTINGS_SQL = `
     theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
     show_line_popups AS "showLinePopups",
+    large_city_population_threshold::integer AS "largeCityPopulationThreshold",
+    large_city_area_km2_threshold::double precision AS "largeCityAreaKm2Threshold",
     public_download_name AS "publicDownloadName",
     mapbox_access_token AS "mapboxAccessToken"
   FROM project_settings WHERE id = 1
@@ -157,6 +181,8 @@ const UPDATE_PROJECT_SETTINGS_SQL = `
       WHEN $11::boolean THEN TRUE
       ELSE mapbox_access_token_initialized
     END,
+    large_city_population_threshold=$13,
+    large_city_area_km2_threshold=$14,
     updated_at=NOW()
   WHERE id=1
 `;
@@ -233,10 +259,14 @@ async function materializeReport(client, config) {
       SELECT 1
       FROM city_boundaries AS boundary_presence
       WHERE boundary_presence.city_id = city.id
+        AND boundary_presence.is_active
     )
       AND EXISTS (
         SELECT 1
         FROM city_geometries AS geometry_presence
+        JOIN city_boundaries AS geometry_boundary
+          ON geometry_boundary.id = geometry_presence.boundary_id
+         AND geometry_boundary.is_active
         WHERE geometry_presence.city_id = city.id
       )
     ORDER BY city.id
@@ -358,6 +388,8 @@ export function createProjectSettingsTransferService(pool) {
           projectSettings.publicDownloadName,
           projectSettings.hasMapboxAccessToken,
           projectSettings.mapboxAccessToken,
+          projectSettings.largeCityPopulationThreshold,
+          projectSettings.largeCityAreaKm2Threshold,
         ]);
         const primaryRank = reportConfig.rank.sort[0];
         await client.query(SAVE_REPORT_CONFIG_SQL, [
