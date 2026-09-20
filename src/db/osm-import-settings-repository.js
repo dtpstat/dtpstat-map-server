@@ -14,6 +14,7 @@ const SELECT_SQL = `
     max_retries::integer AS "maxRetries",
     retry_base_delay_ms::integer AS "retryBaseDelayMs",
     retry_max_delay_ms::integer AS "retryMaxDelayMs",
+    initialized,
     updated_at AS "updatedAt"
   FROM osm_import_settings
   WHERE id = 1
@@ -35,6 +36,7 @@ const UPDATE_SQL = `
       max_retries = $12,
       retry_base_delay_ms = $13,
       retry_max_delay_ms = $14,
+      initialized = TRUE,
       updated_at = now()
   WHERE id = 1
   RETURNING
@@ -52,7 +54,31 @@ const UPDATE_SQL = `
     max_retries::integer AS "maxRetries",
     retry_base_delay_ms::integer AS "retryBaseDelayMs",
     retry_max_delay_ms::integer AS "retryMaxDelayMs",
+    initialized,
     updated_at AS "updatedAt"
+`;
+
+const BOOTSTRAP_SQL = `
+  UPDATE osm_import_settings
+  SET source_url = $1,
+      include_city = TRUE,
+      include_town = TRUE,
+      include_administrative = TRUE,
+      admin_level_min = 4,
+      admin_level_max = 8,
+      batch_size = $2,
+      min_delay_ms = $3,
+      timeout_ms = $4,
+      query_timeout_seconds = $5,
+      max_bytes = $6,
+      max_retries = $7,
+      retry_base_delay_ms = $8,
+      retry_max_delay_ms = $9,
+      initialized = TRUE,
+      updated_at = now()
+  WHERE id = 1
+    AND initialized = FALSE
+  RETURNING id
 `;
 
 function row(settings) {
@@ -60,6 +86,7 @@ function row(settings) {
   return {
     ...settings,
     maxBytes: Number(settings.maxBytes),
+    initialized: Boolean(settings.initialized),
     updatedAt: settings.updatedAt instanceof Date
       ? settings.updatedAt.toISOString()
       : settings.updatedAt,
@@ -69,6 +96,21 @@ function row(settings) {
 /** @param {{ query: Function }} database */
 export function createOsmImportSettingsRepository(database) {
   return {
+    async bootstrap(config) {
+      const result = await database.query(BOOTSTRAP_SQL, [
+        config.url,
+        config.batchSize,
+        config.minDelayMs,
+        config.timeoutMs,
+        config.queryTimeoutSeconds,
+        config.maxBytes,
+        config.maxRetries,
+        config.retryBaseDelayMs,
+        config.retryMaxDelayMs,
+      ]);
+      return { initialized: result.rowCount > 0 };
+    },
+
     async get() {
       const result = await database.query(SELECT_SQL);
       return row(result.rows[0]);
