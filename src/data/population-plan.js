@@ -108,7 +108,7 @@ export function buildPopulationPlan(payload) {
 
     return {
       name,
-      type,
+      ...(type === null ? {} : { type }),
       population,
       asOf: item.asOf === undefined ? asOf : normalizeDate(item.asOf, `Population item ${index} asOf`),
       source: item.source === undefined ? source : normalizeSource(item.source, `Population item ${index} source`),
