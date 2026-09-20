@@ -137,6 +137,204 @@ function createPool() {
   };
 }
 
+function createCheckpointRepositoryMock() {
+  let checkpoint = null;
+  let nextId = 1;
+  const staged = new Map();
+  const calls = [];
+
+  const snapshot = () => checkpoint && {
+    ...structuredClone(checkpoint),
+    stagedObjects: staged.size,
+    remainingObjects: Math.max(
+      0,
+      checkpoint.totalObjects - staged.size,
+    ),
+  };
+
+  return {
+    calls,
+    staged,
+    get state() {
+      return snapshot();
+    },
+    async cleanup() {
+      calls.push({ method: 'cleanup' });
+      return 0;
+    },
+    async getResumable() {
+      calls.push({ method: 'getResumable' });
+      return snapshot();
+    },
+    async getById(id) {
+      calls.push({ method: 'getById', id });
+      return checkpoint?.id === id ? snapshot() : null;
+    },
+    async getIndexObjects(id) {
+      calls.push({ method: 'getIndexObjects', id });
+      return checkpoint?.id === id
+        ? structuredClone(checkpoint.indexObjects)
+        : null;
+    },
+    async create(value) {
+      calls.push({ method: 'create' });
+      checkpoint = {
+        id: nextId,
+        status: 'downloading',
+        sourceURL: value.sourceURL,
+        settingsFingerprint: value.settingsFingerprint,
+        indexFingerprint: value.indexFingerprint,
+        options: structuredClone(value.options),
+        indexObjects: structuredClone(value.indexObjects),
+        sourceElements: value.sourceElements,
+        duplicateIndexObjects: value.duplicateIndexObjects,
+        osmTimestamp: value.osmTimestamp,
+        downloadedBytes: value.downloadedBytes,
+        requestAttemptCount: value.requestAttemptCount,
+        retryCount: value.retryCount,
+        retryWaitMs: value.retryWaitMs,
+        throttleWaitMs: value.throttleWaitMs,
+        ignoredElements: 0,
+        stagedBatchCount: 0,
+        totalObjects: value.indexObjects.length,
+        lastError: null,
+        createdAt: '2026-09-20T10:00:00.000Z',
+        updatedAt: '2026-09-20T10:00:00.000Z',
+        completedAt: null,
+      };
+      nextId += 1;
+      staged.clear();
+      return snapshot();
+    },
+    async getStagedKeys(id) {
+      calls.push({ method: 'getStagedKeys', id });
+      return new Set(staged.keys());
+    },
+    async stageBatch(id, places, metrics) {
+      calls.push({
+        method: 'stageBatch',
+        id,
+        keys: places.map((item) => `${item.osmType}/${item.osmId}`),
+      });
+      for (const item of places) {
+        staged.set(`${item.osmType}/${item.osmId}`, structuredClone(item));
+      }
+      checkpoint.status = 'downloading';
+      checkpoint.downloadedBytes += metrics.downloadedBytes ?? 0;
+      checkpoint.requestAttemptCount += metrics.requestAttemptCount ?? 0;
+      checkpoint.retryCount += metrics.retryCount ?? 0;
+      checkpoint.retryWaitMs += metrics.retryWaitMs ?? 0;
+      checkpoint.throttleWaitMs += metrics.throttleWaitMs ?? 0;
+      checkpoint.ignoredElements += metrics.ignoredElements ?? 0;
+      checkpoint.stagedBatchCount += 1;
+      checkpoint.lastError = null;
+      return snapshot();
+    },
+    async addMetrics(id, metrics) {
+      calls.push({ method: 'addMetrics', id });
+      checkpoint.downloadedBytes += metrics.downloadedBytes ?? 0;
+      checkpoint.requestAttemptCount += metrics.requestAttemptCount ?? 0;
+      checkpoint.retryCount += metrics.retryCount ?? 0;
+      checkpoint.retryWaitMs += metrics.retryWaitMs ?? 0;
+      checkpoint.throttleWaitMs += metrics.throttleWaitMs ?? 0;
+    },
+    async mark(id, status, lastError = null) {
+      calls.push({ method: 'mark', id, status });
+      checkpoint.status = status;
+      checkpoint.lastError = lastError;
+      checkpoint.updatedAt = '2026-09-20T11:00:00.000Z';
+      return snapshot();
+    },
+    async discard(id) {
+      calls.push({ method: 'discard', id });
+      checkpoint.status = 'discarded';
+      checkpoint.indexObjects = [];
+      checkpoint.totalObjects = 0;
+      staged.clear();
+    },
+    async stats(id) {
+      calls.push({ method: 'stats', id });
+      const values = [...staged.values()];
+      const names = new Map();
+      for (const item of values) {
+        names.set(item.name, (names.get(item.name) ?? 0) + 1);
+      }
+      return {
+        stagedObjects: values.length,
+        cityPlaces: values.filter((item) => item.placeType === 'city').length,
+        townPlaces: values.filter((item) => item.placeType === 'town').length,
+        administrativePlaces: values.filter(
+          (item) => item.adminLevel != null && item.placeType == null,
+        ).length,
+        duplicateNames: [...names.values()].filter((count) => count > 1).length,
+      };
+    },
+    async checksums(id) {
+      calls.push({ method: 'checksums', id });
+      return [...staged.values()]
+        .sort((left, right) =>
+          left.osmType.localeCompare(right.osmType) ||
+          left.osmId - right.osmId)
+        .map((item) => ({
+          osmType: item.osmType,
+          osmId: String(item.osmId),
+          contentChecksum: item.contentChecksum,
+        }));
+    },
+  };
+}
+
+async function createFailedCheckpoint({
+  checkpointRepository,
+  controller,
+} = {}) {
+  const repository = checkpointRepository ?? createCheckpointRepositoryMock();
+  const pool = createPool();
+  let downloadCall = 0;
+  let indexParseCall = 0;
+  const service = createOsmCityUpdateService(pool, config, {
+    checkpointRepository: repository,
+    async download(_url, query) {
+      downloadCall += 1;
+      if (downloadCall === 6) {
+        throw new Error('simulated crash near completion');
+      }
+      return {
+        jsonText: downloadCall <= 4
+          ? `index-${downloadCall}`
+          : 'batch-1',
+        bytes: 10,
+        finalURL: config.url,
+        query,
+      };
+    },
+    parseIndex() {
+      const parsed = indexParts[indexParseCall];
+      indexParseCall += 1;
+      return parsed;
+    },
+    parseBatch() {
+      return batches[0];
+    },
+    reportProgress() {},
+  });
+
+  await assert.rejects(
+    service.update(undefined, {}, controller
+      ? {
+          signal: controller.signal,
+          onProgress(progress) {
+            if (progress.phase === 'geometry') {
+              controller.abort(new Error('cancel checkpoint test'));
+            }
+          },
+        }
+      : {}),
+    controller ? /cancel checkpoint test/ : /simulated crash/,
+  );
+  return { repository, pool };
+}
+
 function createDependencies(overrides = {}) {
   let downloadCall = 0;
   let indexParseCall = 0;
@@ -167,6 +365,122 @@ function createDependencies(overrides = {}) {
     ...overrides,
   };
 }
+
+test('OSM resume survives failure and skips already staged objects', async () => {
+  const { repository } = await createFailedCheckpoint();
+
+  assert.equal(repository.state.status, 'failed');
+  assert.equal(repository.state.stagedObjects, 2);
+  assert.equal(repository.state.remainingObjects, 1);
+
+  const pool = createPool();
+  const progress = [];
+  const queries = [];
+  const service = createOsmCityUpdateService(pool, config, {
+    checkpointRepository: repository,
+    async download(_url, query) {
+      queries.push(query);
+      return {
+        jsonText: 'resume-last',
+        bytes: 10,
+        finalURL: config.url,
+        query,
+      };
+    },
+    parseBatch() {
+      return batches[1];
+    },
+    reportProgress(value) {
+      progress.push(value);
+    },
+  });
+
+  const result = await service.update(undefined, { resume: 'true' });
+
+  assert.equal(queries.length, 1);
+  assert.doesNotMatch(queries[0], /out ids/);
+  assert.match(queries[0], /way\(id:9\)/);
+  assert.doesNotMatch(queries[0], /relation\(id:7\)|way\(id:8\)/);
+  assert.equal(result.resumed, true);
+  assert.equal(result.reusedObjects, 2);
+  assert.equal(result.importedPlaces, 3);
+  assert.equal(result.batchCount, 2);
+  assert.equal(result.updateRunId, 9);
+  assert.deepEqual(
+    progress.filter((item) => item.phase === 'resume')
+      .map((item) => ({
+        stagedPlaces: item.stagedPlaces,
+        indexedPlaces: item.indexedPlaces,
+        remainingPlaces: item.remainingPlaces,
+      })),
+    [{
+      stagedPlaces: 2,
+      indexedPlaces: 3,
+      remainingPlaces: 1,
+    }],
+  );
+  assert.ok(pool.queries.includes('BEGIN'));
+  assert.ok(pool.queries.includes('COMMIT'));
+  assert.ok(pool.queries.some((query) =>
+    query.startsWith('DELETE FROM osm_city_update_checkpoint_stage')));
+  assert.ok(pool.queries.some((query) =>
+    query.startsWith('UPDATE osm_city_update_checkpoints')));
+});
+
+test('OSM resume rejects incompatible batch semantics before downloading', async () => {
+  const { repository } = await createFailedCheckpoint();
+  let downloads = 0;
+  const service = createOsmCityUpdateService(createPool(), {
+    ...config,
+    batchSize: 1,
+  }, {
+    checkpointRepository: repository,
+    async download() {
+      downloads += 1;
+      throw new Error('must not download');
+    },
+  });
+
+  await assert.rejects(
+    service.update(undefined, { resume: 'true' }),
+    /checkpoint is incompatible/,
+  );
+  assert.equal(downloads, 0);
+  assert.equal(repository.state.stagedObjects, 2);
+});
+
+test('OSM cancellation keeps the durable checkpoint resumable', async () => {
+  const controller = new AbortController();
+  const repository = createCheckpointRepositoryMock();
+  await createFailedCheckpoint({ checkpointRepository: repository, controller });
+
+  assert.equal(repository.state.status, 'cancelled');
+  assert.equal(repository.state.stagedObjects, 2);
+  assert.equal(repository.state.remainingObjects, 1);
+});
+
+test('OSM fresh start refuses to discard unfinished checkpoint implicitly', async () => {
+  const { repository } = await createFailedCheckpoint();
+  let downloads = 0;
+  const service = createOsmCityUpdateService(
+    createPool(),
+    config,
+    {
+      checkpointRepository: repository,
+      async download() {
+        downloads += 1;
+        throw new Error('must not download');
+      },
+    },
+  );
+
+  await assert.rejects(
+    service.update(undefined, {}),
+    /resume it or explicitly start over/,
+  );
+  assert.equal(downloads, 0);
+  assert.equal(repository.state.stagedObjects, 2);
+});
 
 test('OSM update stages sequential ID batches before one atomic replacement', async () => {
   const pool = createPool();
