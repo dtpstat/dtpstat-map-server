@@ -7,11 +7,27 @@
 .osm-selection-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .osm-settings-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1rem; }
 .osm-boundary-workspace { min-height: 34rem; }
+.osm-boundary-section-card > .panel-description {
+  flex: 0 0 auto;
+  margin: -.15rem 0 .9rem;
+}
+.osm-boundary-section-card .osm-boundary-workspace {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 .osm-boundary-layout {
   min-height: 30rem;
   display: grid;
   grid-template-columns: minmax(18rem, .8fr) minmax(0, 1.6fr);
   gap: .85rem;
+}
+.osm-boundary-section-card .osm-boundary-layout {
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(22rem, .72fr) minmax(0, 1.8fr);
 }
 .osm-boundary-tree-panel,
 .osm-boundary-details {
@@ -69,11 +85,26 @@
 .osm-boundary-meta dt { color: var(--muted); font-size: .65rem; }
 .osm-boundary-meta dd { margin: .15rem 0 0; overflow-wrap: anywhere; font-size: .72rem; }
 .osm-boundary-map { min-height: 18rem; border-radius: 9px; overflow: hidden; }
+.osm-boundary-section-card .osm-boundary-details {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.osm-boundary-section-card .osm-boundary-map {
+  min-height: 0;
+  height: 100%;
+}
 .osm-boundary-map .leaflet-control-attribution { font-size: 9px; }
 
 @media (max-width: 900px) {
-  .osm-boundary-layout { grid-template-columns: minmax(0, 1fr); }
+  .osm-boundary-layout,
+  .osm-boundary-section-card .osm-boundary-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .osm-boundary-section-card .osm-boundary-workspace { overflow: visible; }
   .osm-boundary-tree-panel { max-height: 18rem; }
+  .osm-boundary-section-card .osm-boundary-map {
+    min-height: 24rem;
+    height: auto;
+  }
 }
 @media (max-width: 650px) {
   .osm-selection-grid,
