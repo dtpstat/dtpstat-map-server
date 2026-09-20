@@ -54,3 +54,22 @@ test('geometry editor attribute form exposes visibility tags line fields and pol
   assert.match(html, /id="geometry-new-line"/);
   assert.match(html, /id="geometry-new-polygon"/);
 });
+
+
+test('geometry editor exposes visual staged-import conflict decisions', async () => {
+  const [html, editor] = await Promise.all([
+    read('admin/index.html'),
+    read('admin/geometry-editor.js'),
+  ]);
+  assert.match(html, /id="geometry-import-conflicts"/);
+  assert.match(html, /id="geometry-conflict-candidates"/);
+  assert.match(html, /id="geometry-conflict-keep"/);
+  assert.match(html, /id="geometry-conflict-add"/);
+  assert.match(html, /id="geometry-conflict-replace"/);
+  assert.match(editor, /geometry-import\/pending/);
+  assert.match(editor, /keep-existing/);
+  assert.match(editor, /add-new/);
+  assert.match(editor, /replaceExistingIds/);
+  assert.match(editor, /geometry-editor-import-incoming/);
+  assert.match(editor, /geometry-editor-import-existing/);
+});
