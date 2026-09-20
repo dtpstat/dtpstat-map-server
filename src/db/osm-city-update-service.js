@@ -1038,6 +1038,48 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           batchIndex += 1;
         }
 
+        let checksum;
+        let duplicateNames = [...nameCounts.values()]
+          .filter((count) => count > 1).length;
+        let batchCount = geometryBatches.length;
+
+        if (checkpointRepository) {
+          checkpoint = await checkpointRepository.getById(checkpoint.id);
+          if (checkpoint.stagedObjects !== index.objects.length) {
+            throw new Error(
+              `OSM checkpoint contains ${checkpoint.stagedObjects}/` +
+              `${index.objects.length} indexed objects`,
+            );
+          }
+          checkpoint = await checkpointRepository.mark(
+            checkpoint.id,
+            'ready',
+          );
+          await client.query(DROP_STAGE_SQL);
+          await client.query(
+            MATERIALIZE_CHECKPOINT_STAGE_SQL,
+            [checkpoint.id],
+          );
+
+          const stats = await checkpointRepository.stats(checkpoint.id);
+          cityPlaces = Number(stats.cityPlaces ?? 0);
+          townPlaces = Number(stats.townPlaces ?? 0);
+          administrativePlaces = Number(stats.administrativePlaces ?? 0);
+          duplicateNames = Number(stats.duplicateNames ?? 0);
+          ignoredElements = checkpoint.ignoredElements;
+          batchCount = checkpoint.stagedBatchCount;
+          const checksums = await checkpointRepository.checksums(
+            checkpoint.id,
+          );
+          checksum = sha256Json({
+            formatVersion: OSM_CHECKPOINT_FORMAT_VERSION,
+            indexFingerprint: checkpoint.indexFingerprint,
+            objects: checksums,
+          });
+        } else {
+          checksum = checksumHash.digest('hex');
+        }
+
         const stageCountResult = await client.query(COUNT_STAGE_SQL);
         if (stageCountResult.rows[0]?.count !== index.objects.length) {
           throw new Error('Not every indexed OSM place was staged');
@@ -1070,7 +1112,15 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
 
-        const checksum = checksumHash.digest('hex');
+        if (checkpointRepository) {
+          checkpoint = await checkpointRepository.getById(checkpoint.id);
+          downloadedBytes = checkpoint.downloadedBytes;
+          requestAttemptCount = checkpoint.requestAttemptCount;
+          retryCount = checkpoint.retryCount;
+          retryWaitMs = checkpoint.retryWaitMs;
+          throttleWaitMs = checkpoint.throttleWaitMs;
+        }
+
         const result = {
           dryRun: options.dryRun,
           sourceURL: options.url,
@@ -1083,11 +1133,10 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           townPlaces,
           administrativePlaces,
           duplicateIndexObjects: index.duplicateIndexObjects,
-          duplicateNames: [...nameCounts.values()]
-            .filter((count) => count > 1).length,
+          duplicateNames,
           ignoredElements,
           batchSize: options.batchSize,
-          batchCount: geometryBatches.length,
+          batchCount,
           maxResponseBytes: options.maxResponseBytes,
           maxTotalBytes: options.maxTotalBytes,
           minDelayMs: options.minDelayMs,
@@ -1099,12 +1148,19 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           restoredGeometryLinks: restoredLinksResult.rowCount,
           osmTimestamp: index.osmTimestamp,
           checksum,
+          checkpointId: checkpoint?.id ?? null,
+          resumed: mode.resume,
+          reusedObjects: stagedKeys.size,
           completedAt: new Date().toISOString(),
         };
         if (options.dryRun) {
           await client.query('ROLLBACK');
           inTransaction = false;
-          return result;
+          return {
+            ...result,
+            checkpointStatus: checkpointRepository ? 'ready' : null,
+            resumable: Boolean(checkpointRepository),
+          };
         }
 
         const runResult = await client.query(INSERT_RUN_SQL, [
@@ -1117,18 +1173,39 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           index.osmTimestamp,
           cityPlaces,
           townPlaces,
-          result.duplicateNames,
+          duplicateNames,
           administrativePlaces,
           index.duplicateIndexObjects,
           options.batchSize,
-          geometryBatches.length,
+          batchCount,
         ]);
+
+        if (checkpointRepository) {
+          await client.query(
+            `DELETE FROM osm_city_update_checkpoint_stage
+             WHERE checkpoint_id = $1`,
+            [checkpoint.id],
+          );
+          await client.query(
+            `UPDATE osm_city_update_checkpoints
+             SET status = 'completed',
+                 index_objects = '[]'::jsonb,
+                 last_error = NULL,
+                 completed_at = NOW(),
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [checkpoint.id],
+          );
+        }
+
         throwIfAdminTaskCancelled(operation.signal);
         operation.onCommit?.();
         await client.query('COMMIT');
         inTransaction = false;
         return {
           ...result,
+          checkpointStatus: checkpointRepository ? 'completed' : null,
+          resumable: false,
           updateRunId: runResult.rows[0].id,
           completedAt: runResult.rows[0].createdAt,
         };
