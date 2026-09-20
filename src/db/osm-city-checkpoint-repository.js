@@ -349,6 +349,7 @@ export function createOsmCityCheckpointRepository(pool) {
 
     async stageBatch(checkpointId, places, metrics = {}) {
       const client = await pool.connect();
+      let batchUnbuildableGeometryObjects = 0;
       try {
         await client.query('BEGIN');
         const staged = await client.query(
@@ -358,7 +359,7 @@ export function createOsmCityCheckpointRepository(pool) {
         if (staged.rowCount !== places.length) {
           throw new Error('Not every OSM place in checkpoint batch was staged');
         }
-        const batchUnbuildableGeometryObjects = staged.rows.filter(
+        batchUnbuildableGeometryObjects = staged.rows.filter(
           (row) => row.geometryStatus === 'unbuildable',
         ).length;
 
