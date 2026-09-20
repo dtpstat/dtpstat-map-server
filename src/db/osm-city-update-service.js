@@ -852,11 +852,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         index = combineIndexParts(indexParts);
 
         if (checkpointRepository) {
-          if (checkpoint && mode.restart) {
-            await checkpointRepository.discard(checkpoint.id);
-            checkpoint = null;
-          }
-          checkpoint = await checkpointRepository.create({
+          const checkpointValue = {
             sourceURL: options.url,
             settingsFingerprint,
             indexFingerprint: checkpointIndexFingerprint(index.objects),
@@ -873,7 +869,13 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
             retryCount,
             retryWaitMs,
             throttleWaitMs,
-          });
+          };
+          checkpoint = checkpoint && mode.restart
+            ? await checkpointRepository.replaceResumable(
+                checkpoint.id,
+                checkpointValue,
+              )
+            : await checkpointRepository.create(checkpointValue);
           rememberPersistedMetrics();
         }
       }
