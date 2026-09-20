@@ -120,6 +120,19 @@ HTTP_PORT=3002
 <DATABASE_SCHEMA>.schema_versions
 ```
 
+## Большие portable JSON / ZIP transfers
+
+Admin transfer для OSM boundaries, линий и населения поддерживает raw
+JSON/GeoJSON и single-file ZIP. Экспорт формируется потоково; импорт spooled на
+диск и затем разбирается по элементам без materialization всего JSON в heap
+Node. ZIP обязан содержать ровно одну JSON/GeoJSON entry без каталогов.
+
+DB import выполняется одной транзакцией: malformed JSON/ZIP, schema/PostGIS
+ошибка или cancellation приводят к полному `ROLLBACK`. Лимиты streaming
+transport/decoded JSON/item задаются через
+`IMPORT_API_MAX_STREAM_*_BYTES`. Подробнее:
+[docs/data-transfer.md](docs/data-transfer.md).
+
 ## OSM геометрии
 
 Начиная с `V027`, исходная identity каждого объекта — строго:
