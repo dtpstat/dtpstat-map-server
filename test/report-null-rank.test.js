@@ -15,7 +15,7 @@ function configRow() {
   };
 }
 
-test('report materialization ranks only visible cities and leaves missing metric rank null', async () => {
+test('report materialization ranks only cities with effective geometries and leaves missing metric rank null', async () => {
   let materializeSql = '';
   let rankingSql = '';
   const client = {
@@ -46,7 +46,7 @@ test('report materialization ranks only visible cities and leaves missing metric
   );
   assert.match(
     materializeSql,
-    /FROM city_geometries AS geometry_presence\s*WHERE geometry_presence\.city_id = city\.id/s,
+    /FROM effective_city_geometries AS geometry_presence\s*WHERE geometry_presence\.city_id = city\.id/s,
   );
   assert.doesNotMatch(
     materializeSql,
