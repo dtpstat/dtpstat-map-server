@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { createWriteStream } from 'node:fs';
+import { deflateRawSync } from 'node:zlib';
 import test from 'node:test';
 import {
   createSingleFileZipStream,
@@ -73,6 +74,57 @@ function storedZip(entries) {
   eocd.writeUInt32LE(centralDirectory.length, 12);
   eocd.writeUInt32LE(localOffset, 16);
   return Buffer.concat([...locals, centralDirectory, eocd]);
+}
+
+function classicDescriptorZip(nameValue, dataValue) {
+  const name = Buffer.from(nameValue, 'utf8');
+  const data = Buffer.from(dataValue);
+  const compressed = deflateRawSync(data);
+  const checksum = crc32(data);
+
+  const local = Buffer.alloc(30);
+  local.writeUInt32LE(0x04034b50, 0);
+  local.writeUInt16LE(20, 4);
+  local.writeUInt16LE(0x0808, 6);
+  local.writeUInt16LE(8, 8);
+  local.writeUInt16LE(name.length, 26);
+
+  const descriptor = Buffer.alloc(16);
+  descriptor.writeUInt32LE(0x08074b50, 0);
+  descriptor.writeUInt32LE(checksum, 4);
+  descriptor.writeUInt32LE(compressed.length, 8);
+  descriptor.writeUInt32LE(data.length, 12);
+
+  const centralOffset =
+    local.length + name.length + compressed.length + descriptor.length;
+  const central = Buffer.alloc(46);
+  central.writeUInt32LE(0x02014b50, 0);
+  central.writeUInt16LE(20, 4);
+  central.writeUInt16LE(20, 6);
+  central.writeUInt16LE(0x0808, 8);
+  central.writeUInt16LE(8, 10);
+  central.writeUInt32LE(checksum, 16);
+  central.writeUInt32LE(compressed.length, 20);
+  central.writeUInt32LE(data.length, 24);
+  central.writeUInt16LE(name.length, 28);
+  central.writeUInt32LE(0, 42);
+  const centralRecord = Buffer.concat([central, name]);
+
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(1, 8);
+  eocd.writeUInt16LE(1, 10);
+  eocd.writeUInt32LE(centralRecord.length, 12);
+  eocd.writeUInt32LE(centralOffset, 16);
+
+  return Buffer.concat([
+    local,
+    name,
+    compressed,
+    descriptor,
+    centralRecord,
+    eocd,
+  ]);
 }
 
 function zip64DirectoryInfo(buffer) {
@@ -263,6 +315,40 @@ test('ZIP reader rejects two actual ordinary entries even when directories are p
     await assert.rejects(
       openSingleFileZip(file, { maxUncompressedBytes: 1024 }),
       /exactly one ordinary entry/,
+    );
+  });
+});
+
+
+test('ZIP reader accepts classic streamed data-descriptor archive with extensionless entry', async () => {
+  await withTempZip(async (file) => {
+    const json = Buffer.from('{"producer":"stdin"}');
+    await fs.writeFile(file, classicDescriptorZip('stdin', json));
+
+    const entry = await openSingleFileZip(file, {
+      maxUncompressedBytes: 1024,
+    });
+    assert.equal(entry.fileName, 'stdin');
+    assert.deepEqual(await collect(entry.stream), json);
+  });
+});
+
+test('ZIP reader rejects a data descriptor that disagrees with central metadata', async () => {
+  await withTempZip(async (file) => {
+    const json = Buffer.from('{"value":1}');
+    const archive = await collect(
+      createSingleFileZipStream('stdin', [json]),
+    );
+    const { centralOffset } = zip64DirectoryInfo(archive);
+    const descriptorOffset = centralOffset - 24;
+    assert.equal(archive.readUInt32LE(descriptorOffset), 0x08074b50);
+    const crc = archive.readUInt32LE(descriptorOffset + 4);
+    archive.writeUInt32LE((crc + 1) >>> 0, descriptorOffset + 4);
+    await fs.writeFile(file, archive);
+
+    await assert.rejects(
+      openSingleFileZip(file, { maxUncompressedBytes: 1024 }),
+      /data descriptor does not match/,
     );
   });
 });
