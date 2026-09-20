@@ -7,36 +7,37 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relative) => fs.readFile(path.join(root, relative), 'utf8');
 
-test('city ownership, not geometry boundary activity, drives metrics and public geometry membership', async () => {
-  const [recalculate, reports, cities] = await Promise.all([
+test('effective geometry membership is owned by the exact active OSM boundary', async () => {
+  const [recalculate, reports, cities, transfer] = await Promise.all([
     read('src/db/recalculate-city-statistics.js'),
     read('src/db/report-config-service.js'),
     read('src/db/cities-repository.js'),
+    read('src/db/project-settings-transfer-service.js'),
   ]);
 
-  assert.match(recalculate, /geometry\.city_id = city\.id/);
-  const geometryStatistics = recalculate.slice(
-    recalculate.indexOf('WITH geometry_statistics AS'),
-    recalculate.indexOf('boundary_statistics AS'),
+  assert.match(recalculate, /effective_city_geometries/i);
+  assert.match(reports, /effective_city_geometries/i);
+  assert.match(cities, /effective_city_geometries/i);
+  assert.match(transfer, /effective_city_geometries/i);
+
+  assert.doesNotMatch(
+    cities,
+    /active_boundary\.city_id = geometry\.city_id/,
   );
-  assert.doesNotMatch(geometryStatistics, /boundary\.is_active/);
-  assert.match(reports, /LEFT JOIN city_geometries AS geometry\s+ON geometry\.city_id = city\.id/);
-  assert.doesNotMatch(reports, /metric_boundary\.id = geometry\.boundary_id/);
-  assert.match(cities, /geometry_presence\.city_id = city\.id/);
-  assert.doesNotMatch(cities, /geometry_boundary\.id = geometry_presence\.boundary_id/);
-  assert.match(cities, /active_boundary\.city_id = geometry\.city_id/);
 });
 
-test('database migration enforces deferred boundary/geometry consistency and derived values', async () => {
-  const migration = await read('db/migrations/V036__geometry_model_invariants.sql');
+test('historical V036 keeps derived-value normalization and V038 defines final ownership', async () => {
+  const [legacy, finalMigration] = await Promise.all([
+    read('db/migrations/V036__geometry_model_invariants.sql'),
+    read('db/migrations/V038__effective_geometry_ownership.sql'),
+  ]);
 
-  assert.match(migration, /ALTER COLUMN CITY_ID SET NOT NULL/);
-  assert.match(migration, /NORMALIZE_CITY_GEOMETRY_DERIVED/);
-  assert.match(migration, /ALIGN_ACTIVE_BOUNDARY_GEOMETRIES/);
-  assert.match(migration, /CREATE CONSTRAINT TRIGGER CITY_BOUNDARIES_CONSISTENCY_CHECK/);
-  assert.match(migration, /DEFERRABLE INITIALLY DEFERRED/);
-  assert.match(migration, /CREATE CONSTRAINT TRIGGER CITY_GEOMETRIES_CONSISTENCY_CHECK/);
-  assert.match(migration, /ASSERT_NO_PENDING_GEOMETRY_IMPORT/);
+  assert.match(legacy, /NORMALIZE_CITY_GEOMETRY_DERIVED/);
+  assert.match(finalMigration, /ALTER COLUMN CITY_ID DROP NOT NULL/);
+  assert.match(finalMigration, /ON DELETE SET NULL/);
+  assert.match(finalMigration, /EFFECTIVE_CITY_GEOMETRIES/);
+  assert.match(finalMigration, /SYNC_GEOMETRY_CITY_FROM_BOUNDARY/);
+  assert.match(finalMigration, /PROPAGATE_BOUNDARY_CITY_TO_GEOMETRIES/);
 });
 
 test('legacy portable line replacement cannot erase manual edits or non-line geometries', async () => {
@@ -47,5 +48,4 @@ test('legacy portable line replacement cannot erase manual edits or non-line geo
   assert.match(source, /GeometryType\(geom\) IN \('LINESTRING', 'MULTILINESTRING'\)/);
   assert.match(source, /AND NOT was_edited/);
   assert.match(source, /Legacy line replacement import is blocked because manually edited lines exist/);
-  assert.match(source, /COALESCE\(city\.id, boundary\.city_id\)/);
 });

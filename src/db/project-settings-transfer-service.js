@@ -264,7 +264,7 @@ async function materializeReport(client, config) {
     )
       AND EXISTS (
         SELECT 1
-        FROM city_geometries AS geometry_presence
+        FROM effective_city_geometries AS geometry_presence
         WHERE geometry_presence.city_id = city.id
       )
     ORDER BY city.id

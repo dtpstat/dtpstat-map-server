@@ -42,7 +42,7 @@ try {
   const version = await client.query(
     'SELECT MAX(version)::integer AS version FROM buslanes.schema_versions',
   );
-  assert(version.rows[0]?.version === 37, 'Expected schema version 37');
+  assert(version.rows[0]?.version === 38, 'Expected schema version 38');
 
   const postgis = await client.query('SELECT PostGIS_Version() AS version');
   assert(postgis.rows[0]?.version, 'PostGIS is not available');
@@ -232,12 +232,17 @@ try {
   `);
   const otherCityId = Number(otherCity.rows[0].id);
 
-  await expectCommitFailure(
-    () => client.query(
-      'UPDATE city_geometries SET city_id = $2 WHERE id = $1',
-      [geometryId, otherCityId],
-    ),
-    /active boundary .* belongs to CITY_ID/i,
+  await client.query(
+    'UPDATE city_geometries SET city_id = $2 WHERE id = $1',
+    [geometryId, otherCityId],
+  );
+  const normalizedOwner = await client.query(
+    'SELECT city_id::bigint AS city_id FROM city_geometries WHERE id = $1',
+    [geometryId],
+  );
+  assert(
+    Number(normalizedOwner.rows[0].city_id) === canonicalCityId,
+    'Geometry CITY_ID was not normalized back from BOUNDARY_ID',
   );
 
   await expectCommitFailure(
@@ -270,6 +275,40 @@ try {
     `),
     /has no CITY_ID/i,
   );
+
+  // Deactivation must remove the row only from the effective set, not from
+  // durable CITY_GEOMETRIES storage. Reactivation restores it automatically.
+  await client.query('BEGIN');
+  await client.query(
+    'UPDATE city_boundaries SET is_active = FALSE WHERE id = $1',
+    [boundaryId],
+  );
+  await client.query('COMMIT');
+
+  let effective = await client.query(
+    'SELECT id FROM effective_city_geometries WHERE id = $1',
+    [geometryId],
+  );
+  assert(effective.rowCount === 0, 'Inactive boundary geometry remained effective');
+  let durable = await client.query(
+    'SELECT id FROM city_geometries WHERE id = $1',
+    [geometryId],
+  );
+  assert(durable.rowCount === 1, 'Boundary deactivation deleted durable geometry');
+
+  await client.query('BEGIN');
+  await client.query(
+    'UPDATE city_boundaries SET is_active = TRUE WHERE id = $1',
+    [boundaryId],
+  );
+  await client.query('SELECT sync_active_boundary_cities()');
+  await client.query('COMMIT');
+
+  effective = await client.query(
+    'SELECT id FROM effective_city_geometries WHERE id = $1',
+    [geometryId],
+  );
+  assert(effective.rowCount === 1, 'Reactivated boundary geometry did not become effective');
 
   const pending = await client.query(`
     INSERT INTO geometry_import_sessions (kind, status, metadata)
