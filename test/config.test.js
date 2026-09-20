@@ -48,6 +48,9 @@ test('loadConfig enables HTTP with safe generic defaults', () => {
   assert.equal(config.osmCityUpdate.maxRetries, 6);
   assert.equal(config.osmCityUpdate.retryBaseDelayMs, 30000);
   assert.equal(config.osmCityUpdate.retryMaxDelayMs, 240000);
+  assert.equal(config.osmCityUpdate.maxResponseBytes, 128 * 1024 * 1024);
+  assert.equal(config.osmCityUpdate.maxTotalBytes, 2 * 1024 * 1024 * 1024);
+  assert.equal(config.osmCityUpdate.maxBytes, config.osmCityUpdate.maxTotalBytes);
   assert.equal(
     config.osmCityUpdate.userAgent,
     'buslanes/2.0 OSM city updater',
@@ -130,6 +133,33 @@ test('loadConfig requires the default OSM endpoint in the exact URL allowlist', 
     }, '/project'),
     /OSM_CITY_UPDATE_URL must be included/,
   );
+});
+
+test('loadConfig separates OSM response and total byte limits', () => {
+  const config = loadConfig({
+    ...REQUIRED_ENV,
+    OSM_CITY_UPDATE_MAX_RESPONSE_BYTES: String(64 * 1024 * 1024),
+    OSM_CITY_UPDATE_MAX_TOTAL_BYTES: String(3 * 1024 * 1024 * 1024),
+  }, '/project');
+
+  assert.equal(config.osmCityUpdate.maxResponseBytes, 64 * 1024 * 1024);
+  assert.equal(config.osmCityUpdate.maxTotalBytes, 3 * 1024 * 1024 * 1024);
+
+  assert.throws(
+    () => loadConfig({
+      ...REQUIRED_ENV,
+      OSM_CITY_UPDATE_MAX_RESPONSE_BYTES: String(256 * 1024 * 1024),
+      OSM_CITY_UPDATE_MAX_TOTAL_BYTES: String(128 * 1024 * 1024),
+    }, '/project'),
+    /must not exceed/,
+  );
+
+  const legacy = loadConfig({
+    ...REQUIRED_ENV,
+    OSM_CITY_UPDATE_MAX_BYTES: String(300 * 1024 * 1024),
+  }, '/project');
+  assert.equal(legacy.osmCityUpdate.maxResponseBytes, 128 * 1024 * 1024);
+  assert.equal(legacy.osmCityUpdate.maxTotalBytes, 300 * 1024 * 1024);
 });
 
 test('loadConfig keeps the OSM geometry batch within its configured maximum', () => {
