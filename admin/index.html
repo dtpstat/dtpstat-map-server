@@ -199,6 +199,20 @@
 
                   <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
                 </div>
+                <div class="osm-checkpoint" id="osm-checkpoint" hidden>
+                  <div>
+                    <strong>Сохранён прогресс OSM-загрузки</strong>
+                    <p id="osm-checkpoint-summary"></p>
+                  </div>
+                  <div class="osm-checkpoint-actions">
+                    <button class="secondary" id="osm-resume" type="button">
+                      Возобновить
+                    </button>
+                    <button class="danger" id="osm-checkpoint-discard" type="button">
+                      Удалить сохранённый прогресс
+                    </button>
+                  </div>
+                </div>
                 <div class="osm-settings-actions">
                   <button class="secondary" id="osm-defaults" type="button">Перезагрузить сохранённые</button>
                   <button class="secondary" id="osm-settings-save" type="button">Сохранить настройки загрузки</button>
