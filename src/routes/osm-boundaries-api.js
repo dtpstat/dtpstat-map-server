@@ -61,15 +61,15 @@ function settingsPayload(value, config) {
     adminLevelMax: integer(value.adminLevelMax, 'adminLevelMax', 1, 20),
     batchSize: integer(value.batchSize, 'batchSize', 1, config.maxBatchSize),
     minDelayMs: integer(value.minDelayMs, 'minDelayMs', 0, 300000),
-    timeoutMs: integer(value.timeoutMs, 'timeoutMs', 1000, config.timeoutMs),
+    timeoutMs: integer(value.timeoutMs, 'timeoutMs', 1000, 900000),
     queryTimeoutSeconds: integer(
       value.queryTimeoutSeconds,
       'queryTimeoutSeconds',
       1,
-      config.queryTimeoutSeconds,
+      600,
     ),
-    maxBytes: integer(value.maxBytes, 'maxBytes', 1024, config.maxBytes),
-    maxRetries: integer(value.maxRetries, 'maxRetries', 0, config.maxRetries),
+    maxBytes: integer(value.maxBytes, 'maxBytes', 1024, 500 * 1024 * 1024),
+    maxRetries: integer(value.maxRetries, 'maxRetries', 0, 20),
     retryBaseDelayMs: integer(value.retryBaseDelayMs, 'retryBaseDelayMs', 1000, 3600000),
     retryMaxDelayMs: integer(value.retryMaxDelayMs, 'retryMaxDelayMs', 1000, 3600000),
   };
@@ -120,10 +120,10 @@ export function createOsmBoundariesRouter({
         allowedURLs: [...osmConfig.allowedURLs],
         limits: {
           maxBatchSize: osmConfig.maxBatchSize,
-          timeoutMs: osmConfig.timeoutMs,
-          queryTimeoutSeconds: osmConfig.queryTimeoutSeconds,
-          maxBytes: osmConfig.maxBytes,
-          maxRetries: osmConfig.maxRetries,
+          timeoutMs: 900000,
+          queryTimeoutSeconds: 600,
+          maxBytes: 500 * 1024 * 1024,
+          maxRetries: 20,
         },
       });
     } catch (error) { next(error); }
