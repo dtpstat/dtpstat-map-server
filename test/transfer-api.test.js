@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import http from 'node:http';
+import { once } from 'node:events';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -163,6 +164,55 @@ async function collect(source) {
   return Buffer.concat(chunks);
 }
 
+function zip64DirectoryInfo(buffer) {
+  const eocd = buffer.length - 22;
+  assert.equal(buffer.readUInt32LE(eocd), 0x06054b50);
+  const locator = eocd - 20;
+  assert.equal(buffer.readUInt32LE(locator), 0x07064b50);
+  const zip64Eocd = Number(buffer.readBigUInt64LE(locator + 8));
+  assert.equal(buffer.readUInt32LE(zip64Eocd), 0x06064b50);
+  return {
+    zip64Eocd,
+    centralOffset: Number(buffer.readBigUInt64LE(zip64Eocd + 48)),
+  };
+}
+
+async function postChunked(baseUrl, pathname, source, headers = {}) {
+  const target = new URL(pathname, baseUrl);
+  return new Promise((resolve, reject) => {
+    const request = http.request(target, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Transfer-Encoding': 'chunked',
+      },
+    }, (response) => {
+      const chunks = [];
+      response.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+      response.on('error', reject);
+      response.on('end', () => {
+        resolve({
+          status: response.statusCode,
+          headers: response.headers,
+          body: Buffer.concat(chunks),
+        });
+      });
+    });
+    request.on('error', reject);
+
+    void (async () => {
+      try {
+        for await (const chunk of source) {
+          if (!request.write(chunk)) await once(request, 'drain');
+        }
+        request.end();
+      } catch (error) {
+        request.destroy(error);
+      }
+    })();
+  });
+}
+
 async function zipBuffer(fileName, payload) {
   return collect(createSingleFileZipStream(
     fileName,
@@ -300,12 +350,59 @@ test('single-file ZIP import is decoded before the transactional service task', 
   }, { importService: service });
 });
 
+test('chunked ZIP64 import accepts an stdin-style entry with unknown source size', async () => {
+  let received;
+  const payload = {
+    type: 'FeatureCollection',
+    features: [{
+      type: 'Feature',
+      properties: { short_name: 'Поток', lanes: 1 },
+      geometry: {
+        type: 'LineString',
+        coordinates: [[30, 60], [30.1, 60.1]],
+      },
+    }],
+  };
+  const json = Buffer.from(JSON.stringify(payload));
+  const archive = createSingleFileZipStream(
+    'stdin',
+    (async function* () {
+      for (let offset = 0; offset < json.length; offset += 13) {
+        yield json.subarray(offset, offset + 13);
+      }
+    })(),
+  );
+
+  await withServer(async (baseUrl) => {
+    const response = await postChunked(
+      baseUrl,
+      '/api/admin/import/lines',
+      archive,
+      {
+        Authorization: authorization,
+        'Content-Type': 'application/zip',
+      },
+    );
+    assert.equal(response.status, 202);
+    const accepted = JSON.parse(response.body.toString('utf8'));
+    const completed = await waitForTask(baseUrl, accepted);
+    assert.equal(completed.status, 'succeeded');
+    assert.deepEqual(received, payload);
+  }, {
+    importService: {
+      async replaceFromGeoJson(body) {
+        received = body;
+        return { geometries: body.features.length };
+      },
+    },
+  });
+});
+
 test('ZIP import with more than one entry fails the admin task', async () => {
   const archive = await zipBuffer('lines.geojson', lineSnapshot);
-  const eocd = archive.length - 22;
-  assert.equal(archive.readUInt32LE(eocd), 0x06054b50);
-  archive.writeUInt16LE(2, eocd + 8);
-  archive.writeUInt16LE(2, eocd + 10);
+  const { zip64Eocd } = zip64DirectoryInfo(archive);
+  archive.writeBigUInt64LE(2n, zip64Eocd + 24);
+  archive.writeBigUInt64LE(2n, zip64Eocd + 32);
 
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/admin/import/lines`, {
@@ -322,7 +419,7 @@ test('ZIP import with more than one entry fails the admin task', async () => {
     assert.equal(completed.status, 'failed');
     assert.match(
       completed.task.error.message,
-      /exactly one file entry/,
+      /entry count|exactly one ordinary entry/,
     );
   });
 });
