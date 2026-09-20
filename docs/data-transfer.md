@@ -2,7 +2,7 @@
 
 Admin API переносит три независимых набора source data:
 
-1. OSM city/town boundaries — GeoJSON;
+1. OSM place/admin boundaries — GeoJSON;
 2. линии + dictionary business line types — GeoJSON или portable KML;
 3. население — JSON.
 
@@ -19,7 +19,7 @@ GET  /api/admin/settings/export
 POST /api/admin/settings/import
 ```
 
-Текущий settings format: `schemaVersion 6`.
+Текущий settings format: `schemaVersion 7`.
 
 Подробнее: [project-settings-transfer.md](project-settings-transfer.md).
 
@@ -45,15 +45,18 @@ GET /api/admin/export/cities
 
 Portable city snapshot содержит OSM provenance и, если boundary уже связан с application city, переносимые city fields.
 
-Boundary properties включают:
+Boundary properties schemaVersion 2 включают:
 
-- `placeType` (`city`/`town`);
+- `placeType` (`city`/`town`/null);
+- `adminLevel`;
+- `active`;
+- `displayName` / `displayType`;
 - `osmType` (`way`/`relation`);
 - `osmId`;
 - `osmName`;
 - OSM tags/timestamp;
 - geometry `Polygon`/`MultiPolygon`;
-- linked city slug/name/fullName/attributes.
+- linked city slug/name/fullName/displayType/attributes.
 
 ## Import
 
@@ -68,31 +71,20 @@ Import:
 2. загружает temporary staging пакетами;
 3. проверяет PostGIS geometry validity/area;
 4. сохраняет существующие line-to-boundary references по OSM provenance, где это возможно;
-5. заменяет `CITY_BOUNDARIES` в transaction;
-6. применяет DB normalization `V023`;
-7. пересчитывает report/public snapshots после успешного real update.
+5. атомарно заменяет `CITY_BOUNDARIES`;
+6. пересчитывает hierarchy по полному `ST_Covers`;
+7. синхронизирует application cities только с активными boundaries;
+8. пересчитывает city statistics, report/public snapshots.
 
-### Логический город после V023
+### Identity и hierarchy после V027
 
-`CITY_BOUNDARIES.FULL_NAME` вычисляется как:
+`osmType + osmId` — identity исходного OSM объекта. Разные relations не
+объединяются по имени. Пользовательская identity активного объекта задаётся
+отдельно через `displayType + displayName`; среди активных она уникальна после
+нормализации регистра и пробелов.
 
-```text
-addr:district
-→ name:ru
-→ osm_name
-```
-
-Для `OSM_TYPE='relation'` несколько source rows с одинаковыми:
-
-```text
-PLACE_TYPE + FULL_NAME
-```
-
-объединяются в один `MultiPolygon` через `ST_UnaryUnion(ST_Collect(...))`.
-
-Таким образом `osmType + osmId` остаётся **source provenance/portable-transfer key**, но не является identity логического города после relation normalization.
-
-Когда normalized boundary связан с `CITIES.ID`, его `FULL_NAME` синхронизируется в `CITIES.FULL_NAME`. Короткое `CITIES.NAME` остаётся отдельным display/import name.
+`parentId` является производным и в portable snapshot не считается authority:
+после импорта дерево строится заново по геометрическому containment.
 
 # Линии и LINE_TYPES
 
@@ -206,7 +198,7 @@ GET /api/admin/export/populations
 
 Файл: `populations.json`.
 
-Для каждой записи переносятся name/citySlug/population/asOf/source/attributes.
+Для каждой записи переносятся type/name/citySlug/population/asOf/source/attributes.
 
 ## Import
 
@@ -215,7 +207,12 @@ POST /api/admin/populations
 Content-Type: application/json
 ```
 
-Population snapshot может содержать города, отсутствующие в target `cities`. Такие entries пропускаются без падения всей операции.
+Population matching выполняется только по активным OSM boundaries. Основная
+identity — нормализованные `type + name` без учёта регистра и whitespace.
+Legacy запись без `type` принимается только если имя соответствует ровно одному
+активному объекту; неоднозначные записи не угадываются.
+
+Записи без совпадения пропускаются без падения всей операции.
 
 Result содержит, в частности:
 
@@ -224,7 +221,9 @@ Result содержит, в частности:
   "cities": 71,
   "requestedCities": 72,
   "skippedCount": 1,
-  "skippedCities": ["Киров"]
+  "skippedCities": ["Киров"],
+  "ambiguousCount": 0,
+  "ambiguousCities": []
 }
 ```
 
