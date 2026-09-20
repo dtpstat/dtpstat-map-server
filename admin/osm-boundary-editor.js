@@ -1,5 +1,5 @@
 if (typeof document !== 'undefined') {
-  const panel = document.querySelector('#operation-osm-objects');
+  const panel = document.querySelector('#admin-section-osm-objects');
   const treeHost = document.querySelector('#osm-boundary-tree');
   const refreshButton = document.querySelector('#osm-boundary-refresh');
   const form = document.querySelector('#osm-boundary-form');
@@ -20,6 +20,7 @@ if (typeof document !== 'undefined') {
     const active = field('active');
     const displayName = field('displayName');
     const displayType = field('displayType');
+    const population = field('population');
     const save = form.querySelector('button[type="submit"]');
 
     function setMessage(text, tone = '') {
@@ -141,7 +142,10 @@ if (typeof document !== 'undefined') {
       for (const control of [active, displayName, displayType, save]) {
         control.disabled = !enabled;
       }
+      population.disabled = !enabled || !item?.active;
       if (!item) {
+        population.value = '';
+        population.dataset.initialValue = '';
         title.textContent = 'Выберите объект в дереве';
         meta.replaceChildren();
         renderTree();
@@ -151,6 +155,11 @@ if (typeof document !== 'undefined') {
       active.checked = Boolean(item.active);
       displayName.value = item.displayName;
       displayType.value = item.displayType;
+      population.value = item.population ?? '';
+      population.dataset.initialValue = item.population === null || item.population === undefined
+        ? ''
+        : String(item.population);
+      population.disabled = !active.checked;
       title.textContent = item.displayName;
       meta.replaceChildren(
         metaItem('OSM', `${item.osmType}/${item.osmId}`),
@@ -159,6 +168,8 @@ if (typeof document !== 'undefined') {
         metaItem('admin_level', item.adminLevel),
         metaItem('Площадь, км²', Number(item.areaKm2).toLocaleString('ru-RU', { maximumFractionDigits: 2 })),
         metaItem('DB city_id', item.cityId),
+        metaItem('Население на дату', item.populationAsOf),
+        metaItem('Источник населения', item.populationSource),
       );
       renderTree();
     }
@@ -234,11 +245,23 @@ if (typeof document !== 'undefined') {
           {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              active: active.checked,
-              displayName: displayName.value.trim(),
-              displayType: displayType.value,
-            }),
+            body: JSON.stringify((() => {
+              const changes = {
+                active: active.checked,
+                displayName: displayName.value.trim(),
+                displayType: displayType.value,
+              };
+              const populationValue = population.value.trim();
+              if (
+                active.checked &&
+                populationValue !== (population.dataset.initialValue ?? '')
+              ) {
+                changes.population = populationValue === ''
+                  ? null
+                  : Number(populationValue);
+              }
+              return changes;
+            })()),
           },
         );
         await load();
@@ -253,8 +276,12 @@ if (typeof document !== 'undefined') {
       }
     });
 
+    active.addEventListener('change', () => {
+      population.disabled = !state.selectedId || !active.checked;
+    });
+
     refreshButton.addEventListener('click', () => void load());
-    document.querySelector('#operation-tab-osm-objects')?.addEventListener('click', () => {
+    window.addEventListener('dtpstat:osm-boundary-editor-open', () => {
       void load();
       window.setTimeout(() => state.map?.invalidateSize(), 0);
     });
