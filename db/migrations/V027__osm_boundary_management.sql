@@ -205,16 +205,45 @@ RETURNS VOID
 LANGUAGE PLPGSQL
 AS $FUNCTION$
 BEGIN
+    -- If an active boundary identity changes, release its stale application
+    -- city link so the normalized type/name can be resolved again.
     UPDATE BUSLANES.CITY_BOUNDARIES AS BOUNDARY
-    SET CITY_ID = CITY.ID,
+    SET CITY_ID = NULL,
         UPDATED_AT = NOW()
     FROM BUSLANES.CITIES AS CITY
     WHERE BOUNDARY.IS_ACTIVE
+      AND BOUNDARY.CITY_ID = CITY.ID
+      AND (
+        LOWER(REGEXP_REPLACE(CITY.DISPLAY_TYPE, '[[:space:]]+', '', 'g'))
+            <> LOWER(REGEXP_REPLACE(BOUNDARY.DISPLAY_TYPE, '[[:space:]]+', '', 'g'))
+        OR LOWER(REGEXP_REPLACE(CITY.NAME, '[[:space:]]+', '', 'g'))
+            <> LOWER(REGEXP_REPLACE(BOUNDARY.DISPLAY_NAME, '[[:space:]]+', '', 'g'))
+      );
+
+    -- CITIES is storage, not the uniqueness authority. Reuse the oldest
+    -- compatible row if legacy data contains equivalent normalized identities.
+    UPDATE BUSLANES.CITY_BOUNDARIES AS BOUNDARY
+    SET CITY_ID = (
+            SELECT CITY.ID
+            FROM BUSLANES.CITIES AS CITY
+            WHERE LOWER(REGEXP_REPLACE(CITY.DISPLAY_TYPE, '[[:space:]]+', '', 'g'))
+                  = LOWER(REGEXP_REPLACE(BOUNDARY.DISPLAY_TYPE, '[[:space:]]+', '', 'g'))
+              AND LOWER(REGEXP_REPLACE(CITY.NAME, '[[:space:]]+', '', 'g'))
+                  = LOWER(REGEXP_REPLACE(BOUNDARY.DISPLAY_NAME, '[[:space:]]+', '', 'g'))
+            ORDER BY CITY.ID
+            LIMIT 1
+        ),
+        UPDATED_AT = NOW()
+    WHERE BOUNDARY.IS_ACTIVE
       AND BOUNDARY.CITY_ID IS NULL
-      AND LOWER(REGEXP_REPLACE(CITY.DISPLAY_TYPE, '[[:space:]]+', '', 'g'))
-          = LOWER(REGEXP_REPLACE(BOUNDARY.DISPLAY_TYPE, '[[:space:]]+', '', 'g'))
-      AND LOWER(REGEXP_REPLACE(CITY.NAME, '[[:space:]]+', '', 'g'))
-          = LOWER(REGEXP_REPLACE(BOUNDARY.DISPLAY_NAME, '[[:space:]]+', '', 'g'));
+      AND EXISTS (
+            SELECT 1
+            FROM BUSLANES.CITIES AS CITY
+            WHERE LOWER(REGEXP_REPLACE(CITY.DISPLAY_TYPE, '[[:space:]]+', '', 'g'))
+                  = LOWER(REGEXP_REPLACE(BOUNDARY.DISPLAY_TYPE, '[[:space:]]+', '', 'g'))
+              AND LOWER(REGEXP_REPLACE(CITY.NAME, '[[:space:]]+', '', 'g'))
+                  = LOWER(REGEXP_REPLACE(BOUNDARY.DISPLAY_NAME, '[[:space:]]+', '', 'g'))
+        );
 
     INSERT INTO BUSLANES.CITIES (
         SLUG,
@@ -272,7 +301,18 @@ BEGIN
         ),
         UPDATED_AT = NOW()
     FROM BUSLANES.CITY_BOUNDARIES AS BOUNDARY
-    WHERE BOUNDARY.CITY_ID = CITY.ID;
+    WHERE BOUNDARY.CITY_ID = CITY.ID
+      AND BOUNDARY.IS_ACTIVE;
+
+    -- Line rows carry both boundary_id and city_id; keep city_id aligned after
+    -- an active boundary is renamed or reassigned.
+    UPDATE BUSLANES.CITY_GEOMETRIES AS GEOMETRY
+    SET CITY_ID = BOUNDARY.CITY_ID
+    FROM BUSLANES.CITY_BOUNDARIES AS BOUNDARY
+    WHERE GEOMETRY.BOUNDARY_ID = BOUNDARY.ID
+      AND BOUNDARY.IS_ACTIVE
+      AND BOUNDARY.CITY_ID IS NOT NULL
+      AND GEOMETRY.CITY_ID IS DISTINCT FROM BOUNDARY.CITY_ID;
 END
 $FUNCTION$;
 
