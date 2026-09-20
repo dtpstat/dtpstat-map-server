@@ -52,8 +52,10 @@ function sizeLimitTransform(maxBytes, message) {
 }
 
 /**
- * Spool a protected transfer request to disk without buffering it in memory.
- * The task starts only after the complete HTTP body has been received.
+ * Spool only the transport bytes of a protected transfer request without
+ * buffering them in memory. Content-Length is optional: chunked bodies from a
+ * pipe/stdin ZIP producer are accepted. Decoded JSON is never materialized as
+ * a temporary file and is consumed later as a stream inside one DB transaction.
  *
  * @param {import('express').Request} request
  * @param {{
@@ -172,12 +174,19 @@ function decodedStreamFor(upload) {
  * archive fails the surrounding DB transaction.
  *
  * @param {object} upload
- * @param {{ maxJsonBytes: number, signal?: AbortSignal }} options
+ * @param {{
+ *   maxJsonBytes: number,
+ *   maxZipCompressionRatio?: number,
+ *   maxZipEntries?: number,
+ *   signal?: AbortSignal
+ * }} options
  */
 export async function openUploadedJson(upload, options) {
   if (upload.contentType === 'application/zip') {
     const entry = await openSingleFileZip(upload.path, {
       maxUncompressedBytes: options.maxJsonBytes,
+      maxCompressionRatio: options.maxZipCompressionRatio,
+      maxEntries: options.maxZipEntries,
       signal: options.signal,
     });
     return {
