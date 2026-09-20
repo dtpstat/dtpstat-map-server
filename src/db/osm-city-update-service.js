@@ -386,6 +386,14 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
       );
       return;
     }
+    if (progress.phase === 'split') {
+      console.warn(
+        `OSM geometry batch ${progress.batch} exceeded ` +
+        `${progress.limitBytes} bytes; split ${progress.objectCount} objects into ` +
+        `${progress.splitSizes.join('+')}`,
+      );
+      return;
+    }
     console.info(
       `OSM city update batch ${progress.batch}/${progress.batchCount}: ` +
       `${progress.stagedPlaces}/${progress.indexedPlaces} places staged`,
@@ -427,7 +435,8 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
             minDelayMs: savedSettings.minDelayMs,
             timeoutMs: savedSettings.timeoutMs,
             queryTimeoutSeconds: savedSettings.queryTimeoutSeconds,
-            maxBytes: savedSettings.maxBytes,
+            maxResponseBytes: savedSettings.maxResponseBytes,
+            maxTotalBytes: savedSettings.maxTotalBytes,
             maxRetries: savedSettings.maxRetries,
             retryBaseDelayMs: savedSettings.retryBaseDelayMs,
             retryMaxDelayMs: savedSettings.retryMaxDelayMs,
@@ -456,19 +465,29 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
             }
           }
 
-          const remainingBytes = options.maxBytes - downloadedBytes;
-          if (remainingBytes < 1) {
+          const remainingTotalBytes =
+            options.maxTotalBytes - downloadedBytes;
+          if (remainingTotalBytes < 1) {
             throw new OsmCityDownloadError(
               'OSM responses exceed the configured total size limit',
+              {
+                code: 'total-size-limit',
+                limitBytes: options.maxTotalBytes,
+                receivedBytes: downloadedBytes,
+              },
             );
           }
+          const responseLimitBytes = Math.min(
+            options.maxResponseBytes,
+            remainingTotalBytes,
+          );
 
           requestAttemptCount += 1;
           try {
             const downloaded = await download(options.url, overpassQuery, {
               allowedHosts: config.allowedHosts,
               timeoutMs: options.timeoutMs,
-              maxBytes: remainingBytes,
+              maxBytes: responseLimitBytes,
               userAgent: config.userAgent,
               signal: operation.signal,
             });
@@ -482,6 +501,23 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
             return downloaded;
           } catch (error) {
             lastRequestCompletedAt = now();
+            if (
+              error instanceof OsmCityDownloadError &&
+              error.code === 'response-size-limit' &&
+              responseLimitBytes < options.maxResponseBytes
+            ) {
+              const totalLimitError = new OsmCityDownloadError(
+                'OSM responses exceed the configured total size limit',
+                {
+                  code: 'total-size-limit',
+                  limitBytes: options.maxTotalBytes,
+                  receivedBytes: downloadedBytes,
+                  finalURL: error.finalURL,
+                },
+              );
+              totalLimitError.cause = error;
+              throw totalLimitError;
+            }
             if (!(error instanceof OsmCityDownloadError) ||
                 !RETRYABLE_HTTP_STATUS_CODES.has(error.statusCode)) {
               throw error;
@@ -568,7 +604,10 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         operation.onProgress?.(progress);
       }
       const index = combineIndexParts(indexParts);
-      const batchCount = Math.ceil(index.objects.length / options.batchSize);
+      const geometryBatches = [];
+      for (let offset = 0; offset < index.objects.length; offset += options.batchSize) {
+        geometryBatches.push(index.objects.slice(offset, offset + options.batchSize));
+      }
       const client = await pool.connect();
       let inTransaction = false;
       try {
@@ -582,18 +621,61 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         let stagedPlaces = 0;
         const nameCounts = new Map();
 
-        for (let offset = 0; offset < index.objects.length; offset += options.batchSize) {
+        for (let batchIndex = 0; batchIndex < geometryBatches.length;) {
           throwIfAdminTaskCancelled(operation.signal);
-          const objects = index.objects.slice(offset, offset + options.batchSize);
-          const batchNumber = Math.floor(offset / options.batchSize) + 1;
-          const batchDownload = await downloadQuery(
-            buildOsmPlacesBatchQuery(objects, options.queryTimeoutSeconds),
-            {
-              requestPhase: 'geometry',
-              batch: batchNumber,
-              batchCount,
-            },
-          );
+          const objects = geometryBatches[batchIndex];
+          const batchNumber = batchIndex + 1;
+          let batchDownload;
+          try {
+            batchDownload = await downloadQuery(
+              buildOsmPlacesBatchQuery(objects, options.queryTimeoutSeconds),
+              {
+                requestPhase: 'geometry',
+                batch: batchNumber,
+                batchCount: geometryBatches.length,
+              },
+            );
+          } catch (error) {
+            if (
+              error instanceof OsmCityDownloadError &&
+              error.code === 'response-size-limit'
+            ) {
+              if (objects.length === 1) {
+                const object = objects[0];
+                const objectError = new OsmCityDownloadError(
+                  `OSM object ${objectKey(object)} exceeds the configured single-response size limit`,
+                  {
+                    code: 'response-size-limit',
+                    limitBytes: options.maxResponseBytes,
+                    receivedBytes: error.receivedBytes,
+                    finalURL: error.finalURL,
+                  },
+                );
+                objectError.cause = error;
+                throw objectError;
+              }
+              const splitAt = Math.ceil(objects.length / 2);
+              const left = objects.slice(0, splitAt);
+              const right = objects.slice(splitAt);
+              geometryBatches.splice(batchIndex, 1, left, right);
+              const progress = {
+                phase: 'split',
+                requestPhase: 'geometry',
+                batch: batchNumber,
+                batchCount: geometryBatches.length,
+                objectCount: objects.length,
+                splitSizes: [left.length, right.length],
+                limitBytes: options.maxResponseBytes,
+                indexedPlaces: index.objects.length,
+                stagedPlaces,
+              };
+              reportProgress(progress);
+              operation.onProgress?.(progress);
+              continue;
+            }
+            throw error;
+          }
+
           const parsed = parseBatch(batchDownload.jsonText);
           assertCompleteBatch(objects, parsed.places, batchNumber);
 
@@ -615,12 +697,13 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           const progress = {
             phase: 'geometry',
             batch: batchNumber,
-            batchCount,
+            batchCount: geometryBatches.length,
             stagedPlaces,
             indexedPlaces: index.objects.length,
           };
           reportProgress(progress);
           operation.onProgress?.(progress);
+          batchIndex += 1;
         }
 
         const stageCountResult = await client.query(COUNT_STAGE_SQL);
@@ -672,7 +755,9 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
             .filter((count) => count > 1).length,
           ignoredElements,
           batchSize: options.batchSize,
-          batchCount,
+          batchCount: geometryBatches.length,
+          maxResponseBytes: options.maxResponseBytes,
+          maxTotalBytes: options.maxTotalBytes,
           minDelayMs: options.minDelayMs,
           maxRetries: options.maxRetries,
           requestAttemptCount,
@@ -704,7 +789,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           administrativePlaces,
           index.duplicateIndexObjects,
           options.batchSize,
-          batchCount,
+          geometryBatches.length,
         ]);
         throwIfAdminTaskCancelled(operation.signal);
         operation.onCommit?.();
