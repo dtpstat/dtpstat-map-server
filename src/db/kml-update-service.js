@@ -8,7 +8,7 @@ import {
   resolveKmlUpdateRequest,
 } from '../data/kml-update-options.js';
 import { acquireDataImportLock } from './database-locks.js';
-import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
+import { createGeometryImportRepository } from './geometry-import-repository.js';
 
 export class KmlUpdateMatchError extends Error {
   constructor(message) {
@@ -100,114 +100,6 @@ const MATCH_GEOMETRIES_SQL = `
   ORDER BY prepared."inputIndex"
 `;
 
-const UPSERT_MATCHED_OSM_CITIES_SQL = `
-  WITH requested AS (
-    SELECT DISTINCT payload."boundaryId" AS boundary_id
-    FROM jsonb_to_recordset($1::jsonb) AS payload("boundaryId" bigint)
-    WHERE payload."boundaryId" IS NOT NULL
-  ),
-  canonical AS (
-    SELECT
-      boundary.id AS boundary_id,
-      boundary.display_name AS city_name,
-      boundary.display_type AS city_type,
-      boundary.osm_type,
-      boundary.osm_id,
-      boundary.place_type,
-      boundary.admin_level
-    FROM requested
-    JOIN city_boundaries AS boundary ON boundary.id = requested.boundary_id
-    WHERE boundary.is_active
-  )
-  INSERT INTO cities (
-    slug,
-    name,
-    full_name,
-    display_type,
-    lane_length_m,
-    attributes
-  )
-  SELECT
-    'osm-' || canonical.osm_type || '-' || canonical.osm_id,
-    canonical.city_name,
-    canonical.city_name,
-    canonical.city_type,
-    0,
-    jsonb_build_object(
-      '_osm',
-      jsonb_build_object(
-        'osmType', canonical.osm_type,
-        'osmId', canonical.osm_id,
-        'placeType', canonical.place_type,
-        'adminLevel', canonical.admin_level
-      )
-    )
-  FROM canonical
-  ON CONFLICT (slug) DO UPDATE SET
-    name = EXCLUDED.name,
-    full_name = EXCLUDED.full_name,
-    display_type = EXCLUDED.display_type,
-    attributes = cities.attributes || EXCLUDED.attributes,
-    updated_at = now()
-  RETURNING id::integer AS id, name
-`;
-
-const LINK_MATCHED_OSM_CITIES_SQL = `
-  WITH requested AS (
-    SELECT DISTINCT payload."boundaryId" AS boundary_id
-    FROM jsonb_to_recordset($1::jsonb) AS payload("boundaryId" bigint)
-    WHERE payload."boundaryId" IS NOT NULL
-  )
-  UPDATE city_boundaries AS boundary
-  SET city_id = city.id,
-      updated_at = now()
-  FROM requested, cities AS city
-  WHERE boundary.id = requested.boundary_id
-    AND city.slug = 'osm-' || boundary.osm_type || '-' || boundary.osm_id
-    AND boundary.is_active
-    AND boundary.city_id IS NULL
-`;
-
-const LOAD_MATCHED_CITY_IDS_SQL = `
-  WITH requested AS (
-    SELECT DISTINCT payload."boundaryId" AS boundary_id
-    FROM jsonb_to_recordset($1::jsonb) AS payload("boundaryId" bigint)
-    WHERE payload."boundaryId" IS NOT NULL
-  )
-  SELECT
-    boundary.id::integer AS "boundaryId",
-    city.id::integer AS id,
-    city.name
-  FROM requested
-  JOIN city_boundaries AS boundary ON boundary.id = requested.boundary_id
-  JOIN cities AS city ON city.id = boundary.city_id
-  ORDER BY boundary.id
-`;
-
-const INSERT_MISSING_LINE_TYPES_SQL = `
-  WITH requested AS (
-    SELECT DISTINCT BTRIM(name) AS name
-    FROM unnest($1::text[]) AS requested(name)
-  )
-  INSERT INTO line_types (name, title)
-  SELECT requested.name, requested.name
-  FROM requested
-  WHERE NOT EXISTS (
-    SELECT 1
-    FROM line_types AS existing
-    WHERE LOWER(BTRIM(existing.name)) = LOWER(BTRIM(requested.name))
-  )
-  ON CONFLICT DO NOTHING
-  RETURNING
-    id::integer AS id,
-    code::integer AS code,
-    name,
-    title,
-    color,
-    line_style AS style,
-    width::double precision AS width
-`;
-
 const LOAD_LINE_TYPES_SQL = `
   WITH requested AS (
     SELECT DISTINCT BTRIM(name) AS name
@@ -226,70 +118,6 @@ const LOAD_LINE_TYPES_SQL = `
   JOIN line_types AS line_type
     ON LOWER(BTRIM(line_type.name)) = LOWER(BTRIM(requested.name))
   ORDER BY line_type.code
-`;
-
-const INSERT_GEOMETRIES_SQL = `
-  WITH payload_rows AS (
-    SELECT *
-    FROM jsonb_to_recordset($1::jsonb) AS payload(
-      "cityId" bigint,
-      "boundaryId" bigint,
-      "lineTypeId" bigint,
-      multiple smallint,
-      properties jsonb,
-      "sourceTags" jsonb,
-      geometry jsonb
-    )
-  ),
-  prepared AS (
-    SELECT
-      payload_rows.*,
-      ST_SetSRID(
-        ST_GeomFromGeoJSON(payload_rows.geometry::text),
-        4326
-      ) AS geom
-    FROM payload_rows
-  )
-  INSERT INTO city_geometries (
-    city_id,
-    boundary_id,
-    line_type_id,
-    lanes,
-    length_m,
-    lane_length_m,
-    properties,
-    geom,
-    display_name,
-    source_tags
-  )
-  SELECT
-    prepared."cityId",
-    prepared."boundaryId",
-    prepared."lineTypeId",
-    prepared.multiple,
-    ST_Length(prepared.geom::geography),
-    ST_Length(prepared.geom::geography) * prepared.multiple,
-    prepared.properties,
-    prepared.geom,
-    NULLIF(BTRIM(prepared.properties ->> 'placemarkName'), ''),
-    prepared."sourceTags"
-  FROM prepared
-`;
-
-const INSERT_UPDATE_RUN_SQL = `
-  INSERT INTO geometry_update_runs (
-    sources,
-    checksum,
-    downloaded_bytes,
-    parsed_lines,
-    imported_geometries,
-    skipped_without_city,
-    resolved_ambiguous,
-    ignored_non_lines,
-    city_buffer_m
-  )
-  VALUES ($1::jsonb, $2, $3, $4, $5, $6, $7, $8, $9)
-  RETURNING id::integer AS id, created_at AS "createdAt"
 `;
 
 function importedSourceTags(properties) {
@@ -361,11 +189,17 @@ function publicLineTypes(rows) {
 /**
  * @param {{ connect: () => Promise<any>, databaseSchema?: string }} pool
  * @param {any} config
- * @param {{ download?: typeof downloadKml, parse?: typeof parseKmlSource }} [dependencies]
+ * @param {{
+ *   download?: typeof downloadKml,
+ *   parse?: typeof parseKmlSource,
+ *   geometryImportRepository?: ReturnType<typeof createGeometryImportRepository>
+ * }} [dependencies]
  */
 export function createKmlUpdateService(pool, config, dependencies = {}) {
   const download = dependencies.download ?? downloadKml;
   const parse = dependencies.parse ?? parseKmlSource;
+  const geometryImportRepository = dependencies.geometryImportRepository ??
+    createGeometryImportRepository(pool);
 
   return {
     /**
@@ -447,27 +281,14 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
         )).rows;
         const missingNames = missingTypeNames(referencedNames, typeRows);
         let createdLineTypes = [];
-        let wouldCreateLineTypes = [];
+        const wouldCreateLineTypes = previewLineTypes(missingNames);
 
-        if (options.dryRun) {
-          // PostgreSQL sequences are non-transactional. Do not INSERT here:
-          // a rolled-back dry run must not consume future numeric CODE values.
-          wouldCreateLineTypes = previewLineTypes(missingNames);
-          typeRows = [...typeRows, ...wouldCreateLineTypes.map((lineType) => ({
-            requestedName: lineType.name,
-            ...lineType,
-          }))];
-        } else if (missingNames.length > 0) {
-          const created = await client.query(
-            INSERT_MISSING_LINE_TYPES_SQL,
-            [missingNames],
-          );
-          createdLineTypes = created.rows;
-          typeRows = (await client.query(
-            LOAD_LINE_TYPES_SQL,
-            [referencedNames],
-          )).rows;
-        }
+        // Missing line types remain previews until the staged import is
+        // actually applied. A pending conflict must not modify dictionaries.
+        typeRows = [...typeRows, ...wouldCreateLineTypes.map((lineType) => ({
+          requestedName: lineType.name,
+          ...lineType,
+        }))];
 
         const typeByName = new Map(
           typeRows.map((lineType) => [
@@ -519,48 +340,13 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           );
         }
 
-        const matchedCityPayload = matchedRows.map((row) => ({
-          cityName: row.cityName ?? row.placeName,
-          boundaryId: row.boundaryId,
-        }));
-        let cityIdByBoundary = new Map(
-          matchedRows
-            .filter((row) => row.cityId !== null)
-            .map((row) => [Number(row.boundaryId), Number(row.cityId)]),
-        );
-
-        if (!options.dryRun) {
-          await client.query(UPSERT_MATCHED_OSM_CITIES_SQL, [
-            JSON.stringify(matchedCityPayload),
-          ]);
-          await client.query(LINK_MATCHED_OSM_CITIES_SQL, [
-            JSON.stringify(matchedCityPayload),
-          ]);
-          const cityResult = await client.query(LOAD_MATCHED_CITY_IDS_SQL, [
-            JSON.stringify(matchedCityPayload),
-          ]);
-          cityIdByBoundary = new Map(
-            cityResult.rows.map((row) => [Number(row.boundaryId), Number(row.id)]),
-          );
-          if (cityIdByBoundary.size !== new Set(
-            matchedCityPayload.map((row) => Number(row.boundaryId)),
-          ).size) {
-            throw new Error('Not every active OSM boundary was resolved to a city record');
-          }
-        }
-
         const matched = matchedRows.map((row) => {
           const feature = features[row.inputIndex];
           const lineType = typeByName.get(
             comparableLineTypeName(feature.businessTypeName),
           );
           const cityName = row.cityName ?? row.placeName;
-          const cityId = row.cityId === null
-            ? cityIdByBoundary.get(Number(row.boundaryId)) ?? null
-            : Number(row.cityId);
-          if (!options.dryRun && cityId === null) {
-            throw new Error(`Matched OSM place has no city record: ${cityName}`);
-          }
+          const cityId = row.cityId === null ? null : Number(row.cityId);
           return {
             cityId,
             cityName,
@@ -636,33 +422,56 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           return result;
         }
 
-        await client.query('DELETE FROM city_geometries');
-        const insertResult = await client.query(INSERT_GEOMETRIES_SQL, [
-          JSON.stringify(matched),
-        ]);
-        if (insertResult.rowCount !== matched.length) {
-          throw new Error('Not every matched KML geometry was inserted');
-        }
-        await client.query(RECALCULATE_CITY_STATISTICS_SQL);
+        const importSession = await geometryImportRepository.stageKml(
+          client,
+          matched,
+          result,
+        );
         throwIfAdminTaskCancelled(operation.signal);
-        const runResult = await client.query(INSERT_UPDATE_RUN_SQL, [
-          JSON.stringify(sourceResults),
-          result.checksum,
-          downloadedBytes,
-          allFeatures.length,
-          matched.length,
-          unmatched.length,
-          ambiguous.length,
-          ignoredNonLines,
-          options.cityBufferMeters,
-        ]);
+
+        if (importSession.conflictCount > 0) {
+          operation.onProgress?.({
+            phase: 'import-conflicts',
+            sessionId: importSession.id,
+            conflictGeometries: importSession.conflictGeometries,
+            conflictPairs: importSession.conflictCount,
+          });
+          operation.onCommit?.();
+          await client.query('COMMIT');
+          return {
+            ...result,
+            pendingResolution: true,
+            importSession,
+            createdLineTypes: [],
+          };
+        }
+
+        const applied = await geometryImportRepository.applyInTransaction(
+          client,
+          importSession.id,
+          [],
+        );
+        createdLineTypes = applied.createdLineTypes ?? [];
+        typeRows = (await client.query(
+          LOAD_LINE_TYPES_SQL,
+          [referencedNames],
+        )).rows;
         throwIfAdminTaskCancelled(operation.signal);
         operation.onCommit?.();
         await client.query('COMMIT');
         return {
           ...result,
-          updateRunId: runResult.rows[0].id,
-          completedAt: runResult.rows[0].createdAt,
+          pendingResolution: false,
+          importSession: {
+            ...importSession,
+            status: 'applied',
+          },
+          lineTypes: publicLineTypes(typeRows),
+          createdLineTypes,
+          wouldCreateLineTypes: [],
+          updateRunId: applied.updateRunId,
+          completedAt: applied.completedAt,
+          reconciliation: applied,
         };
       } catch (error) {
         await client.query('ROLLBACK');

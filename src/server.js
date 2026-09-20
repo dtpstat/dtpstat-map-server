@@ -12,6 +12,7 @@ import {createCityBoundaryTransferService} from './db/city-boundary-transfer-ser
 import {createDataExportRepository} from './db/data-export-repository.js';
 import {createDataImportService} from './db/data-import-service.js';
 import {createGeometryEditorRepository} from './db/geometry-editor-repository.js';
+import {createGeometryImportRepository} from './db/geometry-import-repository.js';
 import {createKmlUpdateService} from './db/kml-update-service.js';
 import {createLineTypesRepository} from './db/line-types-repository.js';
 import {createOsmCityUpdateService} from './db/osm-city-update-service.js';
@@ -78,9 +79,12 @@ async function main() {
   });
   const importService = createDataImportService(pool);
   const geometryEditorRepository = createGeometryEditorRepository(pool);
+  const geometryImportRepository = createGeometryImportRepository(pool);
   const cityBoundaryTransferService = createCityBoundaryTransferService(pool);
   const populationService = createPopulationImportService(pool);
-  const kmlUpdateService = createKmlUpdateService(pool, config.kmlUpdate);
+  const kmlUpdateService = createKmlUpdateService(pool, config.kmlUpdate, {
+    geometryImportRepository,
+  });
   const osmImportSettingsRepository = createOsmImportSettingsRepository(pool);
   const osmBoundaryAdminRepository = createOsmBoundaryAdminRepository(pool);
   const osmCityCheckpointRepository = createOsmCityCheckpointRepository(pool);
@@ -222,6 +226,7 @@ async function main() {
     osmImportSettingsRepository,
     osmBoundaryAdminRepository,
     geometryEditorRepository,
+    geometryImportRepository,
     exportRepository,
     importService,
     cityBoundaryTransferService,
