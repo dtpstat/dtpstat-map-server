@@ -34,6 +34,10 @@ test('OSM object editor is a top-level admin section with population editing', a
     html,
     /id="osm-boundary-search"[^>]*type="search"[^>]*placeholder="Название, тип, OSM ID…"/,
   );
+  assert.match(html, /class="osm-boundary-state-legend"/);
+  assert.match(html, /is-active[\s\S]*включена/);
+  assert.match(html, /is-partial[\s\S]*частично/);
+  assert.match(html, /is-inactive[\s\S]*выключена/);
   assert.match(
     html,
     /name="population"[^>]*type="number"[^>]*max="2147483647"/,
@@ -104,6 +108,7 @@ test('OSM object editor is a top-level admin section with population editing', a
     styles,
     /\.osm-boundary-branch-actions[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
   );
+  assert.match(styles, /\.osm-boundary-state-legend/);
   assert.match(styles, /\.osm-boundary-node-row/);
   assert.match(styles, /\.osm-boundary-toggle/);
   assert.match(styles, /\.osm-boundary-active-dot\.is-active/);
