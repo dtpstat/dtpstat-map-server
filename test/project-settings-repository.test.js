@@ -28,6 +28,8 @@ test('project settings repository reads and updates the singleton row', async ()
             showLinePopups: values[7] ?? true,
             publicDownloadName: 'bus-lanes',
             mapboxAccessTokenConfigured: Boolean(values[8]),
+            largeCityPopulationThreshold: values[9],
+            largeCityAreaKm2Threshold: values[10],
             updatedAt: '2026-09-05T13:00:00.000Z',
           }],
         };
@@ -44,6 +46,8 @@ test('project settings repository reads and updates the singleton row', async ()
           showLinePopups: true,
           publicDownloadName: 'bus-lanes',
           mapboxAccessTokenConfigured: false,
+          largeCityPopulationThreshold: 400000,
+          largeCityAreaKm2Threshold: null,
           updatedAt: '2026-09-05T12:00:00.000Z',
         }],
       };
@@ -78,7 +82,8 @@ test('project settings repository reads and updates the singleton row', async ()
   assert.equal(saved.themePreset, 'modern');
   assert.equal(saved.showLinePopups, false);
   assert.equal(saved.publicDownloadName, 'bus-lanes');
-  assert.deepEqual(calls[1].values, [
+  const firstUpdate = calls.find((call) => /UPDATE project_settings/i.test(call.text));
+  assert.deepEqual(firstUpdate.values, [
     'Трамвайные пути России',
     ['трамвай'],
     '<p class="project-muted">Описание</p>',
@@ -88,6 +93,8 @@ test('project settings repository reads and updates the singleton row', async ()
     true,
     false,
     'pk.test-public-token-value',
+    400000,
+    null,
   ]);
 
   await repository.save({
@@ -99,10 +106,13 @@ test('project settings repository reads and updates the singleton row', async ()
     showLineLabels: false,
     footerHtml: '<p>Описание</p>',
   });
-  assert.equal(calls[2].values[7], null);
-  assert.equal(calls[2].values[8], null);
-  assert.match(calls[2].text, /show_line_popups = COALESCE\(\$8::boolean, show_line_popups\)/i);
-  assert.doesNotMatch(calls[2].text, /public_download_name\s*=/i);
+  const updates = calls.filter((call) => /UPDATE project_settings/i.test(call.text));
+  assert.equal(updates[1].values[7], null);
+  assert.equal(updates[1].values[8], null);
+  assert.equal(updates[1].values[9], 400000);
+  assert.equal(updates[1].values[10], null);
+  assert.match(updates[1].text, /show_line_popups = COALESCE\(\$8::boolean, show_line_popups\)/i);
+  assert.doesNotMatch(updates[1].text, /public_download_name\s*=/i);
 
   await assert.rejects(
     async () => repository.save({
@@ -120,5 +130,7 @@ test('project settings repository reads and updates the singleton row', async ()
 
   const renamed = await repository.savePublicDownloadName('  Трамвайные   линии  ');
   assert.equal(renamed.publicDownloadName, 'Трамвайные линии');
-  assert.deepEqual(calls[3].values, ['Трамвайные линии']);
+  const publicDownloadUpdate = calls.find((call) =>
+    /SET\s+public_download_name = \$1/i.test(call.text));
+  assert.deepEqual(publicDownloadUpdate.values, ['Трамвайные линии']);
 });
