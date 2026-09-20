@@ -265,9 +265,6 @@ async function materializeReport(client, config) {
       AND EXISTS (
         SELECT 1
         FROM city_geometries AS geometry_presence
-        JOIN city_boundaries AS geometry_boundary
-          ON geometry_boundary.id = geometry_presence.boundary_id
-         AND geometry_boundary.is_active
         WHERE geometry_presence.city_id = city.id
       )
     ORDER BY city.id
