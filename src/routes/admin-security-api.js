@@ -136,7 +136,11 @@ export function createAdminSecurityRouter({ securityService, adminAuth, maxBodyB
 
   router.get('/admin/me', adminAuth.requireProfile, (request, response) => {
     response.set('Cache-Control', 'no-store');
-    response.json({ user: request.adminUser, sessionId: request.adminSessionId });
+    response.json({
+      user: request.adminUser,
+      sessionId: request.adminSessionId,
+      expiresAt: request.adminSessionExpiresAt ?? null,
+    });
   });
 
   router.patch(
