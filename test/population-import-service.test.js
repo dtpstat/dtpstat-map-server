@@ -16,9 +16,18 @@ function createFakePool({
   const queries = [];
   let released = false;
   const client = {
-    async query(text) {
+    async query(text, values = []) {
       const normalized = text.trim();
       queries.push(normalized);
+      if (
+        normalized.startsWith('INSERT INTO population_transfer_raw') ||
+        normalized.startsWith('INSERT INTO population_transfer_stage')
+      ) {
+        return {
+          rows: [],
+          rowCount: values[0] ? JSON.parse(values[0]).length : 0,
+        };
+      }
       if (normalized.includes('COUNT(boundary.id)::integer AS match_count')) {
         const rows = [
           ...unknownCities.map((name) => ({ name, type: null, match_count: 0 })),
@@ -108,4 +117,45 @@ test('population update reports ambiguous legacy names instead of guessing', asy
   assert.equal(result.ambiguousCount, 1);
   assert.deepEqual(result.ambiguousCities, ['Октябрьский']);
   assert.equal(pool.queries.at(-1), 'COMMIT');
+});
+
+
+test('streamed population import rolls back staged records when JSON fails late', async () => {
+  const populations = Array.from({ length: 101 }, (_value, index) => ({
+    name: `Город ${index}`,
+    population: 1000 + index,
+  }));
+  const malformed =
+    '{"asOf":"2026-01-01","populations":' +
+    JSON.stringify(populations) +
+    ',"broken":';
+
+  async function* source() {
+    const buffer = Buffer.from(malformed);
+    for (let offset = 0; offset < buffer.length; offset += 97) {
+      yield buffer.subarray(offset, offset + 97);
+    }
+  }
+
+  const pool = createFakePool();
+  const service = createPopulationImportService(pool);
+
+  await assert.rejects(
+    service.updateFromJsonStream(source(), {
+      maxJsonBytes: Buffer.byteLength(malformed) + 1,
+      maxItemBytes: 1024 * 1024,
+    }),
+    /Unexpected end|JSON value/,
+  );
+
+  assert.equal(pool.queries[0], 'BEGIN');
+  assert.equal(
+    pool.queries.filter((query) =>
+      query.startsWith('INSERT INTO population_transfer_raw')).length,
+    1,
+  );
+  assert.equal(pool.queries.at(-1), 'ROLLBACK');
+  assert.equal(pool.queries.includes('COMMIT'), false);
+  assert.doesNotMatch(pool.queries.join('\n'), /INSERT INTO city_populations/);
+  assert.equal(pool.released, true);
 });
