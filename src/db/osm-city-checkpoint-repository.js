@@ -20,6 +20,7 @@ function mapCheckpoint(row) {
     retryWaitMs: Number(row.retryWaitMs ?? 0),
     throttleWaitMs: Number(row.throttleWaitMs ?? 0),
     ignoredElements: Number(row.ignoredElements ?? 0),
+    stagedBatchCount: Number(row.stagedBatchCount ?? 0),
     totalObjects,
     stagedObjects,
     remainingObjects: Math.max(0, totalObjects - stagedObjects),
@@ -47,6 +48,7 @@ const CHECKPOINT_SELECT = `
     checkpoint.retry_wait_ms::bigint::text AS "retryWaitMs",
     checkpoint.throttle_wait_ms::bigint::text AS "throttleWaitMs",
     checkpoint.ignored_elements::integer AS "ignoredElements",
+    checkpoint.staged_batch_count::integer AS "stagedBatchCount",
     checkpoint.last_error AS "lastError",
     checkpoint.created_at AS "createdAt",
     checkpoint.updated_at AS "updatedAt",
@@ -305,6 +307,7 @@ export function createOsmCityCheckpointRepository(pool) {
                retry_wait_ms = retry_wait_ms + $5,
                throttle_wait_ms = throttle_wait_ms + $6,
                ignored_elements = ignored_elements + $7,
+               staged_batch_count = staged_batch_count + 1,
                last_error = NULL,
                updated_at = NOW()
            WHERE id = $1`,
