@@ -133,7 +133,7 @@ test('OSM downloader does not mark permanent TLS failures as retryable', async (
       assert.ok(error instanceof OsmCityDownloadError);
       assert.equal(error.code, 'network-error');
       assert.equal(error.networkCode, 'CERT_HAS_EXPIRED');
-      assert.equal(error.retryable, true);
+      assert.equal(error.retryable, false);
       return true;
     },
   );
