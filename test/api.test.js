@@ -389,6 +389,13 @@ test('admin entry requires auth while static admin assets remain public', async 
       headers: { Authorization: authorization },
     });
     assert.equal(authorized.status, 200);
+    assert.equal(
+      authorized.headers.get('referrer-policy'),
+      'strict-origin-when-cross-origin',
+    );
+    const csp = authorized.headers.get('content-security-policy') ?? '';
+    assert.match(csp, /img-src[^;]*https:\/\/tile\.openstreetmap\.org/);
+    assert.doesNotMatch(csp, /https:\/\/\*\.tile\.openstreetmap\.org/);
     const html = await authorized.text();
     assert.match(html, /Администрирование/);
     assert.match(html, /role="tablist"/);
