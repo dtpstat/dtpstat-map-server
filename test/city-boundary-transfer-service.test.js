@@ -106,6 +106,12 @@ test('city transfer restores city attributes, boundaries, and geometry links ato
   const cityInsertIndex = pool.queries.findIndex((query) => query.startsWith('INSERT INTO cities'));
   const boundaryDeleteIndex = pool.queries.indexOf('DELETE FROM city_boundaries');
   assert.ok(cityInsertIndex >= 0 && cityInsertIndex < boundaryDeleteIndex);
+  const boundaryInsert = pool.queries.find((query) =>
+    query.startsWith('INSERT INTO city_boundaries'));
+  assert.match(
+    boundaryInsert,
+    /SELECT MIN\(city\.id\)[\s\S]*HAVING COUNT\(\*\) = 1/i,
+  );
   const cityPayload = JSON.parse(pool.parameters[cityInsertIndex][0]);
   assert.deepEqual(cityPayload, [{
     slug: 'testograd',
