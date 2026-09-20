@@ -910,12 +910,15 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
       try {
         throwIfAdminTaskCancelled(operation.signal);
         await client.query(DROP_STAGE_SQL);
-        await client.query(CREATE_STAGE_SQL);
+        if (!checkpointRepository) {
+          await client.query(CREATE_STAGE_SQL);
+        }
         let cityPlaces = 0;
         let townPlaces = 0;
         let administrativePlaces = 0;
-        let ignoredElements = 0;
-        let stagedPlaces = 0;
+        let ignoredElements = mode.resume
+          ? checkpoint.ignoredElements
+          : 0;
         const nameCounts = new Map();
 
         for (let batchIndex = 0; batchIndex < geometryBatches.length;) {
