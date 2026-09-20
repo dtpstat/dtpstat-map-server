@@ -246,6 +246,9 @@ export function createCityBoundaryTransferService(pool) {
       try {
         await client.query('BEGIN');
         await acquireDataImportLock(client, pool);
+        if (!operation.dryRun) {
+          await client.query('SELECT assert_no_pending_geometry_import()');
+        }
         throwIfAdminTaskCancelled(operation.signal);
         await client.query(CREATE_STAGE_SQL);
 
@@ -416,6 +419,9 @@ export function createCityBoundaryTransferService(pool) {
       try {
         await client.query('BEGIN');
         await acquireDataImportLock(client, pool);
+        if (!operation.dryRun) {
+          await client.query('SELECT assert_no_pending_geometry_import()');
+        }
         throwIfAdminTaskCancelled(operation.signal);
 
         if (plan.cities.length > 0) {

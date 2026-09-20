@@ -91,6 +91,7 @@ export function createLineTypesRepository(database) {
       try {
         await client.query('BEGIN');
         await acquireDataImportLock(client, database);
+        await client.query('SELECT assert_no_pending_geometry_import()');
         await client.query(CREATE_STAGE_SQL);
         await client.query(INSERT_STAGE_SQL, [JSON.stringify(plan.lineTypes)]);
 

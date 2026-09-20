@@ -1117,6 +1117,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         await client.query('BEGIN');
         inTransaction = true;
         await acquireDataImportLock(client, pool);
+        await client.query('SELECT assert_no_pending_geometry_import()');
         await client.query(PRESERVE_LINKS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
         await client.query('DELETE FROM city_boundaries');

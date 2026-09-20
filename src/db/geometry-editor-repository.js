@@ -238,6 +238,9 @@ export function createGeometryEditorRepository(pool) {
       return result;
     } catch (error) {
       await rollbackQuietly(client);
+      if (error?.code === '55000') {
+        throw new GeometryEditorValidationError(error.message, 409);
+      }
       if (databaseGeometryError(error) && !(error instanceof GeometryEditorValidationError)) {
         throw new GeometryEditorValidationError(`Invalid geometry: ${error.message}`);
       }

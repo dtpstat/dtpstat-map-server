@@ -151,6 +151,7 @@ export function createOsmBoundaryAdminRepository(pool) {
       try {
         await client.query('BEGIN');
         await acquireDataImportLock(client, pool);
+        await client.query('SELECT assert_no_pending_geometry_import()');
 
         const subtree = await client.query(
           `WITH RECURSIVE subtree AS (
@@ -243,6 +244,9 @@ export function createOsmBoundaryAdminRepository(pool) {
             409,
           );
         }
+        if (error?.code === '55000') {
+          throw new OsmBoundaryAdminValidationError(error.message, 409);
+        }
         throw error;
       } finally {
         client.release();
@@ -256,6 +260,7 @@ export function createOsmBoundaryAdminRepository(pool) {
       try {
         await client.query('BEGIN');
         await acquireDataImportLock(client, pool);
+        await client.query('SELECT assert_no_pending_geometry_import()');
         const current = await client.query(
           `SELECT
                   boundary.id,
@@ -403,6 +408,9 @@ export function createOsmBoundaryAdminRepository(pool) {
             'An active OSM object with the same normalized type and name already exists',
             409,
           );
+        }
+        if (error?.code === '55000') {
+          throw new OsmBoundaryAdminValidationError(error.message, 409);
         }
         throw error;
       } finally {
