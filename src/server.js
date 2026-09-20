@@ -14,6 +14,8 @@ import {createDataImportService} from './db/data-import-service.js';
 import {createKmlUpdateService} from './db/kml-update-service.js';
 import {createLineTypesRepository} from './db/line-types-repository.js';
 import {createOsmCityUpdateService} from './db/osm-city-update-service.js';
+import {createOsmImportSettingsRepository} from './db/osm-import-settings-repository.js';
+import {createOsmBoundaryAdminRepository} from './db/osm-boundary-admin-repository.js';
 import {createPopulationImportService} from './db/population-import-service.js';
 import {createProjectSettingsRepository} from './db/project-settings-repository.js';
 import {createProjectSettingsTransferService} from './db/project-settings-transfer-service.js';
@@ -75,7 +77,13 @@ async function main() {
   const cityBoundaryTransferService = createCityBoundaryTransferService(pool);
   const populationService = createPopulationImportService(pool);
   const kmlUpdateService = createKmlUpdateService(pool, config.kmlUpdate);
-  const osmCityUpdateService = createOsmCityUpdateService(pool, config.osmCityUpdate);
+  const osmImportSettingsRepository = createOsmImportSettingsRepository(pool);
+  const osmBoundaryAdminRepository = createOsmBoundaryAdminRepository(pool);
+  const osmCityUpdateService = createOsmCityUpdateService(
+    pool,
+    config.osmCityUpdate,
+    {settingsRepository: osmImportSettingsRepository},
+  );
   const adminTaskSuccessRepository = createAdminTaskSuccessRepository(pool);
   const adminSecurityRepository = createAdminSecurityRepository(pool);
   const securityService = createAdminSecurityService(adminSecurityRepository);
@@ -174,6 +182,16 @@ async function main() {
     refreshPublicDownloads: () => refreshPublicDownloads({reason: 'report-config'}),
     refreshPublicDownloadsAfterSettingsImport: () =>
       refreshPublicDownloads({reason: 'project-settings-import'}),
+    refreshProjectDerived: async () => {
+      await refreshReportValues({reason: 'project-settings'});
+      return refreshPublicDownloads({reason: 'project-settings'});
+    },
+    refreshOsmBoundaryDerived: async () => {
+      await refreshReportValues({reason: 'osm-boundary-settings'});
+      return refreshPublicDownloads({reason: 'osm-boundary-settings'});
+    },
+    osmImportSettingsRepository,
+    osmBoundaryAdminRepository,
     exportRepository,
     importService,
     cityBoundaryTransferService,

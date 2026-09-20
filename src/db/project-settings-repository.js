@@ -16,6 +16,8 @@ const SELECT_SETTINGS_SQL = `
     theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
     show_line_popups AS "showLinePopups",
+    large_city_population_threshold::integer AS "largeCityPopulationThreshold",
+    large_city_area_km2_threshold::double precision AS "largeCityAreaKm2Threshold",
     public_download_name AS "publicDownloadName",
     (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured",
     (city_marker_icon IS NOT NULL) AS "cityMarkerIconConfigured",
@@ -69,6 +71,8 @@ const UPDATE_SETTINGS_SQL = `
       WHEN $9::text IS NULL THEN mapbox_access_token_initialized
       ELSE TRUE
     END,
+    large_city_population_threshold = $10,
+    large_city_area_km2_threshold = $11,
     updated_at = now()
   WHERE id = 1
   RETURNING
@@ -80,6 +84,8 @@ const UPDATE_SETTINGS_SQL = `
     theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
     show_line_popups AS "showLinePopups",
+    large_city_population_threshold::integer AS "largeCityPopulationThreshold",
+    large_city_area_km2_threshold::double precision AS "largeCityAreaKm2Threshold",
     public_download_name AS "publicDownloadName",
     (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured",
     (city_marker_icon IS NOT NULL) AS "cityMarkerIconConfigured",
@@ -153,6 +159,8 @@ function splitProjectSettingsPayload(payload) {
     showLineLabels = false,
     showLinePopups: rawShowLinePopups,
     mapboxAccessToken = null,
+    largeCityPopulationThreshold = 400000,
+    largeCityAreaKm2Threshold = null,
     ...base
   } = payload;
   if (typeof showLineLabels !== 'boolean') {
@@ -160,6 +168,26 @@ function splitProjectSettingsPayload(payload) {
   }
   if (hasShowLinePopups && typeof rawShowLinePopups !== 'boolean') {
     throw new ProjectSettingsValidationError('showLinePopups must be boolean');
+  }
+  const populationThreshold = Number(largeCityPopulationThreshold);
+  if (
+    !Number.isSafeInteger(populationThreshold) ||
+    populationThreshold <= 0 ||
+    populationThreshold > 2147483647
+  ) {
+    throw new ProjectSettingsValidationError(
+      'largeCityPopulationThreshold must be a positive integer',
+    );
+  }
+  const areaThreshold = largeCityAreaKm2Threshold === null ||
+      largeCityAreaKm2Threshold === undefined ||
+      largeCityAreaKm2Threshold === ''
+    ? null
+    : Number(largeCityAreaKm2Threshold);
+  if (areaThreshold !== null && (!Number.isFinite(areaThreshold) || areaThreshold < 0)) {
+    throw new ProjectSettingsValidationError(
+      'largeCityAreaKm2Threshold must be a non-negative number or null',
+    );
   }
   return {
     plan: buildProjectSettingsPlan(base),
@@ -169,6 +197,8 @@ function splitProjectSettingsPayload(payload) {
     showLineLabels,
     showLinePopups: hasShowLinePopups ? rawShowLinePopups : null,
     mapboxAccessToken: normalizeMapboxAccessToken(mapboxAccessToken, { optional: true }),
+    largeCityPopulationThreshold: populationThreshold,
+    largeCityAreaKm2Threshold: areaThreshold,
   };
 }
 
@@ -245,6 +275,8 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
       showLineLabels,
       showLinePopups,
       mapboxAccessToken,
+      largeCityPopulationThreshold,
+      largeCityAreaKm2Threshold,
     } = splitProjectSettingsPayload(payload);
     const result = await database.query(UPDATE_SETTINGS_SQL, [
       plan.projectName,
@@ -256,7 +288,10 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
       showLineLabels,
       showLinePopups,
       mapboxAccessToken,
+      largeCityPopulationThreshold,
+      largeCityAreaKm2Threshold,
     ]);
+    await database.query((await import('./recalculate-city-statistics.js')).RECALCULATE_CITY_STATISTICS_SQL);
     if (!result.rows[0]) {
       throw new Error('Project settings row is missing; run database migrations');
     }

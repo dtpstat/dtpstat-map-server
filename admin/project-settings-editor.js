@@ -91,6 +91,26 @@ if (typeof document !== 'undefined') {
                 </div>
               </section>
 
+              <section class="project-settings-section" aria-labelledby="project-city-category-title">
+                <div>
+                  <h5 id="project-city-category-title">Разделение больших и малых городов</h5>
+                  <p>Если население известно, используется порог населения. При отсутствии населения — порог площади активной OSM-геометрии.</p>
+                </div>
+                <div class="project-metrics-grid">
+                  <label>Население большого города от
+                    <input name="largeCityPopulationThreshold" type="number"
+                           min="1" step="1" required inputmode="numeric">
+                    <small>Сравнение выполняется по правилу население ≥ порога.</small>
+                  </label>
+                  <label>Площадь большого города от, км²
+                    <input name="largeCityAreaKm2Threshold" type="number"
+                           min="0" step="any" inputmode="decimal"
+                           placeholder="не задано">
+                    <small>Используется только когда данных населения нет. Пустое значение отключает fallback по площади.</small>
+                  </label>
+                </div>
+              </section>
+
               <label class="check project-setting-check">
                 <input name="showLineLabels" type="checkbox">
                 Постоянно отображать наименования линий
@@ -195,6 +215,8 @@ if (typeof document !== 'undefined') {
       const themePreset = form.elements.namedItem('themePreset');
       const showLineLabels = form.elements.namedItem('showLineLabels');
       const showLinePopups = form.elements.namedItem('showLinePopups');
+      const largeCityPopulationThreshold = form.elements.namedItem('largeCityPopulationThreshold');
+      const largeCityAreaKm2Threshold = form.elements.namedItem('largeCityAreaKm2Threshold');
       const cityMarkerIcon = form.elements.namedItem('cityMarkerIcon');
       const keywords = form.elements.namedItem('keywords');
       const yandexMetrikaId = form.elements.namedItem('yandexMetrikaId');
@@ -318,6 +340,11 @@ if (typeof document !== 'undefined') {
         themePreset.value = settings.themePreset ?? 'classic';
         showLineLabels.checked = Boolean(settings.showLineLabels);
         showLinePopups.checked = settings.showLinePopups !== false;
+        largeCityPopulationThreshold.value = String(
+          settings.largeCityPopulationThreshold ?? 400000,
+        );
+        largeCityAreaKm2Threshold.value =
+          settings.largeCityAreaKm2Threshold ?? '';
         keywords.value = settings.keywords.join('\n');
         yandexMetrikaId.value = settings.yandexMetrikaId ?? '';
         googleAnalyticsId.value = settings.googleAnalyticsId ?? '';
@@ -430,6 +457,10 @@ if (typeof document !== 'undefined') {
               themePreset: themePreset.value,
               showLineLabels: showLineLabels.checked,
               showLinePopups: showLinePopups.checked,
+              largeCityPopulationThreshold: Number(largeCityPopulationThreshold.value),
+              largeCityAreaKm2Threshold: largeCityAreaKm2Threshold.value === ''
+                ? null
+                : Number(largeCityAreaKm2Threshold.value),
               keywords: splitKeywords(keywords.value),
               yandexMetrikaId: yandexMetrikaId.value.trim() || null,
               googleAnalyticsId: googleAnalyticsId.value.trim() || null,

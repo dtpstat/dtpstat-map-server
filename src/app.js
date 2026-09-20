@@ -19,6 +19,7 @@ import { createAdminSecurityRouter } from './routes/admin-security-api.js';
 import { createApiRouter } from './routes/api.js';
 import { createKmlTransferRouter } from './routes/kml-transfer-api.js';
 import { createLineTypesRouter } from './routes/line-types-api.js';
+import { createOsmBoundariesRouter } from './routes/osm-boundaries-api.js';
 import { createProjectSettingsRouter } from './routes/project-settings-api.js';
 import { createProjectSettingsTransferRouter } from './routes/project-settings-transfer-api.js';
 import { createReportConfigRouter } from './routes/report-config-api.js';
@@ -299,6 +300,10 @@ function testSecurity(config) {
  *   reportConfigService?: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
  *   refreshPublicDownloads?: () => Promise<any>,
  *   refreshPublicDownloadsAfterSettingsImport?: () => Promise<any>,
+ *   refreshProjectDerived?: () => Promise<any>,
+ *   refreshOsmBoundaryDerived?: () => Promise<any>,
+ *   osmImportSettingsRepository?: { get: Function, save: Function },
+ *   osmBoundaryAdminRepository?: { list: Function, getGeometry: Function, update: Function },
  *   exportRepository: import('./routes/api.js').DataExportRepository,
  *   importService: import('./routes/api.js').DataImportService,
  *   cityBoundaryTransferService: import('./routes/api.js').CityBoundaryTransferService,
@@ -319,6 +324,10 @@ export function createApp({
   reportConfigService,
   refreshPublicDownloads,
   refreshPublicDownloadsAfterSettingsImport,
+  refreshProjectDerived,
+  refreshOsmBoundaryDerived,
+  osmImportSettingsRepository,
+  osmBoundaryAdminRepository,
   exportRepository,
   importService,
   cityBoundaryTransferService,
@@ -456,7 +465,18 @@ export function createApp({
     projectSettingsRepository: effectiveProjectSettingsRepository,
     ...commonAdmin,
     afterPublicDownloadNameSave: async () => refreshPublicDownloads?.(),
+    afterSettingsSave: async () => refreshProjectDerived?.(),
   }));
+  if (osmImportSettingsRepository && osmBoundaryAdminRepository) {
+    app.use('/api', createOsmBoundariesRouter({
+      settingsRepository: osmImportSettingsRepository,
+      boundaryRepository: osmBoundaryAdminRepository,
+      adminAuth: effectiveAdminAuth,
+      securityService: effectiveSecurityService,
+      osmConfig: config.osmCityUpdate,
+      afterBoundaryChange: async () => refreshOsmBoundaryDerived?.(),
+    }));
+  }
   app.use('/api', createReportConfigRouter({
     reportConfigService: effectiveReportConfigService,
     lineTypesRepository: effectiveLineTypesRepository,
