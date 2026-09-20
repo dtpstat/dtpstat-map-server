@@ -740,6 +740,66 @@ test('OSM subtree endpoint toggles the whole selected branch once', async () => 
   });
 });
 
+test('OSM checkpoint API exposes and explicitly discards resumable progress', async () => {
+  let checkpoint = {
+    id: 7,
+    status: 'failed',
+    stagedObjects: 24800,
+    totalObjects: 27520,
+    remainingObjects: 2720,
+    updatedAt: '2026-09-20T12:00:00.000Z',
+  };
+  const osmCityUpdateService = {
+    async update() {
+      return osmCityUpdateResult;
+    },
+    async checkpointStatus() {
+      return checkpoint;
+    },
+    async discardCheckpoint() {
+      const value = checkpoint;
+      checkpoint = null;
+      return value;
+    },
+  };
+  const authorization = `Basic ${Buffer.from(
+    'importer:test:secret',
+  ).toString('base64')}`;
+
+  await withServer(async (baseUrl) => {
+    const unauthorized = await fetch(
+      `${baseUrl}/api/admin/osm-checkpoint`,
+    );
+    assert.equal(unauthorized.status, 401);
+
+    const response = await fetch(
+      `${baseUrl}/api/admin/osm-checkpoint`,
+      { headers: { Authorization: authorization } },
+    );
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('cache-control'), /no-store/);
+    assert.deepEqual((await response.json()).checkpoint, checkpoint);
+
+    const discarded = await fetch(
+      `${baseUrl}/api/admin/osm-checkpoint`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: authorization },
+      },
+    );
+    assert.equal(discarded.status, 200);
+    const discardedBody = await discarded.json();
+    assert.equal(discardedBody.discarded, true);
+    assert.equal(discardedBody.checkpoint.id, 7);
+
+    const after = await fetch(
+      `${baseUrl}/api/admin/osm-checkpoint`,
+      { headers: { Authorization: authorization } },
+    );
+    assert.equal((await after.json()).checkpoint, null);
+  }, { osmCityUpdateService });
+});
+
 test('OSM city update endpoint is protected and forwards URL and safe overrides', async () => {
   let receivedBody;
   let receivedQuery;
