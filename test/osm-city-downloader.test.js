@@ -52,7 +52,14 @@ test('OSM downloader rejects foreign redirects and oversized responses', async (
       { ...options, maxBytes: 4 },
       async () => new Response('{"elements":[]}', { status: 200 }),
     ),
-    /size limit/,
+    (error) => {
+      assert.ok(error instanceof OsmCityDownloadError);
+      assert.match(error.message, /size limit/);
+      assert.equal(error.code, 'response-size-limit');
+      assert.equal(error.limitBytes, 4);
+      assert.ok(error.receivedBytes > 4);
+      return true;
+    },
   );
 });
 
