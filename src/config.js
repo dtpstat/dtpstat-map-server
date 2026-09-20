@@ -307,6 +307,11 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
         128 * 1024 * 1024,
         { min: 1024 * 1024, max: 1024 * 1024 * 1024 },
       ),
+      streamUploadDirectory: path.join(
+        projectRoot,
+        'var',
+        'import-staging',
+      ),
     },
     kmlUpdate: {
       ...kmlConstraints,
