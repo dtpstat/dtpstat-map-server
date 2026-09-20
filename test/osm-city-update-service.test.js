@@ -526,6 +526,143 @@ test('HTTP 429 waits and retries the same OSM request without advancing the batc
   );
 });
 
+test('repeated HTTP 504 splits a multi-object geometry batch instead of exhausting the full retry budget', async () => {
+  const pool = createPool();
+  const base = createDependencies();
+  const progress = [];
+  const delays = [];
+  let indexSuccesses = 0;
+  let geometryAttempts = 0;
+
+  const service = createOsmCityUpdateService(pool, {
+    ...config,
+    batchSize: 2,
+    maxRetries: 6,
+    retryBaseDelayMs: 1,
+    retryMaxDelayMs: 1,
+  }, {
+    ...base,
+    async sleep(milliseconds) {
+      delays.push(milliseconds);
+    },
+    async download(url, query, options) {
+      if (/out ids/.test(query)) {
+        indexSuccesses += 1;
+        return {
+          jsonText: `index-${indexSuccesses}`,
+          bytes: 10,
+          finalURL: url,
+          query,
+        };
+      }
+
+      geometryAttempts += 1;
+      if (
+        /relation\(id:7\)/.test(query) &&
+        /way\(id:8\)/.test(query)
+      ) {
+        throw new OsmCityDownloadError('OSM download returned HTTP 504', {
+          statusCode: 504,
+          finalURL: url,
+        });
+      }
+
+      return {
+        jsonText: /relation\(id:7\)/.test(query)
+          ? 'geometry-left'
+          : /way\(id:8\)/.test(query)
+            ? 'geometry-right'
+            : 'geometry-tail',
+        bytes: 10,
+        finalURL: url,
+        query,
+      };
+    },
+    parseIndex(jsonText) {
+      return indexParts[Number(jsonText.split('-')[1]) - 1];
+    },
+    parseBatch(jsonText) {
+      if (jsonText === 'geometry-left') {
+        return {
+          ...batches[0],
+          places: [batches[0].places[0]],
+          cityPlaces: 1,
+          townPlaces: 0,
+        };
+      }
+      if (jsonText === 'geometry-right') {
+        return {
+          ...batches[0],
+          places: [batches[0].places[1]],
+          cityPlaces: 0,
+          townPlaces: 1,
+        };
+      }
+      return batches[1];
+    },
+    reportProgress(value) {
+      progress.push(value);
+    },
+  });
+
+  const result = await service.update(undefined, {});
+
+  assert.equal(result.importedPlaces, 3);
+  assert.equal(result.batchCount, 3);
+  assert.equal(geometryAttempts, 6);
+  assert.deepEqual(delays, [1, 1, 1]);
+  assert.deepEqual(
+    progress.filter((item) => item.phase === 'retry')
+      .map((item) => ({
+        statusCode: item.statusCode,
+        attempt: item.attempt,
+        maxRetries: item.maxRetries,
+        configuredMaxRetries: item.configuredMaxRetries,
+        objectCount: item.objectCount,
+      })),
+    [
+      {
+        statusCode: 504,
+        attempt: 1,
+        maxRetries: 3,
+        configuredMaxRetries: 6,
+        objectCount: 2,
+      },
+      {
+        statusCode: 504,
+        attempt: 2,
+        maxRetries: 3,
+        configuredMaxRetries: 6,
+        objectCount: 2,
+      },
+      {
+        statusCode: 504,
+        attempt: 3,
+        maxRetries: 3,
+        configuredMaxRetries: 6,
+        objectCount: 2,
+      },
+    ],
+  );
+  assert.deepEqual(
+    progress.filter((item) => item.phase === 'split')
+      .map((item) => ({
+        reason: item.reason,
+        statusCode: item.statusCode,
+        retryCount: item.retryCount,
+        objectCount: item.objectCount,
+        splitSizes: item.splitSizes,
+      })),
+    [{
+      reason: 'http-504',
+      statusCode: 504,
+      retryCount: 3,
+      objectCount: 2,
+      splitSizes: [1, 1],
+    }],
+  );
+});
+
 test('HTTP 504 retries the same OSM index part after backoff', async () => {
   const pool = createPool();
   const base = createDependencies();
