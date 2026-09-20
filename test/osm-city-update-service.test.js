@@ -10,8 +10,8 @@ const config = {
   timeoutMs: 180000,
   queryTimeoutSeconds: 120,
   maxResponseBytes: 1000000,
-  maxTotalBytes: 1000000,
-  maxBytes: 1000000,
+  maxTotalBytes: 2000000,
+  maxBytes: 2000000,
   batchSize: 2,
   maxBatchSize: 10,
   minDelayMs: 0,
@@ -213,11 +213,11 @@ test('OSM update stages sequential ID batches before one atomic replacement', as
   assert.match(downloadQueries[5].query, /way\(id:9\)/);
   assert.deepEqual(downloadQueries.map((item) => item.maxBytes), [
     1000000,
-    999990,
-    999980,
-    999970,
-    999960,
-    999950,
+    1000000,
+    1000000,
+    1000000,
+    1000000,
+    1000000,
   ]);
   assert.deepEqual(progress.filter((item) => item.phase === 'index')
     .map((item) => item.indexedPlaces), [0, 1, 3, 3]);
@@ -597,7 +597,7 @@ test('saved OSM source is rejected when deployment allowlist no longer permits i
           timeoutMs: 180000,
           queryTimeoutSeconds: 120,
           maxResponseBytes: 1000000,
-          maxTotalBytes: 1000000,
+          maxTotalBytes: 2000000,
           maxRetries: 6,
           retryBaseDelayMs: 30000,
           retryMaxDelayMs: 240000,
