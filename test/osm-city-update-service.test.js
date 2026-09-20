@@ -324,6 +324,74 @@ test('oversized OSM geometry batch is split and retried sequentially', async () 
     query.startsWith('WITH payload_rows AS')).length, 3);
 });
 
+test('single oversized OSM object fails with its exact OSM identity', async () => {
+  const pool = createPool();
+  const base = createDependencies();
+  let calls = 0;
+  const service = createOsmCityUpdateService(pool, {
+    ...config,
+    batchSize: 1,
+    maxResponseBytes: 1000,
+    maxTotalBytes: 10000,
+  }, {
+    ...base,
+    async download(url, query, options) {
+      calls += 1;
+      if (calls === 5) {
+        throw new OsmCityDownloadError(
+          'OSM response exceeds the configured size limit',
+          {
+            code: 'response-size-limit',
+            limitBytes: options.maxBytes,
+            receivedBytes: options.maxBytes + 1,
+          },
+        );
+      }
+      return base.download(url, query, options);
+    },
+  });
+
+  await assert.rejects(
+    service.update(undefined, {}),
+    /OSM object relation\/7 exceeds the configured single-response size limit/,
+  );
+  assert.equal(pool.queries.includes('BEGIN'), false);
+});
+
+test('OSM total byte budget is reported separately from one-response limit', async () => {
+  const pool = createPool();
+  const base = createDependencies();
+  const service = createOsmCityUpdateService(pool, {
+    ...config,
+    maxResponseBytes: 1000,
+    maxTotalBytes: 45,
+  }, {
+    ...base,
+    async download(url, query, options) {
+      if (options.maxBytes < 10) {
+        throw new OsmCityDownloadError(
+          'OSM response exceeds the configured size limit',
+          {
+            code: 'response-size-limit',
+            limitBytes: options.maxBytes,
+            receivedBytes: 10,
+          },
+        );
+      }
+      return base.download(url, query, options);
+    },
+  });
+
+  await assert.rejects(
+    service.update(undefined, {}),
+    (error) =>
+      error instanceof OsmCityDownloadError &&
+      error.code === 'total-size-limit' &&
+      /total size limit/.test(error.message),
+  );
+  assert.equal(pool.connections, 0);
+});
+
 test('a later OSM batch failure leaves production boundaries untouched', async () => {
   const pool = createPool();
   let downloadCall = 0;
