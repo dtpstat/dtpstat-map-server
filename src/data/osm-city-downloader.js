@@ -82,6 +82,7 @@ function wrapNetworkError(error, {
 
   const networkCode = nestedErrorDetail(error, 'code');
   const networkMessage =
+    nestedErrorDetail(error?.cause, 'message') ??
     nestedErrorDetail(error, 'message') ??
     (error instanceof Error ? error.message : String(error));
   const retryable =
