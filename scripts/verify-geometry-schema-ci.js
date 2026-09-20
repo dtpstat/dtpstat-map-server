@@ -273,7 +273,7 @@ try {
         'Orphan Active', 'city', ST_Area(geom::geography)
       FROM prepared
     `),
-    /has no CITY_ID/i,
+    /active-boundary-without-city/i,
   );
 
   // Deactivation must remove the row only from the effective set, not from
