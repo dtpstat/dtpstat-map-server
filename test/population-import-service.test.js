@@ -8,20 +8,25 @@ const upload = {
   populations: [{ name: 'Тестоград', population: 2000 }],
 };
 
-function createFakePool({ unknownCities = [], updatedCities = 1 } = {}) {
+function createFakePool({
+  unknownCities = [],
+  ambiguousCities = [],
+  updatedCities = 1,
+} = {}) {
   const queries = [];
   let released = false;
   const client = {
     async query(text) {
       const normalized = text.trim();
       queries.push(normalized);
-      if (normalized.startsWith('SELECT payload.name')) {
-        return {
-          rows: unknownCities.map((name) => ({ name })),
-          rowCount: unknownCities.length,
-        };
+      if (normalized.includes('COUNT(boundary.id)::integer AS match_count')) {
+        const rows = [
+          ...unknownCities.map((name) => ({ name, type: null, match_count: 0 })),
+          ...ambiguousCities.map((name) => ({ name, type: null, match_count: 2 })),
+        ];
+        return { rows, rowCount: rows.length };
       }
-      if (normalized.startsWith('INSERT INTO city_populations')) {
+      if (normalized.includes('INSERT INTO city_populations')) {
         return { rows: [], rowCount: updatedCities };
       }
       return { rows: [], rowCount: 0 };
@@ -52,6 +57,8 @@ test('population update upserts data and recalculates city statistics', async ()
   assert.equal(result.requestedCities, 1);
   assert.equal(result.skippedCount, 0);
   assert.deepEqual(result.skippedCities, []);
+  assert.equal(result.ambiguousCount, 0);
+  assert.deepEqual(result.ambiguousCities, []);
   assert.equal(result.asOf, '2026-01-01');
   assert.equal(pool.queries[0], 'BEGIN');
   assert.match(pool.queries.at(-2), /^WITH geometry_statistics AS/);
@@ -82,4 +89,23 @@ test('population update skips cities that are absent from the database', async (
   assert.equal(pool.queries.at(-1), 'COMMIT');
   assert.equal(pool.released, true);
   assert.match(pool.queries.join('\n'), /INSERT INTO city_populations/);
+});
+
+
+test('population update reports ambiguous legacy names instead of guessing', async () => {
+  const pool = createFakePool({
+    ambiguousCities: ['Октябрьский'],
+    updatedCities: 0,
+  });
+  const service = createPopulationImportService(pool);
+
+  const result = await service.updateFromJson({
+    populations: [{ name: 'Октябрьский', population: 10000 }],
+  });
+
+  assert.equal(result.cities, 0);
+  assert.equal(result.skippedCount, 0);
+  assert.equal(result.ambiguousCount, 1);
+  assert.deepEqual(result.ambiguousCities, ['Октябрьский']);
+  assert.equal(pool.queries.at(-1), 'COMMIT');
 });
