@@ -102,6 +102,7 @@ async function readStringRaw(reader, limit) {
     throw new StreamingJsonError('Expected a JSON string');
   }
   let raw = '"';
+  let bytes = 1;
   let escaped = false;
   for (;;) {
     const value = await reader.next();
@@ -109,9 +110,10 @@ async function readStringRaw(reader, limit) {
       throw new StreamingJsonError('Unexpected end of JSON string');
     }
     raw += value;
-    if (raw.length > limit) {
+    bytes += Buffer.byteLength(value);
+    if (bytes > limit) {
       throw new StreamingJsonError(
-        `JSON string exceeds the configured item limit of ${limit} characters`,
+        `JSON string exceeds the configured item limit of ${limit} bytes`,
       );
     }
     if (escaped) {
@@ -139,6 +141,7 @@ async function readValueRaw(reader, limit) {
   if (first === '"') return readStringRaw(reader, limit);
 
   let raw = '';
+  let bytes = 0;
   if (first === '{' || first === '[') {
     const stack = [];
     let inString = false;
@@ -149,9 +152,10 @@ async function readValueRaw(reader, limit) {
         throw new StreamingJsonError('Unexpected end of JSON value');
       }
       raw += value;
-      if (raw.length > limit) {
+      bytes += Buffer.byteLength(value);
+      if (bytes > limit) {
         throw new StreamingJsonError(
-          `One JSON value exceeds the configured item limit of ${limit} characters`,
+          `One JSON value exceeds the configured item limit of ${limit} bytes`,
         );
       }
 
@@ -199,10 +203,12 @@ async function readValueRaw(reader, limit) {
     ) {
       break;
     }
-    raw += await reader.next();
-    if (raw.length > limit) {
+    const consumed = await reader.next();
+    raw += consumed;
+    bytes += Buffer.byteLength(consumed);
+    if (bytes > limit) {
       throw new StreamingJsonError(
-        `One JSON value exceeds the configured item limit of ${limit} characters`,
+        `One JSON value exceeds the configured item limit of ${limit} bytes`,
       );
     }
   }
