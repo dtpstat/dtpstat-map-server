@@ -997,13 +997,27 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           const parsed = parseBatch(batchDownload.jsonText);
           assertCompleteBatch(objects, parsed.places, batchNumber);
 
-          const stageResult = await client.query(INSERT_STAGE_SQL, [
-            JSON.stringify(parsed.places),
-          ]);
-          if (stageResult.rowCount !== parsed.places.length) {
-            throw new Error(`Not every OSM place in batch ${batchNumber} was staged`);
+          if (checkpointRepository) {
+            await checkpointRepository.stageBatch(
+              checkpoint.id,
+              addContentChecksums(parsed.places),
+              {
+                ...metricDelta(),
+                ignoredElements: parsed.ignoredElements,
+              },
+            );
+            rememberPersistedMetrics();
+          } else {
+            const stageResult = await client.query(INSERT_STAGE_SQL, [
+              JSON.stringify(parsed.places),
+            ]);
+            if (stageResult.rowCount !== parsed.places.length) {
+              throw new Error(
+                `Not every OSM place in batch ${batchNumber} was staged`,
+              );
+            }
+            await assertValidStage(client);
           }
-          await assertValidStage(client);
           throwIfAdminTaskCancelled(operation.signal);
 
           cityPlaces += parsed.cityPlaces;
