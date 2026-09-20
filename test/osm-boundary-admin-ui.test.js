@@ -11,10 +11,11 @@ async function read(relativePath) {
 }
 
 test('OSM object editor is a top-level admin section with population editing', async () => {
-  const [html, shell, editor] = await Promise.all([
+  const [html, shell, editor, styles] = await Promise.all([
     read('admin/index.html'),
     read('admin/admin-shell.js'),
     read('admin/osm-boundary-editor.js'),
+    read('admin/osm-boundary-editor.css'),
   ]);
 
   assert.match(
@@ -24,6 +25,10 @@ test('OSM object editor is a top-level admin section with population editing', a
   assert.match(
     html,
     /id="admin-section-osm-objects"[\s\S]*id="osm-boundary-map"/,
+  );
+  assert.match(
+    html,
+    /id="osm-boundary-tree"[\s\S]*id="osm-boundary-map"[\s\S]*id="osm-boundary-form"/,
   );
   assert.match(
     html,
@@ -37,4 +42,9 @@ test('OSM object editor is a top-level admin section with population editing', a
   assert.match(editor, /#admin-section-osm-objects/);
   assert.match(editor, /population\.dataset\.initialValue/);
   assert.match(editor, /changes\.population/);
+  assert.match(
+    styles,
+    /grid-template-columns:\s*minmax\(19rem, \.72fr\)[\s\S]*minmax\(30rem, 1\.8fr\)[\s\S]*minmax\(20rem, \.82fr\)/,
+  );
+  assert.match(styles, /#osm-boundary-form[\s\S]*flex-direction:\s*column/);
 });
