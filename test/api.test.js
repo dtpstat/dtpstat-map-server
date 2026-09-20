@@ -123,6 +123,9 @@ async function withServer(callback, options = {}) {
     adminTasks: options.adminTasks,
     repository: options.repository ?? createTestRepository(),
     projectSettingsRepository: options.projectSettingsRepository,
+    osmImportSettingsRepository: options.osmImportSettingsRepository,
+    osmBoundaryAdminRepository: options.osmBoundaryAdminRepository,
+    refreshOsmBoundaryDerived: options.refreshOsmBoundaryDerived,
     importService,
     populationService,
     kmlUpdateService,
@@ -653,6 +656,88 @@ test('KML update endpoint is protected and forwards explicit sources and overrid
     assert.equal(receivedQuery.dryRun, 'true');
     assert.equal(receivedQuery.unmatchedPolicy, 'skip');
   }, { kmlUpdateService });
+});
+
+test('OSM subtree endpoint toggles the whole selected branch once', async () => {
+  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const calls = [];
+  let derivedCalls = 0;
+  const osmImportSettingsRepository = {
+    async get() { return {}; },
+    async save(value) { return value; },
+  };
+  const osmBoundaryAdminRepository = {
+    async list() { return []; },
+    async getGeometry() { return null; },
+    async update() { return null; },
+    async setSubtreeActive(boundaryId, active) {
+      calls.push({ boundaryId, active });
+      return {
+        root: {
+          id: Number(boundaryId),
+          displayName: 'Тестовая область',
+          active,
+        },
+        active,
+        affectedCount: 14,
+        changedCount: 11,
+        previousActiveCount: 11,
+        previousInactiveCount: 3,
+      };
+    },
+  };
+
+  await withServer(async (baseUrl) => {
+    const unauthorized = await fetch(
+      `${baseUrl}/api/admin/osm-boundaries/42/subtree`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: false }),
+      },
+    );
+    assert.equal(unauthorized.status, 401);
+
+    const response = await fetch(
+      `${baseUrl}/api/admin/osm-boundaries/42/subtree`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: authorization,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ active: false }),
+      },
+    );
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('cache-control'), /no-store/);
+    const body = await response.json();
+    assert.deepEqual(calls, [{ boundaryId: '42', active: false }]);
+    assert.equal(body.subtree.affectedCount, 14);
+    assert.equal(body.subtree.changedCount, 11);
+    assert.equal(body.subtree.active, false);
+    assert.equal(derivedCalls, 1);
+
+    const invalid = await fetch(
+      `${baseUrl}/api/admin/osm-boundaries/42/subtree`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: authorization,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ active: 'false' }),
+      },
+    );
+    assert.equal(invalid.status, 400);
+  }, {
+    osmImportSettingsRepository,
+    osmBoundaryAdminRepository,
+    async refreshOsmBoundaryDerived() {
+      derivedCalls += 1;
+      return { refreshed: true };
+    },
+  });
 });
 
 test('OSM city update endpoint is protected and forwards URL and safe overrides', async () => {
