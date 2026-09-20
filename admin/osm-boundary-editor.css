@@ -40,8 +40,31 @@
   border-radius: 10px;
   background: #0c1417;
 }
-.osm-boundary-tree-panel { overflow: auto; }
-.osm-boundary-tree { padding: .55rem; }
+.osm-boundary-tree-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.osm-boundary-search-label {
+  flex: 0 0 auto;
+  padding: .55rem;
+  border-bottom: 1px solid var(--line);
+}
+.osm-boundary-search-label > span {
+  display: block;
+  margin-bottom: .3rem;
+  color: var(--muted);
+  font-size: .68rem;
+}
+.osm-boundary-search {
+  width: 100%;
+}
+.osm-boundary-tree {
+  min-height: 0;
+  padding: .55rem;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
 .osm-boundary-children { margin-left: 1rem; padding-left: .55rem; border-left: 1px solid #294047; }
 .osm-boundary-node { margin: .15rem 0; }
 .osm-boundary-node-button {
