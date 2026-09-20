@@ -507,3 +507,43 @@ test('admin cancellation interrupts an HTTP 429 backoff immediately', async () =
   );
   assert.equal(pool.connections, 0);
 });
+
+
+test('saved OSM source is rejected when deployment allowlist no longer permits it', async () => {
+  const pool = createPool();
+  const restrictedConfig = {
+    ...config,
+    allowedURLs: new Set([config.url]),
+  };
+  const service = createOsmCityUpdateService(pool, restrictedConfig, {
+    settingsRepository: {
+      async get() {
+        return {
+          sourceURL: 'https://overpass-api.de/api/status',
+          includeCity: true,
+          includeTown: true,
+          includeAdministrative: true,
+          adminLevelMin: 4,
+          adminLevelMax: 8,
+          batchSize: 2,
+          minDelayMs: 0,
+          timeoutMs: 180000,
+          queryTimeoutSeconds: 120,
+          maxBytes: 1000000,
+          maxRetries: 6,
+          retryBaseDelayMs: 30000,
+          retryMaxDelayMs: 240000,
+        };
+      },
+    },
+    async download() {
+      throw new Error('download must not start');
+    },
+  });
+
+  await assert.rejects(
+    service.update(undefined, {}),
+    /Saved OSM URL is no longer allowed/,
+  );
+  assert.equal(pool.connections, 0);
+});
