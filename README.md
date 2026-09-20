@@ -92,7 +92,7 @@ HTTP_PORT=3002
 
 ## Миграции
 
-Текущая последовательность: `V001…V027`.
+Текущая последовательность: `V001…V028`.
 
 Последние изменения:
 
@@ -108,8 +108,9 @@ HTTP_PORT=3002
 | `V025` | `PROJECT_SETTINGS.PUBLIC_DOWNLOAD_NAME` |
 | `V026` | динамические ссылки на публичные GeoJSON/CSV в footer |
 | `V027` | OSM object identity, active/display identity, hierarchy, DB-backed OSM import settings и пороги large/small |
+| `V028` | раздельные лимиты одного Overpass response / всей загрузки и база для adaptive geometry batching |
 
-Следующая migration: **V028+**. Уже опубликованные migrations не редактируются задним числом.
+Следующая migration: **V029+**. Уже опубликованные migrations не редактируются задним числом.
 
 История хранится в:
 
@@ -132,6 +133,10 @@ OSM_TYPE + OSM_ID
 
 Загрузчик получает ID-индекс, дедуплицирует пересечения selectors по
 `(osm_type, osm_id)`, затем последовательно загружает geometry batches.
+Начиная с V028 лимит памяти одного Overpass-ответа отделён от суммарного
+лимита операции. Если geometry batch превышает single-response limit, он
+автоматически делится пополам и повторяется; уже обработанные пакеты при этом
+не скачиваются заново.
 
 Для каждого объекта отдельно хранятся source-признаки OSM и пользовательская
 конфигурация:
