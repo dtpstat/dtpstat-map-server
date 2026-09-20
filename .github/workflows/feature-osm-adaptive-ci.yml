@@ -43,3 +43,26 @@ jobs:
       - run: npm run check
       - run: npm run db:init
       - run: npm run db:migrate
+      - name: Bootstrap OSM settings against migrated database
+        run: |
+          node --input-type=module <<'NODE'
+          import { loadConfig } from './src/config.js';
+          import { createPool } from './src/db/pool.js';
+          import { createOsmImportSettingsRepository } from './src/db/osm-import-settings-repository.js';
+
+          const config = loadConfig(process.env, process.cwd());
+          const pool = createPool(config.database);
+          try {
+            const repository = createOsmImportSettingsRepository(pool);
+            await repository.bootstrap(config.osmCityUpdate);
+            const settings = await repository.get();
+            if (settings.maxResponseBytes !== 134217728) {
+              throw new Error(`unexpected maxResponseBytes: ${settings.maxResponseBytes}`);
+            }
+            if (settings.maxTotalBytes !== 2147483648) {
+              throw new Error(`unexpected maxTotalBytes: ${settings.maxTotalBytes}`);
+            }
+          } finally {
+            await pool.end();
+          }
+          NODE
