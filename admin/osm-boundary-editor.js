@@ -23,6 +23,8 @@ if (typeof document !== 'undefined') {
     const displayType = field('displayType');
     const population = field('population');
     const save = form.querySelector('button[type="submit"]');
+    const enableBranch = document.querySelector('#osm-boundary-enable-branch');
+    const disableBranch = document.querySelector('#osm-boundary-disable-branch');
 
     function setMessage(text, tone = '') {
       message.textContent = text;
