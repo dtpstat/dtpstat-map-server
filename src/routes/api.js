@@ -112,7 +112,10 @@ export function createApiRouter({
       const target = progress.requestPhase === 'geometry'
         ? `пакет ${progress.batch}/${progress.batchCount}`
         : `часть индекса ${progress.indexPart}/${progress.indexPartCount}`;
-      message = `OSM: HTTP ${progress.statusCode}, ${target}; повтор ${progress.attempt}/${progress.maxRetries} через ${Math.ceil(progress.waitMs / 1000)} сек.`;
+      const reason = progress.retryKind === 'network'
+        ? `сетевая ошибка ${progress.networkCode ?? progress.networkMessage ?? 'fetch'}`
+        : `HTTP ${progress.statusCode}`;
+      message = `OSM: ${reason}, ${target}; повтор ${progress.attempt}/${progress.maxRetries} через ${Math.ceil(progress.waitMs / 1000)} сек.`;
     } else if (progress.phase === 'split') {
       message = progress.reason === 'http-504'
         ? `OSM: пакет ${progress.batch} получил HTTP 504 после ${progress.retryCount} повторов; разделён ${progress.objectCount} → ${progress.splitSizes.join(' + ')} объектов`
