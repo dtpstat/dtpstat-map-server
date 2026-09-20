@@ -37,8 +37,8 @@ function settingsPayload(value, config) {
   const allowed = new Set([
     'sourceURL', 'includeCity', 'includeTown', 'includeAdministrative',
     'adminLevelMin', 'adminLevelMax', 'batchSize', 'minDelayMs', 'timeoutMs',
-    'queryTimeoutSeconds', 'maxBytes', 'maxRetries', 'retryBaseDelayMs',
-    'retryMaxDelayMs',
+    'queryTimeoutSeconds', 'maxResponseBytes', 'maxTotalBytes', 'maxRetries',
+    'retryBaseDelayMs', 'retryMaxDelayMs',
   ]);
   const unknown = Object.keys(value).filter((key) => !allowed.has(key));
   if (unknown.length > 0) {
@@ -68,7 +68,18 @@ function settingsPayload(value, config) {
       1,
       600,
     ),
-    maxBytes: integer(value.maxBytes, 'maxBytes', 1024, 500 * 1024 * 1024),
+    maxResponseBytes: integer(
+      value.maxResponseBytes,
+      'maxResponseBytes',
+      1024 * 1024,
+      512 * 1024 * 1024,
+    ),
+    maxTotalBytes: integer(
+      value.maxTotalBytes,
+      'maxTotalBytes',
+      1024 * 1024,
+      8 * 1024 * 1024 * 1024,
+    ),
     maxRetries: integer(value.maxRetries, 'maxRetries', 0, 20),
     retryBaseDelayMs: integer(value.retryBaseDelayMs, 'retryBaseDelayMs', 1000, 3600000),
     retryMaxDelayMs: integer(value.retryMaxDelayMs, 'retryMaxDelayMs', 1000, 3600000),
@@ -81,6 +92,11 @@ function settingsPayload(value, config) {
   }
   if (result.retryBaseDelayMs > result.retryMaxDelayMs) {
     throw new OsmCityUpdateValidationError('retryBaseDelayMs must not exceed retryMaxDelayMs');
+  }
+  if (result.maxResponseBytes > result.maxTotalBytes) {
+    throw new OsmCityUpdateValidationError(
+      'maxResponseBytes must not exceed maxTotalBytes',
+    );
   }
   return result;
 }
@@ -122,7 +138,8 @@ export function createOsmBoundariesRouter({
           maxBatchSize: osmConfig.maxBatchSize,
           timeoutMs: 900000,
           queryTimeoutSeconds: 600,
-          maxBytes: 500 * 1024 * 1024,
+          maxResponseBytes: 512 * 1024 * 1024,
+          maxTotalBytes: 8 * 1024 * 1024 * 1024,
           maxRetries: 20,
         },
       });
