@@ -545,7 +545,7 @@ test('repeated HTTP 504 splits a multi-object geometry batch instead of exhausti
     async sleep(milliseconds) {
       delays.push(milliseconds);
     },
-    async download(url, query, options) {
+    async download(url, query, _options) {
       if (/out ids/.test(query)) {
         indexSuccesses += 1;
         return {
