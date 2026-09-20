@@ -29,6 +29,13 @@ test('loadConfig enables HTTP with safe generic defaults', () => {
   assert.equal(config.importApi.bootstrapUsername, 'importer');
   assert.equal(config.importApi.bootstrapPassword, 'test-secret');
   assert.equal(config.importApi.maxBodyBytes, 25 * 1024 * 1024);
+  assert.equal(config.importApi.maxStreamUploadBytes, 8 * 1024 * 1024 * 1024);
+  assert.equal(config.importApi.maxStreamJsonBytes, 32 * 1024 * 1024 * 1024);
+  assert.equal(config.importApi.maxStreamItemBytes, 128 * 1024 * 1024);
+  assert.equal(config.importApi.maxStreamZipCompressionRatio, 1000);
+  assert.equal(config.importApi.maxStreamZipEntries, 64);
+  assert.equal(config.importApi.maxStreamJsonDepth, 128);
+  assert.equal(config.importApi.maxStreamJsonItems, 5_000_000);
   assert.equal(config.kmlUpdate.sources.length, 0);
   assert.equal(config.kmlUpdate.timeoutMs, 30000);
   assert.equal(config.kmlUpdate.unmatchedPolicy, 'skip');
@@ -262,5 +269,36 @@ test('loadConfig requires application database settings', () => {
   assert.throws(
     () => loadConfig({}, '/project'),
     /DATABASE_NAME is required/,
+  );
+});
+
+
+test('loadConfig validates streaming ZIP and JSON safety limits', () => {
+  const config = loadConfig({
+    ...REQUIRED_ENV,
+    IMPORT_API_MAX_STREAM_ZIP_RATIO: '250',
+    IMPORT_API_MAX_STREAM_ZIP_ENTRIES: '12',
+    IMPORT_API_MAX_STREAM_JSON_DEPTH: '64',
+    IMPORT_API_MAX_STREAM_JSON_ITEMS: '12345',
+  }, '/project');
+
+  assert.equal(config.importApi.maxStreamZipCompressionRatio, 250);
+  assert.equal(config.importApi.maxStreamZipEntries, 12);
+  assert.equal(config.importApi.maxStreamJsonDepth, 64);
+  assert.equal(config.importApi.maxStreamJsonItems, 12345);
+
+  assert.throws(
+    () => loadConfig({
+      ...REQUIRED_ENV,
+      IMPORT_API_MAX_STREAM_JSON_DEPTH: '2',
+    }, '/project'),
+    /IMPORT_API_MAX_STREAM_JSON_DEPTH/,
+  );
+  assert.throws(
+    () => loadConfig({
+      ...REQUIRED_ENV,
+      IMPORT_API_MAX_STREAM_ZIP_RATIO: '0',
+    }, '/project'),
+    /IMPORT_API_MAX_STREAM_ZIP_RATIO/,
   );
 });
