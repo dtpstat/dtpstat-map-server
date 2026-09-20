@@ -161,10 +161,9 @@ const LINK_MATCHED_OSM_CITIES_SQL = `
   UPDATE city_boundaries AS boundary
   SET city_id = city.id,
       updated_at = now()
-  FROM requested
-  JOIN cities AS city
-    ON city.slug = 'osm-' || boundary.osm_type || '-' || boundary.osm_id
+  FROM requested, cities AS city
   WHERE boundary.id = requested.boundary_id
+    AND city.slug = 'osm-' || boundary.osm_type || '-' || boundary.osm_id
     AND boundary.is_active
     AND boundary.city_id IS NULL
 `;

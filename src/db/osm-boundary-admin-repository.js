@@ -1,3 +1,4 @@
+import { acquireDataImportLock } from './database-locks.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 const LIST_SQL = `
@@ -124,6 +125,7 @@ export function createOsmBoundaryAdminRepository(pool) {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+        await acquireDataImportLock(client, pool);
         const current = await client.query(
           `SELECT id, is_active AS active, display_name AS "displayName",
                   display_type AS "displayType"

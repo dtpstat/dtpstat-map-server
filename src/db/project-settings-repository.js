@@ -5,6 +5,7 @@ import {
 } from '../data/project-settings.js';
 import { normalizeMapboxAccessToken } from '../data/mapbox-access-token.js';
 import { normalizePublicDownloadName } from '../data/public-download-name.js';
+import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 const SELECT_SETTINGS_SQL = `
   SELECT
@@ -291,7 +292,7 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
       largeCityPopulationThreshold,
       largeCityAreaKm2Threshold,
     ]);
-    await database.query((await import('./recalculate-city-statistics.js')).RECALCULATE_CITY_STATISTICS_SQL);
+    await database.query(RECALCULATE_CITY_STATISTICS_SQL);
     if (!result.rows[0]) {
       throw new Error('Project settings row is missing; run database migrations');
     }
