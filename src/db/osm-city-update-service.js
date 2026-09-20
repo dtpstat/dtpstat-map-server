@@ -381,8 +381,11 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
       return;
     }
     if (progress.phase === 'retry') {
+      const reason = progress.retryKind === 'network'
+        ? `network ${progress.networkCode ?? progress.networkMessage ?? 'failure'}`
+        : `HTTP ${progress.statusCode}`;
       console.warn(
-        `OSM city update HTTP ${progress.statusCode}: retry ` +
+        `OSM city update ${reason}: retry ` +
         `${progress.attempt}/${progress.maxRetries} in ${progress.waitMs} ms`,
       );
       return;
@@ -521,13 +524,23 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
               totalLimitError.cause = error;
               throw totalLimitError;
             }
-            if (!(error instanceof OsmCityDownloadError) ||
-                !RETRYABLE_HTTP_STATUS_CODES.has(error.statusCode)) {
+            const retryableHttp =
+              error instanceof OsmCityDownloadError &&
+              RETRYABLE_HTTP_STATUS_CODES.has(error.statusCode);
+            const retryableNetwork =
+              error instanceof OsmCityDownloadError &&
+              error.retryable === true &&
+              (
+                error.code === 'network-error' ||
+                error.code === 'network-timeout'
+              );
+            if (!retryableHttp && !retryableNetwork) {
               throw error;
             }
 
             const retryAttempt = attempt + 1;
             const splitEligible504 =
+              retryableHttp &&
               error.statusCode === 504 &&
               requestProgress.requestPhase === 'geometry' &&
               (requestProgress.objectCount ?? 0) > 1;
@@ -539,8 +552,11 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
               : options.maxRetries;
             if (retryAttempt > retryLimit) {
               const exhausted = new OsmCityDownloadError(
-                `OSM download returned HTTP ${error.statusCode} after ` +
-                `${retryLimit} retries`,
+                retryableNetwork
+                  ? `OSM network download failed after ${retryLimit} retries: ` +
+                    `${error.networkCode ?? error.networkMessage ?? 'network failure'}`
+                  : `OSM download returned HTTP ${error.statusCode} after ` +
+                    `${retryLimit} retries`,
                 {
                   statusCode: error.statusCode,
                   retryAfterMs: error.retryAfterMs,
@@ -548,6 +564,9 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
                   code: splitEligible504
                     ? 'geometry-504-retry-limit'
                     : 'retry-limit',
+                  networkCode: error.networkCode,
+                  networkMessage: error.networkMessage,
+                  retryable: false,
                 },
               );
               exhausted.retryCount = retryLimit;
@@ -570,7 +589,10 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
             const progress = {
               phase: 'retry',
               ...requestProgress,
+              retryKind: retryableNetwork ? 'network' : 'http',
               statusCode: error.statusCode,
+              networkCode: error.networkCode,
+              networkMessage: error.networkMessage,
               attempt: retryAttempt,
               maxRetries: retryLimit,
               configuredMaxRetries: options.maxRetries,
