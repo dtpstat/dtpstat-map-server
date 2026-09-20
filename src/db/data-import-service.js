@@ -1,4 +1,9 @@
-import { buildGeoJsonPlan, GeoJsonValidationError } from '../data/geojson-plan.js';
+import {
+  buildGeoJsonPlan,
+  createGeoJsonAccumulator,
+  GeoJsonValidationError,
+} from '../data/geojson-plan.js';
+import { parseStreamingJsonObject } from '../data/streaming-json.js';
 import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
 import { acquireDataImportLock } from './database-locks.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
@@ -152,6 +157,165 @@ const LINK_BOUNDARIES_SQL = `
     AND boundary.osm_id = payload.osm_id
     AND boundary.is_active
     AND boundary.city_id IS NULL
+`;
+
+const STREAM_STAGE_BATCH_SIZE = 50;
+
+const CREATE_STREAM_RAW_SQL = `
+  CREATE TEMP TABLE line_transfer_raw (
+    seq bigint PRIMARY KEY,
+    item jsonb NOT NULL
+  ) ON COMMIT DROP
+`;
+
+const INSERT_STREAM_RAW_SQL = `
+  INSERT INTO line_transfer_raw (seq, item)
+  SELECT payload.seq, payload.item
+  FROM jsonb_to_recordset($1::jsonb) AS payload(
+    seq bigint,
+    item jsonb
+  )
+`;
+
+const CREATE_STREAM_STAGE_SQL = `
+  CREATE TEMP TABLE line_transfer_stage (
+    seq bigint PRIMARY KEY,
+    city_name text,
+    city_slug text,
+    boundary_osm_type text,
+    boundary_osm_id bigint,
+    line_type_name text NOT NULL,
+    lanes smallint NOT NULL,
+    properties jsonb NOT NULL,
+    geom geometry(Geometry, 4326) NOT NULL
+  ) ON COMMIT DROP
+`;
+
+const INSERT_STREAM_STAGE_SQL = `
+  WITH payload_rows AS (
+    SELECT *
+    FROM jsonb_to_recordset($1::jsonb) AS payload(
+      seq bigint,
+      "cityName" text,
+      "citySlug" text,
+      "boundaryOsmType" text,
+      "boundaryOsmId" bigint,
+      "lineTypeName" text,
+      lanes smallint,
+      properties jsonb,
+      geometry jsonb
+    )
+  )
+  INSERT INTO line_transfer_stage (
+    seq,
+    city_name,
+    city_slug,
+    boundary_osm_type,
+    boundary_osm_id,
+    line_type_name,
+    lanes,
+    properties,
+    geom
+  )
+  SELECT
+    seq,
+    "cityName",
+    "citySlug",
+    "boundaryOsmType",
+    "boundaryOsmId",
+    "lineTypeName",
+    lanes,
+    properties,
+    ST_SetSRID(ST_GeomFromGeoJSON(geometry::text), 4326)
+  FROM payload_rows
+`;
+
+const FIND_STREAM_UNKNOWN_BOUNDARIES_SQL = `
+  SELECT DISTINCT
+    stage.boundary_osm_type AS osm_type,
+    stage.boundary_osm_id AS osm_id
+  FROM line_transfer_stage AS stage
+  LEFT JOIN city_boundaries AS boundary
+    ON boundary.osm_type = stage.boundary_osm_type
+   AND boundary.osm_id = stage.boundary_osm_id
+   AND boundary.is_active
+  WHERE stage.boundary_osm_id IS NOT NULL
+    AND boundary.id IS NULL
+  ORDER BY osm_type, osm_id
+`;
+
+const FIND_STREAM_BOUNDARY_CITY_CONFLICTS_SQL = `
+  SELECT DISTINCT
+    boundary.osm_type,
+    boundary.osm_id,
+    boundary.city_id AS existing_city_id,
+    city.id AS imported_city_id
+  FROM line_transfer_stage AS stage
+  JOIN city_boundaries AS boundary
+    ON boundary.osm_type = stage.boundary_osm_type
+   AND boundary.osm_id = stage.boundary_osm_id
+   AND boundary.is_active
+  JOIN cities AS city ON city.slug = stage.city_slug
+  WHERE boundary.city_id IS NOT NULL
+    AND boundary.city_id <> city.id
+  ORDER BY boundary.osm_type, boundary.osm_id
+`;
+
+const LINK_STREAM_BOUNDARIES_SQL = `
+  UPDATE city_boundaries AS boundary
+  SET city_id = city.id,
+      updated_at = now()
+  FROM (
+    SELECT DISTINCT city_slug, boundary_osm_type, boundary_osm_id
+    FROM line_transfer_stage
+    WHERE city_slug IS NOT NULL
+      AND boundary_osm_id IS NOT NULL
+  ) AS stage
+  JOIN cities AS city ON city.slug = stage.city_slug
+  WHERE boundary.osm_type = stage.boundary_osm_type
+    AND boundary.osm_id = stage.boundary_osm_id
+    AND boundary.is_active
+    AND boundary.city_id IS NULL
+`;
+
+const FIND_STREAM_UNKNOWN_LINE_TYPES_SQL = `
+  SELECT DISTINCT stage.line_type_name
+  FROM line_transfer_stage AS stage
+  LEFT JOIN line_types AS line_type
+    ON LOWER(BTRIM(line_type.name)) = LOWER(BTRIM(stage.line_type_name))
+  WHERE line_type.id IS NULL
+  ORDER BY stage.line_type_name
+`;
+
+const INSERT_STREAM_GEOMETRIES_SQL = `
+  INSERT INTO city_geometries (
+    city_id,
+    boundary_id,
+    line_type_id,
+    lanes,
+    length_m,
+    lane_length_m,
+    properties,
+    geom
+  )
+  SELECT
+    city.id,
+    boundary.id,
+    line_type.id,
+    stage.lanes,
+    ST_Length(stage.geom::geography),
+    ST_Length(stage.geom::geography) * stage.lanes,
+    stage.properties,
+    stage.geom
+  FROM line_transfer_stage AS stage
+  JOIN line_types AS line_type
+    ON LOWER(BTRIM(line_type.name)) = LOWER(BTRIM(stage.line_type_name))
+  LEFT JOIN cities AS city ON city.slug = stage.city_slug
+  LEFT JOIN city_boundaries AS boundary
+    ON boundary.osm_type = stage.boundary_osm_type
+   AND boundary.osm_id = stage.boundary_osm_id
+   AND boundary.is_active
+  ORDER BY stage.seq
 `;
 
 const INSERT_GEOMETRIES_SQL = `
