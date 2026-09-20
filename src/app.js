@@ -118,6 +118,8 @@ const TEST_PROJECT_SETTINGS = Object.freeze({
   themePreset: 'classic',
   showLineLabels: false,
   showLinePopups: true,
+  largeCityPopulationThreshold: 400000,
+  largeCityAreaKm2Threshold: null,
   publicDownloadName: DEFAULT_PUBLIC_DOWNLOAD_NAME,
   updatedAt: '2026-01-01T00:00:00.000Z',
 });
@@ -193,7 +195,7 @@ function testSettingsTransferService() {
       return {
         _dtpstat: {
           kind: 'project-settings',
-          schemaVersion: 6,
+          schemaVersion: 7,
           exportedAt: '2026-01-01T00:00:00.000Z',
         },
         projectSettings: TEST_PROJECT_SETTINGS,
@@ -388,6 +390,7 @@ export function createApp({
           styleSrc: ["'self'", "'unsafe-inline'"],
           imgSrc: [
             "'self'", 'data:', 'blob:', 'https://*.mapbox.com',
+            'https://*.tile.openstreetmap.org',
             ...YANDEX_METRIKA_HTTPS_ORIGINS,
             // Current Metrica tag uses this image-only endpoint for mapuid sync.
             'https://yandex.ru',
@@ -432,6 +435,13 @@ export function createApp({
     }),
   );
 
+  app.use(
+    '/vendor/leaflet',
+    express.static(path.join(config.projectRoot, 'node_modules/leaflet/dist'), {
+      immutable: isProduction,
+      maxAge: isProduction ? '30d' : 0,
+    }),
+  );
   app.use(
     '/vendor/mapbox-gl',
     express.static(path.join(config.projectRoot, 'node_modules/mapbox-gl/dist'), {

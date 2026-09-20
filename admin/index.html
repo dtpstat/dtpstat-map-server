@@ -6,6 +6,9 @@
   <title>Администрирование — карта данных</title>
   <link rel="stylesheet" href="/admin/admin.css">
   <link rel="stylesheet" href="/admin/line-types.css">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/admin/osm-boundary-editor.css">
+  <script src="/vendor/leaflet/leaflet.js"></script>
   <script type="module" src="/admin/admin-session.js"></script>
   <script type="module" src="/admin/project-branding.js"></script>
   <script type="module" src="/admin/admin-shell.js"></script>
@@ -100,19 +103,24 @@
 
           <article class="task-panel" id="panel-osm" role="tabpanel"
                    aria-labelledby="tab-osm" data-task-panel="osm">
-            <h3>Города</h3>
-            <p class="panel-description">Границы OSM можно обновить напрямую из Overpass либо перенести готовым GeoJSON-снимком между серверами.</p>
+            <h3>OSM геометрии</h3>
+            <p class="panel-description">Населённые пункты и административные границы OSM загружаются пакетами, после чего активные объекты используются для населения и привязки линий.</p>
 
-            <nav class="operation-tabs" role="tablist" aria-label="Операции с городами">
+            <nav class="operation-tabs" role="tablist" aria-label="Операции с OSM геометриями">
               <button class="operation-tab" id="operation-tab-osm-update" type="button" role="tab"
                       aria-selected="true" aria-controls="operation-osm-update"
                       data-operation-tab="osm-update" data-operation-group="osm">
-                Обновить с OSM
+                Обновление
+              </button>
+              <button class="operation-tab" id="operation-tab-osm-objects" type="button" role="tab"
+                      aria-selected="false" aria-controls="operation-osm-objects"
+                      data-operation-tab="osm-objects" data-operation-group="osm">
+                Объекты OSM
               </button>
               <button class="operation-tab" id="operation-tab-osm-geojson" type="button" role="tab"
                       aria-selected="false" aria-controls="operation-osm-geojson"
                       data-operation-tab="osm-geojson" data-operation-group="osm">
-                Импорт / экспорт GeoJSON
+                Импорт / экспорт
               </button>
             </nav>
 
@@ -121,8 +129,8 @@
                      data-operation-panel="osm-update" data-operation-group="osm">
               <div class="mode-heading">
                 <div>
-                  <h4>Обновить с OSM</h4>
-                  <p>Индекс RU city/town, последовательные пакеты геометрий и атомарная замена.</p>
+                  <h4>Обновить из Overpass</h4>
+                  <p>Сначала загружается ID-индекс, затем геометрии последовательно загружаются пакетами и атомарно заменяют снимок.</p>
                 </div>
               </div>
               <p class="last-success" data-last-success="osm-city-update">
@@ -131,38 +139,118 @@
               <form id="osm-form" data-task-form="osm" data-task-type="osm-city-update">
                 <div class="form-fields">
                   <label>Overpass URL
-                    <select name="URL" id="osm-url">
+                    <select name="URL" id="osm-url" required>
                       <option value="">Загрузка настроек…</option>
                     </select>
                   </label>
-                  <label>Размер пакета
-                    <input name="batchSize" type="number" inputmode="numeric"
-                           min="1" step="1" placeholder="из ENV">
-                  </label>
-                  <label>Пауза между запросами, мс
-                    <input name="minDelayMs" type="number" inputmode="numeric"
-                           min="0" step="1" placeholder="из ENV">
-                  </label>
-                  <label>Максимум повторов временной ошибки
-                    <input name="maxRetries" type="number" inputmode="numeric"
-                           min="0" step="1" placeholder="из ENV">
-                  </label>
-                  <label>Начальная пауза повтора, мс
-                    <input name="retryBaseDelayMs" type="number" inputmode="numeric"
-                           min="1000" step="1" placeholder="из ENV">
-                  </label>
-                  <label>Предел backoff, мс
-                    <input name="retryMaxDelayMs" type="number" inputmode="numeric"
-                           min="1000" step="1" placeholder="из ENV">
-                  </label>
+
+                  <div class="osm-selection-grid">
+                    <label class="check"><input name="includeCity" type="checkbox" checked> place=city</label>
+                    <label class="check"><input name="includeTown" type="checkbox" checked> place=town</label>
+                    <label class="check"><input name="includeAdministrative" type="checkbox" checked> boundary=administrative</label>
+                  </div>
+
+                  <div class="osm-number-grid">
+                    <label>admin_level от
+                      <input name="adminLevelMin" type="number" inputmode="numeric"
+                             min="1" max="20" step="1" required>
+                    </label>
+                    <label>admin_level до
+                      <input name="adminLevelMax" type="number" inputmode="numeric"
+                             min="1" max="20" step="1" required>
+                    </label>
+                    <label>Размер пакета
+                      <input name="batchSize" type="number" inputmode="numeric"
+                             min="1" step="1" required>
+                    </label>
+                    <label>Пауза между запросами, мс
+                      <input name="minDelayMs" type="number" inputmode="numeric"
+                             min="0" step="1" required>
+                    </label>
+                    <label>HTTP timeout, мс
+                      <input name="timeoutMs" type="number" inputmode="numeric"
+                             min="1000" step="1" required>
+                    </label>
+                    <label>Overpass timeout, сек
+                      <input name="queryTimeoutSeconds" type="number" inputmode="numeric"
+                             min="1" step="1" required>
+                    </label>
+                    <label>Общий лимит ответа, байт
+                      <input name="maxBytes" type="number" inputmode="numeric"
+                             min="1024" step="1" required>
+                    </label>
+                    <label>Максимум повторов
+                      <input name="maxRetries" type="number" inputmode="numeric"
+                             min="0" step="1" required>
+                    </label>
+                    <label>Начальная пауза повтора, мс
+                      <input name="retryBaseDelayMs" type="number" inputmode="numeric"
+                             min="1000" step="1" required>
+                    </label>
+                    <label>Предел backoff, мс
+                      <input name="retryMaxDelayMs" type="number" inputmode="numeric"
+                             min="1000" step="1" required>
+                    </label>
+                  </div>
+
                   <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
                 </div>
-                <button class="secondary defaults-button" id="osm-defaults" type="button">
-                  Загрузить значения по умолчанию
-                </button>
-                <button class="task-action" type="submit" data-task-action="osm"
-                        data-task-type="osm-city-update" data-start-label="Запустить OSM">Запустить OSM</button>
+                <div class="osm-settings-actions">
+                  <button class="secondary" id="osm-defaults" type="button">Перезагрузить сохранённые</button>
+                  <button class="secondary" id="osm-settings-save" type="button">Сохранить настройки загрузки</button>
+                  <button class="task-action" type="submit" data-task-action="osm"
+                          data-task-type="osm-city-update" data-start-label="Запустить OSM">Запустить OSM</button>
+                </div>
               </form>
+            </section>
+
+            <section class="operation-panel transfer-mode osm-boundary-workspace"
+                     id="operation-osm-objects" role="tabpanel"
+                     aria-labelledby="operation-tab-osm-objects"
+                     data-operation-panel="osm-objects" data-operation-group="osm" hidden>
+              <div class="mode-heading">
+                <div>
+                  <h4>Загруженные OSM-объекты</h4>
+                  <p>Иерархия строится только по полному геометрическому вложению. Просто пересекающиеся объекты остаются на одном уровне.</p>
+                </div>
+                <button class="secondary" id="osm-boundary-refresh" type="button">Обновить дерево</button>
+              </div>
+              <div class="osm-boundary-layout">
+                <section class="osm-boundary-tree-panel" aria-label="Дерево OSM объектов">
+                  <div id="osm-boundary-tree" class="osm-boundary-tree">
+                    <p class="empty-state">Загружаем объекты…</p>
+                  </div>
+                </section>
+                <section class="osm-boundary-details">
+                  <form id="osm-boundary-form">
+                    <div class="osm-boundary-selected-title" id="osm-boundary-selected-title">
+                      Выберите объект в дереве
+                    </div>
+                    <label class="check">
+                      <input name="active" type="checkbox" disabled>
+                      Активная геометрия
+                    </label>
+                    <label>Отображаемое имя
+                      <input name="displayName" type="text" maxlength="160" disabled required>
+                    </label>
+                    <label>Тип
+                      <select name="displayType" disabled required>
+                        <option value="city">Город</option>
+                        <option value="town">Town / малый город</option>
+                        <option value="urban_okrug">Городской округ</option>
+                        <option value="federal_city">Город федерального значения</option>
+                        <option value="settlement">Поселение</option>
+                        <option value="administrative">Административная территория</option>
+                      </select>
+                    </label>
+                    <dl class="osm-boundary-meta" id="osm-boundary-meta"></dl>
+                    <button type="submit" disabled>Сохранить объект</button>
+                    <p class="notice" id="osm-boundary-message" role="status"></p>
+                  </form>
+                  <div id="osm-boundary-map" class="osm-boundary-map"
+                       aria-label="Карта выбранной OSM геометрии"></div>
+                </section>
+              </div>
             </section>
 
             <section class="operation-panel transfer-mode" id="operation-osm-geojson" role="tabpanel"
@@ -171,7 +259,7 @@
               <div class="mode-heading">
                 <div>
                   <h4>Импорт / экспорт GeoJSON</h4>
-                  <p>Полный перенос place=city/town с OSM type/id, тегами, временем OSM и геометрией.</p>
+                  <p>Полный перенос OSM объектов, их source-тегов, admin_level, признака активности и отображаемой идентичности.</p>
                 </div>
                 <a class="secondary-link" href="/api/admin/export/cities" download>Выгрузить GeoJSON</a>
               </div>
@@ -180,14 +268,16 @@
               </p>
               <form id="city-geojson-form" data-task-form="osm" data-task-type="city-geojson-import">
                 <div class="form-fields">
-                  <label>GeoJSON городов
-                    <input name="file" type="file" accept=".json,.geojson,application/json,application/geo+json" required>
-                    <small>Ожидается FeatureCollection с Polygon/MultiPolygon и свойствами placeType, osmType, osmId, osmName. Файл собственного экспорта принимается без преобразования.</small>
+                  <label>GeoJSON OSM-границ
+                    <input name="file" type="file"
+                           accept=".json,.geojson,application/json,application/geo+json" required>
+                    <small>FeatureCollection schemaVersion 2 переносит place/admin признаки, OSM type/id, active/displayName/displayType и Polygon/MultiPolygon.</small>
                   </label>
                   <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
                 </div>
                 <button class="task-action" type="submit" data-task-action="osm"
-                        data-task-type="city-geojson-import" data-start-label="Импортировать города">Импортировать города</button>
+                        data-task-type="city-geojson-import"
+                        data-start-label="Импортировать OSM">Импортировать OSM</button>
               </form>
             </section>
             <p class="notice" data-task-notice="osm" role="status"></p>

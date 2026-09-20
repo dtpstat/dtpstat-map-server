@@ -233,6 +233,7 @@ async function loadDataEditors() {
   await import('./json-examples.js');
   await import('./kml-transfer-editor.js');
   await import('./admin.js');
+  await import('./osm-boundary-editor.js');
   setupDataSectionLockExtensions();
 }
 
