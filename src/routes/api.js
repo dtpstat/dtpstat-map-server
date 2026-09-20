@@ -405,11 +405,11 @@ export function createApiRouter({
     }
   });
 
-  const cityStream = exportRepository.streamCityBoundaries?.bind(
+  const cityStream = exportRepository?.streamCityBoundaries?.bind(
     exportRepository,
   );
-  const lineStream = exportRepository.streamLines?.bind(exportRepository);
-  const populationStream = exportRepository.streamPopulations?.bind(
+  const lineStream = exportRepository?.streamLines?.bind(exportRepository);
+  const populationStream = exportRepository?.streamPopulations?.bind(
     exportRepository,
   );
 
