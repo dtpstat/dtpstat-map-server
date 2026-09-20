@@ -113,6 +113,8 @@ export function createApiRouter({
         ? `пакет ${progress.batch}/${progress.batchCount}`
         : `часть индекса ${progress.indexPart}/${progress.indexPartCount}`;
       message = `OSM: HTTP ${progress.statusCode}, ${target}; повтор ${progress.attempt}/${progress.maxRetries} через ${Math.ceil(progress.waitMs / 1000)} сек.`;
+    } else if (progress.phase === 'split') {
+      message = `OSM: пакет ${progress.batch} слишком большой; разделён ${progress.objectCount} → ${progress.splitSizes.join(' + ')} объектов`;
     } else if (progress.phase === 'kml-source') {
       message = `KML: обработан источник ${progress.source}/${progress.sourceCount}`;
     } else if (progress.phase === 'validated') {
