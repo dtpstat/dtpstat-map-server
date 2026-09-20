@@ -230,7 +230,10 @@
                   <h4>Импорт / экспорт GeoJSON</h4>
                   <p>Полный перенос OSM объектов, их source-тегов, admin_level, признака активности и отображаемой идентичности.</p>
                 </div>
-                <a class="secondary-link" href="/api/admin/export/cities" download>Выгрузить GeoJSON</a>
+                <div class="transfer-links">
+                  <a class="secondary-link" href="/api/admin/export/cities" download>GeoJSON</a>
+                  <a class="secondary-link" href="/api/admin/export/cities.zip" download>ZIP</a>
+                </div>
               </div>
               <p class="last-success" data-last-success="city-geojson-import">
                 <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
@@ -239,7 +242,7 @@
                 <div class="form-fields">
                   <label>GeoJSON OSM-границ
                     <input name="file" type="file"
-                           accept=".json,.geojson,application/json,application/geo+json" required>
+                           accept=".json,.geojson,.zip,application/json,application/geo+json,application/zip" required>
                     <small>FeatureCollection schemaVersion 2 переносит place/admin признаки, OSM type/id, active/displayName/displayType и Polygon/MultiPolygon.</small>
                   </label>
                   <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
@@ -307,7 +310,10 @@
                   <h4>Импорт / экспорт GeoJSON</h4>
                   <p>Переносит свойства линий, типы, KML Placemark/name и переносимые связи с городом/OSM-полигоном.</p>
                 </div>
-                <a class="secondary-link" href="/api/admin/export/lines" download>Выгрузить GeoJSON</a>
+                <div class="transfer-links">
+                  <a class="secondary-link" href="/api/admin/export/lines" download>GeoJSON</a>
+                  <a class="secondary-link" href="/api/admin/export/lines.zip" download>ZIP</a>
+                </div>
               </div>
               <p class="last-success" data-last-success="geojson-import">
                 <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
@@ -315,7 +321,8 @@
               <form id="line-geojson-form" data-task-form="kml" data-task-type="geojson-import">
                 <div class="form-fields">
                   <label>GeoJSON линий
-                    <input name="file" type="file" accept=".json,.geojson,application/json,application/geo+json" required>
+                    <input name="file" type="file"
+                           accept=".json,.geojson,.zip,application/json,application/geo+json,application/zip" required>
                     <small>Канонический schemaVersion 3 переносит lineTypes и _dtpstat.businessTypeCode. Сопоставление на целевой БД идёт по NAME; локальные CODE могут отличаться.</small>
                   </label>
                 </div>
@@ -347,7 +354,10 @@
                   <h4>Импорт / экспорт JSON</h4>
                   <p>Экспорт можно без преобразования загрузить на другой сервер.</p>
                 </div>
-                <a class="secondary-link" href="/api/admin/export/populations" download>Выгрузить JSON</a>
+                <div class="transfer-links">
+                  <a class="secondary-link" href="/api/admin/export/populations" download>JSON</a>
+                  <a class="secondary-link" href="/api/admin/export/populations.zip" download>ZIP</a>
+                </div>
               </div>
               <p class="last-success" data-last-success="population-update">
                 <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
@@ -355,7 +365,7 @@
               <form id="population-form" data-task-form="population" data-task-type="population-update">
                 <div class="form-fields">
                   <label>JSON-файл
-                    <input name="file" type="file" accept=".json,application/json">
+                    <input name="file" type="file" accept=".json,.zip,application/json,application/zip">
                     <small>Файл собственного экспорта принимается без преобразования, включая schemaVersion/exportedAt и индивидуальные asOf/source.</small>
                   </label>
                   <label>Или данные JSON
