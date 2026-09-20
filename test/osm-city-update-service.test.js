@@ -252,6 +252,39 @@ function createCheckpointRepositoryMock() {
       checkpoint.totalObjects = 0;
       staged.clear();
     },
+    async replaceResumable(id, value) {
+      calls.push({ method: 'replaceResumable', id });
+      if (checkpoint?.id !== id) {
+        throw new Error('checkpoint no longer resumable');
+      }
+      checkpoint = {
+        id: nextId,
+        status: 'downloading',
+        sourceURL: value.sourceURL,
+        settingsFingerprint: value.settingsFingerprint,
+        indexFingerprint: value.indexFingerprint,
+        options: structuredClone(value.options),
+        indexObjects: structuredClone(value.indexObjects),
+        sourceElements: value.sourceElements,
+        duplicateIndexObjects: value.duplicateIndexObjects,
+        osmTimestamp: value.osmTimestamp,
+        downloadedBytes: value.downloadedBytes,
+        requestAttemptCount: value.requestAttemptCount,
+        retryCount: value.retryCount,
+        retryWaitMs: value.retryWaitMs,
+        throttleWaitMs: value.throttleWaitMs,
+        ignoredElements: 0,
+        stagedBatchCount: 0,
+        totalObjects: value.indexObjects.length,
+        lastError: null,
+        createdAt: '2026-09-20T12:00:00.000Z',
+        updatedAt: '2026-09-20T12:00:00.000Z',
+        completedAt: null,
+      };
+      nextId += 1;
+      staged.clear();
+      return snapshot();
+    },
     async stats(id) {
       calls.push({ method: 'stats', id });
       const values = [...staged.values()];
@@ -459,6 +492,53 @@ test('OSM cancellation keeps the durable checkpoint resumable', async () => {
   assert.equal(repository.state.status, 'cancelled');
   assert.equal(repository.state.stagedObjects, 2);
   assert.equal(repository.state.remainingObjects, 1);
+});
+
+test('explicit OSM restart replaces old checkpoint only after the new index succeeds', async () => {
+  const { repository } = await createFailedCheckpoint();
+  const oldCheckpointId = repository.state.id;
+  const oldStagedObjects = repository.state.stagedObjects;
+
+  let downloadCall = 0;
+  let indexParseCall = 0;
+  const service = createOsmCityUpdateService(createPool(), config, {
+    checkpointRepository: repository,
+    async download(_url, query) {
+      downloadCall += 1;
+      if (downloadCall === 5) {
+        throw new Error('stop after replacement checkpoint was created');
+      }
+      return {
+        jsonText: `index-${downloadCall}`,
+        bytes: 10,
+        finalURL: config.url,
+        query,
+      };
+    },
+    parseIndex() {
+      const parsed = indexParts[indexParseCall];
+      indexParseCall += 1;
+      return parsed;
+    },
+    reportProgress() {},
+  });
+
+  await assert.rejects(
+    service.update(undefined, { restart: 'true' }),
+    /stop after replacement checkpoint was created/,
+  );
+
+  assert.equal(downloadCall, 5);
+  assert.notEqual(repository.state.id, oldCheckpointId);
+  assert.equal(repository.state.stagedObjects, 0);
+  assert.equal(repository.state.totalObjects, 3);
+  assert.equal(
+    repository.calls.filter(
+      (call) => call.method === 'replaceResumable',
+    ).length,
+    1,
+  );
+  assert.equal(oldStagedObjects, 2);
 });
 
 test('OSM fresh start refuses to discard unfinished checkpoint implicitly', async () => {
