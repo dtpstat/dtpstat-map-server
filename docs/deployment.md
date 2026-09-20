@@ -106,6 +106,26 @@ V030__osm_checkpoint_batch_count.sql
 
 Следующая migration: **V031+**. Опубликованные migration files не изменяются задним числом.
 
+## Большие portable JSON / ZIP transfers
+
+City boundaries, lines и populations импортируются потоково. Входной request
+сначала spooled в `var/import-staging`, затем raw JSON/GeoJSON либо единственная
+JSON entry ZIP читается в одну DB transaction. Полный JSON не материализуется в
+heap Node. При parse/schema/PostGIS ошибке выполняется полный `ROLLBACK`.
+
+Production limits задаются отдельно от небольших JSON API:
+
+```dotenv
+IMPORT_API_MAX_STREAM_UPLOAD_BYTES=2147483648
+IMPORT_API_MAX_STREAM_JSON_BYTES=3221225472
+IMPORT_API_MAX_STREAM_ITEM_BYTES=134217728
+```
+
+`client_max_body_size` reverse proxy должен учитывать именно
+`IMPORT_API_MAX_STREAM_UPLOAD_BYTES`. ZIP поддерживается в строгом single-file
+ZIP32 режиме (одна entry без directories; Store/Deflate; CRC32; без encryption
+и ZIP64). Orphan spool-файлы старше 24 часов удаляются при startup.
+
 ## Production за nginx
 
 Типичная схема:
