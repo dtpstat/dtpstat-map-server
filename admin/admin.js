@@ -404,6 +404,16 @@ async function api(path, options = {}) {
   return payload;
 }
 
+function portableFileOptions(file, jsonContentType) {
+  const zip = file.name.toLocaleLowerCase('en-US').endsWith('.zip');
+  return {
+    headers: {
+      'Content-Type': zip ? 'application/zip' : jsonContentType,
+    },
+    body: file,
+  };
+}
+
 async function encodedJsonBody(text, contentType) {
   const headers = { 'Content-Type': contentType };
   if (text.length < 1024 || typeof CompressionStream !== 'function') {
@@ -646,8 +656,11 @@ async function importGeoJsonFile(form, endpoint, taskKey, query = '') {
   if (!form.reportValidity()) return;
   const file = new FormData(form).get('file');
   if (!(file instanceof File) || file.size === 0) return;
-  const options = await encodedJsonBody(await file.text(), 'application/geo+json');
-  await start(`${endpoint}${query}`, options, taskKey);
+  await start(
+    `${endpoint}${query}`,
+    portableFileOptions(file, 'application/geo+json'),
+    taskKey,
+  );
 }
 
 for (const tab of elements.tabs) {
@@ -791,18 +804,29 @@ elements.populationForm.addEventListener('submit', async (event) => {
   if (await cancelActiveTask()) return;
   const data = new FormData(form);
   const file = data.get('file');
-  const raw = file instanceof File && file.size > 0
-    ? (await file.text()).trim()
-    : String(data.get('payload') ?? '').trim();
+
+  if (file instanceof File && file.size > 0) {
+    await start(
+      '/api/admin/populations',
+      portableFileOptions(file, 'application/json'),
+      'population',
+    );
+    return;
+  }
+
+  const raw = String(data.get('payload') ?? '').trim();
   if (!raw) {
-    setTaskNotice('population', 'выберите JSON-файл или вставьте JSON.', 'error');
+    setTaskNotice('population', 'выберите JSON/ZIP-файл или вставьте JSON.', 'error');
     return;
   }
   try { JSON.parse(raw); }
   catch { setTaskNotice('population', 'некорректный JSON.', 'error'); return; }
   await start(
     '/api/admin/populations',
-    await encodedJsonBody(raw, 'application/json'),
+    {
+      headers: { 'Content-Type': 'application/json' },
+      body: raw,
+    },
     'population',
   );
 });
