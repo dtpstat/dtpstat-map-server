@@ -15,6 +15,7 @@ import {
   resolveOsmCityUpdateRequest,
 } from '../data/osm-city-update-options.js';
 import { acquireDataImportLock } from './database-locks.js';
+import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 const RETRYABLE_HTTP_STATUS_CODES = new Set([429, 502, 503, 504]);
 
@@ -631,10 +632,15 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         }
         await client.query(ACTIVATE_NEW_PLACES_SQL);
         await client.query('SELECT rebuild_city_boundary_hierarchy()');
-        await client.query('SELECT sync_active_boundary_cities()');
         const restoredLinksResult = await client.query(
           RESTORE_GEOMETRY_LINKS_SQL,
         );
+        // DELETE FROM city_boundaries temporarily clears boundary_id through
+        // ON DELETE SET NULL. Restore exact OSM links before synchronizing
+        // city_id so renamed/reassigned active boundaries can realign existing
+        // line rows as part of the same transaction.
+        await client.query('SELECT sync_active_boundary_cities()');
+        await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
 
         const checksum = checksumHash.digest('hex');
