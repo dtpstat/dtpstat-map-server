@@ -4,6 +4,7 @@ import {
   citiesToMarkerGeoJson,
   createMapController,
   findTopLabelLayerId,
+  geometryFeatureTooltip,
   lineFeatureName,
   ROAD_DATA_MIN_ZOOM,
 } from '../public/js/map-controller.js';
@@ -22,7 +23,11 @@ test('label anchor is selected after all non-symbol road layers', () => {
   );
 });
 
-test('line hover names only use the KML Placemark source property', () => {
+test('geometry names prefer administrator displayName without falling back to city name', () => {
+  assert.equal(
+    lineFeatureName({ properties: { displayName: '  Ручное имя  ', placemarkName: 'KML' } }),
+    'Ручное имя',
+  );
   assert.equal(
     lineFeatureName({ properties: { placemarkName: '  Проспект Победы  ' } }),
     'Проспект Победы',
@@ -30,6 +35,17 @@ test('line hover names only use the KML Placemark source property', () => {
   assert.equal(lineFeatureName({ properties: { placemarkName: '   ' } }), null);
   assert.equal(lineFeatureName({ properties: { name: 'Название города' } }), null);
   assert.equal(lineFeatureName(null), null);
+
+  assert.equal(
+    geometryFeatureTooltip({
+      properties: { tooltip: '  Подсказка  ', displayName: 'Имя' },
+    }),
+    'Подсказка',
+  );
+  assert.equal(
+    geometryFeatureTooltip({ properties: { displayName: 'Имя' } }),
+    'Имя',
+  );
 });
 
 test('ranked cities become low-zoom marker points', () => {
@@ -335,4 +351,16 @@ test('typed bus-lane layers stay below labels, show names on hover and can be to
     if (previousWindow === undefined) delete globalThis.window;
     else globalThis.window = previousWindow;
   }
+});
+
+
+test('public map controller declares generic Point and Polygon layers', async () => {
+  const source = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../public/js/map-controller.js', import.meta.url), 'utf8'));
+  assert.match(source, /project-geometries-polygons-fill/);
+  assert.match(source, /project-geometries-polygons-line/);
+  assert.match(source, /project-geometries-points/);
+  assert.match(source, /\['geometry-type'\], 'Polygon'/);
+  assert.match(source, /\['geometry-type'\], 'Point'/);
+  assert.match(source, /geometryFeatureTooltip/);
 });

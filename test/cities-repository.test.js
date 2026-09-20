@@ -103,6 +103,12 @@ test('viewport query uses padded selector, returns complete intersecting lines a
   assert.match(sql, /geometry\.geom\s+FROM viewport/);
   assert.doesNotMatch(sql, /ST_Intersection\(geometry\.geom, viewport\.geom\)/);
   assert.match(sql, /line_type\.code AS business_type_code/);
+  assert.match(sql, /LEFT JOIN line_types AS line_type/);
+  assert.match(sql, /geometry\.is_visible/);
+  assert.match(sql, /'geometryFamily'/);
+  assert.match(sql, /'displayName'/);
+  assert.match(sql, /'tooltip'/);
+  assert.match(sql, /'tags'/);
   assert.match(sql, /'businessTypeCode', visible_geometries\.business_type_code/);
   assert.match(sql, /ST_Covers\(boundary\.geom, viewport\.center\)/);
   assert.match(
