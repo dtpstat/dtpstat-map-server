@@ -34,6 +34,10 @@ test('OSM object editor is a top-level admin section with population editing', a
     html,
     /name="population"[^>]*type="number"[^>]*max="2147483647"/,
   );
+  assert.match(
+    html,
+    /name="population"[\s\S]*<button type="submit" disabled>Сохранить объект<\/button>[\s\S]*id="osm-boundary-meta"/,
+  );
   assert.doesNotMatch(html, /data-operation-tab="osm-objects"/);
   assert.doesNotMatch(html, /data-operation-panel="osm-objects"/);
 
