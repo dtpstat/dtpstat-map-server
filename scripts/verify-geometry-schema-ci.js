@@ -42,7 +42,7 @@ try {
   const version = await client.query(
     'SELECT MAX(version)::integer AS version FROM buslanes.schema_versions',
   );
-  assert(version.rows[0]?.version === 38, 'Expected schema version 38');
+  assert(version.rows[0]?.version === 39, 'Expected schema version 39');
 
   const postgis = await client.query('SELECT PostGIS_Version() AS version');
   assert(postgis.rows[0]?.version, 'PostGIS is not available');

@@ -19,3 +19,16 @@ test('final V038 geometry model supports durable detached rows and exact effecti
   assert.match(source, /BOUNDARY\.CITY_ID = GEOMETRY\.CITY_ID/);
   assert.match(source, /ASSERT_CITY_GEOMETRY_INVARIANTS/);
 });
+
+
+test('V039 replaces stale-row deferred guards with final-state validation', async () => {
+  const source = await fs.readFile(
+    path.join(root, 'db/migrations/V039__geometry_final_state_constraints.sql'),
+    'utf8',
+  );
+  assert.match(source, /DROP TRIGGER IF EXISTS CITY_BOUNDARIES_CONSISTENCY_CHECK/);
+  assert.match(source, /DROP TRIGGER IF EXISTS CITY_GEOMETRIES_CONSISTENCY_CHECK/);
+  assert.match(source, /VALIDATE_GEOMETRY_MODEL_FINAL_STATE/);
+  assert.match(source, /GEOMETRY_MODEL_INTEGRITY/);
+  assert.match(source, /DEFERRABLE INITIALLY DEFERRED/);
+});
