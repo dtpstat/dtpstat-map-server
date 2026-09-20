@@ -13,7 +13,6 @@ export class GeoJsonValidationError extends Error {
   }
 }
 
-/** @param {string} name */
 export function slugify(name) {
   return name
     .normalize('NFKC')
@@ -22,13 +21,11 @@ export function slugify(name) {
     .replace(/^-|-$/g, '');
 }
 
-/** @param {unknown} value */
 function finiteNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
 
-/** @param {Record<string, unknown>} properties */
 function storedGeometryProperties(properties) {
   const stored = { ...properties };
   delete stored.lineType;
@@ -49,10 +46,11 @@ function storedGeometryProperties(properties) {
   return stored;
 }
 
-/** @param {unknown} geometry @param {number} featureIndex */
 function validateGeometry(geometry, featureIndex) {
   if (!geometry || typeof geometry !== 'object') {
-    throw new GeoJsonValidationError(`GeoJSON feature ${featureIndex} has no geometry`);
+    throw new GeoJsonValidationError(
+      `GeoJSON feature ${featureIndex} has no geometry`,
+    );
   }
   const { type, coordinates } = geometry;
   if (type !== 'LineString' && type !== 'MultiLineString') {
@@ -62,22 +60,31 @@ function validateGeometry(geometry, featureIndex) {
   }
   const lines = type === 'LineString' ? [coordinates] : coordinates;
   if (!Array.isArray(lines) || lines.length === 0) {
-    throw new GeoJsonValidationError(`GeoJSON feature ${featureIndex} has empty coordinates`);
+    throw new GeoJsonValidationError(
+      `GeoJSON feature ${featureIndex} has empty coordinates`,
+    );
   }
   for (const line of lines) {
     if (!Array.isArray(line) || line.length < 2) {
-      throw new GeoJsonValidationError(`GeoJSON feature ${featureIndex} contains an invalid line`);
+      throw new GeoJsonValidationError(
+        `GeoJSON feature ${featureIndex} contains an invalid line`,
+      );
     }
     for (const position of line) {
       if (!Array.isArray(position) || position.length < 2) {
-        throw new GeoJsonValidationError(`GeoJSON feature ${featureIndex} contains an invalid position`);
+        throw new GeoJsonValidationError(
+          `GeoJSON feature ${featureIndex} contains an invalid position`,
+        );
       }
       const longitude = finiteNumber(position[0]);
       const latitude = finiteNumber(position[1]);
       if (
-        longitude === null || latitude === null ||
-        longitude < -180 || longitude > 180 ||
-        latitude < -90 || latitude > 90
+        longitude === null ||
+        latitude === null ||
+        longitude < -180 ||
+        longitude > 180 ||
+        latitude < -90 ||
+        latitude > 90
       ) {
         throw new GeoJsonValidationError(
           `GeoJSON feature ${featureIndex} contains coordinates outside WGS84`,
@@ -87,7 +94,6 @@ function validateGeometry(geometry, featureIndex) {
   }
 }
 
-/** @param {unknown} value @param {number} featureIndex */
 function baseMetadata(value, featureIndex) {
   if (value === undefined || value === null) {
     return {
@@ -121,8 +127,13 @@ function baseMetadata(value, featureIndex) {
       `GeoJSON feature ${featureIndex} has invalid _dtpstat.boundaryOsmType`,
     );
   }
-  const boundaryOsmId = boundaryOsmIdRaw === null ? null : Number(boundaryOsmIdRaw);
-  if (hasBoundary && (!Number.isSafeInteger(boundaryOsmId) || boundaryOsmId <= 0)) {
+  const boundaryOsmId = boundaryOsmIdRaw === null
+    ? null
+    : Number(boundaryOsmIdRaw);
+  if (
+    hasBoundary &&
+    (!Number.isSafeInteger(boundaryOsmId) || boundaryOsmId <= 0)
+  ) {
     throw new GeoJsonValidationError(
       `GeoJSON feature ${featureIndex} has invalid _dtpstat.boundaryOsmId`,
     );
@@ -137,142 +148,217 @@ function baseMetadata(value, featureIndex) {
   };
 }
 
-/** @param {unknown} collection */
+function normalizeLineTypes(rawLineTypes) {
+  if (rawLineTypes === undefined) return [];
+  try {
+    return buildLineTypesPlan({ lineTypes: rawLineTypes }).lineTypes;
+  } catch (error) {
+    if (error instanceof LineTypeValidationError) {
+      throw new GeoJsonValidationError(error.message);
+    }
+    throw error;
+  }
+}
+
+export function createGeoJsonAccumulator({
+  lineTypes: rawLineTypes,
+  collectGeometries = false,
+  collectIgnoredFeatures = false,
+} = {}) {
+  const lineTypes = normalizeLineTypes(rawLineTypes);
+  const typeNameByCode = new Map(
+    lineTypes.map((lineType) => [lineType.code, lineType.name]),
+  );
+  const cityByName = new Map();
+  const geometries = collectGeometries ? [] : null;
+  const ignoredFeatures = collectIgnoredFeatures ? [] : null;
+  const referencedLineTypes = new Set();
+  let ignoredFeatureCount = 0;
+  let geometryCount = 0;
+
+  return {
+    addFeature(feature, featureIndex = geometryCount + ignoredFeatureCount) {
+      if (
+        !feature ||
+        feature.type !== 'Feature' ||
+        !feature.properties ||
+        typeof feature.properties !== 'object' ||
+        Array.isArray(feature.properties)
+      ) {
+        throw new GeoJsonValidationError(
+          `GeoJSON feature ${featureIndex} is not a valid Feature`,
+        );
+      }
+
+      const metadata = baseMetadata(
+        feature.properties._dtpstat,
+        featureIndex,
+      );
+      let lineTypeName = DEFAULT_LINE_TYPE_NAME;
+      if (metadata.rawBusinessTypeCode !== undefined) {
+        let code;
+        try {
+          code = normalizeLineTypeCode(
+            metadata.rawBusinessTypeCode,
+            `GeoJSON feature ${featureIndex} _dtpstat.businessTypeCode`,
+          );
+        } catch (error) {
+          if (error instanceof LineTypeValidationError) {
+            throw new GeoJsonValidationError(error.message);
+          }
+          throw error;
+        }
+        lineTypeName = typeNameByCode.get(code);
+        if (!lineTypeName) {
+          throw new GeoJsonValidationError(
+            `GeoJSON feature ${featureIndex} references unknown business type code: ${code}`,
+          );
+        }
+      } else if (metadata.legacyLineType !== undefined) {
+        try {
+          lineTypeName = normalizeLineTypeName(
+            metadata.legacyLineType,
+            `GeoJSON feature ${featureIndex} _dtpstat.lineType`,
+          );
+        } catch (error) {
+          if (error instanceof LineTypeValidationError) {
+            throw new GeoJsonValidationError(error.message);
+          }
+          throw error;
+        }
+      }
+
+      const rawCityName = feature.properties.short_name;
+      let cityName = null;
+      if (
+        rawCityName !== null &&
+        rawCityName !== undefined &&
+        rawCityName !== ''
+      ) {
+        if (typeof rawCityName !== 'string' || !rawCityName.trim()) {
+          throw new GeoJsonValidationError(
+            `GeoJSON feature ${featureIndex} has an invalid short_name`,
+          );
+        }
+        cityName = rawCityName.trim();
+      }
+      if (!cityName && metadata.boundaryOsmId === null) {
+        ignoredFeatureCount += 1;
+        ignoredFeatures?.push(featureIndex);
+        return null;
+      }
+
+      const lanes = finiteNumber(feature.properties.lanes);
+      if (!Number.isSafeInteger(lanes) || (lanes !== 1 && lanes !== 2)) {
+        throw new GeoJsonValidationError(
+          `GeoJSON feature ${featureIndex} must have lanes equal to 1 or 2`,
+        );
+      }
+
+      validateGeometry(feature.geometry, featureIndex);
+      let citySlug = metadata.citySlug;
+      if (cityName) {
+        citySlug ||= slugify(cityName);
+        let city = cityByName.get(cityName);
+        if (!city) {
+          city = {
+            slug: citySlug,
+            name: cityName,
+            fullName:
+              typeof feature.properties.name === 'string' &&
+              feature.properties.name.trim()
+                ? feature.properties.name.trim()
+                : cityName,
+            attributes: {
+              adminLevel: feature.properties.admin_level,
+              place: feature.properties.place,
+              type: feature.properties.type,
+            },
+          };
+          if (!city.slug) {
+            throw new GeoJsonValidationError(
+              `Cannot create a slug for ${cityName}`,
+            );
+          }
+          cityByName.set(cityName, city);
+        } else if (city.slug !== citySlug) {
+          throw new GeoJsonValidationError(
+            `GeoJSON has conflicting city slugs for ${cityName}`,
+          );
+        }
+      }
+
+      const geometry = {
+        cityName,
+        citySlug,
+        boundaryOsmType: metadata.boundaryOsmType,
+        boundaryOsmId: metadata.boundaryOsmId,
+        lineTypeName,
+        lanes,
+        properties: storedGeometryProperties(feature.properties),
+        geometry: feature.geometry,
+      };
+      geometryCount += 1;
+      referencedLineTypes.add(lineTypeName);
+      geometries?.push(geometry);
+      return geometry;
+    },
+
+    finish(metadata = {}) {
+      if (metadata.type !== undefined && metadata.type !== 'FeatureCollection') {
+        throw new GeoJsonValidationError(
+          'Request body must be a GeoJSON FeatureCollection',
+        );
+      }
+      const cities = [...cityByName.values()];
+      if (geometryCount === 0) {
+        throw new GeoJsonValidationError(
+          'FeatureCollection contains no transferable line geometries',
+        );
+      }
+      if (new Set(cities.map((city) => city.slug)).size !== cities.length) {
+        throw new GeoJsonValidationError(
+          'GeoJSON produces duplicate city slugs',
+        );
+      }
+      return {
+        cities,
+        geometries: geometries ?? [],
+        geometryCount,
+        ignoredFeatures: ignoredFeatures ?? [],
+        ignoredFeatureCount,
+        lineTypes,
+        referencedLineTypes: [...referencedLineTypes],
+      };
+    },
+  };
+}
+
 export function buildGeoJsonPlan(collection) {
   if (
-    !collection || typeof collection !== 'object' ||
-    collection.type !== 'FeatureCollection' || !Array.isArray(collection.features)
+    !collection ||
+    typeof collection !== 'object' ||
+    collection.type !== 'FeatureCollection' ||
+    !Array.isArray(collection.features)
   ) {
-    throw new GeoJsonValidationError('Request body must be a GeoJSON FeatureCollection');
+    throw new GeoJsonValidationError(
+      'Request body must be a GeoJSON FeatureCollection',
+    );
   }
 
-  let lineTypes = [];
-  if (collection.lineTypes !== undefined) {
-    try {
-      lineTypes = buildLineTypesPlan({ lineTypes: collection.lineTypes }).lineTypes;
-    } catch (error) {
-      if (error instanceof LineTypeValidationError) {
-        throw new GeoJsonValidationError(error.message);
-      }
-      throw error;
-    }
-  }
-  const typeNameByCode = new Map(lineTypes.map((lineType) => [lineType.code, lineType.name]));
-
-  const cityByName = new Map();
-  const geometries = [];
-  const ignoredFeatures = [];
-
+  const accumulator = createGeoJsonAccumulator({
+    lineTypes: collection.lineTypes,
+    collectGeometries: true,
+    collectIgnoredFeatures: true,
+  });
   for (const [featureIndex, feature] of collection.features.entries()) {
-    if (
-      !feature || feature.type !== 'Feature' || !feature.properties ||
-      typeof feature.properties !== 'object' || Array.isArray(feature.properties)
-    ) {
-      throw new GeoJsonValidationError(`GeoJSON feature ${featureIndex} is not a valid Feature`);
-    }
-
-    const metadata = baseMetadata(feature.properties._dtpstat, featureIndex);
-    let lineTypeName = DEFAULT_LINE_TYPE_NAME;
-    if (metadata.rawBusinessTypeCode !== undefined) {
-      let code;
-      try {
-        code = normalizeLineTypeCode(
-          metadata.rawBusinessTypeCode,
-          `GeoJSON feature ${featureIndex} _dtpstat.businessTypeCode`,
-        );
-      } catch (error) {
-        if (error instanceof LineTypeValidationError) {
-          throw new GeoJsonValidationError(error.message);
-        }
-        throw error;
-      }
-      lineTypeName = typeNameByCode.get(code);
-      if (!lineTypeName) {
-        throw new GeoJsonValidationError(
-          `GeoJSON feature ${featureIndex} references unknown business type code: ${code}`,
-        );
-      }
-    } else if (metadata.legacyLineType !== undefined) {
-      try {
-        lineTypeName = normalizeLineTypeName(
-          metadata.legacyLineType,
-          `GeoJSON feature ${featureIndex} _dtpstat.lineType`,
-        );
-      } catch (error) {
-        if (error instanceof LineTypeValidationError) {
-          throw new GeoJsonValidationError(error.message);
-        }
-        throw error;
-      }
-    }
-
-    const rawCityName = feature.properties.short_name;
-    let cityName = null;
-    if (rawCityName !== null && rawCityName !== undefined && rawCityName !== '') {
-      if (typeof rawCityName !== 'string' || !rawCityName.trim()) {
-        throw new GeoJsonValidationError(
-          `GeoJSON feature ${featureIndex} has an invalid short_name`,
-        );
-      }
-      cityName = rawCityName.trim();
-    }
-    if (!cityName && metadata.boundaryOsmId === null) {
-      ignoredFeatures.push(featureIndex);
-      continue;
-    }
-
-    const lanes = finiteNumber(feature.properties.lanes);
-    if (!Number.isSafeInteger(lanes) || (lanes !== 1 && lanes !== 2)) {
-      throw new GeoJsonValidationError(
-        `GeoJSON feature ${featureIndex} must have lanes equal to 1 or 2`,
-      );
-    }
-
-    validateGeometry(feature.geometry, featureIndex);
-    let citySlug = metadata.citySlug;
-    if (cityName) {
-      citySlug ||= slugify(cityName);
-      let city = cityByName.get(cityName);
-      if (!city) {
-        city = {
-          slug: citySlug,
-          name: cityName,
-          fullName:
-            typeof feature.properties.name === 'string' && feature.properties.name.trim()
-              ? feature.properties.name.trim()
-              : cityName,
-          attributes: {
-            adminLevel: feature.properties.admin_level,
-            place: feature.properties.place,
-            type: feature.properties.type,
-          },
-        };
-        if (!city.slug) throw new GeoJsonValidationError(`Cannot create a slug for ${cityName}`);
-        cityByName.set(cityName, city);
-      } else if (city.slug !== citySlug) {
-        throw new GeoJsonValidationError(`GeoJSON has conflicting city slugs for ${cityName}`);
-      }
-    }
-
-    geometries.push({
-      cityName,
-      citySlug,
-      boundaryOsmType: metadata.boundaryOsmType,
-      boundaryOsmId: metadata.boundaryOsmId,
-      lineTypeName,
-      lanes,
-      properties: storedGeometryProperties(feature.properties),
-      geometry: feature.geometry,
-    });
+    accumulator.addFeature(feature, featureIndex);
   }
-
-  const cities = [...cityByName.values()];
-  if (geometries.length === 0) {
-    throw new GeoJsonValidationError('FeatureCollection contains no transferable line geometries');
-  }
-  if (new Set(cities.map((city) => city.slug)).size !== cities.length) {
-    throw new GeoJsonValidationError('GeoJSON produces duplicate city slugs');
-  }
-
-  return { cities, geometries, ignoredFeatures, lineTypes };
+  const result = accumulator.finish({ type: collection.type });
+  return {
+    cities: result.cities,
+    geometries: result.geometries,
+    ignoredFeatures: result.ignoredFeatures,
+    lineTypes: result.lineTypes,
+  };
 }
