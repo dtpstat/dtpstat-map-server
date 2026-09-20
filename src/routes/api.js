@@ -272,16 +272,13 @@ export function createApiRouter({
     }
   };
 
-  const portableServiceMethod = (service, streamingName, legacyName) => {
-    if (typeof service[streamingName] === 'function') {
-      return service[streamingName].bind(service);
+  const portableServiceMethod = (service, streamingName) => {
+    if (typeof service?.[streamingName] !== 'function') {
+      throw new Error(
+        `Streaming transfer service method is unavailable: ${streamingName}`,
+      );
     }
-    return async (source, operation) => {
-      const chunks = [];
-      for await (const chunk of source) chunks.push(Buffer.from(chunk));
-      const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-      return service[legacyName](payload, operation);
-    };
+    return service[streamingName].bind(service);
   };
 
   const executePortableUpload = async (
@@ -504,7 +501,6 @@ export function createApiRouter({
       portableServiceMethod(
         importService,
         'replaceFromGeoJsonStream',
-        'replaceFromGeoJson',
       ),
     ));
     if (!task) await removeStreamUpload(upload).catch(() => {});
@@ -551,7 +547,6 @@ export function createApiRouter({
         portableServiceMethod(
           cityBoundaryTransferService,
           'replaceFromGeoJsonStream',
-          'replaceFromGeoJson',
         ),
         { dryRun },
       ));
@@ -872,7 +867,6 @@ export function createApiRouter({
         portableServiceMethod(
           populationService,
           'updateFromJsonStream',
-          'updateFromJson',
         ),
       ));
       if (!task) await removeStreamUpload(upload).catch(() => {});
