@@ -17,6 +17,64 @@ async function collect(source) {
   return Buffer.concat(chunks);
 }
 
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function storedZip(entries) {
+  const locals = [];
+  const centrals = [];
+  let localOffset = 0;
+
+  for (const entry of entries) {
+    const name = Buffer.from(entry.name, 'utf8');
+    const data = Buffer.from(entry.data ?? '');
+    const checksum = crc32(data);
+
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0x0800, 6);
+    local.writeUInt16LE(0, 8);
+    local.writeUInt32LE(checksum, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    const localRecord = Buffer.concat([local, name, data]);
+    locals.push(localRecord);
+
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0x0800, 8);
+    central.writeUInt16LE(0, 10);
+    central.writeUInt32LE(checksum, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(name.length, 28);
+    central.writeUInt32LE(localOffset, 42);
+    centrals.push(Buffer.concat([central, name]));
+    localOffset += localRecord.length;
+  }
+
+  const centralDirectory = Buffer.concat(centrals);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(centralDirectory.length, 12);
+  eocd.writeUInt32LE(localOffset, 16);
+  return Buffer.concat([...locals, centralDirectory, eocd]);
+}
+
 function zip64DirectoryInfo(buffer) {
   const eocd = buffer.length - 22;
   assert.equal(buffer.readUInt32LE(eocd), 0x06054b50);
@@ -173,6 +231,38 @@ test('single-file ZIP reader enforces compression-ratio limit', async () => {
         maxCompressionRatio: 2,
       }),
       /compression ratio/,
+    );
+  });
+});
+
+
+test('ZIP reader ignores directory entries and accepts one extensionless data entry', async () => {
+  await withTempZip(async (file) => {
+    const json = Buffer.from('{"from":"stdin"}');
+    await fs.writeFile(file, storedZip([
+      { name: 'payload/' },
+      { name: 'payload/stdin', data: json },
+    ]));
+
+    const entry = await openSingleFileZip(file, {
+      maxUncompressedBytes: 1024,
+    });
+    assert.equal(entry.fileName, 'payload/stdin');
+    assert.deepEqual(await collect(entry.stream), json);
+  });
+});
+
+test('ZIP reader rejects two actual ordinary entries even when directories are present', async () => {
+  await withTempZip(async (file) => {
+    await fs.writeFile(file, storedZip([
+      { name: 'payload/' },
+      { name: 'payload/one', data: '{}' },
+      { name: 'payload/two', data: '{}' },
+    ]));
+
+    await assert.rejects(
+      openSingleFileZip(file, { maxUncompressedBytes: 1024 }),
+      /exactly one ordinary entry/,
     );
   });
 });
