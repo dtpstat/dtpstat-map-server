@@ -528,6 +528,113 @@ test('HTTP 429 waits and retries the same OSM request without advancing the batc
   );
 });
 
+test('transient OSM network failure retries the same geometry request', async () => {
+  const pool = createPool();
+  const base = createDependencies();
+  const delays = [];
+  const progress = [];
+  const queries = [];
+  let attempts = 0;
+  let successfulDownloads = 0;
+
+  const service = createOsmCityUpdateService(pool, {
+    ...config,
+    maxRetries: 4,
+    retryBaseDelayMs: 10,
+    retryMaxDelayMs: 40,
+  }, {
+    ...base,
+    async sleep(milliseconds) {
+      delays.push(milliseconds);
+    },
+    async download(url, query, options) {
+      attempts += 1;
+      queries.push(query);
+      if (attempts === 5) {
+        throw new OsmCityDownloadError(
+          'OSM download failed: other side closed the socket [UND_ERR_SOCKET]',
+          {
+            code: 'network-error',
+            networkCode: 'UND_ERR_SOCKET',
+            networkMessage: 'other side closed the socket',
+            retryable: true,
+            finalURL: url,
+          },
+        );
+      }
+      successfulDownloads += 1;
+      return {
+        jsonText: successfulDownloads <= 4
+          ? `index-${successfulDownloads}`
+          : `batch-${successfulDownloads - 4}`,
+        bytes: 10,
+        finalURL: url,
+        query,
+        maxBytes: options.maxBytes,
+      };
+    },
+    reportProgress(value) {
+      progress.push(value);
+    },
+  });
+
+  const result = await service.update(undefined, {});
+
+  assert.equal(result.importedPlaces, 3);
+  assert.equal(attempts, 7);
+  assert.equal(queries[4], queries[5]);
+  assert.deepEqual(delays, [10]);
+  assert.equal(result.retryCount, 1);
+
+  assert.deepEqual(
+    progress.filter((item) => item.phase === 'retry')
+      .map((item) => ({
+        retryKind: item.retryKind,
+        networkCode: item.networkCode,
+        networkMessage: item.networkMessage,
+        statusCode: item.statusCode,
+        attempt: item.attempt,
+        maxRetries: item.maxRetries,
+        configuredMaxRetries: item.configuredMaxRetries,
+      })),
+    [{
+      retryKind: 'network',
+      networkCode: 'UND_ERR_SOCKET',
+      networkMessage: 'other side closed the socket',
+      statusCode: null,
+      attempt: 1,
+      maxRetries: 4,
+      configuredMaxRetries: 4,
+    }],
+  );
+});
+
+test('non-retryable OSM network failure still stops immediately', async () => {
+  const pool = createPool();
+  let attempts = 0;
+  const service = createOsmCityUpdateService(pool, config, {
+    async download() {
+      attempts += 1;
+      throw new OsmCityDownloadError(
+        'OSM download failed: certificate has expired [CERT_HAS_EXPIRED]',
+        {
+          code: 'network-error',
+          networkCode: 'CERT_HAS_EXPIRED',
+          networkMessage: 'certificate has expired',
+          retryable: false,
+        },
+      );
+    },
+  });
+
+  await assert.rejects(
+    service.update(undefined, {}),
+    /certificate has expired/,
+  );
+  assert.equal(attempts, 1);
+  assert.equal(pool.connections, 0);
+});
+
 test('repeated HTTP 504 splits a multi-object geometry batch instead of exhausting the full retry budget', async () => {
   const pool = createPool();
   const base = createDependencies();
