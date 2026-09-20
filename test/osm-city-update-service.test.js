@@ -266,8 +266,7 @@ function createCheckpointRepositoryMock() {
         administrativePlaces: values.filter(
           (item) =>
             item.adminLevel !== null &&
-            item.adminLevel !== undefined &&
-            (item.placeType === null || item.placeType === undefined),
+            item.adminLevel !== undefined,
         ).length,
         duplicateNames: [...names.values()].filter((count) => count > 1).length,
       };
