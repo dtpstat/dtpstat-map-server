@@ -410,7 +410,8 @@ function applyOsmSettings(config) {
     'minDelayMs',
     'timeoutMs',
     'queryTimeoutSeconds',
-    'maxBytes',
+    'maxResponseBytes',
+    'maxTotalBytes',
     'maxRetries',
     'retryBaseDelayMs',
     'retryMaxDelayMs',
@@ -424,7 +425,8 @@ function applyOsmSettings(config) {
     batchSize: limits.maxBatchSize,
     timeoutMs: limits.timeoutMs,
     queryTimeoutSeconds: limits.queryTimeoutSeconds,
-    maxBytes: limits.maxBytes,
+    maxResponseBytes: limits.maxResponseBytes,
+    maxTotalBytes: limits.maxTotalBytes,
     maxRetries: limits.maxRetries,
   };
   for (const [name, maximum] of Object.entries(maxByName)) {
@@ -449,7 +451,8 @@ function osmSettingsPayload(form = elements.osmForm) {
     minDelayMs: number('minDelayMs'),
     timeoutMs: number('timeoutMs'),
     queryTimeoutSeconds: number('queryTimeoutSeconds'),
-    maxBytes: number('maxBytes'),
+    maxResponseBytes: number('maxResponseBytes'),
+    maxTotalBytes: number('maxTotalBytes'),
     maxRetries: number('maxRetries'),
     retryBaseDelayMs: number('retryBaseDelayMs'),
     retryMaxDelayMs: number('retryMaxDelayMs'),
@@ -471,6 +474,14 @@ function validateOsmForm(form) {
     setTaskNotice(
       'osm',
       'начальная пауза повтора не может превышать предел backoff.',
+      'error',
+    );
+    return false;
+  }
+  if (settings.maxResponseBytes > settings.maxTotalBytes) {
+    setTaskNotice(
+      'osm',
+      'лимит одного ответа не может превышать общий лимит загрузки.',
       'error',
     );
     return false;
