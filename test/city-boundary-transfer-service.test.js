@@ -164,3 +164,48 @@ test('city transfer dryRun performs a full validation and rolls back', async () 
   assert.equal(pool.queries.includes('COMMIT'), false);
   assert.equal(pool.released, true);
 });
+
+
+test('streamed city transfer rolls back staged batches when trailing JSON is malformed', async () => {
+  const features = Array.from({ length: 51 }, (_value, index) => ({
+    ...snapshot.features[0],
+    properties: {
+      ...snapshot.features[0].properties,
+      osmId: 50000 + index,
+      osmName: `Streamed ${index}`,
+      city: null,
+    },
+  }));
+  const malformed =
+    '{"type":"FeatureCollection","features":' +
+    JSON.stringify(features) +
+    ',"broken":';
+
+  async function* source() {
+    const buffer = Buffer.from(malformed);
+    for (let offset = 0; offset < buffer.length; offset += 257) {
+      yield buffer.subarray(offset, offset + 257);
+    }
+  }
+
+  const pool = createPool();
+  const service = createCityBoundaryTransferService(pool);
+
+  await assert.rejects(
+    service.replaceFromGeoJsonStream(source(), {
+      maxJsonBytes: Buffer.byteLength(malformed) + 1,
+      maxItemBytes: 1024 * 1024,
+    }),
+    /Unexpected end|JSON value/,
+  );
+
+  assert.equal(pool.queries[0], 'BEGIN');
+  assert.equal(
+    pool.queries.filter((query) => query.startsWith('WITH payload_rows AS')).length,
+    1,
+  );
+  assert.equal(pool.queries.at(-1), 'ROLLBACK');
+  assert.equal(pool.queries.includes('COMMIT'), false);
+  assert.equal(pool.queries.includes('DELETE FROM city_boundaries'), false);
+  assert.equal(pool.released, true);
+});
