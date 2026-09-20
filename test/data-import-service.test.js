@@ -56,11 +56,20 @@ function createFakePool({ failOn } = {}) {
   const queries = [];
   let released = false;
   const client = {
-    async query(text) {
+    async query(text, values = []) {
       const normalized = text.trim();
       queries.push(normalized);
       if (failOn && normalized.includes(failOn)) {
         throw new Error('database failure');
+      }
+      if (
+        normalized.startsWith('INSERT INTO line_transfer_raw') ||
+        normalized.startsWith('WITH payload_rows AS')
+      ) {
+        return {
+          rows: [],
+          rowCount: values[0] ? JSON.parse(values[0]).length : 0,
+        };
       }
       if (normalized.includes('INSERT INTO city_geometries')) {
         return { rows: [], rowCount: 1 };
@@ -133,4 +142,48 @@ test('data import rolls back and releases its connection after a database error'
   assert.equal(pool.queries.at(-1), 'ROLLBACK');
   assert.equal(pool.released, true);
   assert.doesNotMatch(pool.queries.join('\n'), /COMMIT/);
+});
+
+
+test('streamed line import rolls back raw staged data when JSON fails late', async () => {
+  const features = Array.from({ length: 51 }, (_value, index) => ({
+    ...upload.features[0],
+    properties: {
+      ...upload.features[0].properties,
+      short_name: `Тестоград ${index}`,
+    },
+  }));
+  const malformed =
+    '{"type":"FeatureCollection","features":' +
+    JSON.stringify(features) +
+    ',"broken":';
+
+  async function* source() {
+    const buffer = Buffer.from(malformed);
+    for (let offset = 0; offset < buffer.length; offset += 113) {
+      yield buffer.subarray(offset, offset + 113);
+    }
+  }
+
+  const pool = createFakePool();
+  const service = createDataImportService(pool);
+
+  await assert.rejects(
+    service.replaceFromGeoJsonStream(source(), {
+      maxJsonBytes: Buffer.byteLength(malformed) + 1,
+      maxItemBytes: 1024 * 1024,
+    }),
+    /Unexpected end|JSON value/,
+  );
+
+  assert.equal(pool.queries[0], 'BEGIN');
+  assert.equal(
+    pool.queries.filter((query) =>
+      query.startsWith('INSERT INTO line_transfer_raw')).length,
+    1,
+  );
+  assert.equal(pool.queries.at(-1), 'ROLLBACK');
+  assert.equal(pool.queries.includes('COMMIT'), false);
+  assert.equal(pool.queries.includes('DELETE FROM city_geometries'), false);
+  assert.equal(pool.released, true);
 });
