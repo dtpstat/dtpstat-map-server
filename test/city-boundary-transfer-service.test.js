@@ -111,6 +111,7 @@ test('city transfer restores city attributes, boundaries, and geometry links ato
     slug: 'testograd',
     name: 'Тестоград',
     fullName: 'Город Тестоград',
+    displayType: 'city',
     attributes: { source: 'snapshot' },
   }]);
 });

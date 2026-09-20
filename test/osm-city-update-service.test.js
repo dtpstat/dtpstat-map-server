@@ -102,8 +102,7 @@ function createPool() {
       if (normalized.startsWith('SELECT count(*)::integer')) {
         return { rows: [{ count: 3 }], rowCount: 1 };
       }
-      if (normalized.startsWith('WITH name_counts AS') &&
-          normalized.includes('INSERT INTO city_boundaries')) {
+      if (normalized.startsWith('INSERT INTO city_boundaries')) {
         return { rows: [], rowCount: 3 };
       }
       if (normalized.startsWith('UPDATE city_geometries')) {
@@ -193,6 +192,8 @@ test('OSM update stages sequential ID batches before one atomic replacement', as
   assert.equal(result.importedPlaces, 3);
   assert.equal(result.cityPlaces, 1);
   assert.equal(result.townPlaces, 2);
+  assert.equal(result.administrativePlaces, 0);
+  assert.equal(result.duplicateIndexObjects, 0);
   assert.equal(result.duplicateNames, 1);
   assert.equal(result.batchSize, 2);
   assert.equal(result.batchCount, 2);
