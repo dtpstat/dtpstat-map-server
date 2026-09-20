@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relative) => fs.readFile(path.join(root, relative), 'utf8');
 
 test('schema owns city/boundary/geometry consistency instead of relying only on services', async () => {
-  const migration = await read('db/migrations/V036__geometry_city_invariants.sql');
+  const migration = await read('db/migrations/V038__effective_geometry_ownership.sql');
 
   assert.match(migration, /CITY_BOUNDARIES_CITY_ID_FKEY[\s\S]*ON DELETE SET NULL/);
   assert.match(migration, /CITY_GEOMETRIES_CITY_ID_FKEY[\s\S]*ON DELETE SET NULL/);
@@ -78,7 +78,8 @@ test('public GeoJSON includes universal effective geometries, not only lines', a
 });
 
 test('pending geometry import database guard exists for every service that uses it', async () => {
-  const migration = await read('db/migrations/V036__geometry_city_invariants.sql');
-  assert.match(migration, /CREATE OR REPLACE FUNCTION BUSLANES\.ASSERT_NO_PENDING_GEOMETRY_IMPORT/);
-  assert.match(migration, /ERRCODE = '55000'/);
+  const migration = await read('db/migrations/V038__effective_geometry_ownership.sql');
+  const legacyGuard = await read('db/migrations/V036__geometry_model_invariants.sql');
+  assert.match(legacyGuard, /CREATE OR REPLACE FUNCTION BUSLANES\.ASSERT_NO_PENDING_GEOMETRY_IMPORT/);
+  assert.match(legacyGuard, /ERRCODE = '55000'/);
 });
