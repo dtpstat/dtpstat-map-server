@@ -189,21 +189,7 @@ export function createOsmCityCheckpointRepository(pool) {
       return result.rows[0]?.objects ?? null;
     },
 
-    async create({
-      sourceURL,
-      settingsFingerprint,
-      indexFingerprint,
-      options,
-      indexObjects,
-      sourceElements,
-      duplicateIndexObjects,
-      osmTimestamp,
-      downloadedBytes,
-      requestAttemptCount,
-      retryCount,
-      retryWaitMs,
-      throttleWaitMs,
-    }) {
+    async create(value) {
       const result = await query(
         `INSERT INTO osm_city_update_checkpoints (
            status,
@@ -227,22 +213,110 @@ export function createOsmCityCheckpointRepository(pool) {
          )
          RETURNING id::bigint::text AS id`,
         [
-          sourceURL,
-          settingsFingerprint,
-          indexFingerprint,
-          JSON.stringify(options),
-          JSON.stringify(indexObjects),
-          sourceElements,
-          duplicateIndexObjects,
-          osmTimestamp,
-          downloadedBytes,
-          requestAttemptCount,
-          retryCount,
-          retryWaitMs,
-          throttleWaitMs,
+          value.sourceURL,
+          value.settingsFingerprint,
+          value.indexFingerprint,
+          JSON.stringify(value.options),
+          JSON.stringify(value.indexObjects),
+          value.sourceElements,
+          value.duplicateIndexObjects,
+          value.osmTimestamp,
+          value.downloadedBytes,
+          value.requestAttemptCount,
+          value.retryCount,
+          value.retryWaitMs,
+          value.throttleWaitMs,
         ],
       );
       return this.getById(Number(result.rows[0].id));
+    },
+
+    async replaceResumable(checkpointId, value) {
+      const client = await pool.connect();
+      let newId;
+      try {
+        await client.query('BEGIN');
+        const locked = await client.query(
+          `SELECT id
+           FROM osm_city_update_checkpoints
+           WHERE id = $1
+             AND status = ANY($2::text[])
+           FOR UPDATE`,
+          [checkpointId, RESUMABLE_STATUSES],
+        );
+        if (locked.rowCount !== 1) {
+          throw new Error(
+            `OSM checkpoint ${checkpointId} is no longer resumable`,
+          );
+        }
+
+        await client.query(
+          `UPDATE osm_city_update_checkpoints
+           SET status = 'discarded',
+               index_objects = '[]'::jsonb,
+               last_error = NULL,
+               updated_at = NOW(),
+               completed_at = NOW()
+           WHERE id = $1`,
+          [checkpointId],
+        );
+
+        const inserted = await client.query(
+          `INSERT INTO osm_city_update_checkpoints (
+             status,
+             source_url,
+             settings_fingerprint,
+             index_fingerprint,
+             options,
+             index_objects,
+             source_elements,
+             duplicate_index_objects,
+             osm_timestamp,
+             downloaded_bytes,
+             request_attempt_count,
+             retry_count,
+             retry_wait_ms,
+             throttle_wait_ms
+           )
+           VALUES (
+             'downloading', $1, $2, $3, $4::jsonb, $5::jsonb,
+             $6, $7, $8::timestamptz, $9, $10, $11, $12, $13
+           )
+           RETURNING id::bigint::text AS id`,
+          [
+            value.sourceURL,
+            value.settingsFingerprint,
+            value.indexFingerprint,
+            JSON.stringify(value.options),
+            JSON.stringify(value.indexObjects),
+            value.sourceElements,
+            value.duplicateIndexObjects,
+            value.osmTimestamp,
+            value.downloadedBytes,
+            value.requestAttemptCount,
+            value.retryCount,
+            value.retryWaitMs,
+            value.throttleWaitMs,
+          ],
+        );
+        newId = Number(inserted.rows[0].id);
+
+        // Old staged rows are removed only after the replacement row exists.
+        // A failure anywhere in this transaction restores the old resumable
+        // checkpoint and all of its geometry through ROLLBACK.
+        await client.query(
+          `DELETE FROM osm_city_update_checkpoint_stage
+           WHERE checkpoint_id = $1`,
+          [checkpointId],
+        );
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+      return this.getById(newId);
     },
 
     async getStagedKeys(checkpointId) {
