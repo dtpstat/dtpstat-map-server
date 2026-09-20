@@ -1,3 +1,44 @@
+export function buildBoundaryTreeIndex(items) {
+  const byId = new Map();
+  const childrenByParent = new Map();
+  for (const item of items) {
+    byId.set(item.id, item);
+    const children = childrenByParent.get(item.parentId) ?? [];
+    children.push(item);
+    childrenByParent.set(item.parentId, children);
+  }
+  return { byId, childrenByParent };
+}
+
+export function aggregateBoundaryBranchStatus(
+  item,
+  childrenByParent,
+  memo = new Map(),
+) {
+  if (memo.has(item.id)) return memo.get(item.id);
+
+  let totalCount = 1;
+  let activeCount = item.active ? 1 : 0;
+  for (const child of childrenByParent.get(item.id) ?? []) {
+    const childStatus = aggregateBoundaryBranchStatus(
+      child,
+      childrenByParent,
+      memo,
+    );
+    totalCount += childStatus.totalCount;
+    activeCount += childStatus.activeCount;
+  }
+
+  const status = activeCount === 0
+    ? 'inactive'
+    : activeCount === totalCount
+      ? 'active'
+      : 'partial';
+  const result = { status, activeCount, totalCount };
+  memo.set(item.id, result);
+  return result;
+}
+
 if (typeof document !== 'undefined') {
   const panel = document.querySelector('#admin-section-osm-objects');
   const treeHost = document.querySelector('#osm-boundary-tree');
@@ -87,20 +128,8 @@ if (typeof document !== 'undefined') {
         a.id - b.id;
     }
 
-    function treeIndex(items = state.boundaries) {
-      const byId = new Map();
-      const childrenByParent = new Map();
-      for (const item of items) {
-        byId.set(item.id, item);
-        const children = childrenByParent.get(item.parentId) ?? [];
-        children.push(item);
-        childrenByParent.set(item.parentId, children);
-      }
-      return { byId, childrenByParent };
-    }
-
     function subtreeItems(rootId) {
-      const { byId, childrenByParent } = treeIndex();
+      const { byId, childrenByParent } = buildBoundaryTreeIndex(state.boundaries);
       const result = [];
       const stack = [rootId];
       while (stack.length) {
@@ -112,25 +141,6 @@ if (typeof document !== 'undefined') {
           stack.push(child.id);
         }
       }
-      return result;
-    }
-
-    function branchStatus(item, childrenByParent, memo = new Map()) {
-      if (memo.has(item.id)) return memo.get(item.id);
-      let totalCount = 1;
-      let activeCount = item.active ? 1 : 0;
-      for (const child of childrenByParent.get(item.id) ?? []) {
-        const childStatus = branchStatus(child, childrenByParent, memo);
-        totalCount += childStatus.totalCount;
-        activeCount += childStatus.activeCount;
-      }
-      const status = activeCount === 0
-        ? 'inactive'
-        : activeCount === totalCount
-          ? 'active'
-          : 'partial';
-      const result = { status, activeCount, totalCount };
-      memo.set(item.id, result);
       return result;
     }
 
@@ -179,10 +189,15 @@ if (typeof document !== 'undefined') {
         const toggle = document.createElement('button');
         toggle.type = 'button';
         toggle.className = 'osm-boundary-toggle';
+        toggle.disabled = searchMode;
         toggle.setAttribute('aria-expanded', String(expanded));
         toggle.setAttribute(
           'aria-label',
-          expanded ? 'Свернуть ветку' : 'Развернуть ветку',
+          searchMode
+            ? 'Поиск автоматически раскрывает ветку'
+            : expanded
+              ? 'Свернуть ветку'
+              : 'Развернуть ветку',
         );
         toggle.textContent = expanded ? '▾' : '▸';
         toggle.addEventListener('click', () => {
@@ -205,7 +220,7 @@ if (typeof document !== 'undefined') {
       button.className = 'osm-boundary-node-button';
       button.classList.toggle('is-selected', item.id === state.selectedId);
 
-      const aggregate = branchStatus(item, fullChildrenByParent, statusMemo);
+      const aggregate = aggregateBoundaryBranchStatus(item, fullChildrenByParent, statusMemo);
       const dot = document.createElement('span');
       dot.className = 'osm-boundary-active-dot';
       dot.classList.add(`is-${aggregate.status}`);
@@ -252,7 +267,7 @@ if (typeof document !== 'undefined') {
 
     function renderTree() {
       treeHost.replaceChildren();
-      const { byId, childrenByParent: fullChildrenByParent } = treeIndex();
+      const { byId, childrenByParent: fullChildrenByParent } = buildBoundaryTreeIndex(state.boundaries);
       const query = normalizeSearchText(searchInput.value);
       const searchMode = Boolean(query);
       const visibleIds = new Set();
