@@ -73,7 +73,6 @@ const BOOTSTRAP_SQL = `
       min_delay_ms = $3,
       timeout_ms = $4,
       query_timeout_seconds = $5,
-      max_bytes = $7,
       max_response_bytes = $6,
       max_total_bytes = $7,
       max_retries = $8,
