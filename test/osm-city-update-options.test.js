@@ -13,6 +13,8 @@ const config = {
   dryRun: false,
   timeoutMs: 180000,
   queryTimeoutSeconds: 120,
+  maxResponseBytes: 400000,
+  maxTotalBytes: 1000000,
   maxBytes: 1000000,
   batchSize: 50,
   maxBatchSize: 200,
@@ -27,7 +29,8 @@ test('OSM request uses ENV defaults and accepts bounded request overrides', () =
     dryRun: 'true',
     timeoutMs: '5000',
     queryTimeoutSeconds: '30',
-    maxBytes: '500000',
+    maxResponseBytes: '300000',
+    maxTotalBytes: '500000',
     batchSize: '25',
     minDelayMs: '6000',
     maxRetries: '3',
@@ -39,6 +42,8 @@ test('OSM request uses ENV defaults and accepts bounded request overrides', () =
   assert.equal(resolved.dryRun, true);
   assert.equal(resolved.timeoutMs, 5000);
   assert.equal(resolved.queryTimeoutSeconds, 30);
+  assert.equal(resolved.maxResponseBytes, 300000);
+  assert.equal(resolved.maxTotalBytes, 500000);
   assert.equal(resolved.maxBytes, 500000);
   assert.equal(resolved.batchSize, 25);
   assert.equal(resolved.minDelayMs, 6000);
@@ -82,4 +87,18 @@ test('OSM request URL override is allowlisted and cannot raise ENV limits', () =
     () => resolveOsmCityUpdateRequest(undefined, { maxRetries: '7' }, config),
     /maxRetries must be an integer between 0 and 6/,
   );
+  assert.throws(
+    () => resolveOsmCityUpdateRequest(undefined, {
+      maxResponseBytes: '900000',
+      maxTotalBytes: '500000',
+    }, config),
+    /maxResponseBytes must not exceed maxTotalBytes/,
+  );
+  const legacy = resolveOsmCityUpdateRequest(
+    undefined,
+    { maxBytes: '500000' },
+    config,
+  );
+  assert.equal(legacy.maxTotalBytes, 500000);
 });
+
