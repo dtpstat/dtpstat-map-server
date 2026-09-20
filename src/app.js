@@ -378,6 +378,13 @@ export function createApp({
   app.use(
     helmet({
       crossOriginEmbedderPolicy: false,
+      // OSM standard tiles require a valid Referer from web applications.
+      // Helmet defaults to "no-referrer", which makes tile.openstreetmap.org
+      // return the Blocked tiles image. Send only this application's origin
+      // to cross-origin services instead of leaking admin URL paths.
+      referrerPolicy: {
+        policy: 'strict-origin-when-cross-origin',
+      },
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
@@ -390,7 +397,7 @@ export function createApp({
           styleSrc: ["'self'", "'unsafe-inline'"],
           imgSrc: [
             "'self'", 'data:', 'blob:', 'https://*.mapbox.com',
-            'https://*.tile.openstreetmap.org',
+            'https://tile.openstreetmap.org',
             ...YANDEX_METRIKA_HTTPS_ORIGINS,
             // Current Metrica tag uses this image-only endpoint for mapuid sync.
             'https://yandex.ru',
