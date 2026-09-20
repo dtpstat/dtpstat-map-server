@@ -187,3 +187,48 @@ test('streamed line import rolls back raw staged data when JSON fails late', asy
   assert.equal(pool.queries.includes('DELETE FROM city_geometries'), false);
   assert.equal(pool.released, true);
 });
+
+
+test('streamed line import rolls back staged rows when transport fails after valid JSON', async () => {
+  const features = Array.from({ length: 51 }, (_value, index) => ({
+    ...upload.features[0],
+    properties: {
+      ...upload.features[0].properties,
+      short_name: `Transport ${index}`,
+    },
+  }));
+  const valid = Buffer.from(JSON.stringify({
+    type: 'FeatureCollection',
+    features,
+  }));
+
+  async function* source() {
+    for (let offset = 0; offset < valid.length; offset += 127) {
+      yield valid.subarray(offset, offset + 127);
+    }
+    throw new Error('ZIP archive ended unexpectedly');
+  }
+
+  const pool = createFakePool();
+  const service = createDataImportService(pool);
+
+  await assert.rejects(
+    service.replaceFromGeoJsonStream(source(), {
+      maxJsonBytes: valid.length + 1,
+      maxItemBytes: 1024 * 1024,
+      maxJsonDepth: 128,
+      maxJsonItems: 1000,
+    }),
+    /ZIP archive ended unexpectedly/,
+  );
+
+  assert.equal(pool.queries[0], 'BEGIN');
+  assert.ok(
+    pool.queries.some((query) =>
+      query.startsWith('INSERT INTO line_transfer_raw')),
+  );
+  assert.equal(pool.queries.at(-1), 'ROLLBACK');
+  assert.equal(pool.queries.includes('COMMIT'), false);
+  assert.equal(pool.queries.includes('DELETE FROM city_geometries'), false);
+  assert.equal(pool.released, true);
+});
