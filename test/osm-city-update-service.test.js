@@ -389,7 +389,8 @@ test('OSM total byte budget is reported separately from one-response limit', asy
       error.code === 'total-size-limit' &&
       /total size limit/.test(error.message),
   );
-  assert.equal(pool.connections, 0);
+  assert.equal(pool.connections, 1);
+  assert.equal(pool.queries.includes('BEGIN'), false);
 });
 
 test('a later OSM batch failure leaves production boundaries untouched', async () => {
