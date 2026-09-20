@@ -561,13 +561,77 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           }
         : config;
       const options = resolveOsmCityUpdateRequest(body, query, runtimeConfig);
+      const mode = checkpointMode(query);
+      if ((mode.resume || mode.restart) && !checkpointRepository) {
+        throw new OsmCityUpdateValidationError(
+          'OSM resume mode is unavailable without checkpoint storage',
+        );
+      }
+
+      const settingsFingerprint = checkpointSettingsFingerprint(options);
+      if (checkpointRepository) await checkpointRepository.cleanup();
+      let checkpoint = checkpointRepository
+        ? await checkpointRepository.getResumable()
+        : null;
+
+      if (mode.resume) {
+        if (!checkpoint) {
+          throw new OsmCityUpdateValidationError(
+            'No resumable OSM checkpoint exists',
+          );
+        }
+        if (checkpoint.settingsFingerprint !== settingsFingerprint) {
+          throw new OsmCityUpdateValidationError(
+            'Saved OSM checkpoint is incompatible with current source/selectors/query/batch settings; restore those settings or start a new import explicitly',
+          );
+        }
+      } else if (checkpoint && !mode.restart) {
+        throw new OsmCityUpdateValidationError(
+          'Unfinished OSM checkpoint ' + checkpoint.id + ' contains ' +
+          checkpoint.stagedObjects + '/' + checkpoint.totalObjects +
+          ' objects; resume it or explicitly start over',
+        );
+      }
+
       const checksumHash = crypto.createHash('sha256');
-      let downloadedBytes = 0;
+      let downloadedBytes = mode.resume ? checkpoint.downloadedBytes : 0;
       let lastRequestCompletedAt = null;
-      let requestAttemptCount = 0;
-      let retryCount = 0;
-      let retryWaitMs = 0;
-      let throttleWaitMs = 0;
+      let requestAttemptCount = mode.resume
+        ? checkpoint.requestAttemptCount
+        : 0;
+      let retryCount = mode.resume ? checkpoint.retryCount : 0;
+      let retryWaitMs = mode.resume ? checkpoint.retryWaitMs : 0;
+      let throttleWaitMs = mode.resume ? checkpoint.throttleWaitMs : 0;
+      let persistedMetrics = {
+        downloadedBytes,
+        requestAttemptCount,
+        retryCount,
+        retryWaitMs,
+        throttleWaitMs,
+      };
+
+      const metricDelta = () => ({
+        downloadedBytes:
+          downloadedBytes - persistedMetrics.downloadedBytes,
+        requestAttemptCount:
+          requestAttemptCount - persistedMetrics.requestAttemptCount,
+        retryCount:
+          retryCount - persistedMetrics.retryCount,
+        retryWaitMs:
+          retryWaitMs - persistedMetrics.retryWaitMs,
+        throttleWaitMs:
+          throttleWaitMs - persistedMetrics.throttleWaitMs,
+      });
+
+      const rememberPersistedMetrics = () => {
+        persistedMetrics = {
+          downloadedBytes,
+          requestAttemptCount,
+          retryCount,
+          retryWaitMs,
+          throttleWaitMs,
+        };
+      };
 
       const downloadQuery = async (overpassQuery, requestProgress) => {
         for (let attempt = 0; ; attempt += 1) {
