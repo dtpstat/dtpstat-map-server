@@ -589,10 +589,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
             const progress = {
               phase: 'retry',
               ...requestProgress,
-              retryKind: retryableNetwork ? 'network' : 'http',
               statusCode: error.statusCode,
-              networkCode: error.networkCode,
-              networkMessage: error.networkMessage,
               attempt: retryAttempt,
               maxRetries: retryLimit,
               configuredMaxRetries: options.maxRetries,
@@ -600,6 +597,13 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
               retryAt: new Date(now() + waitMs).toISOString(),
               retryAfterMs: error.retryAfterMs,
               fallbackDelayMs,
+              ...(retryableNetwork
+                ? {
+                    retryKind: 'network',
+                    networkCode: error.networkCode,
+                    networkMessage: error.networkMessage,
+                  }
+                : {}),
             };
             reportProgress(progress);
             operation.onProgress?.(progress);
