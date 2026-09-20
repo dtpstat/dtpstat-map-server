@@ -78,7 +78,6 @@ test('public GeoJSON includes universal effective geometries, not only lines', a
 });
 
 test('pending geometry import database guard exists for every service that uses it', async () => {
-  const migration = await read('db/migrations/V038__effective_geometry_ownership.sql');
   const legacyGuard = await read('db/migrations/V036__geometry_model_invariants.sql');
   assert.match(legacyGuard, /CREATE OR REPLACE FUNCTION BUSLANES\.ASSERT_NO_PENDING_GEOMETRY_IMPORT/);
   assert.match(legacyGuard, /ERRCODE = '55000'/);

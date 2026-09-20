@@ -290,7 +290,7 @@ try {
     [geometryId],
   );
   assert(effective.rowCount === 0, 'Inactive boundary geometry remained effective');
-  let durable = await client.query(
+  const durable = await client.query(
     'SELECT id FROM city_geometries WHERE id = $1',
     [geometryId],
   );
