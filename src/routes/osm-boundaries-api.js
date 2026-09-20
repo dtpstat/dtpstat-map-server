@@ -1,11 +1,13 @@
 import express, { Router } from 'express';
-import { recordAdminOperationChanges } from '../data/admin-audit-details.js';
 import {
   normalizeOsmUpdateUrl,
   OsmCityUpdateValidationError,
 } from '../data/osm-city-update-options.js';
 import { OsmBoundaryAdminValidationError } from '../db/osm-boundary-admin-repository.js';
-import { createAdminOperationAudit } from '../http/admin-auth.js';
+import {
+  createAdminOperationAudit,
+  recordAdminOperationChanges,
+} from '../http/admin-auth.js';
 
 function object(value) {
   return value && typeof value === 'object' && !Array.isArray(value);
