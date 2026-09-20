@@ -21,15 +21,18 @@
 .osm-boundary-layout {
   min-height: 30rem;
   display: grid;
-  grid-template-columns: minmax(18rem, .8fr) minmax(0, 1.6fr);
+  grid-template-columns:
+    minmax(19rem, .72fr)
+    minmax(30rem, 1.8fr)
+    minmax(20rem, .82fr);
   gap: .85rem;
 }
 .osm-boundary-section-card .osm-boundary-layout {
   min-height: 0;
   flex: 1 1 auto;
-  grid-template-columns: minmax(22rem, .72fr) minmax(0, 1.8fr);
 }
 .osm-boundary-tree-panel,
+.osm-boundary-map-panel,
 .osm-boundary-details {
   min-width: 0;
   min-height: 0;
@@ -68,32 +71,74 @@
 .osm-boundary-node-source { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .osm-boundary-node-source { color: var(--muted); font-size: .67rem; font-weight: 500; }
 .osm-boundary-node-type { color: var(--muted); font-size: .68rem; white-space: nowrap; }
-.osm-boundary-details {
-  padding: .7rem;
-  display: grid;
-  grid-template-rows: auto minmax(18rem, 1fr);
-  gap: .75rem;
+.osm-boundary-map-panel {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
-#osm-boundary-form { flex: none; overflow: visible; display: grid; grid-template-columns: 1fr 1fr; gap: .65rem; }
-#osm-boundary-form > .osm-boundary-selected-title,
-#osm-boundary-form > .osm-boundary-meta,
-#osm-boundary-form > button,
-#osm-boundary-form > .notice { grid-column: 1 / -1; }
+.osm-boundary-details {
+  padding: .8rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+#osm-boundary-form {
+  display: flex;
+  flex-direction: column;
+  gap: .72rem;
+  min-width: 0;
+}
+#osm-boundary-form > label {
+  min-width: 0;
+}
+#osm-boundary-form > .check {
+  align-self: flex-start;
+}
 .osm-boundary-selected-title { font-weight: 800; }
-.osm-boundary-meta { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45rem; }
+.osm-boundary-meta {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: .45rem;
+}
 .osm-boundary-meta div { min-width: 0; padding: .45rem; border: 1px solid #233840; border-radius: 7px; }
 .osm-boundary-meta dt { color: var(--muted); font-size: .65rem; }
 .osm-boundary-meta dd { margin: .15rem 0 0; overflow-wrap: anywhere; font-size: .72rem; }
-.osm-boundary-map { min-height: 18rem; border-radius: 9px; overflow: hidden; }
-.osm-boundary-section-card .osm-boundary-details {
-  grid-template-rows: auto minmax(0, 1fr);
+.osm-boundary-map {
+  width: 100%;
+  height: 100%;
+  min-height: 24rem;
+  border-radius: 9px;
+  overflow: hidden;
 }
 .osm-boundary-section-card .osm-boundary-map {
   min-height: 0;
-  height: 100%;
 }
 .osm-boundary-map .leaflet-control-attribution { font-size: 9px; }
 
+@media (max-width: 1250px) {
+  .osm-boundary-layout,
+  .osm-boundary-section-card .osm-boundary-layout {
+    grid-template-columns: minmax(18rem, .75fr) minmax(0, 1.6fr);
+  }
+  .osm-boundary-details {
+    grid-column: 1 / -1;
+    max-height: 22rem;
+  }
+  #osm-boundary-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  #osm-boundary-form > .osm-boundary-selected-title,
+  #osm-boundary-form > .osm-boundary-meta,
+  #osm-boundary-form > button,
+  #osm-boundary-form > .notice {
+    grid-column: 1 / -1;
+  }
+  .osm-boundary-meta {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
 @media (max-width: 900px) {
   .osm-boundary-layout,
   .osm-boundary-section-card .osm-boundary-layout {
@@ -101,15 +146,23 @@
   }
   .osm-boundary-section-card .osm-boundary-workspace { overflow: visible; }
   .osm-boundary-tree-panel { max-height: 18rem; }
+  .osm-boundary-details {
+    grid-column: auto;
+    max-height: none;
+    overflow: visible;
+  }
+  #osm-boundary-form {
+    display: flex;
+  }
+  .osm-boundary-meta {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .osm-boundary-section-card .osm-boundary-map {
-    min-height: 24rem;
+    min-height: 28rem;
     height: auto;
   }
 }
 @media (max-width: 650px) {
   .osm-selection-grid,
-  .osm-number-grid,
-  #osm-boundary-form { grid-template-columns: minmax(0, 1fr); }
-  #osm-boundary-form > * { grid-column: 1; }
-  .osm-boundary-meta { grid-template-columns: minmax(0, 1fr); }
+  .osm-number-grid { grid-template-columns: minmax(0, 1fr); }
 }
