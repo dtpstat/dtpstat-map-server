@@ -15,17 +15,18 @@ POST /api/admin/settings/import
 
 ```text
 _dtpstat.kind = project-settings
-_dtpstat.schemaVersion = 6
+_dtpstat.schemaVersion = 7
 ```
 
-Import принимает `v1…v6`.
+Import принимает `v1…v7`.
 
 Ключевые изменения:
 
 - `v3` — `themePreset`;
 - `v4` — независимый `showLinePopups`;
 - `v5` — ordered `reportConfig.rank.sort`;
-- `v6` — `projectSettings.publicDownloadName`.
+- `v6` — `projectSettings.publicDownloadName`;
+- `v7` — `largeCityPopulationThreshold` и `largeCityAreaKm2Threshold`.
 
 Legacy packages нормализуются к текущей модели.
 
@@ -42,6 +43,8 @@ Legacy packages нормализуются к текущей модели.
 - `showLineLabels`;
 - `showLinePopups`;
 - `publicDownloadName`;
+- `largeCityPopulationThreshold`;
+- `largeCityAreaKm2Threshold`;
 - public Mapbox access token.
 
 Не переносятся custom city marker binary/metadata и deployment-specific `MAPBOX_STYLE_URL`.
@@ -235,13 +238,13 @@ Import:
 
 Post-commit snapshot refresh не может физически откатить уже committed DB transaction; API должен сообщать post-processing failure отдельно.
 
-## Пример v6
+## Пример v7
 
 ```json
 {
   "_dtpstat": {
     "kind": "project-settings",
-    "schemaVersion": 6,
+    "schemaVersion": 7,
     "exportedAt": "2026-09-08T03:00:00.000Z"
   },
   "projectSettings": {
@@ -254,6 +257,8 @@ Post-commit snapshot refresh не может физически откатить
     "showLineLabels": false,
     "showLinePopups": true,
     "publicDownloadName": "tram-lines",
+    "largeCityPopulationThreshold": 400000,
+    "largeCityAreaKm2Threshold": 250,
     "mapboxAccessToken": "pk...."
   },
   "lineTypes": [],
