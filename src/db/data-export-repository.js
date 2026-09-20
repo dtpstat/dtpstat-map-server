@@ -96,9 +96,11 @@ const EXPORT_LINES_SQL = `
     )
   ) AS payload
   FROM city_geometries AS geometry
+  JOIN city_boundaries AS boundary
+    ON boundary.id = geometry.boundary_id
+   AND boundary.is_active
   JOIN line_types AS line_type ON line_type.id = geometry.line_type_id
   LEFT JOIN cities AS city ON city.id = geometry.city_id
-  LEFT JOIN city_boundaries AS boundary ON boundary.id = geometry.boundary_id
 `;
 
 const EXPORT_POPULATIONS_SQL = `
