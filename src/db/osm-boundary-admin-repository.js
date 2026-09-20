@@ -192,7 +192,7 @@ export function createOsmBoundaryAdminRepository(pool) {
             `UPDATE city_boundaries
                 SET is_active = $2,
                     updated_at = now()
-              WHERE id = ANY($1::integer[])
+              WHERE id = ANY($1::bigint[])
                 AND is_active IS DISTINCT FROM $2`,
             [ids, active],
           );
