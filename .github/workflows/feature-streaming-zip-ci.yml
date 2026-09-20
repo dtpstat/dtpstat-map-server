@@ -43,3 +43,23 @@ jobs:
       - run: npm run check
       - run: npm run db:init
       - run: npm run db:migrate
+      - name: Verify streamed ZIP64 with system unzip
+        run: |
+          node --input-type=module <<'NODE'
+          import { createWriteStream } from 'node:fs';
+          import { pipeline } from 'node:stream/promises';
+          import { createSingleFileZipStream } from './src/data/single-file-zip.js';
+
+          async function* source() {
+            yield Buffer.from('{"');
+            yield Buffer.from('stream":true');
+            yield Buffer.from('}');
+          }
+
+          await pipeline(
+            createSingleFileZipStream('stdin', source()),
+            createWriteStream('/tmp/dtpstat-stream.zip'),
+          );
+          NODE
+          unzip -t /tmp/dtpstat-stream.zip
+          test "$(unzip -p /tmp/dtpstat-stream.zip stdin)" = '{"stream":true}'
