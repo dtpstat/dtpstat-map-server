@@ -275,7 +275,15 @@ test('typed bus-lane layers stay below labels, show names on hover and can be to
     assert.deepEqual(popup.lngLat, hoverLngLat);
     assert.deepEqual(
       calls.findLast((call) => call[0] === 'queryRenderedFeatures'),
-      ['queryRenderedFeatures', ['bus-lanes-lines-0', 'bus-lanes-lines-7']],
+      [
+        'queryRenderedFeatures',
+        [
+          'bus-lanes-lines-0',
+          'bus-lanes-lines-7',
+          'project-geometries-points',
+          'project-geometries-polygons-fill',
+        ],
+      ],
     );
 
     map.renderedFeatures = [{ properties: { name: 'Казань' } }];

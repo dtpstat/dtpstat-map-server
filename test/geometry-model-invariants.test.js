@@ -15,7 +15,11 @@ test('city ownership, not geometry boundary activity, drives metrics and public 
   ]);
 
   assert.match(recalculate, /geometry\.city_id = city\.id/);
-  assert.doesNotMatch(recalculate, /boundary\.is_active[\s\S]*lane_length_m/);
+  const geometryStatistics = recalculate.slice(
+    recalculate.indexOf('WITH geometry_statistics AS'),
+    recalculate.indexOf('boundary_statistics AS'),
+  );
+  assert.doesNotMatch(geometryStatistics, /boundary\.is_active/);
   assert.match(reports, /LEFT JOIN city_geometries AS geometry\s+ON geometry\.city_id = city\.id/);
   assert.doesNotMatch(reports, /metric_boundary\.id = geometry\.boundary_id/);
   assert.match(cities, /geometry_presence\.city_id = city\.id/);

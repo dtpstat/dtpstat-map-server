@@ -6,7 +6,7 @@ import {
   VIEWPORT_EXPANSION_RATIO,
 } from '../src/db/cities-repository.js';
 
-test('city list does not require population but does require line geometries', async () => {
+test('city list does not require population but does require project geometries', async () => {
   let sql;
   const repository = createCitiesRepository({
     async query(text) {
@@ -28,8 +28,9 @@ test('city list does not require population but does require line geometries', a
   );
   assert.match(
     sql,
-    /EXISTS \(\s*SELECT 1\s*FROM city_geometries AS geometry_presence\s*JOIN city_boundaries AS geometry_boundary[\s\S]*geometry_boundary\.is_active[\s\S]*geometry_presence\.city_id = city\.id\s*\)/s,
+    /EXISTS \(\s*SELECT 1\s*FROM city_geometries AS geometry_presence\s*WHERE geometry_presence\.city_id = city\.id\s*\)/s,
   );
+  assert.doesNotMatch(sql, /geometry_boundary\.id = geometry_presence\.boundary_id/);
   assert.match(
     sql,
     /CASE WHEN city\.is_large IS TRUE THEN 'large' ELSE 'small' END AS category/,
@@ -113,6 +114,10 @@ test('viewport query uses padded selector, returns complete intersecting lines a
   assert.match(sql, /ST_Covers\(boundary\.geom, viewport\.center\)/);
   assert.match(
     sql,
-    /geometry_boundary\.id = geometry_presence\.boundary_id[\s\S]*geometry_boundary\.is_active[\s\S]*geometry_presence\.city_id = boundary\.city_id/,
+    /active_boundary\.city_id = geometry\.city_id[\s\S]*active_boundary\.is_active/,
+  );
+  assert.match(
+    sql,
+    /FROM city_geometries AS geometry_presence\s+WHERE geometry_presence\.city_id = boundary\.city_id/,
   );
 });

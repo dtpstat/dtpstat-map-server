@@ -121,12 +121,18 @@ test('versioned data import applies dictionary by imported NAME before inserting
   assert.deepEqual(result.lineTypes, ['Трамвай']);
   assert.ok(pool.queries.some((query) => query.includes('UPDATE line_types AS line_type')));
   assert.ok(pool.queries.some((query) => query.includes('INSERT INTO line_types (name, title')));
-  const geometryDelete = pool.queries.indexOf('DELETE FROM city_geometries');
+  const editedGuard = pool.queries.findIndex((query) =>
+    query.includes("GeometryType(geom) IN ('LINESTRING', 'MULTILINESTRING')") &&
+    query.includes('was_edited'));
+  const geometryDelete = pool.queries.findIndex((query) =>
+    query.includes('DELETE FROM city_geometries') &&
+    query.includes('NOT was_edited'));
   const typeDelete = pool.queries.findIndex((query) =>
     query.includes('WITH payload AS') && query.includes('DELETE FROM line_types AS line_type'));
   const typeUpdate = pool.queries.findIndex((query) => query.includes('UPDATE line_types AS line_type'));
   const geometryInsert = pool.queries.findIndex((query) => query.includes('INSERT INTO city_geometries'));
-  assert.ok(geometryDelete >= 0);
+  assert.ok(editedGuard >= 0);
+  assert.ok(geometryDelete > editedGuard);
   assert.ok(typeDelete > geometryDelete);
   assert.ok(typeUpdate > typeDelete);
   assert.ok(geometryInsert > typeUpdate);

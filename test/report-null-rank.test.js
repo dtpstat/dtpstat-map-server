@@ -46,7 +46,11 @@ test('report materialization ranks only visible cities and leaves missing metric
   );
   assert.match(
     materializeSql,
-    /FROM city_geometries AS geometry_presence\s*JOIN city_boundaries AS geometry_boundary\s*ON geometry_boundary\.id = geometry_presence\.boundary_id\s*AND geometry_boundary\.is_active\s*WHERE geometry_presence\.city_id = city\.id/s,
+    /FROM city_geometries AS geometry_presence\s*WHERE geometry_presence\.city_id = city\.id/s,
+  );
+  assert.doesNotMatch(
+    materializeSql,
+    /geometry_boundary\.id = geometry_presence\.boundary_id/,
   );
   assert.match(
     rankingSql,
