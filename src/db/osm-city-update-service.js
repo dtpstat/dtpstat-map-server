@@ -11,6 +11,7 @@ import {
   parseOsmPlaceIdsResponse,
 } from '../data/osm-city-parser.js';
 import {
+  normalizeOsmUpdateUrl,
   OsmCityUpdateValidationError,
   resolveOsmCityUpdateRequest,
 } from '../data/osm-city-update-options.js';
@@ -402,6 +403,17 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
       const savedSettings = settingsRepository
         ? await settingsRepository.get()
         : null;
+      if (savedSettings?.sourceURL) {
+        const savedSourceURL = normalizeOsmUpdateUrl(
+          savedSettings.sourceURL,
+          config.allowedHosts,
+        );
+        if (config.allowedURLs && !config.allowedURLs.has(savedSourceURL)) {
+          throw new OsmCityUpdateValidationError(
+            `Saved OSM URL is no longer allowed by deployment configuration: ${savedSourceURL}`,
+          );
+        }
+      }
       const runtimeConfig = savedSettings
         ? {
             ...config,
