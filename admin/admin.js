@@ -583,9 +583,14 @@ async function loadAdminConfig({ announce = false } = {}) {
 
 async function refresh({ quiet = false } = {}) {
   try {
-    const payload = await api('/api/admin/status');
+    const [payload, checkpointPayload] = await Promise.all([
+      api('/api/admin/status'),
+      api('/api/admin/osm-checkpoint'),
+    ]);
     state.lastSuccessfulUpdates = payload.lastSuccessfulUpdates ?? {};
+    state.osmCheckpoint = checkpointPayload.checkpoint ?? null;
     applyTask(payload.task);
+    renderOsmCheckpoint();
     if (!quiet) setNotice('Статус обновлён.', 'success');
   } catch (error) {
     if (error.message === 'Admin task not found') {
@@ -666,10 +671,26 @@ elements.osmForm.addEventListener('submit', async (event) => {
   if (!validateOsmForm(form)) return;
 
   const dryRun = new FormData(form).get('dryRun') === 'on';
+  const restart = Boolean(state.osmCheckpoint);
+  if (restart) {
+    const checkpoint = state.osmCheckpoint;
+    const confirmed = window.confirm(
+      'Есть сохранённый прогресс OSM: ' +
+      checkpoint.stagedObjects + '/' + checkpoint.totalObjects +
+      ' объектов. Начать заново? Старый checkpoint будет удалён только ' +
+      'после успешного получения нового OSM-индекса.',
+    );
+    if (!confirmed) return;
+  }
+
   try {
     if (!await saveOsmSettings({ announce: false })) return;
+    const query = new URLSearchParams({
+      dryRun: String(dryRun),
+      restart: String(restart),
+    });
     await start(
-      `/api/admin/update/cities?dryRun=${encodeURIComponent(String(dryRun))}`,
+      `/api/admin/update/cities?${query}`,
       {},
       'osm',
     );
@@ -686,6 +707,45 @@ elements.osmSettingsSave?.addEventListener('click', () => {
   void saveOsmSettings().catch((error) => {
     setTaskNotice('osm', error.message, 'error');
   });
+});
+
+elements.osmResume?.addEventListener('click', async () => {
+  if (active(state.task) || !state.osmCheckpoint) return;
+  if (!validateOsmForm(elements.osmForm)) return;
+  const dryRun = new FormData(elements.osmForm).get('dryRun') === 'on';
+  try {
+    if (!await saveOsmSettings({ announce: false })) return;
+    const query = new URLSearchParams({
+      dryRun: String(dryRun),
+      resume: 'true',
+    });
+    await start(
+      `/api/admin/update/cities?${query}`,
+      {},
+      'osm',
+    );
+  } catch (error) {
+    setTaskNotice('osm', error.message, 'error');
+  }
+});
+
+elements.osmCheckpointDiscard?.addEventListener('click', async () => {
+  const checkpoint = state.osmCheckpoint;
+  if (active(state.task) || !checkpoint) return;
+  const confirmed = window.confirm(
+    'Удалить сохранённый прогресс OSM ' +
+    checkpoint.stagedObjects + '/' + checkpoint.totalObjects +
+    '? Возобновить эту загрузку после удаления будет невозможно.',
+  );
+  if (!confirmed) return;
+  try {
+    await api('/api/admin/osm-checkpoint', { method: 'DELETE' });
+    state.osmCheckpoint = null;
+    renderOsmCheckpoint();
+    setTaskNotice('osm', 'сохранённый прогресс удалён.', 'warning');
+  } catch (error) {
+    setTaskNotice('osm', error.message, 'error');
+  }
 });
 
 elements.cityGeoJsonForm.addEventListener('submit', async (event) => {
@@ -770,6 +830,14 @@ function connectWebSocket() {
           state.lastSuccessfulUpdates = message.lastSuccessfulUpdates;
         }
         applyTask(message.task, true);
+        if (
+          message.task &&
+          ['failed', 'cancelled', 'succeeded'].includes(message.task.status)
+        ) {
+          void loadOsmCheckpoint().catch((error) => {
+            setTaskNotice('osm', error.message, 'error');
+          });
+        }
       } else if (message.type === 'success') {
         state.lastSuccessfulUpdates = {
           ...state.lastSuccessfulUpdates,
