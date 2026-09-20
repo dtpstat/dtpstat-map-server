@@ -30,6 +30,11 @@
             aria-selected="false" aria-controls="admin-section-data">
       Управление данными
     </button>
+    <button type="button" role="tab" id="admin-tab-osm-objects"
+            data-admin-section-tab="osm-objects"
+            aria-selected="false" aria-controls="admin-section-osm-objects">
+      Объекты OSM
+    </button>
     <button type="button" role="tab" data-admin-section-tab="interface"
             aria-selected="false" aria-controls="admin-section-interface">
       Настройка интерфейса
@@ -111,11 +116,6 @@
                       aria-selected="true" aria-controls="operation-osm-update"
                       data-operation-tab="osm-update" data-operation-group="osm">
                 Обновление
-              </button>
-              <button class="operation-tab" id="operation-tab-osm-objects" type="button" role="tab"
-                      aria-selected="false" aria-controls="operation-osm-objects"
-                      data-operation-tab="osm-objects" data-operation-group="osm">
-                Объекты OSM
               </button>
               <button class="operation-tab" id="operation-tab-osm-geojson" type="button" role="tab"
                       aria-selected="false" aria-controls="operation-osm-geojson"
@@ -202,55 +202,6 @@
                           data-task-type="osm-city-update" data-start-label="Запустить OSM">Запустить OSM</button>
                 </div>
               </form>
-            </section>
-
-            <section class="operation-panel transfer-mode osm-boundary-workspace"
-                     id="operation-osm-objects" role="tabpanel"
-                     aria-labelledby="operation-tab-osm-objects"
-                     data-operation-panel="osm-objects" data-operation-group="osm" hidden>
-              <div class="mode-heading">
-                <div>
-                  <h4>Загруженные OSM-объекты</h4>
-                  <p>Иерархия строится только по полному геометрическому вложению. Просто пересекающиеся объекты остаются на одном уровне.</p>
-                </div>
-                <button class="secondary" id="osm-boundary-refresh" type="button">Обновить дерево</button>
-              </div>
-              <div class="osm-boundary-layout">
-                <section class="osm-boundary-tree-panel" aria-label="Дерево OSM объектов">
-                  <div id="osm-boundary-tree" class="osm-boundary-tree">
-                    <p class="empty-state">Загружаем объекты…</p>
-                  </div>
-                </section>
-                <section class="osm-boundary-details">
-                  <form id="osm-boundary-form">
-                    <div class="osm-boundary-selected-title" id="osm-boundary-selected-title">
-                      Выберите объект в дереве
-                    </div>
-                    <label class="check">
-                      <input name="active" type="checkbox" disabled>
-                      Активная геометрия
-                    </label>
-                    <label>Отображаемое имя
-                      <input name="displayName" type="text" maxlength="160" disabled required>
-                    </label>
-                    <label>Тип
-                      <select name="displayType" disabled required>
-                        <option value="city">Город</option>
-                        <option value="town">Town / малый город</option>
-                        <option value="urban_okrug">Городской округ</option>
-                        <option value="federal_city">Город федерального значения</option>
-                        <option value="settlement">Поселение</option>
-                        <option value="administrative">Административная территория</option>
-                      </select>
-                    </label>
-                    <dl class="osm-boundary-meta" id="osm-boundary-meta"></dl>
-                    <button type="submit" disabled>Сохранить объект</button>
-                    <p class="notice" id="osm-boundary-message" role="status"></p>
-                  </form>
-                  <div id="osm-boundary-map" class="osm-boundary-map"
-                       aria-label="Карта выбранной OSM геометрии"></div>
-                </section>
-              </div>
             </section>
 
             <section class="operation-panel transfer-mode" id="operation-osm-geojson" role="tabpanel"
@@ -427,6 +378,79 @@
             <pre id="task-result">—</pre>
           </details>
         </aside>
+      </div>
+    </section>
+
+    <section class="admin-section-panel" id="admin-section-osm-objects"
+             data-admin-section-panel="osm-objects" role="tabpanel"
+             aria-labelledby="admin-tab-osm-objects" hidden>
+      <div class="admin-layout admin-layout-single">
+        <section class="settings-card osm-boundary-section-card"
+                 aria-labelledby="osm-boundary-section-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">OSM ОБЪЕКТЫ И НАСЕЛЕНИЕ</p>
+              <h2 id="osm-boundary-section-title">Редактор объектов OSM</h2>
+            </div>
+            <button class="secondary" id="osm-boundary-refresh" type="button">Обновить дерево</button>
+          </div>
+          <p class="panel-description">
+            Иерархия строится только по полному геометрическому вложению. Здесь настраиваются
+            активность, отображаемая идентичность и население связанного города.
+          </p>
+
+          <div class="osm-boundary-workspace">
+            <div class="osm-boundary-layout">
+              <section class="osm-boundary-tree-panel" aria-label="Дерево OSM объектов">
+                <div id="osm-boundary-tree" class="osm-boundary-tree">
+                  <p class="empty-state">Загружаем объекты…</p>
+                </div>
+              </section>
+
+              <section class="osm-boundary-details">
+                <form id="osm-boundary-form">
+                  <div class="osm-boundary-selected-title" id="osm-boundary-selected-title">
+                    Выберите объект в дереве
+                  </div>
+
+                  <label class="check">
+                    <input name="active" type="checkbox" disabled>
+                    Активная геометрия
+                  </label>
+
+                  <label>Отображаемое имя
+                    <input name="displayName" type="text" maxlength="160" disabled required>
+                  </label>
+
+                  <label>Тип
+                    <select name="displayType" disabled required>
+                      <option value="city">Город</option>
+                      <option value="town">Town / малый город</option>
+                      <option value="urban_okrug">Городской округ</option>
+                      <option value="federal_city">Город федерального значения</option>
+                      <option value="settlement">Поселение</option>
+                      <option value="administrative">Административная территория</option>
+                    </select>
+                  </label>
+
+                  <label>Население
+                    <input name="population" type="number" inputmode="numeric"
+                           min="1" max="2147483647" step="1" disabled
+                           placeholder="не задано">
+                    <small>Редактируется для активного объекта. Пустое значение удаляет текущую запись населения.</small>
+                  </label>
+
+                  <dl class="osm-boundary-meta" id="osm-boundary-meta"></dl>
+                  <button type="submit" disabled>Сохранить объект</button>
+                  <p class="notice" id="osm-boundary-message" role="status"></p>
+                </form>
+
+                <div id="osm-boundary-map" class="osm-boundary-map"
+                     aria-label="Карта выбранной OSM геометрии"></div>
+              </section>
+            </div>
+          </div>
+        </section>
       </div>
     </section>
 
