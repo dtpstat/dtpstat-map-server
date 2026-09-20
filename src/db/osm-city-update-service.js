@@ -448,7 +448,10 @@ function combineIndexParts(parts) {
  *   parseBatch?: typeof parseOsmCityResponse,
  *   reportProgress?: (progress: object) => void,
  *   sleep?: (milliseconds: number, signal?: AbortSignal) => Promise<void>,
- *   now?: () => number
+ *   now?: () => number,
+ *   checkpointRepository?: ReturnType<
+ *     import('./osm-city-checkpoint-repository.js').createOsmCityCheckpointRepository
+ *   >
  * }} [dependencies]
  */
 export function createOsmCityUpdateService(pool, config, dependencies = {}) {
@@ -456,9 +459,18 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
   const parseIndex = dependencies.parseIndex ?? parseOsmPlaceIdsResponse;
   const parseBatch = dependencies.parseBatch ?? parseOsmCityResponse;
   const settingsRepository = dependencies.settingsRepository;
+  const checkpointRepository = dependencies.checkpointRepository;
   const sleep = dependencies.sleep ?? abortableDelay;
   const now = dependencies.now ?? Date.now;
   const reportProgress = dependencies.reportProgress ?? ((progress) => {
+    if (progress.phase === 'resume') {
+      console.info(
+        `OSM city update resumed checkpoint ${progress.checkpointId}: ` +
+        `${progress.stagedPlaces}/${progress.indexedPlaces} already staged, ` +
+        `${progress.remainingPlaces} remaining`,
+      );
+      return;
+    }
     if (progress.phase === 'index') {
       console.info(
         `OSM city update index ${progress.indexPart}/${progress.indexPartCount}: ` +
@@ -493,6 +505,20 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
   });
 
   return {
+    async checkpointStatus() {
+      if (!checkpointRepository) return null;
+      await checkpointRepository.cleanup();
+      return checkpointRepository.getResumable();
+    },
+
+    async discardCheckpoint() {
+      if (!checkpointRepository) return null;
+      const checkpoint = await checkpointRepository.getResumable();
+      if (!checkpoint) return null;
+      await checkpointRepository.discard(checkpoint.id);
+      return checkpoint;
+    },
+
     /**
      * @param {unknown} body
      * @param {Record<string, unknown>} query
