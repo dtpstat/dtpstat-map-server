@@ -220,7 +220,11 @@ test('single-file ZIP reader verifies CRC and decoded size limits', async () => 
     const buffer = await fs.readFile(file);
     const { centralOffset } = zip64DirectoryInfo(buffer);
     const originalCrc = buffer.readUInt32LE(centralOffset + 16);
-    buffer.writeUInt32LE((originalCrc + 1) >>> 0, centralOffset + 16);
+    const wrongCrc = (originalCrc + 1) >>> 0;
+    buffer.writeUInt32LE(wrongCrc, centralOffset + 16);
+    const descriptorOffset = centralOffset - 24;
+    assert.equal(buffer.readUInt32LE(descriptorOffset), 0x08074b50);
+    buffer.writeUInt32LE(wrongCrc, descriptorOffset + 4);
     await fs.writeFile(file, buffer);
 
     const entry = await openSingleFileZip(file, {
