@@ -86,6 +86,50 @@ if (typeof document !== 'undefined') {
         a.id - b.id;
     }
 
+    function subtreeItems(rootId) {
+      const childrenByParent = new Map();
+      for (const item of state.boundaries) {
+        const children = childrenByParent.get(item.parentId) ?? [];
+        children.push(item);
+        childrenByParent.set(item.parentId, children);
+      }
+
+      const result = [];
+      const stack = [rootId];
+      while (stack.length) {
+        const id = stack.pop();
+        const item = state.boundaries.find((candidate) => candidate.id === id);
+        if (!item) continue;
+        result.push(item);
+        for (const child of childrenByParent.get(id) ?? []) {
+          stack.push(child.id);
+        }
+      }
+      return result;
+    }
+
+    function updateBranchActions(item) {
+      const controls = [enableBranch, disableBranch].filter(Boolean);
+      if (!item) {
+        for (const control of controls) control.disabled = true;
+        if (enableBranch) enableBranch.textContent = 'Включить ветку';
+        if (disableBranch) disableBranch.textContent = 'Отключить ветку';
+        return;
+      }
+
+      const items = subtreeItems(item.id);
+      const activeCount = items.filter((entry) => entry.active).length;
+      const inactiveCount = items.length - activeCount;
+      if (enableBranch) {
+        enableBranch.disabled = inactiveCount === 0;
+        enableBranch.textContent = `Включить ветку (${items.length})`;
+      }
+      if (disableBranch) {
+        disableBranch.disabled = activeCount === 0;
+        disableBranch.textContent = `Отключить ветку (${items.length})`;
+      }
+    }
+
     function node(item, childrenByParent) {
       const wrapper = document.createElement('div');
       wrapper.className = 'osm-boundary-node';
