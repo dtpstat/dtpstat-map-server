@@ -469,12 +469,28 @@ export function createAdminSecurityService(repository) {
         return { status: 'blocked', user, retryAfterSeconds };
       }
     }
-    if (now.valueOf() - new Date(session.sessionLastSeenAt).valueOf() > 60000) {
+    let lastSeenAt = new Date(session.sessionLastSeenAt);
+    if (now.valueOf() - lastSeenAt.valueOf() > 60000) {
+      lastSeenAt = now;
       await repository.touchSession(session.sessionId, now.toISOString());
     }
+    const absoluteExpiresAt = new Date(session.sessionExpiresAt);
+    const idleExpiresAt = new Date(
+      lastSeenAt.valueOf() + settings.sessionIdleSeconds * 1000,
+    );
+    const effectiveExpiresAt = new Date(Math.min(
+      absoluteExpiresAt.valueOf(),
+      idleExpiresAt.valueOf(),
+    ));
     return {
-      status: 'success', user, sessionId: session.sessionId,
-      authMethod: 'session', token,
+      status: 'success',
+      user,
+      sessionId: session.sessionId,
+      authMethod: 'session',
+      token,
+      sessionAbsoluteExpiresAt: absoluteExpiresAt.toISOString(),
+      sessionIdleExpiresAt: idleExpiresAt.toISOString(),
+      sessionEffectiveExpiresAt: effectiveExpiresAt.toISOString(),
     };
   }
 
