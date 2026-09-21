@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import { once } from 'node:events';
+import { createReadStream } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -220,6 +222,31 @@ async function zipBuffer(fileName, payload) {
   ));
 }
 
+function sevenZipAvailable() {
+  return spawnSync('7z', ['i'], { stdio: 'ignore' }).status === 0;
+}
+
+async function createSevenZipFromStdin(file, payload) {
+  const child = spawn(
+    '7z',
+    ['a', '-tzip', '-mx=6', file, '-si'],
+    { stdio: ['pipe', 'ignore', 'pipe'] },
+  );
+  const errors = [];
+  child.stderr.on('data', (chunk) => errors.push(Buffer.from(chunk)));
+  child.stdin.end(Buffer.from(JSON.stringify(payload)));
+  const [code] = await new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (...args) => resolve(args));
+  });
+  if (code !== 0) {
+    throw new Error(
+      `7z failed with exit code ${code}: ` +
+      Buffer.concat(errors).toString('utf8'),
+    );
+  }
+}
+
 async function readZipBuffer(buffer) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'dtpstat-api-zip-'));
   const file = path.join(directory, 'response.zip');
@@ -397,6 +424,59 @@ test('chunked ZIP64 import accepts an stdin-style entry with unknown source size
     },
   });
 });
+
+test(
+  'chunked HTTP import accepts ZIP produced by 7-Zip from stdin',
+  { skip: !sevenZipAvailable() },
+  async () => {
+    let received;
+    const directory = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'dtpstat-7z-http-'),
+    );
+    const archivePath = path.join(directory, 'stdin.zip');
+    const payload = {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        properties: { short_name: '7z поток', lanes: 1 },
+        geometry: {
+          type: 'LineString',
+          coordinates: [[37, 55], [37.1, 55.1]],
+        },
+      }],
+    };
+
+    try {
+      await createSevenZipFromStdin(archivePath, payload);
+
+      await withServer(async (baseUrl) => {
+        const response = await postChunked(
+          baseUrl,
+          '/api/admin/import/lines',
+          createReadStream(archivePath, { highWaterMark: 17 }),
+          {
+            Authorization: authorization,
+            'Content-Type': 'application/zip',
+          },
+        );
+        assert.equal(response.status, 202);
+        const accepted = JSON.parse(response.body.toString('utf8'));
+        const completed = await waitForTask(baseUrl, accepted);
+        assert.equal(completed.status, 'succeeded');
+        assert.deepEqual(received, payload);
+      }, {
+        importService: {
+          async replaceFromGeoJson(body) {
+            received = body;
+            return { geometries: body.features.length };
+          },
+        },
+      });
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+  },
+);
 
 test('ZIP import with more than one entry fails the admin task', async () => {
   const archive = await zipBuffer('lines.geojson', lineSnapshot);
