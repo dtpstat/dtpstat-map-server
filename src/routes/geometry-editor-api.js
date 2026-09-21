@@ -24,15 +24,13 @@ function validationError(response, error) {
  *   geometryEditorRepository: {
  *     get: Function,
  *     listCities: Function,
- *     listCity: Function,
- *     listTags: Function,
+ *     listCityGeometries: Function,
  *     create: Function,
  *     update: Function,
  *     delete: Function,
  *     merge: Function,
  *     cut: Function
  *   },
- *   lineTypesRepository: { list: Function },
  *   adminAuth: any,
  *   securityService: any,
  *   maxBodyBytes: number,
@@ -41,7 +39,6 @@ function validationError(response, error) {
  */
 export function createGeometryEditorRouter({
   geometryEditorRepository,
-  lineTypesRepository,
   adminAuth,
   securityService,
   maxBodyBytes,
@@ -61,33 +58,46 @@ export function createGeometryEditorRouter({
     adminAuth.requireGeometryEditor,
     async (_request, response, next) => {
       try {
-        const [cityResult, lineTypes, tags] = await Promise.all([
-          geometryEditorRepository.listCities(),
-          lineTypesRepository.list(),
-          geometryEditorRepository.listTags(),
-        ]);
+        const cityResult = await geometryEditorRepository.listCities();
         response.set('Cache-Control', 'no-store').json({
           cities: cityResult.cities,
           cityLinkState: cityResult.linkState,
-          lineTypes,
-          tags,
         });
       } catch (error) { next(error); }
     },
   );
 
   router.get(
-    '/admin/geometry-editor/cities/:cityId',
+    '/admin/geometry-editor/cities/:cityId/geometries',
     adminAuth.requireGeometryEditor,
     async (request, response, next) => {
       try {
         const cityId = normalizeGeometryId(request.params.cityId, 'cityId');
-        const result = await geometryEditorRepository.listCity(cityId);
+        const result = await geometryEditorRepository.listCityGeometries(cityId);
         if (!result) {
           response.status(404).json({ error: 'City not found or has no active boundary' });
           return;
         }
         response.set('Cache-Control', 'no-store').json(result);
+      } catch (error) {
+        if (validationError(response, error)) return;
+        next(error);
+      }
+    },
+  );
+
+  router.get(
+    '/admin/geometry-editor/geometries/:geometryId',
+    adminAuth.requireGeometryEditor,
+    async (request, response, next) => {
+      try {
+        const geometryId = normalizeGeometryId(request.params.geometryId);
+        const geometry = await geometryEditorRepository.get(geometryId);
+        if (!geometry) {
+          response.status(404).json({ error: 'Geometry not found' });
+          return;
+        }
+        response.set('Cache-Control', 'no-store').json({ geometry });
       } catch (error) {
         if (validationError(response, error)) return;
         next(error);

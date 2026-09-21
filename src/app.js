@@ -311,7 +311,7 @@ function testSecurity(config) {
  *   refreshOsmBoundaryDerived?: () => Promise<any>,
  *   refreshGeometryDerived?: (details?: object) => Promise<any>,
  *   osmImportSettingsRepository?: { get: Function, save: Function },
- *   geometryEditorRepository?: { listCities: Function, listCity: Function },
+ *   geometryEditorRepository?: { listCities: Function, listCityGeometries: Function, get: Function },
  *   geometryImportRepository?: { pending: Function, discard: Function, apply: Function },
  *   osmBoundaryAdminRepository?: { list: Function, getGeometry: Function, update: Function },
  *   exportRepository: import('./routes/api.js').DataExportRepository,
@@ -483,7 +483,6 @@ export function createApp({
   if (geometryEditorRepository) {
     app.use('/api', createGeometryEditorRouter({
       geometryEditorRepository,
-      lineTypesRepository: effectiveLineTypesRepository,
       adminAuth: effectiveAdminAuth,
       securityService: effectiveSecurityService,
       maxBodyBytes: config.importApi.maxBodyBytes,

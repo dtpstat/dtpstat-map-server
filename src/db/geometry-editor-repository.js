@@ -22,27 +22,16 @@ const ACTIVE_BOUNDARY_LINK_STATE_SQL = `
 const CITIES_SQL = `
   SELECT
     city.id::integer AS id,
-    city.slug,
     city.name,
     city.full_name AS "fullName",
-    boundary.id::integer AS "boundaryId",
-    json_build_array(
-      ST_XMin(boundary.bounds),
-      ST_YMin(boundary.bounds),
-      ST_XMax(boundary.bounds),
-      ST_YMax(boundary.bounds)
-    ) AS bounds,
-    json_build_array(
-      ST_X(ST_PointOnSurface(boundary.geom)),
-      ST_Y(ST_PointOnSurface(boundary.geom))
-    ) AS center,
     COUNT(geometry.id)::integer AS "geometryCount"
   FROM cities AS city
   JOIN city_boundaries AS boundary
     ON boundary.city_id = city.id
    AND boundary.is_active
-  LEFT JOIN city_geometries AS geometry ON geometry.city_id = city.id
-  GROUP BY city.id, boundary.id
+  LEFT JOIN city_geometries AS geometry
+    ON geometry.city_id = city.id
+  GROUP BY city.id, city.name, city.full_name
   ORDER BY city.name, city.id
 `;
 
@@ -72,7 +61,7 @@ const CITY_SQL = `
   LIMIT 1
 `;
 
-const GEOMETRIES_SQL = `
+const GEOMETRY_SUMMARIES_SQL = `
   SELECT
     geometry.id::integer AS id,
     geometry.city_id::integer AS "cityId",
@@ -80,34 +69,11 @@ const GEOMETRIES_SQL = `
     ${FAMILY_SQL} AS family,
     GeometryType(geometry.geom) AS "geometryType",
     geometry.display_name AS "displayName",
-    geometry.tooltip,
-    geometry.tags,
-    geometry.source_tags AS "sourceTags",
     geometry.is_visible AS "isVisible",
-    geometry.was_edited AS "wasEdited",
-    geometry.line_type_id::integer AS "lineTypeId",
-    line_type.code::integer AS "lineTypeCode",
     line_type.name AS "lineTypeName",
-    line_type.title AS "lineTypeTitle",
     line_type.color AS "lineTypeColor",
-    line_type.line_style AS "lineTypeStyle",
     line_type.width::double precision AS "lineTypeWidth",
-    geometry.lanes,
-    geometry.length_m AS "lengthMeters",
-    geometry.lane_length_m AS "laneLengthMeters",
-    CASE
-      WHEN GeometryType(geometry.geom) IN ('POLYGON', 'MULTIPOLYGON')
-        THEN ST_Perimeter(geometry.geom::geography)
-      ELSE NULL
-    END::double precision AS "perimeterMeters",
-    CASE
-      WHEN GeometryType(geometry.geom) IN ('POLYGON', 'MULTIPOLYGON')
-        THEN ST_Area(geometry.geom::geography)
-      ELSE NULL
-    END::double precision AS "areaSquareMeters",
-    ST_AsGeoJSON(geometry.geom)::json AS geometry,
-    geometry.created_at AS "createdAt",
-    geometry.updated_at AS "updatedAt"
+    ST_AsGeoJSON(geometry.geom)::json AS geometry
   FROM city_geometries AS geometry
   LEFT JOIN line_types AS line_type ON line_type.id = geometry.line_type_id
   WHERE geometry.city_id = $1
@@ -326,36 +292,14 @@ export function createGeometryEditorRepository(pool) {
       };
     },
 
-    async listCity(cityId) {
+    async listCityGeometries(cityId) {
       await ensureActiveBoundaryCities();
       const [cityResult, geometries] = await Promise.all([
         pool.query(CITY_SQL, [cityId]),
-        pool.query(GEOMETRIES_SQL, [cityId]),
+        pool.query(GEOMETRY_SUMMARIES_SQL, [cityId]),
       ]);
       const city = cityResult.rows[0] ?? null;
       return city ? { city, geometries: geometries.rows } : null;
-    },
-
-    async listTags() {
-      const result = await pool.query(`
-        WITH tag_values AS (
-          SELECT
-            BTRIM(expanded.tag) AS tag,
-            LOWER(BTRIM(expanded.tag)) AS tag_key
-          FROM city_geometries AS geometry
-          CROSS JOIN LATERAL unnest(geometry.tags) AS expanded(tag)
-          WHERE BTRIM(expanded.tag) <> ''
-        ),
-        unique_tags AS (
-          SELECT tag_key, MIN(tag) AS tag
-          FROM tag_values
-          GROUP BY tag_key
-        )
-        SELECT tag
-        FROM unique_tags
-        ORDER BY tag_key, tag
-      `);
-      return result.rows.map((row) => row.tag);
     },
 
     async create(payload) {

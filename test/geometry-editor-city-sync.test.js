@@ -16,7 +16,7 @@ test('geometry editor repairs active OSM boundaries missing city links before li
   assert.match(source, /await acquireDataImportLock\(client, pool\)/);
   assert.match(source, /SELECT sync_active_boundary_cities\(\)/);
   assert.match(source, /async listCities\(\) \{[\s\S]*ensureActiveBoundaryCities\(\)/);
-  assert.match(source, /async listCity\(cityId\) \{[\s\S]*ensureActiveBoundaryCities\(\)/);
+  assert.match(source, /async listCityGeometries\(cityId\) \{[\s\S]*ensureActiveBoundaryCities\(\)/);
 });
 
 test('geometry editor migration backfills active boundary city links', async () => {
