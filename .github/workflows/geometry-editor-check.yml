@@ -61,3 +61,41 @@ jobs:
         run: npm run db:migrate
       - name: Exercise geometry schema invariants
         run: node scripts/verify-geometry-schema-ci.js
+
+
+  upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_PASSWORD: postgres-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: 5432
+      DATABASE_NAME: dtpstat_geometry_upgrade_ci
+      DATABASE_ROLE: dtpstat_geometry_app
+      DATABASE_ROLE_PASSWORD: app-ci-password
+      DATABASE_SCHEMA: buslanes
+      DATABASE_SSL: "false"
+      POSTGRES_ADMIN_USER: postgres
+      POSTGRES_ADMIN_PASSWORD: postgres-ci
+      POSTGRES_ADMIN_DATABASE: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.19'
+          cache: npm
+      - run: npm ci
+      - run: npm run db:init
+      - name: Exercise V035 upgrade with detached geometries
+        run: node scripts/verify-geometry-upgrade-ci.js

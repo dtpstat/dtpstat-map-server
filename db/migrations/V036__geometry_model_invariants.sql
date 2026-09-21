@@ -1,8 +1,9 @@
 SET SEARCH_PATH = BUSLANES, PUBLIC;
 
--- CITY_ID is the semantic owner of every project geometry. BOUNDARY_ID is an
--- optional OSM/matching link and must never decide whether the geometry exists
--- in metrics or on the public map.
+-- Transitional geometry-model guards. Existing installations may legitimately
+-- contain detached geometries whose CITY_ID/BOUNDARY_ID are NULL after an OSM
+-- refresh or legacy import. Do not force ownership here: V038 installs the
+-- canonical effective-geometry ownership model while preserving such rows.
 SELECT BUSLANES.SYNC_ACTIVE_BOUNDARY_CITIES();
 
 UPDATE BUSLANES.CITY_GEOMETRIES AS GEOMETRY
@@ -14,25 +15,9 @@ WHERE GEOMETRY.BOUNDARY_ID = BOUNDARY.ID
   AND BOUNDARY.CITY_ID IS NOT NULL
   AND GEOMETRY.CITY_ID IS DISTINCT FROM BOUNDARY.CITY_ID;
 
-DO $MIGRATION$
-DECLARE
-    ORPHAN_COUNT BIGINT;
-BEGIN
-    SELECT COUNT(*)
-    INTO ORPHAN_COUNT
-    FROM BUSLANES.CITY_GEOMETRIES
-    WHERE CITY_ID IS NULL;
-
-    IF ORPHAN_COUNT > 0 THEN
-        RAISE EXCEPTION
-            'Cannot enforce geometry ownership: % CITY_GEOMETRIES rows have no CITY_ID after active-boundary repair',
-            ORPHAN_COUNT;
-    END IF;
-END
-$MIGRATION$;
-
-ALTER TABLE BUSLANES.CITY_GEOMETRIES
-    ALTER COLUMN CITY_ID SET NOT NULL;
+-- CITY_ID intentionally remains nullable in this transition. Detached rows are
+-- durable editor/import data and are excluded from public calculations by the
+-- effective geometry view introduced in V038.
 
 CREATE OR REPLACE FUNCTION BUSLANES.NORMALIZE_CITY_GEOMETRY_DERIVED()
 RETURNS TRIGGER
