@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { createWriteStream } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
 import { deflateRawSync } from 'node:zlib';
 import test from 'node:test';
 import {
@@ -150,6 +151,61 @@ async function withTempZip(callback) {
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
+}
+
+function sevenZipAvailable() {
+  const result = spawnSync('7z', ['i'], {
+    stdio: 'ignore',
+  });
+  return result.status === 0;
+}
+
+async function sevenZipFromStdin(file, payload) {
+  const child = spawn(
+    '7z',
+    ['a', '-tzip', '-mx=6', file, '-si'],
+    {
+      stdio: ['pipe', 'ignore', 'pipe'],
+    },
+  );
+  const errors = [];
+  child.stderr.on('data', (chunk) => errors.push(Buffer.from(chunk)));
+  child.stdin.end(payload);
+  const [code] = await new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (...args) => resolve(args));
+  });
+  if (code !== 0) {
+    throw new Error(
+      `7z failed with exit code ${code}: ` +
+      Buffer.concat(errors).toString('utf8'),
+    );
+  }
+}
+
+async function sevenZipExtractStdout(file) {
+  const child = spawn(
+    '7z',
+    ['x', '-so', file],
+    {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  const output = [];
+  const errors = [];
+  child.stdout.on('data', (chunk) => output.push(Buffer.from(chunk)));
+  child.stderr.on('data', (chunk) => errors.push(Buffer.from(chunk)));
+  const [code] = await new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (...args) => resolve(args));
+  });
+  if (code !== 0) {
+    throw new Error(
+      `7z extraction failed with exit code ${code}: ` +
+      Buffer.concat(errors).toString('utf8'),
+    );
+  }
+  return Buffer.concat(output);
 }
 
 test('single-file ZIP writer and reader round-trip streamed UTF-8 JSON', async () => {
@@ -356,3 +412,64 @@ test('ZIP reader rejects a data descriptor that disagrees with central metadata'
     );
   });
 });
+
+
+test(
+  'ZIP reader accepts an archive whose only entry was created by 7-Zip from stdin',
+  { skip: !sevenZipAvailable() },
+  async () => {
+    await withTempZip(async (file) => {
+      const json = Buffer.from(JSON.stringify({
+        producer: '7z-stdin',
+        values: Array.from({ length: 200 }, (_value, index) => index),
+      }));
+
+      await sevenZipFromStdin(file, json);
+
+      const entry = await openSingleFileZip(file, {
+        maxUncompressedBytes: 1024 * 1024,
+      });
+      assert.ok(
+        entry.fileName === 'stdin' ||
+        entry.fileName === '[Content]' ||
+        entry.fileName.length > 0,
+      );
+      assert.deepEqual(await collect(entry.stream), json);
+    });
+  },
+);
+
+test(
+  'streaming ZIP writer produces archives readable by 7-Zip',
+  { skip: !sevenZipAvailable() },
+  async () => {
+    await withTempZip(async (file) => {
+      const json = Buffer.from(JSON.stringify({
+        producer: 'dtpstat-stream',
+        message: 'проверка ZIP64/data descriptor',
+      }));
+      async function* source() {
+        for (let offset = 0; offset < json.length; offset += 5) {
+          yield json.subarray(offset, offset + 5);
+        }
+      }
+
+      await pipeline(
+        createSingleFileZipStream('stdin', source()),
+        createWriteStream(file),
+      );
+
+      const testResult = spawnSync(
+        '7z',
+        ['t', file],
+        { encoding: 'utf8' },
+      );
+      assert.equal(
+        testResult.status,
+        0,
+        testResult.stderr || testResult.stdout,
+      );
+      assert.deepEqual(await sevenZipExtractStdout(file), json);
+    });
+  },
+);
