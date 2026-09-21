@@ -241,7 +241,11 @@ if (section) {
         features.push({
           type: 'Feature',
           geometry: { type: 'Point', coordinates: geometry.coordinates },
-          properties: { kind: 'vertex', path: pathKey([]) },
+          properties: {
+            kind: 'vertex',
+            path: pathKey([]),
+            selected: pathKey(state.selectedVertexPath) === pathKey([]),
+          },
         });
         continue;
       }
@@ -767,6 +771,7 @@ if (section) {
     state.draft = state.future.pop();
     state.selectedVertexPath = null;
     updateDraftMap();
+    modeLabel.textContent = editingModeText(state.current);
   }
 
   function selectVertex(path) {
@@ -841,6 +846,7 @@ if (section) {
     }
     state.selectedVertexPath = null;
     updateDraftMap();
+    modeLabel.textContent = editingModeText(state.current);
   }
 
   function updateDraftMap() {
