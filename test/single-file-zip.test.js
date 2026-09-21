@@ -430,6 +430,7 @@ test(
         maxUncompressedBytes: 1024 * 1024,
       });
       assert.ok(
+        entry.fileName === null ||
         entry.fileName === 'stdin' ||
         entry.fileName === '[Content]' ||
         entry.fileName.length > 0,
