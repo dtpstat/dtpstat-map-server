@@ -160,3 +160,13 @@ test('Ctrl or Cmd dynamically switches a hovered vertex to a delete cursor', asy
   assert.match(editor, /window\.addEventListener\('blur'/);
   assert.match(editor, /state\.hoveredVertex\) canvas\.style\.cursor = 'move'/);
 });
+
+
+test('selected geometry is removed from the background source while editing its draft', async () => {
+  const editor = await read('admin/geometry-editor.js');
+
+  assert.match(editor, /const backgroundGeometries = state\.draft && state\.current\?\.id/);
+  assert.match(editor, /state\.geometries\.filter\(\(item\) => item\.id !== state\.current\.id\)/);
+  assert.match(editor, /MAP_SOURCE\)\?\.setData\(featureCollection\(backgroundGeometries\)\)/);
+  assert.match(editor, /SELECTED_SOURCE\)\?\.setData/);
+});

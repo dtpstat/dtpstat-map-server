@@ -761,7 +761,14 @@ if (section) {
   function updateMapSources() {
     const map = state.map;
     if (!map) return;
-    map.getSource(MAP_SOURCE)?.setData(featureCollection(state.geometries));
+
+    // The selected geometry is rendered exclusively from the editable draft.
+    // Keeping its persisted copy in MAP_SOURCE makes the old shape visible
+    // underneath the draft and is especially confusing after moving vertices.
+    const backgroundGeometries = state.draft && state.current?.id
+      ? state.geometries.filter((item) => item.id !== state.current.id)
+      : state.geometries;
+    map.getSource(MAP_SOURCE)?.setData(featureCollection(backgroundGeometries));
     map.getSource(SELECTED_SOURCE)?.setData(
       state.draft
         ? featureCollection([{
