@@ -21,6 +21,7 @@ const mapMessage = document.querySelector('#map-message');
 const mapPanel = document.querySelector('.map-panel');
 const cityTable = document.querySelector('.city-table');
 const cityTableHead = cityTable?.querySelector('thead');
+const PUBLISHED_DATA_REVISION_KEY = 'dtpstat:published-data-revision';
 
 function ensureTableStatus() {
   const existingStatus = document.querySelector('#status');
@@ -75,6 +76,7 @@ let lineTypesSignature = '';
 let lineTypesRefresh = null;
 let lineDisplayRefresh = null;
 let openMapRefresh = null;
+let publishedDataRefresh = null;
 
 function setMapMessage(message, isError = false) {
   mapMessage.hidden = !message;
@@ -186,6 +188,38 @@ async function refreshLineDisplayOptions() {
     }
   })();
   return lineDisplayRefresh;
+}
+
+async function refreshPublishedData() {
+  if (!mapController) return;
+  if (publishedDataRefresh) return publishedDataRefresh;
+
+  publishedDataRefresh = (async () => {
+    try {
+      setCityStatus('Обновляем опубликованные данные…');
+      const [reportConfig, cities, lineTypes] = await Promise.all([
+        loadReportConfig({ cache: 'no-store' }),
+        loadCities({ cache: 'no-store' }),
+        loadLineTypes({ cache: 'no-store' }),
+      ]);
+
+      cityList.setReportConfig(reportConfig);
+      tableStatus.colSpan = Math.max(1, reportConfig.tableColumns.length);
+      cityList.setCities(cities);
+      citiesById = new Map(cities.map((city) => [city.id, city]));
+      mapController.setCities(cities);
+      if (lineTypes.length) applyLineTypes(lineTypes);
+      mapController.refreshViewport();
+      setCityStatus(cities.length ? '' : 'Данные пока не загружены');
+    } catch (error) {
+      setCityStatus('Не удалось обновить опубликованные данные', true);
+      console.error('Не удалось обновить опубликованные данные после пересчёта', error);
+    } finally {
+      publishedDataRefresh = null;
+    }
+  })();
+
+  return publishedDataRefresh;
 }
 
 async function refreshOpenMap() {
@@ -309,6 +343,11 @@ window.addEventListener('focus', () => {
 });
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) void refreshOpenMap();
+});
+window.addEventListener('storage', (event) => {
+  if (event.key === PUBLISHED_DATA_REVISION_KEY && event.newValue !== event.oldValue) {
+    void refreshPublishedData();
+  }
 });
 
 start();

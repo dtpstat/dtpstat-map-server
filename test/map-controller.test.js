@@ -372,3 +372,19 @@ test('public map controller declares generic Point and Polygon layers', async ()
   assert.match(source, /\['geometry-type'\], 'Point'/);
   assert.match(source, /geometryFeatureTooltip/);
 });
+
+
+test('public app refreshes cities statistics and viewport only after published-data signal', async () => {
+  const fs = await import('node:fs/promises');
+  const source = await fs.readFile(
+    new URL('../public/js/app.js', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /PUBLISHED_DATA_REVISION_KEY/);
+  assert.match(source, /async function refreshPublishedData\(\)/);
+  assert.match(source, /loadCities\(\{ cache: 'no-store' \}\)/);
+  assert.match(source, /loadReportConfig\(\{ cache: 'no-store' \}\)/);
+  assert.match(source, /mapController\.setCities\(cities\)/);
+  assert.match(source, /mapController\.refreshViewport\(\)/);
+  assert.match(source, /window\.addEventListener\('storage'/);
+});

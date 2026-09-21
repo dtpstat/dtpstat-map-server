@@ -43,6 +43,7 @@ if (section) {
   const DRAW_SOURCE = 'geometry-editor-draw';
   const BOUNDARY_SOURCE = 'geometry-editor-boundary';
   const IMPORT_SOURCE = 'geometry-editor-import-conflict';
+  const PUBLISHED_DATA_REVISION_KEY = 'dtpstat:published-data-revision';
 
   const state = {
     cities: [],
@@ -1587,8 +1588,16 @@ if (section) {
         method: 'POST',
       });
       await refresh({ keepSelection: Boolean(selectedId), fit: false });
+      try {
+        window.localStorage.setItem(
+          PUBLISHED_DATA_REVISION_KEY,
+          String(Date.now()),
+        );
+      } catch {
+        // Cross-tab refresh is a convenience; recalculation itself already succeeded.
+      }
       setMessage(
-        'Пересчёт завершён: обновлены города, статистика, рейтинги и публичные данные.',
+        'Пересчёт завершён: обновлены города, основная карта, статистика, рейтинги и публичные данные.',
         'success',
       );
       window.dispatchEvent(new CustomEvent('dtpstat:geometry-changed', {
