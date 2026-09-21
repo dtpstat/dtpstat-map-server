@@ -270,8 +270,9 @@ ZIP-контракт намеренно строгий:
 - после игнорирования directory entries должна остаться ровно **одна**
   ordinary data entry;
 - имя и расширение этой entry не определяют формат: допустимы, например,
-  `stdin` или `payload/data`; JSON/GeoJSON определяется и валидируется по
-  содержимому/schema;
+  `stdin`, `payload/data` и даже anonymous entry с пустым именем, который
+  создаёт `7z ... -si` без явного имени; JSON/GeoJSON определяется и
+  валидируется по содержимому/schema;
 - encryption и multi-volume ZIP не поддерживаются;
 - поддерживаются Store и Deflate;
 - поддерживаются classic ZIP и ZIP64, включая streamed archives с data
