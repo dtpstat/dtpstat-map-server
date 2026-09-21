@@ -309,7 +309,7 @@ function testSecurity(config) {
  *   refreshPublicDownloadsAfterSettingsImport?: () => Promise<any>,
  *   refreshProjectDerived?: () => Promise<any>,
  *   refreshOsmBoundaryDerived?: () => Promise<any>,
- *   refreshGeometryDerived?: (details?: object) => Promise<any>,
+ *   recalculateGeometryDerived?: (details?: object) => Promise<any>,
  *   osmImportSettingsRepository?: { get: Function, save: Function },
  *   geometryEditorRepository?: { listCities: Function, listCityGeometries: Function, get: Function },
  *   geometryImportRepository?: { pending: Function, discard: Function, apply: Function },
@@ -336,7 +336,7 @@ export function createApp({
   refreshPublicDownloadsAfterSettingsImport,
   refreshProjectDerived,
   refreshOsmBoundaryDerived,
-  refreshGeometryDerived,
+  recalculateGeometryDerived,
   osmImportSettingsRepository,
   osmBoundaryAdminRepository,
   geometryEditorRepository,
@@ -486,7 +486,7 @@ export function createApp({
       adminAuth: effectiveAdminAuth,
       securityService: effectiveSecurityService,
       maxBodyBytes: config.importApi.maxBodyBytes,
-      afterChange: async (details) => refreshGeometryDerived?.(details),
+      afterRecalculate: async (details) => recalculateGeometryDerived?.(details),
     }));
   }
   if (osmImportSettingsRepository && osmBoundaryAdminRepository) {

@@ -23,6 +23,7 @@ function validationError(response, error) {
  * @param {{
  *   geometryEditorRepository: {
  *     get: Function,
+ *     recalculate: Function,
  *     listCities: Function,
  *     listCityGeometries: Function,
  *     create: Function,
@@ -34,7 +35,7 @@ function validationError(response, error) {
  *   adminAuth: any,
  *   securityService: any,
  *   maxBodyBytes: number,
- *   afterChange?: (details?: object) => Promise<any>
+ *   afterRecalculate?: (details?: object) => Promise<any>
  * }} dependencies
  */
 export function createGeometryEditorRouter({
@@ -42,7 +43,7 @@ export function createGeometryEditorRouter({
   adminAuth,
   securityService,
   maxBodyBytes,
-  afterChange = async () => undefined,
+  afterRecalculate = async () => undefined,
 }) {
   const router = Router();
   const jsonBody = express.json({
@@ -86,6 +87,31 @@ export function createGeometryEditorRouter({
     },
   );
 
+  router.post(
+    '/admin/geometry-editor/recalculate',
+    adminAuth.requireGeometryEditor,
+    audit('geometry.recalculate'),
+    async (_request, response, next) => {
+      try {
+        const statistics = await geometryEditorRepository.recalculate();
+        const derived = await afterRecalculate({
+          operation: 'recalculate',
+          cities: statistics.cities,
+        });
+        recordAdminOperationDetails(response, {
+          cities: statistics.cities,
+        });
+        response.set('Cache-Control', 'no-store').json({
+          statistics,
+          derived,
+        });
+      } catch (error) {
+        if (validationError(response, error)) return;
+        next(error);
+      }
+    },
+  );
+
   router.get(
     '/admin/geometry-editor/geometries/:geometryId',
     adminAuth.requireGeometryEditor,
@@ -120,8 +146,7 @@ export function createGeometryEditorRouter({
           cityId: geometry.cityId,
           family: geometry.family,
         });
-        const derived = await afterChange({ operation: 'create', geometryId: geometry.id });
-        response.set('Cache-Control', 'no-store').status(201).json({ geometry, derived });
+        response.set('Cache-Control', 'no-store').status(201).json({ geometry });
       } catch (error) {
         if (validationError(response, error)) return;
         next(error);
@@ -147,8 +172,7 @@ export function createGeometryEditorRouter({
           return;
         }
         recordAdminOperationChanges(response, previous, geometry);
-        const derived = await afterChange({ operation: 'update', geometryId });
-        response.set('Cache-Control', 'no-store').json({ geometry, derived });
+        response.set('Cache-Control', 'no-store').json({ geometry });
       } catch (error) {
         if (validationError(response, error)) return;
         next(error);
@@ -174,8 +198,7 @@ export function createGeometryEditorRouter({
           family: geometry.family,
           displayName: geometry.displayName,
         });
-        const derived = await afterChange({ operation: 'delete', geometryId });
-        response.set('Cache-Control', 'no-store').json({ deleted: geometry, derived });
+        response.set('Cache-Control', 'no-store').json({ deleted: geometry });
       } catch (error) {
         if (validationError(response, error)) return;
         next(error);
@@ -198,8 +221,7 @@ export function createGeometryEditorRouter({
           cityId: geometry.cityId,
           family: geometry.family,
         });
-        const derived = await afterChange({ operation: 'merge', geometryId: geometry.id });
-        response.set('Cache-Control', 'no-store').json({ geometry, derived });
+        response.set('Cache-Control', 'no-store').json({ geometry });
       } catch (error) {
         if (validationError(response, error)) return;
         next(error);
@@ -229,8 +251,7 @@ export function createGeometryEditorRouter({
           cityId: geometry.cityId,
           family: geometry.family,
         });
-        const derived = await afterChange({ operation: 'cut', geometryId });
-        response.set('Cache-Control', 'no-store').json({ geometry, derived });
+        response.set('Cache-Control', 'no-store').json({ geometry });
       } catch (error) {
         if (validationError(response, error)) return;
         next(error);

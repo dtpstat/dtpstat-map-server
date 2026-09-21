@@ -219,9 +219,9 @@ async function main() {
       await refreshReportValues({reason: 'osm-boundary-settings'});
       return refreshPublicDownloads({reason: 'osm-boundary-settings'});
     },
-    refreshGeometryDerived: async (details = {}) => {
-      await refreshReportValues({reason: 'geometry-editor', ...details});
-      return refreshPublicDownloads({reason: 'geometry-editor', ...details});
+    recalculateGeometryDerived: async (details = {}) => {
+      await refreshReportValues({reason: 'geometry-editor-recalculate', ...details});
+      return refreshPublicDownloads({reason: 'geometry-editor-recalculate', ...details});
     },
     osmImportSettingsRepository,
     osmBoundaryAdminRepository,

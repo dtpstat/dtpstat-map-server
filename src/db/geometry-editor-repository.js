@@ -24,14 +24,23 @@ const CITIES_SQL = `
     city.id::integer AS id,
     city.name,
     city.full_name AS "fullName",
-    COUNT(geometry.id)::integer AS "geometryCount"
+    (
+      SELECT COUNT(*)::integer
+      FROM city_geometries AS geometry_count
+      WHERE geometry_count.city_id = city.id
+    ) AS "geometryCount"
   FROM cities AS city
-  JOIN city_boundaries AS boundary
-    ON boundary.city_id = city.id
-   AND boundary.is_active
-  LEFT JOIN city_geometries AS geometry
-    ON geometry.city_id = city.id
-  GROUP BY city.id, city.name, city.full_name
+  WHERE EXISTS (
+    SELECT 1
+    FROM city_boundaries AS boundary
+    WHERE boundary.city_id = city.id
+      AND boundary.is_active
+  )
+    AND EXISTS (
+      SELECT 1
+      FROM city_geometries AS geometry_presence
+      WHERE geometry_presence.city_id = city.id
+    )
   ORDER BY city.name, city.id
 `;
 
@@ -200,7 +209,6 @@ export function createGeometryEditorRepository(pool) {
       await client.query('SELECT assert_no_pending_geometry_import()');
       const result = await operation(client);
       await client.query('SELECT assert_city_geometry_invariants()');
-      await client.query(RECALCULATE_CITY_STATISTICS_SQL);
       await client.query('COMMIT');
       return result;
     } catch (error) {
@@ -278,9 +286,37 @@ export function createGeometryEditorRepository(pool) {
     return one(client, geometryId);
   }
 
+  async function recalculateDerived() {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await acquireDataImportLock(client, pool);
+      await client.query('SELECT assert_no_pending_geometry_import()');
+      await client.query('SELECT sync_active_boundary_cities()');
+      await client.query('SELECT assert_city_geometry_invariants()');
+      const statistics = await client.query(RECALCULATE_CITY_STATISTICS_SQL);
+      await client.query('COMMIT');
+      return {
+        cities: statistics.rowCount,
+      };
+    } catch (error) {
+      await rollbackQuietly(client);
+      if (error?.code === '55000') {
+        throw new GeometryEditorValidationError(error.message, 409);
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   return {
     async get(geometryId) {
       return one(pool, geometryId);
+    },
+
+    async recalculate() {
+      return recalculateDerived();
     },
 
     async listCities() {
