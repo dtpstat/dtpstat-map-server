@@ -46,7 +46,8 @@ if (section) {
   const state = {
     cities: [],
     lineTypes: [],
-    knownTags: [],
+    lineTypesLoaded: false,
+    lineTypesPromise: null,
     city: null,
     geometries: [],
     selectedId: null,
@@ -510,7 +511,7 @@ if (section) {
         map.on('click', layerId, (event) => {
           if (state.drawing) return;
           const id = Number(event.features?.[0]?.properties?.id);
-          if (Number.isSafeInteger(id) && id > 0) selectGeometry(id);
+          if (Number.isSafeInteger(id) && id > 0) void selectGeometry(id);
         });
         map.on('mouseenter', layerId, () => { map.getCanvas().style.cursor = 'pointer'; });
         map.on('mouseleave', layerId, () => { if (!state.dragPath) map.getCanvas().style.cursor = ''; });
@@ -826,9 +827,11 @@ if (section) {
   function geometryMatchesSearch(item, query) {
     if (!query) return true;
     const haystack = [
-      item.id, displayName(item), item.geometryType,
-      ...(item.tags ?? []),
-    ].join(' ').toLocaleLowerCase('ru-RU');
+      item.id,
+      displayName(item),
+      item.geometryType,
+      item.lineTypeName,
+    ].filter(Boolean).join(' ').toLocaleLowerCase('ru-RU');
     return haystack.includes(query);
   }
 
@@ -865,16 +868,19 @@ if (section) {
       const name = document.createElement('span');
       name.className = 'geometry-editor-row-name';
       name.textContent = displayName(item);
-      const tags = document.createElement('span');
-      tags.className = 'geometry-editor-row-tags';
-      tags.textContent = (item.tags ?? []).join(' · ') || (item.isVisible ? 'без тегов' : 'скрыта');
-      copy.append(name, tags);
+      const details = document.createElement('span');
+      details.className = 'geometry-editor-row-tags';
+      details.textContent = [
+        item.lineTypeName,
+        item.isVisible === false ? 'скрыта' : null,
+      ].filter(Boolean).join(' · ') || typeLabel(item);
+      copy.append(name, details);
 
       const type = document.createElement('span');
       type.className = 'geometry-editor-row-type';
       type.textContent = typeLabel(item);
       row.append(check, copy, type);
-      row.addEventListener('click', () => selectGeometry(item.id));
+      row.addEventListener('click', () => void selectGeometry(item.id));
       listHost.append(row);
     }
     renderMergeState();
@@ -895,23 +901,48 @@ if (section) {
     state.map.fitBounds(bounds, { padding: 70, maxZoom: 17, duration: 250 });
   }
 
-  function selectGeometry(id, { focus = true } = {}) {
+  async function selectGeometry(id, { focus = true } = {}) {
     if (state.drawing) cancelDrawing();
-    const item = state.geometries.find((candidate) => candidate.id === id);
-    if (!item) return;
+    const summary = state.geometries.find((candidate) => candidate.id === id);
+    if (!summary) return;
+
     state.selectedId = id;
-    state.current = item;
-    state.draft = clone(item.geometry);
+    state.current = null;
+    state.draft = null;
     state.history = [];
     state.future = [];
     state.selectedVertexPath = null;
-    applyForm(item);
+    applyForm(null);
     renderList();
     updateMapSources();
     renderHistoryControls();
-    modeLabel.textContent = `Редактирование: ${displayName(item)}`;
+    modeLabel.textContent = `Загрузка: ${displayName(summary)}…`;
     setMessage('');
-    if (focus) focusGeometry(item.geometry);
+    if (focus) focusGeometry(summary.geometry);
+
+    try {
+      const payload = await api(
+        `/api/admin/geometry-editor/geometries/${encodeURIComponent(id)}`,
+      );
+      if (state.selectedId !== id) return;
+      const item = payload.geometry;
+      if (item.family === 'line') await ensureLineTypes();
+      if (state.selectedId !== id) return;
+
+      state.current = item;
+      state.draft = clone(item.geometry);
+      state.history = [];
+      state.future = [];
+      state.selectedVertexPath = null;
+      applyForm(item);
+      updateMapSources();
+      renderHistoryControls();
+      modeLabel.textContent = `Редактирование: ${displayName(item)}`;
+    } catch (error) {
+      if (state.selectedId !== id) return;
+      clearSelection();
+      setMessage(error.message, 'error');
+    }
   }
 
   function clearSelection() {
@@ -1160,11 +1191,37 @@ if (section) {
     }
   }
 
-  async function loadCatalog() {
+  function renderLineTypes() {
+    form.elements.lineTypeId.replaceChildren(...state.lineTypes.map((lineType) => {
+      const option = document.createElement('option');
+      option.value = String(lineType.id);
+      option.textContent = lineType.title && lineType.title !== lineType.name
+        ? `${lineType.title} — ${lineType.name}`
+        : lineType.name;
+      return option;
+    }));
+  }
+
+  async function ensureLineTypes() {
+    if (state.lineTypesLoaded) return state.lineTypes;
+    if (state.lineTypesPromise) return state.lineTypesPromise;
+
+    state.lineTypesPromise = api('/api/line-types')
+      .then((payload) => {
+        state.lineTypes = payload.lineTypes ?? [];
+        state.lineTypesLoaded = true;
+        renderLineTypes();
+        return state.lineTypes;
+      })
+      .finally(() => {
+        state.lineTypesPromise = null;
+      });
+    return state.lineTypesPromise;
+  }
+
+  async function loadCities() {
     const payload = await api('/api/admin/geometry-editor/cities');
     state.cities = payload.cities ?? [];
-    state.lineTypes = payload.lineTypes ?? [];
-    state.knownTags = payload.tags ?? [];
 
     if (state.cities.length === 0) {
       const option = document.createElement('option');
@@ -1183,14 +1240,6 @@ if (section) {
         return option;
       }));
     }
-    form.elements.lineTypeId.replaceChildren(...state.lineTypes.map((lineType) => {
-      const option = document.createElement('option');
-      option.value = String(lineType.id);
-      option.textContent = lineType.title && lineType.title !== lineType.name
-        ? `${lineType.title} — ${lineType.name}`
-        : lineType.name;
-      return option;
-    }));
     if (!state.city && state.cities[0]) citySelect.value = String(state.cities[0].id);
   }
 
@@ -1201,7 +1250,9 @@ if (section) {
       clearSelection();
       return;
     }
-    const payload = await api(`/api/admin/geometry-editor/cities/${encodeURIComponent(cityId)}`);
+    const payload = await api(
+      `/api/admin/geometry-editor/cities/${encodeURIComponent(cityId)}/geometries`,
+    );
     const previousId = keepSelection ? state.selectedId : null;
     state.city = payload.city;
     state.geometries = payload.geometries ?? [];
@@ -1210,7 +1261,7 @@ if (section) {
     );
     citySelect.value = String(state.city.id);
     const previous = previousId && state.geometries.find((item) => item.id === previousId);
-    if (previous) selectGeometry(previous.id, { focus: false });
+    if (previous) await selectGeometry(previous.id, { focus: false });
     else clearSelection();
     updateMapSources();
     if (fit && Array.isArray(state.city.bounds) && state.map) {
@@ -1225,7 +1276,7 @@ if (section) {
     try {
       await ensureMap();
       const cityId = Number(citySelect.value || state.city?.id || state.cities[0]?.id);
-      await Promise.all([loadCatalog(), loadPendingImport()]);
+      await Promise.all([loadCities(), loadPendingImport()]);
       const resolvedId = Number.isSafeInteger(cityId) && cityId > 0
         ? cityId
         : state.cities[0]?.id;
@@ -1261,10 +1312,22 @@ if (section) {
     };
   }
 
-  function startDrawing(mode) {
+  async function startDrawing(mode) {
     if (!state.city) {
       setMessage('Сначала выберите город.', 'error');
       return;
+    }
+    if (mode === 'line') {
+      try {
+        const lineTypes = await ensureLineTypes();
+        if (lineTypes.length === 0) {
+          setMessage('Нет доступных типов линий.', 'error');
+          return;
+        }
+      } catch (error) {
+        setMessage(error.message, 'error');
+        return;
+      }
     }
     state.drawing = { mode, coordinates: [] };
     state.current = mode === 'cut' ? state.current : draftItemFor(
@@ -1354,7 +1417,7 @@ if (section) {
           },
         );
         await loadCity(target.cityId, { keepSelection: false, fit: false });
-        selectGeometry(payload.geometry.id, { focus: false });
+        await selectGeometry(payload.geometry.id, { focus: false });
         setMessage('Область вырезана.', 'success');
       } catch (error) {
         setMessage(error.message, 'error');
@@ -1410,8 +1473,8 @@ if (section) {
         },
       );
       await loadCity(state.city.id, { keepSelection: false, fit: false });
-      selectGeometry(payload.geometry.id, { focus: false });
-      await loadCatalog();
+      await selectGeometry(payload.geometry.id, { focus: false });
+      await loadCities();
       setMessage('Геометрия сохранена.', 'success');
       window.dispatchEvent(new CustomEvent('dtpstat:geometry-changed'));
     } catch (error) {
@@ -1425,7 +1488,7 @@ if (section) {
       return;
     }
     const current = state.geometries.find((item) => item.id === state.current.id);
-    if (current) selectGeometry(current.id, { focus: false });
+    if (current) void selectGeometry(current.id, { focus: false });
   });
 
   deleteButton.addEventListener('click', async () => {
@@ -1436,7 +1499,7 @@ if (section) {
       await api(`/api/admin/geometry-editor/geometries/${item.id}`, { method: 'DELETE' });
       state.selectedSet.delete(item.id);
       await loadCity(item.cityId, { keepSelection: false, fit: false });
-      await loadCatalog();
+      await loadCities();
       setMessage('Геометрия удалена.', 'success');
       window.dispatchEvent(new CustomEvent('dtpstat:geometry-changed'));
     } catch (error) {
@@ -1456,8 +1519,8 @@ if (section) {
       });
       state.selectedSet.clear();
       await loadCity(payload.geometry.cityId, { keepSelection: false, fit: false });
-      selectGeometry(payload.geometry.id, { focus: false });
-      await loadCatalog();
+      await selectGeometry(payload.geometry.id, { focus: false });
+      await loadCities();
       setMessage('Геометрии объединены.', 'success');
       window.dispatchEvent(new CustomEvent('dtpstat:geometry-changed'));
     } catch (error) {
@@ -1472,7 +1535,7 @@ if (section) {
   importDiscard.addEventListener('click', () => void discardPendingImport());
 
   cutButton.addEventListener('click', () => {
-    if (state.current?.family === 'polygon' && state.current.id) startDrawing('cut');
+    if (state.current?.family === 'polygon' && state.current.id) void startDrawing('cut');
   });
 
   undoButton.addEventListener('click', undo);
@@ -1480,9 +1543,9 @@ if (section) {
   deleteNodeButton.addEventListener('click', deleteSelectedVertex);
   finishDrawButton.addEventListener('click', () => void finishDrawing());
   cancelDrawButton.addEventListener('click', cancelDrawing);
-  document.querySelector('#geometry-new-point').addEventListener('click', () => startDrawing('point'));
-  document.querySelector('#geometry-new-line').addEventListener('click', () => startDrawing('line'));
-  document.querySelector('#geometry-new-polygon').addEventListener('click', () => startDrawing('polygon'));
+  document.querySelector('#geometry-new-point').addEventListener('click', () => void startDrawing('point'));
+  document.querySelector('#geometry-new-line').addEventListener('click', () => void startDrawing('line'));
+  document.querySelector('#geometry-new-polygon').addEventListener('click', () => void startDrawing('polygon'));
 
   citySelect.addEventListener('change', () => {
     state.selectedSet.clear();

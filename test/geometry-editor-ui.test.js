@@ -81,3 +81,16 @@ test('geometry editor explains an actually empty active-city catalog', async () 
   assert.match(editor, /Проверьте активность объектов в OSM-дереве/);
   assert.match(editor, /cityLinkState/);
 });
+
+
+test('geometry editor loads data progressively instead of one global catalog request', async () => {
+  const editor = await read('admin/geometry-editor.js');
+
+  assert.match(editor, /async function loadCities\(\)/);
+  assert.match(editor, /\/geometry-editor\/cities\/\$\{encodeURIComponent\(cityId\)\}\/geometries/);
+  assert.match(editor, /\/geometry-editor\/geometries\/\$\{encodeURIComponent\(id\)\}/);
+  assert.match(editor, /async function ensureLineTypes\(\)/);
+  assert.match(editor, /api\('\/api\/line-types'\)/);
+  assert.doesNotMatch(editor, /payload\.tags/);
+  assert.doesNotMatch(editor, /payload\.lineTypes[\s\S]{0,200}geometry-editor\/cities/);
+});
