@@ -94,3 +94,23 @@ test('geometry editor loads data progressively instead of one global catalog req
   assert.doesNotMatch(editor, /payload\.tags/);
   assert.doesNotMatch(editor, /payload\.lineTypes[\s\S]{0,200}geometry-editor\/cities/);
 });
+
+
+test('geometry mutations update editor state locally and explicit recalc refreshes derived data', async () => {
+  const [html, editor] = await Promise.all([
+    read('admin/index.html'),
+    read('admin/geometry-editor.js'),
+  ]);
+
+  assert.match(html, /id="geometry-editor-recalculate"/);
+  assert.match(editor, /function upsertGeometrySummary\(item\)/);
+  assert.match(editor, /function adoptGeometryDetail\(item/);
+  assert.match(editor, /\/api\/admin\/geometry-editor\/recalculate/);
+  assert.match(editor, /основной карты и статистики/);
+
+  const submitStart = editor.indexOf("form.addEventListener('submit'");
+  const deleteStart = editor.indexOf("deleteButton.addEventListener");
+  const mutationBlock = editor.slice(submitStart, deleteStart);
+  assert.doesNotMatch(mutationBlock, /await loadCity\(/);
+  assert.doesNotMatch(mutationBlock, /await loadCities\(/);
+});

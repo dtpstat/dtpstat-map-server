@@ -5,6 +5,7 @@ if (section) {
   const searchInput = document.querySelector('#geometry-editor-search');
   const listHost = document.querySelector('#geometry-editor-list');
   const refreshButton = document.querySelector('#geometry-editor-refresh');
+  const recalculateButton = document.querySelector('#geometry-editor-recalculate');
   const form = document.querySelector('#geometry-editor-form');
   const title = document.querySelector('#geometry-editor-selected-title');
   const lineFields = document.querySelector('#geometry-line-fields');
@@ -901,6 +902,56 @@ if (section) {
     state.map.fitBounds(bounds, { padding: 70, maxZoom: 17, duration: 250 });
   }
 
+  function summaryFromDetail(item) {
+    return {
+      id: item.id,
+      cityId: item.cityId,
+      boundaryId: item.boundaryId,
+      family: item.family,
+      geometryType: item.geometryType,
+      displayName: item.displayName,
+      isVisible: item.isVisible,
+      lineTypeName: item.lineTypeName,
+      lineTypeColor: item.lineTypeColor,
+      lineTypeWidth: item.lineTypeWidth,
+      geometry: clone(item.geometry),
+    };
+  }
+
+  function sortGeometrySummaries() {
+    state.geometries.sort((left, right) => {
+      const byName = displayName(left).localeCompare(
+        displayName(right),
+        'ru-RU',
+        { sensitivity: 'base' },
+      );
+      return byName || left.id - right.id;
+    });
+  }
+
+  function upsertGeometrySummary(item) {
+    const summary = summaryFromDetail(item);
+    const index = state.geometries.findIndex((candidate) => candidate.id === item.id);
+    if (index >= 0) state.geometries[index] = summary;
+    else state.geometries.push(summary);
+    sortGeometrySummaries();
+  }
+
+  function adoptGeometryDetail(item, { focus = false } = {}) {
+    state.selectedId = item.id;
+    state.current = item;
+    state.draft = clone(item.geometry);
+    state.history = [];
+    state.future = [];
+    state.selectedVertexPath = null;
+    applyForm(item);
+    renderList();
+    updateMapSources();
+    renderHistoryControls();
+    modeLabel.textContent = `Редактирование: ${displayName(item)}`;
+    if (focus) focusGeometry(item.geometry);
+  }
+
   async function selectGeometry(id, { focus = true } = {}) {
     if (state.drawing) cancelDrawing();
     const summary = state.geometries.find((candidate) => candidate.id === id);
@@ -929,15 +980,7 @@ if (section) {
       if (item.family === 'line') await ensureLineTypes();
       if (state.selectedId !== id) return;
 
-      state.current = item;
-      state.draft = clone(item.geometry);
-      state.history = [];
-      state.future = [];
-      state.selectedVertexPath = null;
-      applyForm(item);
-      updateMapSources();
-      renderHistoryControls();
-      modeLabel.textContent = `Редактирование: ${displayName(item)}`;
+      adoptGeometryDetail(item);
     } catch (error) {
       if (state.selectedId !== id) return;
       clearSelection();
@@ -1416,9 +1459,9 @@ if (section) {
             body: JSON.stringify({ geometry: polygon }),
           },
         );
-        await loadCity(target.cityId, { keepSelection: false, fit: false });
-        await selectGeometry(payload.geometry.id, { focus: false });
-        setMessage('Область вырезана.', 'success');
+        upsertGeometrySummary(payload.geometry);
+        adoptGeometryDetail(payload.geometry);
+        setMessage('Область вырезана. Для публикации и статистики нажмите «Пересчитать».', 'success');
       } catch (error) {
         setMessage(error.message, 'error');
       }
@@ -1472,11 +1515,12 @@ if (section) {
           body: JSON.stringify(body),
         },
       );
-      await loadCity(state.city.id, { keepSelection: false, fit: false });
-      await selectGeometry(payload.geometry.id, { focus: false });
-      await loadCities();
-      setMessage('Геометрия сохранена.', 'success');
-      window.dispatchEvent(new CustomEvent('dtpstat:geometry-changed'));
+      upsertGeometrySummary(payload.geometry);
+      adoptGeometryDetail(payload.geometry);
+      setMessage(
+        'Геометрия сохранена. Для обновления списка городов, основной карты и статистики нажмите «Пересчитать».',
+        'success',
+      );
     } catch (error) {
       setMessage(error.message, 'error');
     }
@@ -1487,8 +1531,7 @@ if (section) {
       clearSelection();
       return;
     }
-    const current = state.geometries.find((item) => item.id === state.current.id);
-    if (current) void selectGeometry(current.id, { focus: false });
+    adoptGeometryDetail(state.current);
   });
 
   deleteButton.addEventListener('click', async () => {
@@ -1498,10 +1541,12 @@ if (section) {
     try {
       await api(`/api/admin/geometry-editor/geometries/${item.id}`, { method: 'DELETE' });
       state.selectedSet.delete(item.id);
-      await loadCity(item.cityId, { keepSelection: false, fit: false });
-      await loadCities();
-      setMessage('Геометрия удалена.', 'success');
-      window.dispatchEvent(new CustomEvent('dtpstat:geometry-changed'));
+      state.geometries = state.geometries.filter((candidate) => candidate.id !== item.id);
+      clearSelection();
+      setMessage(
+        'Геометрия удалена. Для обновления списка городов, основной карты и статистики нажмите «Пересчитать».',
+        'success',
+      );
     } catch (error) {
       setMessage(error.message, 'error');
     }
@@ -1517,16 +1562,45 @@ if (section) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids }),
       });
+      for (const id of ids) {
+        state.geometries = state.geometries.filter((candidate) => candidate.id !== id);
+      }
       state.selectedSet.clear();
-      await loadCity(payload.geometry.cityId, { keepSelection: false, fit: false });
-      await selectGeometry(payload.geometry.id, { focus: false });
-      await loadCities();
-      setMessage('Геометрии объединены.', 'success');
-      window.dispatchEvent(new CustomEvent('dtpstat:geometry-changed'));
+      upsertGeometrySummary(payload.geometry);
+      adoptGeometryDetail(payload.geometry);
+      setMessage(
+        'Геометрии объединены. Для обновления списка городов, основной карты и статистики нажмите «Пересчитать».',
+        'success',
+      );
     } catch (error) {
       setMessage(error.message, 'error');
     }
   });
+
+  async function recalculateDerived() {
+    const selectedId = state.selectedId;
+    try {
+      recalculateButton.disabled = true;
+      refreshButton.disabled = true;
+      setMessage('Пересчитываем список городов, основную карту и статистику…');
+      const result = await api('/api/admin/geometry-editor/recalculate', {
+        method: 'POST',
+      });
+      await refresh({ keepSelection: Boolean(selectedId), fit: false });
+      setMessage(
+        'Пересчёт завершён: обновлены города, статистика, рейтинги и публичные данные.',
+        'success',
+      );
+      window.dispatchEvent(new CustomEvent('dtpstat:geometry-changed', {
+        detail: result,
+      }));
+    } catch (error) {
+      setMessage(error.message, 'error');
+    } finally {
+      recalculateButton.disabled = false;
+      refreshButton.disabled = false;
+    }
+  }
 
   conflictKeep.addEventListener('click', () => setConflictDecision('keep-existing'));
   conflictAdd.addEventListener('click', () => setConflictDecision('add-new'));
@@ -1554,6 +1628,7 @@ if (section) {
   });
   searchInput.addEventListener('input', renderList);
   refreshButton.addEventListener('click', () => void refresh({ keepSelection: true }));
+  recalculateButton.addEventListener('click', () => void recalculateDerived());
   window.addEventListener('dtpstat:geometry-editor-open', () => {
     void refresh({ keepSelection: true, fit: false });
     window.setTimeout(() => state.map?.resize(), 0);
