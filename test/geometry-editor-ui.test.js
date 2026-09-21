@@ -26,9 +26,13 @@ test('geometry editor is an independent top-level role-protected admin section',
   assert.match(editor, /geometry-editor\/geometries/);
   assert.match(editor, /function editableSequences\(geometry\)/);
   assert.match(editor, /kind: 'midpoint'/);
+  assert.match(editor, /kind: 'segment'/);
+  assert.match(editor, /geometry-editor-segment-hit/);
+  assert.match(editor, /'line-width': 18/);
   assert.match(editor, /map\.on\('mousedown', 'geometry-editor-vertices'/);
+  assert.match(editor, /projectedSegmentCoordinate/);
   assert.match(editor, /insertMidpoint/);
-  assert.match(editor, /deleteSelectedVertex/);
+  assert.match(editor, /deleteVertexAtPath/);
   assert.match(editor, /state\.history\.length > 50/);
   assert.match(editor, /geometry-editor\/merge/);
   assert.match(editor, /\/cut/);
@@ -121,4 +125,24 @@ test('explicit geometry recalculation signals an already-open public map tab', a
   assert.match(editor, /PUBLISHED_DATA_REVISION_KEY/);
   assert.match(editor, /localStorage\.setItem/);
   assert.match(editor, /основная карта/);
+});
+
+
+test('vertex editing uses a wide segment hitbox and direct Ctrl-click deletion', async () => {
+  const [html, editor] = await Promise.all([
+    read('admin/index.html'),
+    read('admin/geometry-editor.js'),
+  ]);
+
+  assert.doesNotMatch(html, /id="geometry-delete-node"/);
+  assert.match(editor, /id: 'geometry-editor-segment-hit'/);
+  assert.match(editor, /'line-width': 18/);
+  assert.match(editor, /map\.queryRenderedFeatures\(event\.point/);
+  assert.match(editor, /map\.project\(coordinates\[0\]\)/);
+  assert.match(editor, /map\.unproject/);
+  assert.match(editor, /originalEvent\?\.ctrlKey \|\| originalEvent\?\.metaKey/);
+  assert.match(editor, /deleteVertexAtPath\(JSON\.parse\(candidate\.properties\.path\)\)/);
+  assert.match(editor, /Ctrl\+клик по узлу — удалить/);
+  assert.doesNotMatch(editor, /event\.key === 'Delete'/);
+  assert.doesNotMatch(editor, /event\.key === 'Backspace'/);
 });

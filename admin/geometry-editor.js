@@ -19,7 +19,6 @@ if (section) {
   const cutButton = document.querySelector('#geometry-cut-area');
   const undoButton = document.querySelector('#geometry-undo');
   const redoButton = document.querySelector('#geometry-redo');
-  const deleteNodeButton = document.querySelector('#geometry-delete-node');
   const finishDrawButton = document.querySelector('#geometry-finish-draw');
   const cancelDrawButton = document.querySelector('#geometry-cancel-draw');
   const modeLabel = document.querySelector('#geometry-editor-mode');
@@ -105,6 +104,12 @@ if (section) {
     if (item?.displayName?.trim()) return item.displayName.trim();
     const id = item?.id ?? 'новая';
     return `${typeLabel(item)} #${id}`;
+  }
+
+  function editingModeText(item) {
+    return item
+      ? `Редактирование: ${displayName(item)} · клик по сегменту — добавить узел · Ctrl+клик по узлу — удалить`
+      : 'Выберите геометрию';
   }
 
   function geometryType(geometry) {
@@ -247,12 +252,28 @@ if (section) {
         features.push({
           type: 'Feature',
           geometry: { type: 'Point', coordinates: coords[index] },
-          properties: { kind: 'vertex', path: pathKey(vertexPath) },
+          properties: {
+            kind: 'vertex',
+            path: pathKey(vertexPath),
+            selected: pathKey(state.selectedVertexPath) === pathKey(vertexPath),
+          },
         });
         const nextIndex = sequence.closed
           ? (index + 1) % uniqueLength
           : index + 1;
         if (nextIndex >= uniqueLength) continue;
+        features.push({
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: [coords[index], coords[nextIndex]],
+          },
+          properties: {
+            kind: 'segment',
+            path: pathKey([...sequence.prefix, index]),
+            nextIndex,
+          },
+        });
         features.push({
           type: 'Feature',
           geometry: { type: 'Point', coordinates: midpoint(coords[index], coords[nextIndex]) },
@@ -438,13 +459,34 @@ if (section) {
       });
 
       addLayerSafe(map, {
+        id: 'geometry-editor-segment-hit',
+        type: 'line',
+        source: HANDLE_SOURCE,
+        filter: ['==', ['get', 'kind'], 'segment'],
+        paint: {
+          'line-color': '#35c6b4',
+          'line-width': 18,
+          'line-opacity': 0.01,
+        },
+      });
+      addLayerSafe(map, {
         id: 'geometry-editor-vertices',
         type: 'circle',
         source: HANDLE_SOURCE,
         filter: ['==', ['get', 'kind'], 'vertex'],
         paint: {
-          'circle-radius': 6,
-          'circle-color': '#f3b74e',
+          'circle-radius': [
+            'case',
+            ['==', ['get', 'selected'], true],
+            8,
+            6,
+          ],
+          'circle-color': [
+            'case',
+            ['==', ['get', 'selected'], true],
+            '#ff6b6b',
+            '#f3b74e',
+          ],
           'circle-stroke-color': '#fff',
           'circle-stroke-width': 1.5,
         },
@@ -462,13 +504,59 @@ if (section) {
         },
       });
 
-      map.on('click', 'geometry-editor-midpoints', (event) => {
+      function projectedSegmentCoordinate(candidate, event) {
+        const coordinates = candidate?.geometry?.coordinates;
+        if (!Array.isArray(coordinates) || coordinates.length !== 2) {
+          return event.lngLat.toArray();
+        }
+
+        const start = map.project(coordinates[0]);
+        const end = map.project(coordinates[1]);
+        const click = event.point;
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const lengthSquared = dx * dx + dy * dy;
+        if (lengthSquared <= Number.EPSILON) return coordinates[0];
+
+        const t = Math.max(0, Math.min(1,
+          ((click.x - start.x) * dx + (click.y - start.y) * dy) / lengthSquared,
+        ));
+        return map.unproject([
+          start.x + dx * t,
+          start.y + dy * t,
+        ]).toArray();
+      }
+
+      map.on('click', 'geometry-editor-segment-hit', (event) => {
         const candidate = event.features?.[0];
-        if (!candidate || !state.draft || state.drawing) return;
+        if (!candidate || !state.draft || state.drawing || state.suppressMapClick) return;
+
+        // A vertex sits on the same line, so it wins over the wider segment hitbox.
+        const vertexHits = map.queryRenderedFeatures(event.point, {
+          layers: ['geometry-editor-vertices'],
+        });
+        if (vertexHits.length > 0) return;
+
         event.originalEvent?.stopPropagation?.();
         state.suppressMapClick = true;
         const prefixAndIndex = JSON.parse(candidate.properties.path);
-        insertMidpoint(prefixAndIndex, event.lngLat.toArray());
+        insertMidpoint(
+          prefixAndIndex,
+          projectedSegmentCoordinate(candidate, event),
+        );
+        window.setTimeout(() => { state.suppressMapClick = false; }, 0);
+      });
+
+      map.on('click', 'geometry-editor-vertices', (event) => {
+        const candidate = event.features?.[0];
+        if (!candidate || !state.draft || state.drawing) return;
+        const originalEvent = event.originalEvent;
+        if (!(originalEvent?.ctrlKey || originalEvent?.metaKey)) return;
+
+        originalEvent?.preventDefault?.();
+        originalEvent?.stopPropagation?.();
+        state.suppressMapClick = true;
+        deleteVertexAtPath(JSON.parse(candidate.properties.path));
         window.setTimeout(() => { state.suppressMapClick = false; }, 0);
       });
 
@@ -476,6 +564,9 @@ if (section) {
         const candidate = event.features?.[0];
         if (!candidate || !state.draft || state.drawing) return;
         event.preventDefault();
+        const originalEvent = event.originalEvent;
+        if (originalEvent?.ctrlKey || originalEvent?.metaKey) return;
+
         const path = JSON.parse(candidate.properties.path);
         selectVertex(path);
         state.dragPath = path;
@@ -511,7 +602,12 @@ if (section) {
         'geometry-editor-polygons', 'geometry-editor-points',
       ]) {
         map.on('click', layerId, (event) => {
-          if (state.drawing) return;
+          if (state.drawing || state.suppressMapClick) return;
+          const vertexHits = map.queryRenderedFeatures(event.point, {
+            layers: ['geometry-editor-vertices'],
+          });
+          if (vertexHits.length > 0) return;
+
           const id = Number(event.features?.[0]?.properties?.id);
           if (Number.isSafeInteger(id) && id > 0) void selectGeometry(id);
         });
@@ -520,6 +616,8 @@ if (section) {
       }
       map.on('mouseenter', 'geometry-editor-vertices', () => { map.getCanvas().style.cursor = 'move'; });
       map.on('mouseleave', 'geometry-editor-vertices', () => { if (!state.dragPath) map.getCanvas().style.cursor = ''; });
+      map.on('mouseenter', 'geometry-editor-segment-hit', () => { map.getCanvas().style.cursor = 'copy'; });
+      map.on('mouseleave', 'geometry-editor-segment-hit', () => { if (!state.dragPath) map.getCanvas().style.cursor = ''; });
       map.on('mouseenter', 'geometry-editor-midpoints', () => { map.getCanvas().style.cursor = 'copy'; });
       map.on('mouseleave', 'geometry-editor-midpoints', () => { if (!state.dragPath) map.getCanvas().style.cursor = ''; });
 
@@ -652,7 +750,6 @@ if (section) {
   function renderHistoryControls() {
     undoButton.disabled = state.history.length === 0 || Boolean(state.drawing);
     redoButton.disabled = state.future.length === 0 || Boolean(state.drawing);
-    deleteNodeButton.disabled = !state.selectedVertexPath || !state.draft || Boolean(state.drawing);
   }
 
   function undo() {
@@ -661,6 +758,7 @@ if (section) {
     state.draft = state.history.pop();
     state.selectedVertexPath = null;
     updateDraftMap();
+    modeLabel.textContent = editingModeText(state.current);
   }
 
   function redo() {
@@ -673,8 +771,10 @@ if (section) {
 
   function selectVertex(path) {
     state.selectedVertexPath = path;
+    updateMapSources();
     renderHistoryControls();
-    modeLabel.textContent = `Узел ${path.length ? path.join('.') : 'Point'} выбран`;
+    modeLabel.textContent =
+      `Узел ${path.length ? path.join('.') : 'Point'} выбран · Ctrl+клик по узлу — удалить`;
   }
 
   function moveVertex(path, coordinate, { record = true } = {}) {
@@ -708,10 +808,11 @@ if (section) {
     if (closed) coords[coords.length - 1] = [...coords[0]];
     state.selectedVertexPath = [...prefix, insertAt % (closed ? coords.length - 1 : coords.length)];
     updateDraftMap();
+    modeLabel.textContent =
+      'Новый узел добавлен · перетащите его или Ctrl+кликните для удаления';
   }
 
-  function deleteSelectedVertex() {
-    const path = state.selectedVertexPath;
+  function deleteVertexAtPath(path) {
     if (!path || !state.draft) return;
     if (state.draft.type === 'Point') {
       setMessage('У Point нельзя удалить единственную координату. Удалите всю геометрию.', 'error');
@@ -949,7 +1050,7 @@ if (section) {
     renderList();
     updateMapSources();
     renderHistoryControls();
-    modeLabel.textContent = `Редактирование: ${displayName(item)}`;
+    modeLabel.textContent = editingModeText(item);
     if (focus) focusGeometry(item.geometry);
   }
 
@@ -1401,7 +1502,7 @@ if (section) {
     if (drawing?.mode === 'polygon' || drawing?.mode === 'cut') canFinish = drawing.coordinates.length >= 3;
     finishDrawButton.disabled = !canFinish;
     if (!drawing) {
-      modeLabel.textContent = state.current ? `Редактирование: ${displayName(state.current)}` : 'Выберите геометрию';
+      modeLabel.textContent = editingModeText(state.current);
     } else if (drawing.mode === 'cut') {
       modeLabel.textContent = `Вырез: поставьте минимум 3 точки (${drawing.coordinates.length})`;
     } else {
@@ -1623,7 +1724,6 @@ if (section) {
 
   undoButton.addEventListener('click', undo);
   redoButton.addEventListener('click', redo);
-  deleteNodeButton.addEventListener('click', deleteSelectedVertex);
   finishDrawButton.addEventListener('click', () => void finishDrawing());
   cancelDrawButton.addEventListener('click', cancelDrawing);
   document.querySelector('#geometry-new-point').addEventListener('click', () => void startDrawing('point'));
@@ -1655,11 +1755,6 @@ if (section) {
     if ((event.ctrlKey || event.metaKey) && !editingText && event.key.toLowerCase() === 'y') {
       event.preventDefault();
       redo();
-      return;
-    }
-    if (!editingText && (event.key === 'Delete' || event.key === 'Backspace')) {
-      event.preventDefault();
-      deleteSelectedVertex();
       return;
     }
     if (!editingText && event.key === 'Escape' && state.drawing) cancelDrawing();
