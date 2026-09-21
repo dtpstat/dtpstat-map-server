@@ -91,7 +91,11 @@ function decodeFileName(buffer, flags) {
     );
   }
   const name = buffer.toString('utf8');
-  if (!name || name.includes('\0')) {
+  // Stream producers such as "7z a archive.zip -si" can emit an anonymous
+  // entry with an empty filename. We never extract paths to the filesystem,
+  // and the transport format is identified by JSON content/schema, so an
+  // empty name is valid here.
+  if (name.includes('\0')) {
     throw new SingleFileZipError('ZIP entry has an invalid filename');
   }
   return name;
@@ -701,7 +705,7 @@ export async function openSingleFileZip(zipPath, options) {
 
   return {
     stream: verifier,
-    fileName: selectedEntry.fileName,
+    fileName: selectedEntry.fileName || null,
     compressedSize: selectedEntry.compressedSize,
     uncompressedSize: selectedEntry.uncompressedSize,
   };
