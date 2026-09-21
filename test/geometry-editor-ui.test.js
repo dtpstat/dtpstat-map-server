@@ -146,3 +146,17 @@ test('vertex editing uses a wide segment hitbox and direct Ctrl-click deletion',
   assert.doesNotMatch(editor, /event\.key === 'Delete'/);
   assert.doesNotMatch(editor, /event\.key === 'Backspace'/);
 });
+
+
+test('Ctrl or Cmd dynamically switches a hovered vertex to a delete cursor', async () => {
+  const editor = await read('admin/geometry-editor.js');
+
+  assert.match(editor, /DELETE_VERTEX_CURSOR/);
+  assert.match(editor, /hoveredVertex/);
+  assert.match(editor, /deleteModifier/);
+  assert.match(editor, /event\.key === 'Control' \|\| event\.key === 'Meta'/);
+  assert.match(editor, /canvas\.style\.cursor = DELETE_VERTEX_CURSOR/);
+  assert.match(editor, /window\.addEventListener\('keyup'/);
+  assert.match(editor, /window\.addEventListener\('blur'/);
+  assert.match(editor, /state\.hoveredVertex\) canvas\.style\.cursor = 'move'/);
+});

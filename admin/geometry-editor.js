@@ -43,6 +43,8 @@ if (section) {
   const BOUNDARY_SOURCE = 'geometry-editor-boundary';
   const IMPORT_SOURCE = 'geometry-editor-import-conflict';
   const PUBLISHED_DATA_REVISION_KEY = 'dtpstat:published-data-revision';
+  const DELETE_VERTEX_CURSOR =
+    'url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2228%22 height=%2228%22 viewBox=%220 0 28 28%22%3E%3Cpath d=%22M3 2l8.6 18.8 2.8-7.1 7.2-2.8L3 2z%22 fill=%22white%22 stroke=%22%2310181b%22 stroke-width=%221.5%22 stroke-linejoin=%22round%22/%3E%3Ccircle cx=%2220%22 cy=%2220%22 r=%226.5%22 fill=%22%23d84f57%22 stroke=%22white%22 stroke-width=%221.5%22/%3E%3Cpath d=%22M16.5 20h7%22 stroke=%22white%22 stroke-width=%222%22 stroke-linecap=%22round%22/%3E%3C/svg%3E") 3 2, pointer';
 
   const state = {
     cities: [],
@@ -62,6 +64,9 @@ if (section) {
     map: null,
     mapReady: null,
     dragPath: null,
+    hoveredVertex: false,
+    hoveredSegment: false,
+    deleteModifier: false,
     suppressMapClick: false,
     importSession: null,
     activeConflictId: null,
@@ -508,6 +513,25 @@ if (section) {
         },
       });
 
+      function refreshHandleCursor() {
+        const canvas = map.getCanvas();
+        if (state.dragPath) {
+          canvas.style.cursor = 'move';
+          return;
+        }
+        if (state.hoveredVertex) {
+          canvas.style.cursor = state.deleteModifier
+            ? DELETE_VERTEX_CURSOR
+            : 'move';
+          return;
+        }
+        if (state.hoveredSegment) {
+          canvas.style.cursor = 'copy';
+          return;
+        }
+        canvas.style.cursor = '';
+      }
+
       function projectedSegmentCoordinate(candidate, event) {
         const coordinates = candidate?.geometry?.coordinates;
         if (!Array.isArray(coordinates) || coordinates.length !== 2) {
@@ -586,6 +610,7 @@ if (section) {
         state.dragPath = null;
         map.dragPan.enable();
         updateDraftMap();
+        refreshHandleCursor();
       });
 
       map.on('click', (event) => {
@@ -618,12 +643,30 @@ if (section) {
         map.on('mouseenter', layerId, () => { map.getCanvas().style.cursor = 'pointer'; });
         map.on('mouseleave', layerId, () => { if (!state.dragPath) map.getCanvas().style.cursor = ''; });
       }
-      map.on('mouseenter', 'geometry-editor-vertices', () => { map.getCanvas().style.cursor = 'move'; });
-      map.on('mouseleave', 'geometry-editor-vertices', () => { if (!state.dragPath) map.getCanvas().style.cursor = ''; });
-      map.on('mouseenter', 'geometry-editor-segment-hit', () => { map.getCanvas().style.cursor = 'copy'; });
-      map.on('mouseleave', 'geometry-editor-segment-hit', () => { if (!state.dragPath) map.getCanvas().style.cursor = ''; });
-      map.on('mouseenter', 'geometry-editor-midpoints', () => { map.getCanvas().style.cursor = 'copy'; });
-      map.on('mouseleave', 'geometry-editor-midpoints', () => { if (!state.dragPath) map.getCanvas().style.cursor = ''; });
+      map.on('mouseenter', 'geometry-editor-vertices', () => {
+        state.hoveredVertex = true;
+        refreshHandleCursor();
+      });
+      map.on('mouseleave', 'geometry-editor-vertices', () => {
+        state.hoveredVertex = false;
+        refreshHandleCursor();
+      });
+      map.on('mouseenter', 'geometry-editor-segment-hit', () => {
+        state.hoveredSegment = true;
+        refreshHandleCursor();
+      });
+      map.on('mouseleave', 'geometry-editor-segment-hit', () => {
+        state.hoveredSegment = false;
+        refreshHandleCursor();
+      });
+      map.on('mouseenter', 'geometry-editor-midpoints', () => {
+        state.hoveredSegment = true;
+        refreshHandleCursor();
+      });
+      map.on('mouseleave', 'geometry-editor-midpoints', () => {
+        state.hoveredSegment = false;
+        refreshHandleCursor();
+      });
 
       state.map = map;
       return map;
@@ -1750,6 +1793,13 @@ if (section) {
   });
 
   window.addEventListener('keydown', (event) => {
+    if (event.key === 'Control' || event.key === 'Meta') {
+      state.deleteModifier = true;
+      if (!section.hidden && state.map) {
+        const canvas = state.map.getCanvas();
+        if (state.hoveredVertex) canvas.style.cursor = DELETE_VERTEX_CURSOR;
+      }
+    }
     if (section.hidden) return;
     const editingText = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName ?? '');
     if ((event.ctrlKey || event.metaKey) && !editingText && event.key.toLowerCase() === 'z') {
@@ -1764,6 +1814,27 @@ if (section) {
       return;
     }
     if (!editingText && event.key === 'Escape' && state.drawing) cancelDrawing();
+  });
+
+  window.addEventListener('keyup', (event) => {
+    if (event.key !== 'Control' && event.key !== 'Meta') return;
+    state.deleteModifier = false;
+    if (!section.hidden && state.map) {
+      const canvas = state.map.getCanvas();
+      if (state.hoveredVertex) canvas.style.cursor = 'move';
+      else if (state.hoveredSegment) canvas.style.cursor = 'copy';
+      else if (!state.dragPath) canvas.style.cursor = '';
+    }
+  });
+
+  window.addEventListener('blur', () => {
+    state.deleteModifier = false;
+    if (!section.hidden && state.map && !state.dragPath) {
+      const canvas = state.map.getCanvas();
+      if (state.hoveredVertex) canvas.style.cursor = 'move';
+      else if (state.hoveredSegment) canvas.style.cursor = 'copy';
+      else canvas.style.cursor = '';
+    }
   });
 
   void refresh({ keepSelection: false, fit: true });
