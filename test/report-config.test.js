@@ -401,3 +401,15 @@ test('line length is always filtered to line geometry and polygon measurements t
   invalid.metrics[0].source.geometryType = 'polygon';
   assert.throws(() => validateReportConfig(invalid), /geometryType is not allowed/);
 });
+
+
+test('report tag catalog uses the PostgreSQL-safe normalized tag query', async () => {
+  const fs = await import('node:fs/promises');
+  const source = await fs.readFile(
+    new URL('../src/db/report-config-service.js', import.meta.url),
+    'utf8',
+  );
+  assert.doesNotMatch(source, /SELECT DISTINCT tag[\s\S]*ORDER BY LOWER\(tag\), tag/);
+  assert.match(source, /WITH tag_values AS/);
+  assert.match(source, /GROUP BY tag_key/);
+});

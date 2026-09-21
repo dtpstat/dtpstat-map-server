@@ -52,6 +52,28 @@ try {
   );
   assert(initialIntegrity.rows.length === 0, 'Fresh schema integrity view is not empty');
 
+  // Smoke-test the admin tag catalogs against PostgreSQL itself. This catches
+  // invalid DISTINCT/ORDER BY combinations that static JS tests cannot see.
+  const emptyTagCatalog = await client.query(`
+    WITH tag_values AS (
+      SELECT
+        BTRIM(expanded.tag) AS tag,
+        LOWER(BTRIM(expanded.tag)) AS tag_key
+      FROM city_geometries AS geometry
+      CROSS JOIN LATERAL unnest(geometry.tags) AS expanded(tag)
+      WHERE BTRIM(expanded.tag) <> ''
+    ),
+    unique_tags AS (
+      SELECT tag_key, MIN(tag) AS tag
+      FROM tag_values
+      GROUP BY tag_key
+    )
+    SELECT tag
+    FROM unique_tags
+    ORDER BY tag_key, tag
+  `);
+  assert(Array.isArray(emptyTagCatalog.rows), 'Geometry tag catalog query failed');
+
   // Active OSM boundary may be created before its application city inside the
   // same transaction, but sync must establish a valid link before COMMIT.
   await client.query('BEGIN');

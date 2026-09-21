@@ -357,11 +357,22 @@ export function createReportConfigService(pool) {
   return {
     async listGeometryTags() {
       const result = await pool.query(`
-        SELECT DISTINCT tag
-        FROM city_geometries
-        CROSS JOIN LATERAL unnest(tags) AS tag
-        WHERE BTRIM(tag) <> ''
-        ORDER BY LOWER(tag), tag
+        WITH tag_values AS (
+          SELECT
+            BTRIM(expanded.tag) AS tag,
+            LOWER(BTRIM(expanded.tag)) AS tag_key
+          FROM city_geometries AS geometry
+          CROSS JOIN LATERAL unnest(geometry.tags) AS expanded(tag)
+          WHERE BTRIM(expanded.tag) <> ''
+        ),
+        unique_tags AS (
+          SELECT tag_key, MIN(tag) AS tag
+          FROM tag_values
+          GROUP BY tag_key
+        )
+        SELECT tag
+        FROM unique_tags
+        ORDER BY tag_key, tag
       `);
       return result.rows.map((row) => row.tag);
     },
