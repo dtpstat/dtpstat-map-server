@@ -77,14 +77,12 @@ test('merge id normalization rejects duplicates-only selections', () => {
 });
 
 
-test('geometry tag catalog SQL avoids DISTINCT/ORDER BY expression incompatibility', async () => {
+test('geometry editor repository does not load a global tag catalog', async () => {
   const fs = await import('node:fs/promises');
   const source = await fs.readFile(
     new URL('../src/db/geometry-editor-repository.js', import.meta.url),
     'utf8',
   );
-  assert.doesNotMatch(source, /SELECT DISTINCT tag[\s\S]*ORDER BY LOWER\(tag\), tag/);
-  assert.match(source, /WITH tag_values AS/);
-  assert.match(source, /GROUP BY tag_key/);
-  assert.match(source, /ORDER BY tag_key, tag/);
+  assert.doesNotMatch(source, /async listTags\(/);
+  assert.doesNotMatch(source, /CROSS JOIN LATERAL unnest\(geometry\.tags\)/);
 });
