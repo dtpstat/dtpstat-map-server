@@ -96,6 +96,23 @@ test('project settings repository reads and updates the singleton row', async ()
     400000,
     null,
   ]);
+  const firstRecalculationIndex = calls.findIndex((call) =>
+    /WITH\s+geometry_statistics\s+AS/i.test(call.text) &&
+    /UPDATE\s+cities\s+AS\s+city/i.test(call.text),
+  );
+  const firstUpdateIndex = calls.findIndex((call) =>
+    /UPDATE\s+project_settings/i.test(call.text),
+  );
+  assert.ok(firstUpdateIndex >= 0);
+  assert.ok(firstRecalculationIndex > firstUpdateIndex);
+  assert.match(
+    calls[firstRecalculationIndex].text,
+    /large_city_population_threshold\s+AS\s+population_threshold/i,
+  );
+  assert.match(
+    calls[firstRecalculationIndex].text,
+    /large_city_area_km2_threshold\s+AS\s+area_threshold_km2/i,
+  );
 
   await repository.save({
     projectName: 'Трамвайные пути России',
@@ -113,6 +130,28 @@ test('project settings repository reads and updates the singleton row', async ()
   assert.equal(updates[1].values[10], null);
   assert.match(updates[1].text, /show_line_popups = COALESCE\(\$8::boolean, show_line_popups\)/i);
   assert.doesNotMatch(updates[1].text, /public_download_name\s*=/i);
+
+  await repository.save({
+    projectName: 'Трамвайные пути России',
+    keywords: ['трамвай'],
+    yandexMetrikaId: null,
+    googleAnalyticsId: null,
+    themePreset: 'classic',
+    showLineLabels: false,
+    showLinePopups: true,
+    largeCityPopulationThreshold: 500000,
+    largeCityAreaKm2Threshold: 250,
+    footerHtml: '<p>Описание</p>',
+  });
+  const thresholdUpdates = calls.filter((call) =>
+    /UPDATE\s+project_settings/i.test(call.text));
+  assert.equal(thresholdUpdates.at(-1).values[9], 500000);
+  assert.equal(thresholdUpdates.at(-1).values[10], 250);
+  const recalculations = calls.filter((call) =>
+    /WITH\s+geometry_statistics\s+AS/i.test(call.text) &&
+    /UPDATE\s+cities\s+AS\s+city/i.test(call.text),
+  );
+  assert.equal(recalculations.length, 3);
 
   await assert.rejects(
     async () => repository.save({
