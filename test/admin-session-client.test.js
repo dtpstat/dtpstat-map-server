@@ -117,7 +117,7 @@ test('admin session activity hold keeps idle session alive and resumes expiry ti
   let fetchCalls = 0;
 
   const guard = createAdminSessionFetchGuard({
-    fetchImpl: async (input) => {
+    fetchImpl: async (_input) => {
       fetchCalls += 1;
       return new Response('{}', {
         status: 200,
