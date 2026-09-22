@@ -390,7 +390,10 @@ export function createApiRouter({
   router.get('/cities', async (_request, response, next) => {
     try {
       const cities = await repository.listCities();
-      response.set('Cache-Control', 'public, max-age=300');
+      // Category and rank are derived from mutable project thresholds and
+      // materialized report values. Never let a browser keep the old
+      // classification after the administrator saves new criteria.
+      response.set('Cache-Control', 'no-store');
       response.json({ cities });
     } catch (error) {
       next(error);
