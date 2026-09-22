@@ -249,6 +249,7 @@ function testSecurity(config) {
     requireInterface: requireAuth,
     requireUsers: requireAuth,
     requireAudit: requireAuth,
+    requireUsersOrAudit: requireAuth,
     requireSecurity: requireAuth,
     requireSuperuser: requireAuth,
   };
