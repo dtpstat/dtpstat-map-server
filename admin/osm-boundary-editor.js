@@ -360,7 +360,6 @@ if (typeof document !== 'undefined') {
       population.dataset.initialValue = item.population === null || item.population === undefined
         ? ''
         : String(item.population);
-      delete population.dataset.autoActivated;
       title.textContent = item.displayName;
       meta.replaceChildren(
         metaItem('OSM', `${item.osmType}/${item.osmId}`),
@@ -560,7 +559,6 @@ if (typeof document !== 'undefined') {
               };
               const populationValue = population.value.trim();
               if (
-                active.checked &&
                 populationValue !== (population.dataset.initialValue ?? '')
               ) {
                 changes.population = populationValue === ''
@@ -635,32 +633,6 @@ if (typeof document !== 'undefined') {
         save.disabled = !state.selectedId;
       }
     }
-
-    population.addEventListener('input', () => {
-      if (!state.selectedId) return;
-      const changed =
-        population.value.trim() !== (population.dataset.initialValue ?? '');
-      if (changed && !active.checked) {
-        active.checked = true;
-        population.dataset.autoActivated = 'true';
-        setMessage(
-          'Изменение населения включает выбранный OSM-объект при сохранении.',
-          'warning',
-        );
-        return;
-      }
-      if (!changed && population.dataset.autoActivated === 'true') {
-        active.checked = false;
-        delete population.dataset.autoActivated;
-        setMessage('');
-      }
-    });
-
-    active.addEventListener('change', () => {
-      if (active.checked) {
-        delete population.dataset.autoActivated;
-      }
-    });
 
     enableBranch?.addEventListener('click', () => void setBranchActive(true));
     disableBranch?.addEventListener('click', () => void setBranchActive(false));
