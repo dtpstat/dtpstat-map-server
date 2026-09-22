@@ -216,6 +216,12 @@ test('admin clears previous task status immediately when a new operation starts'
   assert.match(security, /Журнал \(\$\{taskLogCount\}\)/);
   assert.match(admin, /phase === 'stage-write'/);
   assert.match(admin, /Ожидаем PostgreSQL\/PostGIS/);
+  assert.match(admin, /phase === 'delete-boundaries'/);
+  assert.match(admin, /Удаление старых территорий/);
+  assert.match(admin, /phase === 'insert-boundaries'/);
+  assert.match(admin, /Вставка новых территорий/);
+  assert.match(admin, /phase === 'hierarchy'/);
+  assert.match(admin, /Построение иерархии территорий/);
   assert.match(admin, /function stableProcessingView\(/);
   assert.match(admin, /Чтение и подготовка входного JSON/);
   assert.match(admin, /PostgreSQL\/PostGIS:/);
