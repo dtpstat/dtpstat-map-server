@@ -1,5 +1,6 @@
 .osm-selection-grid,
-.osm-number-grid {
+.osm-number-grid,
+.osm-level-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: .75rem;
@@ -158,41 +159,78 @@
   overflow: hidden;
 }
 .osm-boundary-details {
-  padding: .8rem;
+  padding: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+.osm-boundary-details-header {
+  padding: .6rem .7rem;
+  display: grid;
+  gap: .55rem;
+  border-bottom: 1px solid var(--line);
+  background: #101b1f;
+}
+.osm-boundary-primary-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .4rem;
+}
+.osm-boundary-primary-actions button {
+  min-width: 0;
+  padding: .48rem .5rem;
+  border-radius: 7px;
+  font-size: .68rem;
+}
+.osm-boundary-details-scroll {
+  min-height: 0;
+  padding: .7rem;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
 #osm-boundary-form {
   display: flex;
   flex-direction: column;
-  gap: .72rem;
+  gap: .7rem;
   min-width: 0;
+  overflow: visible;
 }
-#osm-boundary-form > label {
+.osm-boundary-edit-group {
   min-width: 0;
-}
-#osm-boundary-form > .check {
-  align-self: flex-start;
-}
-.osm-boundary-branch-actions {
+  padding: .7rem;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: .5rem;
-  padding: .65rem;
+  gap: .65rem;
   border: 1px solid #233840;
   border-radius: 8px;
-  background: rgba(12, 20, 23, .62);
+  background: rgb(12 20 23 / 62%);
 }
-.osm-boundary-branch-actions > button {
+.osm-boundary-edit-group h4 {
+  margin: 0;
+  color: #dbe9eb;
+  font-size: .76rem;
+}
+.osm-boundary-edit-group > label {
   min-width: 0;
 }
-.osm-boundary-branch-actions > small {
-  grid-column: 1 / -1;
-  color: var(--muted);
-  line-height: 1.35;
+.osm-boundary-edit-group > .check {
+  align-self: flex-start;
 }
-.osm-boundary-selected-title { font-weight: 800; }
+.osm-boundary-branch-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: .67rem;
+  line-height: 1.4;
+}
+.osm-boundary-selected-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .osm-boundary-meta {
   margin: 0;
   display: grid;
@@ -223,18 +261,29 @@
     grid-column: 1 / -1;
     max-height: 22rem;
   }
+  .osm-boundary-details {
+    grid-column: 1 / -1;
+    max-height: 22rem;
+  }
+  .osm-boundary-details-header {
+    grid-template-columns: minmax(0, 1fr) minmax(24rem, auto);
+    align-items: center;
+  }
+  .osm-boundary-primary-actions {
+    grid-template-columns: repeat(3, minmax(7rem, auto));
+    justify-content: end;
+  }
   #osm-boundary-form {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
   }
-  #osm-boundary-form > .osm-boundary-selected-title,
-  #osm-boundary-form > .osm-boundary-meta,
-  #osm-boundary-form > button,
-  #osm-boundary-form > .notice {
+  #osm-boundary-form > .notice,
+  #osm-boundary-form > .osm-boundary-branch-hint {
     grid-column: 1 / -1;
   }
   .osm-boundary-meta {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 900px) {
@@ -247,6 +296,16 @@
   .osm-boundary-details {
     grid-column: auto;
     max-height: none;
+    overflow: hidden;
+  }
+  .osm-boundary-details-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .osm-boundary-primary-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    justify-content: stretch;
+  }
+  .osm-boundary-details-scroll {
     overflow: visible;
   }
   #osm-boundary-form {
@@ -263,10 +322,8 @@
 @media (max-width: 650px) {
   .osm-selection-grid,
   .osm-number-grid,
-  .osm-boundary-branch-actions {
+  .osm-level-grid,
+  .osm-boundary-primary-actions {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .osm-boundary-branch-actions > small {
-    grid-column: 1;
   }
 }
