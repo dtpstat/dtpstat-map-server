@@ -280,3 +280,27 @@ test('successful update timestamps persist by task type and ignore dry runs', as
   });
   assert.equal(recorded.length, 1);
 });
+
+
+test('pending conflict task does not record a successful update', async () => {
+  const updates = [];
+  let scheduled;
+  const manager = createAdminTaskManager({
+    schedule(callback) { scheduled = callback; },
+    randomUUID: () => '00000000-0000-4000-8000-000000000099',
+    async recordSuccessfulUpdate(update) { updates.push(update); },
+  });
+  manager.start({
+    type: 'kml-update',
+    endpoint: '/api/admin/update',
+    recordsSuccessfulUpdate: true,
+  }, async () => ({
+    pendingResolution: true,
+    importSession: { id: 99, conflictGeometries: 2 },
+  }));
+  await scheduled();
+  assert.equal(manager.current().status, 'succeeded');
+  assert.equal(manager.current().result.pendingResolution, true);
+  assert.deepEqual(updates, []);
+  assert.deepEqual(manager.successfulUpdates(), {});
+});

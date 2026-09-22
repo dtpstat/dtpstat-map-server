@@ -1060,3 +1060,16 @@ test('admin cancellation aborts the active task and keeps its log', async () => 
     assert.equal(repeated.status, 409);
   }, { osmCityUpdateService });
 });
+
+
+test('public API loaders accept cache-control fetch options for explicit republish refresh', async () => {
+  const fs = await import('node:fs/promises');
+  const source = await fs.readFile(
+    new URL('../public/js/api.js', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /loadCities\(options = \{\}\)/);
+  assert.match(source, /getJson\('\/api\/cities', options\)/);
+  assert.match(source, /loadLineTypes\(options = \{\}\)/);
+  assert.match(source, /loadReportConfig\(options = \{\}\)/);
+});
