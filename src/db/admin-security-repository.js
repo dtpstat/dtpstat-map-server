@@ -5,8 +5,6 @@ const USER_FIELDS_SQL = `
   email,
   can_manage_data AS "canManageData",
   can_manage_interface AS "canManageInterface",
-  can_edit_geometries AS "canEditGeometries",
-  can_edit_osm AS "canEditOsm",
   can_manage_users AS "canManageUsers",
   can_view_audit AS "canViewAudit",
   can_manage_security AS "canManageSecurity",
@@ -42,8 +40,6 @@ const SESSION_USER_FIELDS = `
   users.email,
   users.can_manage_data AS "canManageData",
   users.can_manage_interface AS "canManageInterface",
-  users.can_edit_geometries AS "canEditGeometries",
-  users.can_edit_osm AS "canEditOsm",
   users.can_manage_users AS "canManageUsers",
   users.can_view_audit AS "canViewAudit",
   users.can_manage_security AS "canManageSecurity",
@@ -90,11 +86,11 @@ const GET_USER_SQL = `SELECT ${USER_FIELDS_SQL} FROM admin_users WHERE id = $1`;
 const CREATE_USER_SQL = `
   INSERT INTO admin_users (
     username, display_name, email, password_hash,
-    can_manage_data, can_manage_interface, can_edit_geometries, can_edit_osm,
-    can_manage_users, can_view_audit, can_manage_security,
+    can_manage_data, can_manage_interface, can_manage_users,
+    can_view_audit, can_manage_security,
     is_superuser, is_bootstrap, must_change_password
   )
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
   RETURNING ${USER_FIELDS_SQL}
 `;
 
@@ -105,16 +101,14 @@ const UPDATE_USER_SQL = `
     email = $3,
     can_manage_data = $4,
     can_manage_interface = $5,
-    can_edit_geometries = $6,
-    can_edit_osm = $7,
-    can_manage_users = $8,
-    can_view_audit = $9,
-    can_manage_security = $10,
-    is_blocked = $11,
-    manual_blocked_at = $12,
-    manual_blocked_until = $13,
-    manual_block_reason = $14,
-    manual_blocked_by = $15,
+    can_manage_users = $6,
+    can_view_audit = $7,
+    can_manage_security = $8,
+    is_blocked = $9,
+    manual_blocked_at = $10,
+    manual_blocked_until = $11,
+    manual_block_reason = $12,
+    manual_blocked_by = $13,
     updated_at = NOW()
   WHERE id = $1
   RETURNING ${USER_FIELDS_SQL}
@@ -197,6 +191,12 @@ const SECURITY_FIELDS_SQL = `
   session_idle_seconds AS "sessionIdleSeconds",
   session_absolute_seconds AS "sessionAbsoluteSeconds",
   audit_retention_days AS "auditRetentionDays",
+  password_min_length AS "passwordMinLength",
+  password_max_length AS "passwordMaxLength",
+  password_require_lowercase AS "passwordRequireLowercase",
+  password_require_uppercase AS "passwordRequireUppercase",
+  password_require_digit AS "passwordRequireDigit",
+  password_require_special AS "passwordRequireSpecial",
   updated_at AS "updatedAt"
 `;
 
@@ -265,8 +265,7 @@ export function createAdminSecurityRepository(database) {
     async createUser(user) {
       const result = await database.query(CREATE_USER_SQL, [
         user.username, user.displayName, user.email, user.passwordHash,
-        user.canManageData, user.canManageInterface,
-        user.canEditGeometries, user.canEditOsm, user.canManageUsers,
+        user.canManageData, user.canManageInterface, user.canManageUsers,
         user.canViewAudit, user.canManageSecurity,
         user.isSuperuser, Boolean(user.isBootstrap), Boolean(user.mustChangePassword),
       ]);
@@ -275,8 +274,7 @@ export function createAdminSecurityRepository(database) {
     async updateUser(userId, user) {
       const result = await database.query(UPDATE_USER_SQL, [
         userId, user.displayName, user.email,
-        user.canManageData, user.canManageInterface,
-        user.canEditGeometries, user.canEditOsm, user.canManageUsers,
+        user.canManageData, user.canManageInterface, user.canManageUsers,
         user.canViewAudit, user.canManageSecurity,
         user.isBlocked, user.manualBlockedAt ?? null, user.manualBlockedUntil ?? null,
         user.manualBlockReason ?? null, user.manualBlockedBy ?? null,
@@ -324,12 +322,18 @@ export function createAdminSecurityRepository(database) {
           max_failed_attempts=$1, failure_window_seconds=$2, lockout_seconds=$3,
           ip_max_failed_attempts=$4, ip_failure_window_seconds=$5, ip_lockout_seconds=$6,
           session_idle_seconds=$7, session_absolute_seconds=$8, audit_retention_days=$9,
+          password_min_length=$10, password_max_length=$11,
+          password_require_lowercase=$12, password_require_uppercase=$13,
+          password_require_digit=$14, password_require_special=$15,
           updated_at=NOW()
         WHERE id=1 RETURNING ${SECURITY_FIELDS_SQL}
       `, [
         settings.maxFailedAttempts, settings.failureWindowSeconds, settings.lockoutSeconds,
         settings.ipMaxFailedAttempts, settings.ipFailureWindowSeconds, settings.ipLockoutSeconds,
         settings.sessionIdleSeconds, settings.sessionAbsoluteSeconds, settings.auditRetentionDays,
+        settings.passwordMinLength, settings.passwordMaxLength,
+        settings.passwordRequireLowercase, settings.passwordRequireUppercase,
+        settings.passwordRequireDigit, settings.passwordRequireSpecial,
       ]);
       if (!result.rows[0]) throw new Error('Admin security settings row is missing; run database migrations');
       return result.rows[0];
