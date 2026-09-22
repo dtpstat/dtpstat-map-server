@@ -7,8 +7,8 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = (relativePath) => fs.readFile(path.join(root, relativePath), 'utf8');
 
-test('V041 migrates the report singleton into vertical key-value rows', async () => {
-  const migration = await source('db/migrations/V041__vertical_report_config.sql');
+test('V033 migrates the report singleton into vertical key-value rows', async () => {
+  const migration = await source('db/migrations/V033__vertical_report_config.sql');
 
   assert.match(migration, /CONFIG_KEY\s+TEXT PRIMARY KEY/i);
   assert.match(migration, /CONFIG_VALUE\s+JSONB\s+NOT NULL/i);
