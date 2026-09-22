@@ -90,7 +90,7 @@ HTTP_PORT=3002
 
 ## Миграции
 
-Текущая последовательность: `V001…V040`.
+Текущая последовательность: `V001…V041`.
 
 Последние изменения:
 
@@ -119,8 +119,9 @@ HTTP_PORT=3002
 | `V038` | identity/pending guards для city/boundary/geometry |
 | `V039` | effective geometry ownership для public/metrics |
 | `V040` | финальные ограничения geometry model |
+| `V041` | вертикальное key/value-хранилище `REPORT_CONFIG` вместо растущей singleton-строки |
 
-Следующая migration: **V041+**. Уже опубликованные migrations не редактируются задним числом.
+Следующая migration: **V042+**. Уже опубликованные migrations не редактируются задним числом.
 
 История хранится в:
 
