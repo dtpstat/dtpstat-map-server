@@ -340,6 +340,12 @@ Import:
 spool-файл в `var/import-staging`, после чего background admin task читает его
 потоком. Распакованный JSON целиком ни на диск, ни в RAM не создаётся.
 
+Streaming parser сканирует уже декодированные chunks пакетно, без
+посимвольного async-loop. Для длинного одиночного JSON item byte-progress
+публикуется прямо во время чтения потока, а city-boundary import перед каждым
+PostgreSQL/PostGIS staging batch отдельно публикует фазу `stage-write`.
+Поэтому UI различает собственно чтение JSON и ожидание DB batch.
+
 Для raw JSON/GeoJSON по-прежнему поддерживаются HTTP `gzip`, `deflate` и
 `br`. ZIP передаётся как `Content-Type: application/zip` без дополнительного
 `Content-Encoding`.
