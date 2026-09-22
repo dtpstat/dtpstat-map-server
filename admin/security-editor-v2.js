@@ -449,9 +449,31 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     button.setAttribute('role', 'option');
     const state = user.isBlocked ? 'BLOCKED' : user.mustChangePassword ? 'TEMP' : 'ACTIVE';
     button.innerHTML = `
+      <span class="security-user-avatar" aria-hidden="true">
+        <span class="security-user-avatar-fallback"></span>
+      </span>
       <span class="security-user-row-main"><strong></strong><small></small></span>
       <span class="security-user-row-state is-${state.toLowerCase()}">${state}</span>
     `;
+    const avatar = button.querySelector('.security-user-avatar');
+    const fallback = button.querySelector('.security-user-avatar-fallback');
+    fallback.textContent = auditAvatarFallback(user.displayName ?? user.username);
+    if (user.hasAvatar) {
+      const image = document.createElement('img');
+      image.alt = '';
+      image.decoding = 'async';
+      image.hidden = true;
+      image.addEventListener('load', () => {
+        image.hidden = false;
+        fallback.hidden = true;
+      }, { once: true });
+      image.addEventListener('error', () => {
+        image.remove();
+        fallback.hidden = false;
+      }, { once: true });
+      image.src = `/api/admin/security/users/${encodeURIComponent(user.id)}/avatar?v=${Date.now()}`;
+      avatar.append(image);
+    }
     button.querySelector('strong').textContent = user.displayName ?? user.username;
     button.querySelector('small').textContent = `@${user.username}${user.email ? ` · ${user.email}` : ''}`;
     button.classList.toggle('is-selected', user.id === selectedUserId);
