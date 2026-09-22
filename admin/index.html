@@ -490,8 +490,9 @@
 
                 <div class="osm-boundary-details-scroll">
                   <form id="osm-boundary-form">
-                    <section class="osm-boundary-edit-group" aria-labelledby="osm-boundary-display-title">
-                      <h4 id="osm-boundary-display-title">Данные OSM и отображение</h4>
+                    <section class="osm-boundary-edit-group osm-boundary-edit-group-display"
+                             aria-labelledby="osm-boundary-display-title">
+                      <h4 id="osm-boundary-display-title">Отображение и активность</h4>
                       <label class="check">
                         <input name="active" type="checkbox" disabled>
                         Активная геометрия
@@ -511,11 +512,17 @@
                           <option value="administrative">Административная территория</option>
                         </select>
                       </label>
+                    </section>
 
+                    <section class="osm-boundary-edit-group osm-boundary-edit-group-source"
+                             aria-labelledby="osm-boundary-source-title">
+                      <h4 id="osm-boundary-source-title">Источник OSM</h4>
+                      <p class="osm-boundary-group-help">Исходная идентичность объекта. Эти значения приходят из OSM и здесь не редактируются.</p>
                       <dl class="osm-boundary-meta" id="osm-boundary-source-meta"></dl>
                     </section>
 
-                    <section class="osm-boundary-edit-group" aria-labelledby="osm-boundary-territory-title">
+                    <section class="osm-boundary-edit-group osm-boundary-edit-group-territory"
+                             aria-labelledby="osm-boundary-territory-title">
                       <h4 id="osm-boundary-territory-title">Данные территории</h4>
                       <label>Население
                         <input name="population" type="number" inputmode="numeric"
@@ -539,7 +546,8 @@
                       </label>
                     </section>
 
-                    <section class="osm-boundary-edit-group" aria-labelledby="osm-boundary-geometry-title">
+                    <section class="osm-boundary-edit-group osm-boundary-edit-group-geometry"
+                             aria-labelledby="osm-boundary-geometry-title">
                       <h4 id="osm-boundary-geometry-title">Статистика геометрии</h4>
                       <dl class="osm-boundary-meta" id="osm-boundary-geometry-meta"></dl>
                     </section>
