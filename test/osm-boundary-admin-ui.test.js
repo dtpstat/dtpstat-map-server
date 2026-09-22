@@ -42,6 +42,12 @@ test('OSM object editor is a top-level admin section with population editing', a
     html,
     /name="population"[^>]*type="number"[^>]*max="2147483647"/,
   );
+  assert.match(html, /name="populationAsOf"[^>]*type="date"/);
+  assert.match(
+    html,
+    /name="populationSource"[^>]*type="text"[^>]*maxlength="500"/,
+  );
+  assert.match(html, /textarea name="attributes"[^>]*disabled/);
   assert.match(
     html,
     /name="population"[\s\S]*<button type="submit" disabled>Сохранить объект<\/button>[\s\S]*id="osm-boundary-enable-branch"[\s\S]*id="osm-boundary-disable-branch"[\s\S]*id="osm-boundary-meta"/,
@@ -56,16 +62,25 @@ test('OSM object editor is a top-level admin section with population editing', a
   assert.match(editor, /#admin-section-osm-objects/);
   assert.match(editor, /population\.dataset\.initialValue/);
   assert.match(editor, /changes\.population/);
+  assert.match(editor, /const populationAsOf = field\('populationAsOf'\)/);
+  assert.match(editor, /const populationSource = field\('populationSource'\)/);
+  assert.match(editor, /const attributes = field\('attributes'\)/);
   assert.match(
     editor,
-    /\[active, displayName, displayType, population, save\]/,
+    /active,[\s\S]*displayName,[\s\S]*displayType,[\s\S]*population,[\s\S]*populationAsOf,[\s\S]*populationSource,[\s\S]*attributes,[\s\S]*save/,
   );
   assert.doesNotMatch(
     editor,
     /population\.disabled\s*=\s*!active\.checked/,
   );
   assert.doesNotMatch(editor, /population\.addEventListener\('input'/);
-  assert.doesNotMatch(editor, /active\.checked = true[\s\S]*population/);
+  assert.doesNotMatch(
+    editor,
+    /(?:population|populationAsOf|populationSource|attributes)[\s\S]{0,300}active\.checked\s*=\s*true/,
+  );
+  assert.match(editor, /changes\.populationAsOf/);
+  assert.match(editor, /changes\.populationSource/);
+  assert.match(editor, /changes\.attributes/);
   assert.match(
     html,
     /Данные территории хранятся независимо от флага «Активен»/,
