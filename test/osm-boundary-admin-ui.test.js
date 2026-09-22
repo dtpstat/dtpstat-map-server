@@ -52,16 +52,19 @@ test('OSM object editor is a top-level admin section with population editing', a
   assert.match(html, /textarea name="attributes"[^>]*disabled/);
   assert.match(
     html,
-    /name="population"[\s\S]*<button type="submit" disabled>Сохранить объект<\/button>[\s\S]*id="osm-boundary-enable-branch"[\s\S]*id="osm-boundary-disable-branch"[\s\S]*id="osm-boundary-meta"/,
+    /id="osm-boundary-details-header"|class="osm-boundary-details-header"/,
   );
+  assert.match(html, /id="osm-boundary-save"[^>]*form="osm-boundary-form"[^>]*disabled/);
+  assert.match(html, /id="osm-boundary-enable-branch"[^>]*disabled/);
+  assert.match(html, /id="osm-boundary-disable-branch"[^>]*disabled/);
+  assert.match(html, /id="osm-boundary-source-meta"/);
+  assert.match(html, /id="osm-boundary-geometry-meta"/);
   assert.match(html, /Включить ветку/);
   assert.match(html, /Отключить ветку/);
   assert.doesNotMatch(html, /data-operation-tab="osm-objects"/);
   assert.doesNotMatch(html, /data-operation-panel="osm-objects"/);
 
-  assert.match(shell, /'osm-objects':[\s\S]*canEditOsm/);
-  assert.match(shell, /if \(canEditOsm\(user\)\) await import\('\.\/osm-boundary-editor\.js'\)/);
-  assert.doesNotMatch(shell, /async function loadDataEditors\(\)[\s\S]*osm-boundary-editor\.js[\s\S]*setupDataSectionLockExtensions/);
+  assert.match(shell, /'osm-objects': dataAccess/);
   assert.match(shell, /dtpstat:osm-boundary-editor-open/);
   assert.match(editor, /#admin-section-osm-objects/);
   assert.match(editor, /population\.dataset\.initialValue/);
@@ -115,7 +118,10 @@ test('OSM object editor is a top-level admin section with population editing', a
     editor,
     /\/api\/admin\/osm-boundaries\/\$\{encodeURIComponent\(item\.id\)\}\/subtree/,
   );
-  assert.match(editor, /window\.confirm\(/);
+  assert.doesNotMatch(editor, /window\.confirm\(/);
+  assert.match(editor, /function confirmBranchChange\(/);
+  assert.match(html, /id="osm-boundary-confirm-overlay"/);
+  assert.match(styles, /\.osm-boundary-confirm-overlay/);
   assert.match(editor, /publishDerivedDataChange\('osm-boundary'\)/);
   assert.match(editor, /publishDerivedDataChange\('osm-boundary-subtree'\)/);
   assert.match(
@@ -153,10 +159,11 @@ test('OSM object editor is a top-level admin section with population editing', a
   assert.match(styles, /#osm-boundary-form[\s\S]*flex-direction:\s*column/);
   assert.match(styles, /\.osm-boundary-tree-panel[\s\S]*flex-direction:\s*column/);
   assert.match(styles, /\.osm-boundary-tree[\s\S]*overflow:\s*auto/);
-  assert.match(
-    styles,
-    /\.osm-boundary-branch-actions[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
-  );
+  assert.match(styles, /\.osm-boundary-primary-actions/);
+  assert.match(styles, /display:\s*flex/);
+  assert.match(styles, /\.osm-boundary-edit-group-source/);
+  assert.match(styles, /\.osm-boundary-edit-group-territory/);
+  assert.match(styles, /\.osm-boundary-edit-group-geometry/);
   assert.match(styles, /\.osm-boundary-state-legend/);
   assert.match(styles, /\.osm-boundary-node-row/);
   assert.match(styles, /\.osm-boundary-toggle/);
