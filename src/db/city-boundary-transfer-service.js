@@ -282,12 +282,20 @@ export function createCityBoundaryTransferService(pool) {
         const flush = async () => {
           if (batch.length === 0) return;
           const payload = JSON.stringify(batch);
+          const nextBatch = batchNumber + 1;
+          operation.onProgress?.({
+            phase: 'stage-write',
+            batch: nextBatch,
+            batchPlaces: batch.length,
+            stagedPlaces,
+            payloadBytes: Buffer.byteLength(payload),
+          });
           const stageResult = await client.query(INSERT_STAGE_SQL, [payload]);
           if (stageResult.rowCount !== batch.length) {
             throw new Error('Not every city boundary was staged');
           }
           stagedPlaces += stageResult.rowCount;
-          batchNumber += 1;
+          batchNumber = nextBatch;
           operation.onProgress?.({
             phase: 'stage',
             batch: batchNumber,
@@ -464,6 +472,16 @@ export function createCityBoundaryTransferService(pool) {
           throwIfAdminTaskCancelled(operation.signal);
           const batch = plan.boundaries.slice(offset, offset + STAGE_BATCH_SIZE);
           const payload = JSON.stringify(batch);
+          const batchNumber = Math.floor(offset / STAGE_BATCH_SIZE) + 1;
+          operation.onProgress?.({
+            phase: 'stage-write',
+            batch: batchNumber,
+            batchCount,
+            batchPlaces: batch.length,
+            stagedPlaces,
+            places: plan.boundaries.length,
+            payloadBytes: Buffer.byteLength(payload),
+          });
           const stageResult = await client.query(INSERT_STAGE_SQL, [payload]);
           if (stageResult.rowCount !== batch.length) {
             throw new Error('Not every city boundary was staged');
@@ -471,7 +489,7 @@ export function createCityBoundaryTransferService(pool) {
           stagedPlaces += stageResult.rowCount;
           operation.onProgress?.({
             phase: 'stage',
-            batch: Math.floor(offset / STAGE_BATCH_SIZE) + 1,
+            batch: batchNumber,
             batchCount,
             batchPlaces: batch.length,
             stagedPlaces,
