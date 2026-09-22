@@ -240,9 +240,10 @@ function errorDetails(error) {
 /**
  * Atomically replace the complete OSM city/town boundary snapshot from a
  * portable GeoJSON export. Existing line-to-boundary links survive when the
- * same OSM object exists in the imported snapshot. Linked ranked-city records
- * restore their portable attributes but all derived statistics remain local
- * and are recalculated by line/population imports.
+ * same OSM object exists in the imported snapshot. Exact-boundary population
+ * metadata and attributes travel with the boundary snapshot; active boundaries
+ * are then projected into application-city population data before statistics
+ * are recalculated.
  *
  * @param {{ connect: () => Promise<any>, databaseSchema?: string }} pool
  */
