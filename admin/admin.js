@@ -341,6 +341,15 @@ function processingProgress(task) {
     label = 'Подготовка городов';
   } else if (phase === 'preserve-links') {
     label = 'Сохранение существующих связей';
+  } else if (phase === 'delete-boundaries') {
+    label = 'Удаление старых территорий';
+    detail = 'Сохраняемые связи уже зафиксированы; удаляется прежний snapshot.';
+  } else if (phase === 'insert-boundaries') {
+    label = 'Вставка новых территорий';
+    const places = Number(details.places);
+    detail = Number.isFinite(places)
+      ? `Записывается ${places.toLocaleString('ru-RU')} объектов.`
+      : 'Записывается новый snapshot территорий.';
   } else if (phase === 'replace-boundaries') {
     label = 'Замена геометрий';
   } else if (phase === 'hierarchy') {
