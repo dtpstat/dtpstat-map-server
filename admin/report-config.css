@@ -244,6 +244,41 @@
   gap: .45rem;
 }
 
+.report-column-header-options {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) auto;
+  align-items: end;
+  gap: .65rem;
+}
+
+/*
+ * Public table column settings are split into vertical semantic rows while
+ * keeping tightly related controls horizontal inside each row.
+ */
+#report-table-columns .report-column-row {
+  grid-template-columns: minmax(9rem, .65fr) minmax(14rem, 1.35fr) auto;
+}
+
+#report-table-columns .report-column-details {
+  grid-template-columns: minmax(14rem, 1.5fr) repeat(2, minmax(8rem, .65fr));
+  gap: .55rem;
+}
+
+#report-table-columns .report-column-header-options {
+  grid-template-columns: minmax(14rem, 1fr) auto;
+}
+
+#report-table-columns .report-row-actions {
+  justify-self: end;
+  justify-content: end;
+}
+
+.report-header-bold-control {
+  min-height: 2.15rem;
+  align-items: center;
+  white-space: nowrap;
+}
+
 .report-row-actions {
   display: flex;
   gap: .3rem;
@@ -414,8 +449,12 @@
   .report-operation-row,
   .report-column-row,
   .report-column-details,
+  .report-column-header-options,
   .report-format-rule-row,
-  .report-rank-grid {
+  .report-rank-grid,
+  #report-table-columns .report-column-row,
+  #report-table-columns .report-column-details,
+  #report-table-columns .report-column-header-options {
     grid-template-columns: 1fr;
   }
 
@@ -425,7 +464,9 @@
     justify-self: start;
   }
 
-  .report-row-actions {
+  .report-row-actions,
+  #report-table-columns .report-row-actions {
+    justify-self: start;
     justify-content: start;
   }
 
