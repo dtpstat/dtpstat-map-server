@@ -1142,7 +1142,10 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         await client.query(ACTIVATE_NEW_PLACES_SQL);
         await rebuildCityBoundaryHierarchy(client, {
           signal: operation.signal,
-          onProgress: operation.onProgress,
+          onProgress(progress) {
+            reportProgress(progress);
+            operation.onProgress?.(progress);
+          },
         });
         const restoredLinksResult = await client.query(
           RESTORE_GEOMETRY_LINKS_SQL,
