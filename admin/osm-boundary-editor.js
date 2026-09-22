@@ -48,7 +48,8 @@ if (typeof document !== 'undefined') {
   const refreshButton = document.querySelector('#osm-boundary-refresh');
   const form = document.querySelector('#osm-boundary-form');
   const title = document.querySelector('#osm-boundary-selected-title');
-  const meta = document.querySelector('#osm-boundary-meta');
+  const sourceMeta = document.querySelector('#osm-boundary-source-meta');
+  const geometryMeta = document.querySelector('#osm-boundary-geometry-meta');
   const message = document.querySelector('#osm-boundary-message');
   const mapHost = document.querySelector('#osm-boundary-map');
 
@@ -69,9 +70,52 @@ if (typeof document !== 'undefined') {
     const populationAsOf = field('populationAsOf');
     const populationSource = field('populationSource');
     const attributes = field('attributes');
-    const save = form.querySelector('button[type="submit"]');
+    const save = document.querySelector('#osm-boundary-save');
     const enableBranch = document.querySelector('#osm-boundary-enable-branch');
     const disableBranch = document.querySelector('#osm-boundary-disable-branch');
+    const confirmOverlay = document.querySelector('#osm-boundary-confirm-overlay');
+    const confirmTitle = document.querySelector('#osm-boundary-confirm-title');
+    const confirmMessage = document.querySelector('#osm-boundary-confirm-message');
+    const confirmAccept = document.querySelector('[data-osm-boundary-confirm-accept]');
+    const confirmCancel = document.querySelector('[data-osm-boundary-confirm-cancel]');
+    let confirmResolver = null;
+
+    function closeConfirm(result = false) {
+      if (!confirmOverlay || confirmOverlay.hidden) return;
+      confirmOverlay.hidden = true;
+      const resolve = confirmResolver;
+      confirmResolver = null;
+      resolve?.(result);
+    }
+
+    function confirmBranchChange({ nextActive, item, total, changed }) {
+      if (!confirmOverlay || !confirmTitle || !confirmMessage || !confirmAccept) {
+        return Promise.resolve(false);
+      }
+      confirmTitle.textContent = nextActive ? 'Включить ветку?' : 'Отключить ветку?';
+      confirmMessage.textContent =
+        `${nextActive ? 'Будут включены' : 'Будут отключены'} выбранный объект ` +
+        `«${item.displayName}» и вложенные объекты. ` +
+        `Объектов в ветке: ${total}; изменится: ${changed}.`;
+      confirmAccept.textContent = nextActive ? 'Включить ветку' : 'Отключить ветку';
+      confirmAccept.classList.toggle('danger', !nextActive);
+      confirmOverlay.hidden = false;
+      confirmAccept.focus();
+      return new Promise((resolve) => {
+        confirmResolver = resolve;
+      });
+    }
+
+    confirmCancel?.addEventListener('click', () => closeConfirm(false));
+    confirmAccept?.addEventListener('click', () => closeConfirm(true));
+    confirmOverlay?.addEventListener('click', (event) => {
+      if (event.target === confirmOverlay) closeConfirm(false);
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && confirmOverlay && !confirmOverlay.hidden) {
+        closeConfirm(false);
+      }
+    });
 
     function setMessage(text, tone = '') {
       message.textContent = text;
@@ -367,7 +411,8 @@ if (typeof document !== 'undefined') {
         attributes.value = '{}';
         attributes.dataset.initialValue = '{}';
         title.textContent = 'Выберите объект в дереве';
-        meta.replaceChildren();
+        sourceMeta?.replaceChildren();
+        geometryMeta?.replaceChildren();
         updateBranchActions(null);
         renderTree();
         return;
@@ -390,15 +435,18 @@ if (typeof document !== 'undefined') {
       attributes.value = JSON.stringify(territoryAttributes, null, 2);
       attributes.dataset.initialValue = JSON.stringify(territoryAttributes);
       title.textContent = item.displayName;
-      meta.replaceChildren(
+      sourceMeta?.replaceChildren(
         metaItem('OSM', `${item.osmType}/${item.osmId}`),
         metaItem('Исходное имя', item.osmName),
         metaItem('Класс', item.placeType ? `place=${item.placeType}` : 'administrative'),
         metaItem('admin_level', item.adminLevel),
-        metaItem('Площадь, км²', Number(item.areaKm2).toLocaleString('ru-RU', { maximumFractionDigits: 2 })),
         metaItem('DB city_id', item.cityId),
-        metaItem('Население на дату', item.populationAsOf),
-        metaItem('Источник населения', item.populationSource),
+      );
+      geometryMeta?.replaceChildren(
+        metaItem(
+          'Площадь, км²',
+          Number(item.areaKm2).toLocaleString('ru-RU', { maximumFractionDigits: 2 }),
+        ),
       );
       updateBranchActions(item);
       renderTree();
@@ -665,11 +713,12 @@ if (typeof document !== 'undefined') {
       ).length;
       if (changedCount === 0) return;
 
-      const verb = nextActive ? 'Включить' : 'Отключить';
-      const confirmed = window.confirm(
-        `${verb} выбранный объект «${item.displayName}» и всю его ветку? ` +
-        `Объектов в ветке: ${items.length}; изменится: ${changedCount}.`,
-      );
+      const confirmed = await confirmBranchChange({
+        nextActive,
+        item,
+        total: items.length,
+        changed: changedCount,
+      });
       if (!confirmed) return;
 
       for (const control of [save, enableBranch, disableBranch]) {
