@@ -87,19 +87,22 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           <div><h3>Аудит</h3><p>Входы и административные операции с фильтрацией и быстрыми реакциями.</p></div>
           <a class="secondary-link" id="security-audit-export" href="/api/admin/security/audit/export.csv" download>Экспорт CSV</a>
         </div>
-        <form id="security-audit-filter" class="security-audit-filter">
-          <label>От <input name="from" type="datetime-local"></label>
-          <label>До <input name="to" type="datetime-local"></label>
-          <label>Тип события <select name="eventType"><option value="">Все</option></select></label>
-          <label>Операция <select name="operationType"><option value="">Все</option></select></label>
-          <label>Статус <select name="status"><option value="">Все</option></select></label>
-          <label>Пользователь <input name="username" type="text"></label>
-          <label>IP <input name="ipAddress" type="text"></label>
-          <div class="security-filter-actions">
-            <button type="submit">Применить</button>
-            <button type="button" class="secondary" id="security-audit-reset">Сбросить</button>
-          </div>
-        </form>
+        <details class="security-audit-filter-panel">
+          <summary>Фильтры аудита</summary>
+          <form id="security-audit-filter" class="security-audit-filter">
+            <label>От <input name="from" type="datetime-local"></label>
+            <label>До <input name="to" type="datetime-local"></label>
+            <label>Тип события <select name="eventType"><option value="">Все</option></select></label>
+            <label>Операция <select name="operationType"><option value="">Все</option></select></label>
+            <label>Статус <select name="status"><option value="">Все</option></select></label>
+            <label>Пользователь <input name="username" type="text"></label>
+            <label>IP <input name="ipAddress" type="text"></label>
+            <div class="security-filter-actions">
+              <button type="submit">Применить</button>
+              <button type="button" class="secondary" id="security-audit-reset">Сбросить</button>
+            </div>
+          </form>
+        </details>
         <div class="security-audit-table-wrap">
           <table class="security-audit-table">
             <thead><tr>
@@ -127,9 +130,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
                 <label>Минимум символов
                   <input name="passwordMinLength" type="number" min="1" max="4096" required>
                 </label>
-                <label>Максимум символов
-                  <input name="passwordMaxLength" type="number" min="1" max="4096" required>
-                </label>
+                <input name="passwordMaxLength" type="hidden">
               </div>
               <div class="security-password-requirements">
                 <label class="check"><input name="passwordRequireLowercase" type="checkbox"> Строчная буква</label>
@@ -522,7 +523,8 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         image.remove();
         fallback.hidden = false;
       }, { once: true });
-      image.src = `/api/admin/security/users/${encodeURIComponent(user.id)}/avatar?v=${Date.now()}`;
+      const avatarVersion = encodeURIComponent(user.updatedAt ?? '1');
+      image.src = `/api/admin/security/users/${encodeURIComponent(user.id)}/avatar?v=${avatarVersion}`;
       avatar.append(image);
     }
     button.querySelector('strong').textContent = user.displayName ?? user.username;
@@ -530,7 +532,9 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     button.classList.toggle('is-selected', user.id === selectedUserId);
     button.addEventListener('click', () => {
       selectedUserId = user.id;
-      renderUsersList();
+      for (const row of host.querySelectorAll('.security-user-row')) {
+        row.classList.toggle('is-selected', row.dataset.userId === String(user.id));
+      }
       renderDetail(user);
     });
     return button;
@@ -615,8 +619,8 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       const currentUserRow =
         String(entry.userId) === String(currentUser?.id ?? '');
       image.src = currentUserRow
-        ? `/api/admin/profile/avatar?v=${Date.now()}`
-        : `/api/admin/security/users/${encodeURIComponent(entry.userId)}/avatar?v=${Date.now()}`;
+        ? '/api/admin/profile/avatar'
+        : `/api/admin/security/users/${encodeURIComponent(entry.userId)}/avatar`;
       avatar.append(image);
     }
 
