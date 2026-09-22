@@ -5,6 +5,7 @@ import {
 } from '../data/project-settings.js';
 import { normalizeMapboxAccessToken } from '../data/mapbox-access-token.js';
 import { normalizePublicDownloadName } from '../data/public-download-name.js';
+import { acquireDataImportLock } from './database-locks.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 const SELECT_SETTINGS_SQL = `
@@ -279,7 +280,7 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
       largeCityPopulationThreshold,
       largeCityAreaKm2Threshold,
     } = splitProjectSettingsPayload(payload);
-    const result = await database.query(UPDATE_SETTINGS_SQL, [
+    const values = [
       plan.projectName,
       plan.keywords,
       plan.footerHtml,
@@ -291,12 +292,41 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
       mapboxAccessToken,
       largeCityPopulationThreshold,
       largeCityAreaKm2Threshold,
-    ]);
-    await database.query(RECALCULATE_CITY_STATISTICS_SQL);
-    if (!result.rows[0]) {
-      throw new Error('Project settings row is missing; run database migrations');
+    ];
+
+    // Production uses a Pool, so keep the threshold update and derived city
+    // classification in one transaction. The query-only fallback is retained
+    // for small isolated unit-test repositories.
+    if (typeof database.connect !== 'function') {
+      const result = await database.query(UPDATE_SETTINGS_SQL, values);
+      await database.query(RECALCULATE_CITY_STATISTICS_SQL);
+      if (!result.rows[0]) {
+        throw new Error(
+          'Project settings row is missing; run database migrations',
+        );
+      }
+      return result.rows[0];
     }
-    return result.rows[0];
+
+    const client = await database.connect();
+    try {
+      await client.query('BEGIN');
+      await acquireDataImportLock(client, database);
+      const result = await client.query(UPDATE_SETTINGS_SQL, values);
+      if (!result.rows[0]) {
+        throw new Error(
+          'Project settings row is missing; run database migrations',
+        );
+      }
+      await client.query(RECALCULATE_CITY_STATISTICS_SQL);
+      await client.query('COMMIT');
+      return result.rows[0];
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async function savePublicDownloadName(value) {
