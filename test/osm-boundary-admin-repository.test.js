@@ -134,6 +134,33 @@ test('OSM boundary update upserts population for the active linked city', async 
   assert.equal(pool.released, true);
 });
 
+test('inactive OSM boundary can be activated and receive population atomically', async () => {
+  const pool = createPool({
+    currentActive: false,
+    currentCityId: null,
+    currentPopulation: null,
+    resolvedCityId: 42,
+    finalPopulation: 1000,
+    finalActive: true,
+  });
+  const repository = createOsmBoundaryAdminRepository(pool);
+
+  const result = await repository.update(5, {
+    active: true,
+    population: 1000,
+  });
+
+  assert.equal(result.active, true);
+  assert.equal(result.cityId, 42);
+  assert.equal(result.population, 1000);
+  assert.ok(pool.queries.includes('SELECT sync_active_boundary_cities()'));
+  const populationIndex = pool.queries.findIndex((query) =>
+    query.startsWith('INSERT INTO city_populations'));
+  assert.ok(populationIndex >= 0);
+  assert.deepEqual(pool.parameters[populationIndex], [42, 1000]);
+  assert.equal(pool.queries.at(-1), 'COMMIT');
+});
+
 test('activating one OSM object never activates parents or descendants', async () => {
   const pool = createPool({
     currentActive: false,
