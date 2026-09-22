@@ -173,3 +173,77 @@ test('project settings repository reads and updates the singleton row', async ()
     /SET\s+public_download_name = \$1/i.test(call.text));
   assert.deepEqual(publicDownloadUpdate.values, ['Трамвайные линии']);
 });
+
+
+test('project settings save commits thresholds and city classification atomically', async () => {
+  const calls = [];
+  let released = false;
+  const client = {
+    async query(text, values) {
+      const normalized = text.trim();
+      calls.push({ text: normalized, values });
+      if (/UPDATE project_settings/i.test(normalized)) {
+        return {
+          rows: [{
+            projectName: values[0],
+            keywords: values[1],
+            footerHtml: values[2],
+            yandexMetrikaId: values[3],
+            googleAnalyticsId: values[4],
+            themePreset: values[5] ?? 'classic',
+            showLineLabels: values[6],
+            showLinePopups: values[7] ?? true,
+            publicDownloadName: 'bus-lanes',
+            mapboxAccessTokenConfigured: false,
+            largeCityPopulationThreshold: values[9],
+            largeCityAreaKm2Threshold: values[10],
+            updatedAt: '2026-09-22T18:00:00.000Z',
+          }],
+        };
+      }
+      return { rows: [] };
+    },
+    release() {
+      released = true;
+    },
+  };
+  const database = {
+    databaseSchema: 'buslanes',
+    async connect() {
+      return client;
+    },
+    async query() {
+      throw new Error('pool.query must not be used during transactional save');
+    },
+  };
+  const repository = createProjectSettingsRepository(database);
+
+  const saved = await repository.save({
+    projectName: 'Выделенные полосы в России',
+    keywords: ['транспорт'],
+    footerHtml: '<p>Описание</p>',
+    yandexMetrikaId: null,
+    googleAnalyticsId: null,
+    themePreset: 'classic',
+    showLineLabels: false,
+    showLinePopups: true,
+    largeCityPopulationThreshold: 550000,
+    largeCityAreaKm2Threshold: 300,
+  });
+
+  assert.equal(saved.largeCityPopulationThreshold, 550000);
+  assert.equal(saved.largeCityAreaKm2Threshold, 300);
+  assert.equal(calls[0].text, 'BEGIN');
+  assert.match(calls[1].text, /pg_advisory_xact_lock/i);
+  const updateIndex = calls.findIndex((call) =>
+    /UPDATE project_settings/i.test(call.text));
+  const recalcIndex = calls.findIndex((call) =>
+    /WITH\s+geometry_statistics\s+AS/i.test(call.text) &&
+    /UPDATE\s+cities\s+AS\s+city/i.test(call.text),
+  );
+  const commitIndex = calls.findIndex((call) => call.text === 'COMMIT');
+  assert.ok(updateIndex > 0);
+  assert.ok(recalcIndex > updateIndex);
+  assert.ok(commitIndex > recalcIndex);
+  assert.equal(released, true);
+});
