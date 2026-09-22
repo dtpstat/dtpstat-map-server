@@ -50,11 +50,12 @@ const importResult = {
 };
 
 const populationResult = {
-  territories: 1,
-  requestedTerritories: 1,
-  roots: 1,
+  regions: 1,
+  requestedRegions: 1,
+  cities: 1,
+  requestedCities: 1,
   skippedCount: 0,
-  skippedTerritories: [],
+  skippedCities: [],
   asOf: '2026-01-01',
   source: 'test',
   updatedAt: '2026-08-31T12:00:00.000Z',
@@ -611,16 +612,14 @@ test('authenticated population endpoint updates a separate data source', async (
     schemaVersion: 2,
     asOf: '2026-01-01',
     source: 'test',
-    territories: [{
-      osmType: 'relation',
-      osmId: '123',
-      name: 'Казань',
-      type: 'city',
-      placeType: 'city',
-      adminLevel: 6,
-      population: 1300000,
+    regions: [{
+      name: 'Республика Татарстан',
       attributes: {},
-      children: [],
+      cities: [{
+        name: 'Казань',
+        population: 1300000,
+        attributes: {},
+      }],
     }],
   };
 
