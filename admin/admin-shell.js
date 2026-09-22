@@ -1,3 +1,6 @@
+import { confirmDirtyNavigation, installDirtyTabGuard } from './admin-dirty-state.js';
+import { readTabState, writeTabState } from './admin-tab-state.js';
+
 function canManageData(user) {
   return Boolean(user?.isSuperuser || user?.canManageData);
 }
@@ -101,6 +104,10 @@ function ensureTopbarActions() {
   button.className = 'secondary';
   button.textContent = 'Выйти';
   button.addEventListener('click', async () => {
+    if (!await confirmDirtyNavigation({
+      title: 'Выйти из админки?',
+      message: 'Есть несохранённые изменения. При выходе они будут потеряны.',
+    })) return;
     button.disabled = true;
     button.textContent = 'Выходим…';
     try {
@@ -166,6 +173,7 @@ function setupInterfaceTabs() {
   if (tabs.length === 0) return;
 
   const select = (key) => {
+    writeTabState('interface', key);
     for (const tab of tabs) {
       const active = tab.dataset.interfaceTab === key;
       tab.setAttribute('aria-selected', String(active));
@@ -178,10 +186,13 @@ function setupInterfaceTabs() {
   };
 
   for (const tab of tabs) tab.addEventListener('click', () => select(tab.dataset.interfaceTab));
-  select(
+  const available = tabs.map((tab) => tab.dataset.interfaceTab);
+  select(readTabState(
+    'interface',
+    available,
     tabs.find((tab) => tab.dataset.interfaceTab === 'project')?.dataset.interfaceTab
       ?? tabs[0].dataset.interfaceTab,
-  );
+  ));
 }
 
 async function loadInterfaceEditors(user) {
@@ -268,6 +279,7 @@ function setupPrimarySections(user) {
     .filter((key) => permissions[key]);
   const select = (key) => {
     if (!permissions[key]) return;
+    writeTabState('primary', key);
     for (const tab of tabs) {
       const active = tab.dataset.adminSectionTab === key;
       tab.setAttribute('aria-selected', String(active));
@@ -285,7 +297,10 @@ function setupPrimarySections(user) {
   };
 
   for (const tab of tabs) tab.addEventListener('click', () => select(tab.dataset.adminSectionTab));
-  select(mustChangePassword ? 'profile' : available[0]);
+  const initial = mustChangePassword
+    ? 'profile'
+    : readTabState('primary', available, available[0]);
+  select(initial);
   return { select };
 }
 
@@ -379,3 +394,5 @@ async function startAdminShell() {
 }
 
 await startAdminShell();
+
+installDirtyTabGuard();
