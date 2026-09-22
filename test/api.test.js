@@ -1069,7 +1069,15 @@ test('public API loaders accept cache-control fetch options for explicit republi
     'utf8',
   );
   assert.match(source, /loadCities\(options = \{\}\)/);
-  assert.match(source, /getJson\('\/api\/cities', options\)/);
+  assert.match(
+    source,
+    /getJson\('\/api\/cities', \{[\s\S]*?cache: 'no-store',[\s\S]*?\.\.\.options,[\s\S]*?\}\)/,
+  );
   assert.match(source, /loadLineTypes\(options = \{\}\)/);
+  assert.match(
+    source,
+    /getJson\('\/api\/line-types', \{[\s\S]*?cache: 'no-store',[\s\S]*?\.\.\.options,[\s\S]*?\}\)/,
+  );
   assert.match(source, /loadReportConfig\(options = \{\}\)/);
+  assert.match(source, /getJson\('\/api\/report-config', options\)/);
 });
