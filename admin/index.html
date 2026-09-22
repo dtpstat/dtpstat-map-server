@@ -483,6 +483,20 @@
                     <small>Данные территории хранятся независимо от флага «Активен». Пустое значение удаляет текущую запись населения.</small>
                   </label>
 
+                  <label>Население на дату
+                    <input name="populationAsOf" type="date" disabled>
+                  </label>
+
+                  <label>Источник населения
+                    <input name="populationSource" type="text" maxlength="500"
+                           disabled placeholder="не задан">
+                  </label>
+
+                  <label>Атрибуты территории (JSON)
+                    <textarea name="attributes" rows="6" disabled>{}</textarea>
+                    <small>Произвольный JSON object. Атрибуты также не влияют на активность OSM-объекта.</small>
+                  </label>
+
                   <button type="submit" disabled>Сохранить объект</button>
 
                   <div class="osm-boundary-branch-actions" aria-label="Действия над веткой дерева">
