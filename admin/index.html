@@ -614,55 +614,14 @@
               </section>
 
               <aside class="osm-boundary-details" aria-label="Атрибуты выбранного OSM объекта">
-                <form id="osm-boundary-form">
+                <header class="osm-boundary-details-header">
                   <div class="osm-boundary-selected-title" id="osm-boundary-selected-title">
                     Выберите объект в дереве
                   </div>
-
-                  <label class="check">
-                    <input name="active" type="checkbox" disabled>
-                    Активная геометрия
-                  </label>
-
-                  <label>Отображаемое имя
-                    <input name="displayName" type="text" maxlength="160" disabled required>
-                  </label>
-
-                  <label>Тип
-                    <select name="displayType" disabled required>
-                      <option value="city">Город</option>
-                      <option value="town">Town / малый город</option>
-                      <option value="urban_okrug">Городской округ</option>
-                      <option value="federal_city">Город федерального значения</option>
-                      <option value="settlement">Поселение</option>
-                      <option value="administrative">Административная территория</option>
-                    </select>
-                  </label>
-
-                  <label>Население
-                    <input name="population" type="number" inputmode="numeric"
-                           min="1" max="2147483647" step="1" disabled
-                           placeholder="не задано">
-                    <small>Данные территории хранятся независимо от флага «Активен». Пустое значение удаляет текущую запись населения.</small>
-                  </label>
-
-                  <label>Население на дату
-                    <input name="populationAsOf" type="date" disabled>
-                  </label>
-
-                  <label>Источник населения
-                    <input name="populationSource" type="text" maxlength="500"
-                           disabled placeholder="не задан">
-                  </label>
-
-                  <label>Атрибуты территории (JSON)
-                    <textarea name="attributes" rows="6" disabled>{}</textarea>
-                    <small>Произвольный JSON object. Атрибуты также не влияют на активность OSM-объекта.</small>
-                  </label>
-
-                  <button type="submit" disabled>Сохранить объект</button>
-
-                  <div class="osm-boundary-branch-actions" aria-label="Действия над веткой дерева">
+                  <div class="osm-boundary-primary-actions" aria-label="Основные действия с объектом">
+                    <button id="osm-boundary-save" type="submit" form="osm-boundary-form" disabled>
+                      Сохранить
+                    </button>
                     <button class="secondary" id="osm-boundary-enable-branch"
                             type="button" disabled>
                       Включить ветку
@@ -671,15 +630,93 @@
                             type="button" disabled>
                       Отключить ветку
                     </button>
-                    <small>Действие применяется к выбранному объекту и всем вложенным объектам.</small>
                   </div>
+                </header>
 
-                  <p class="notice" id="osm-boundary-message" role="status"></p>
+                <div class="osm-boundary-details-scroll">
+                  <form id="osm-boundary-form">
+                    <section class="osm-boundary-edit-group osm-boundary-edit-group-display"
+                             aria-labelledby="osm-boundary-display-title">
+                      <h4 id="osm-boundary-display-title">Отображение и активность</h4>
+                      <label class="check">
+                        <input name="active" type="checkbox" disabled>
+                        Активная геометрия
+                      </label>
 
-                  <dl class="osm-boundary-meta" id="osm-boundary-meta"></dl>
-                </form>
+                      <label>Отображаемое имя
+                        <input name="displayName" type="text" maxlength="160" disabled required>
+                      </label>
+
+                      <label>Тип
+                        <select name="displayType" disabled required>
+                          <option value="city">Город</option>
+                          <option value="town">Town / малый город</option>
+                          <option value="urban_okrug">Городской округ</option>
+                          <option value="federal_city">Город федерального значения</option>
+                          <option value="settlement">Поселение</option>
+                          <option value="administrative">Административная территория</option>
+                        </select>
+                      </label>
+                    </section>
+
+                    <section class="osm-boundary-edit-group osm-boundary-edit-group-source"
+                             aria-labelledby="osm-boundary-source-title">
+                      <h4 id="osm-boundary-source-title">Источник OSM</h4>
+                      <p class="osm-boundary-group-help">Исходная идентичность объекта. Эти значения приходят из OSM и здесь не редактируются.</p>
+                      <dl class="osm-boundary-meta" id="osm-boundary-source-meta"></dl>
+                    </section>
+
+                    <section class="osm-boundary-edit-group osm-boundary-edit-group-territory"
+                             aria-labelledby="osm-boundary-territory-title">
+                      <h4 id="osm-boundary-territory-title">Данные территории</h4>
+                      <label>Население
+                        <input name="population" type="number" inputmode="numeric"
+                               min="1" max="2147483647" step="1" disabled
+                               placeholder="не задано">
+                        <small>Хранится независимо от флага «Активная геометрия». Пустое значение удаляет запись населения.</small>
+                      </label>
+
+                      <label>Население на дату
+                        <input name="populationAsOf" type="date" disabled>
+                      </label>
+
+                      <label>Источник населения
+                        <input name="populationSource" type="text" maxlength="500"
+                               disabled placeholder="не задан">
+                      </label>
+
+                      <label>Атрибуты территории (JSON)
+                        <textarea name="attributes" rows="6" disabled>{}</textarea>
+                        <small>Произвольный JSON object. Атрибуты не влияют на активность OSM-объекта.</small>
+                      </label>
+                    </section>
+
+                    <section class="osm-boundary-edit-group osm-boundary-edit-group-geometry"
+                             aria-labelledby="osm-boundary-geometry-title">
+                      <h4 id="osm-boundary-geometry-title">Статистика геометрии</h4>
+                      <dl class="osm-boundary-meta" id="osm-boundary-geometry-meta"></dl>
+                    </section>
+
+                    <p class="osm-boundary-branch-hint">
+                      Включение/отключение ветки применяется к выбранному объекту и всем вложенным объектам.
+                    </p>
+                    <p class="notice" id="osm-boundary-message" role="status"></p>
+                  </form>
+                </div>
               </aside>
             </div>
+          </div>
+
+          <div id="osm-boundary-confirm-overlay" class="osm-boundary-confirm-overlay" hidden>
+            <section class="osm-boundary-confirm-dialog" role="dialog" aria-modal="true"
+                     aria-labelledby="osm-boundary-confirm-title">
+              <h3 id="osm-boundary-confirm-title">Подтверждение</h3>
+              <p id="osm-boundary-confirm-message"></p>
+              <div class="osm-boundary-confirm-actions">
+                <button type="button" class="secondary" data-osm-boundary-confirm-cancel>Отмена</button>
+                <button type="button" data-osm-boundary-confirm-accept>Продолжить</button>
+              </div>
+            </section>
           </div>
         </section>
       </div>
