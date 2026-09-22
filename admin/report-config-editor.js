@@ -1,3 +1,6 @@
+import { trackDirtyForm } from './admin-dirty-state.js';
+import { readTabState, writeTabState } from './admin-tab-state.js';
+
 const stylesheet = document.createElement('link');
 stylesheet.rel = 'stylesheet';
 stylesheet.href = '/admin/report-config.css';
@@ -118,7 +121,11 @@ if (form) {
     config: null,
     catalog: null,
     lineTypes: [],
-    view: 'metrics',
+    view: readTabState(
+      'report-view',
+      ['metrics', 'table', 'csv', 'rank'],
+      'metrics',
+    ),
   };
   let keyCounter = 0;
 
@@ -131,6 +138,11 @@ if (form) {
   const message = document.querySelector('#report-config-message');
   const viewTabs = [...document.querySelectorAll('[data-report-view-tab]')];
   const viewPanels = [...document.querySelectorAll('[data-report-view-panel]')];
+  const dirtyState = trackDirtyForm(form, { label: 'Расчёты и публичная таблица' });
+  form.addEventListener('click', (event) => {
+    const button = event.target.closest('button[type="button"]');
+    if (button) dirtyState?.markDirty();
+  });
 
   function setMessage(text, tone = '') {
     message.textContent = text;
@@ -139,6 +151,7 @@ if (form) {
 
   function setView(view) {
     state.view = view;
+    writeTabState('report-view', view);
     for (const tab of viewTabs) {
       const active = tab.dataset.reportViewTab === view;
       tab.classList.toggle('is-active', active);
@@ -1172,6 +1185,7 @@ if (form) {
       state.catalog = payload.catalog;
       state.lineTypes = payload.lineTypes ?? [];
       renderAll();
+      dirtyState?.markClean();
       setMessage('Конфигурация загружена.');
     } catch (error) {
       setMessage(error.message, 'error');
@@ -1202,6 +1216,7 @@ if (form) {
       if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
       state.config = clone(payload.config);
       renderAll();
+      dirtyState?.markClean();
       const cities = payload.materialized?.cities ?? 0;
       const metrics = payload.materialized?.metrics ?? state.config.metrics.length;
       setMessage(`Сохранено. Пересчитано городов: ${cities}; метрик: ${metrics}. CSV обновлён.`, 'success');
@@ -1210,6 +1225,6 @@ if (form) {
     }
   });
 
-  setView('metrics');
+  setView(state.view);
   void load();
 }
