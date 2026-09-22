@@ -66,9 +66,9 @@ const EXPORT_PUBLIC_CSV_SQL = `
 `;
 
 const EXPORT_PUBLIC_CSV_COLUMNS_SQL = `
-  SELECT csv_columns AS "csvColumns"
+  SELECT config_value AS "csvColumns"
   FROM report_config
-  WHERE id = 1
+  WHERE config_key = 'csv_columns'
 `;
 
 /**
