@@ -427,6 +427,7 @@
   .report-operation-row,
   .report-column-row,
   .report-column-details,
+  .report-column-header-options,
   .report-format-rule-row,
   .report-rank-grid {
     grid-template-columns: 1fr;
