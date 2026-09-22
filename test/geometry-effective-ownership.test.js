@@ -6,9 +6,9 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-test('final V040 geometry model supports durable detached rows and exact effective ownership', async () => {
+test('final V041 geometry model supports durable detached rows and exact effective ownership', async () => {
   const source = await fs.readFile(
-    path.join(root, 'db/migrations/V040__effective_geometry_ownership.sql'),
+    path.join(root, 'db/migrations/V041__effective_geometry_ownership.sql'),
     'utf8',
   );
   assert.match(source, /ALTER COLUMN CITY_ID DROP NOT NULL/);
@@ -21,9 +21,9 @@ test('final V040 geometry model supports durable detached rows and exact effecti
 });
 
 
-test('V041 replaces stale-row deferred guards with final-state validation', async () => {
+test('V042 replaces stale-row deferred guards with final-state validation', async () => {
   const source = await fs.readFile(
-    path.join(root, 'db/migrations/V041__geometry_final_state_constraints.sql'),
+    path.join(root, 'db/migrations/V042__geometry_final_state_constraints.sql'),
     'utf8',
   );
   assert.match(source, /DROP TRIGGER IF EXISTS CITY_BOUNDARIES_CONSISTENCY_CHECK/);
