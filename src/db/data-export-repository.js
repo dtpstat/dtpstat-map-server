@@ -335,12 +335,13 @@ async function* streamPopulationHierarchy(rows) {
       }
     }
 
-    const node = JSON.stringify(populationNode(row));
+    const node = populationNode(row);
     if (row.hasChildren) {
-      yield node.slice(0, -1);
+      const serialized = JSON.stringify(node);
+      yield serialized.slice(0, -1);
       yield ',"children":[';
     } else {
-      yield node;
+      yield JSON.stringify({ ...node, children: [] });
     }
 
     previousDepth = depth;
