@@ -50,7 +50,7 @@
 .security-user-row {
   width: 100%;
   display: grid;
-  grid-template-columns: minmax(0,1fr) auto;
+  grid-template-columns: 2rem minmax(0,1fr) auto;
   gap: .5rem;
   align-items: center;
   padding: .7rem .8rem;
@@ -63,6 +63,21 @@
 }
 .security-user-row:hover,
 .security-user-row.is-selected { background: #13262a; }
+.security-user-avatar {
+  width: 2rem;
+  height: 2rem;
+  display: inline-grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #365158;
+  border-radius: 50%;
+  color: #b7cbcf;
+  background: #17252a;
+  font-size: .72rem;
+  font-weight: 800;
+}
+.security-user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.security-user-avatar [hidden] { display: none !important; }
 .security-user-row-main { min-width: 0; display: grid; gap: .15rem; }
 .security-user-row-main strong,
 .security-user-row-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
