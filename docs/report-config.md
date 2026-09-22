@@ -35,7 +35,7 @@ Backend валидирует модель и компилирует SQL сам.
 
 ## Хранение
 
-Начиная с `V033`, `REPORT_CONFIG` хранится вертикально:
+Начиная с `V041`, `REPORT_CONFIG` хранится вертикально:
 
 ```text
 CONFIG_KEY      CONFIG_VALUE (JSONB)   UPDATED_AT
@@ -53,7 +53,7 @@ rank            {"sort":[...]}
 список метрик, описание колонок и ranking policy атомарно валидируются
 приложением.
 
-`V033` переносит данные из прежней singleton-схемы
+`V041` переносит данные из прежней singleton-схемы
 `METRICS/TABLE_COLUMNS/CSV_COLUMNS/RANK_SORT/RANK_METRIC_KEY/RANK_DIRECTION`
 без изменения внешнего API или project-settings transfer format.
 
