@@ -56,6 +56,8 @@ test('current user and audit rows render profile avatars with fallback initials'
 
   assert.match(editor, /function auditUserCell\(entry\)/);
   assert.match(editor, /if \(entry\.userId\)/);
+  assert.match(editor, /entry\.userId === currentUser\?\.id/);
+  assert.match(editor, /\/api\/admin\/profile\/avatar\?v=\$\{Date\.now\(\)\}/);
   assert.match(editor, /security-audit-avatar-fallback/);
   assert.match(editor, /image\.hidden = false/);
   assert.match(editor, /fallback\.hidden = true/);
