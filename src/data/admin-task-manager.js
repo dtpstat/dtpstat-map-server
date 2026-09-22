@@ -243,7 +243,19 @@ export function createAdminTaskManager(dependencies = {}) {
 
       task.status = 'succeeded';
       task.completedAt = completedAt;
-      appendLog(task, 'info', 'Задача успешно завершена');
+      if (task.result?.partial) {
+        appendLog(
+          task,
+          'warning',
+          'Задача завершена с предупреждениями',
+          {
+            warningCount: task.result.warningCount ?? 0,
+            skippedCount: task.result.skippedCount ?? 0,
+          },
+        );
+      } else {
+        appendLog(task, 'info', 'Задача успешно завершена');
+      }
       if (successfulUpdate) emit({ type: 'success', update: successfulUpdate });
     } catch (error) {
       if (
