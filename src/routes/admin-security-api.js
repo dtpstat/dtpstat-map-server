@@ -440,6 +440,31 @@ export function createAdminSecurityRouter({ securityService, adminAuth, maxBodyB
     },
   );
 
+  router.get(
+    '/admin/security/users/:userId/avatar',
+    adminAuth.requireAudit,
+    async (request, response, next) => {
+      const userId = parsePositiveInteger(request.params.userId);
+      if (!userId) {
+        response.status(400).json({ error: 'userId must be a positive integer' });
+        return;
+      }
+      try {
+        const avatar = await securityService.getAvatar(userId);
+        if (!avatar?.data) {
+          response.status(404).end();
+          return;
+        }
+        response
+          .set('Cache-Control', 'private, max-age=60')
+          .type(avatar.mime)
+          .send(avatar.data);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   router.get('/admin/security/audit/facets', adminAuth.requireAudit, async (_request, response, next) => {
     try { response.json(await securityService.auditFacets()); }
     catch (error) { next(error); }
