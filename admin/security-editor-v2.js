@@ -132,6 +132,23 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
               <label>Максимальная жизнь сессии, сек. <input name="sessionAbsoluteSeconds" type="number" min="300" max="2592000" required></label>
               <label>Хранить аудит, дней (0 = бессрочно) <input name="auditRetentionDays" type="number" min="0" max="3650" required></label>
             </fieldset>
+            <fieldset><legend>Политика паролей</legend>
+              <div class="security-password-lengths">
+                <label>Минимум символов
+                  <input name="passwordMinLength" type="number" min="1" max="4096" required>
+                </label>
+                <label>Максимум символов
+                  <input name="passwordMaxLength" type="number" min="1" max="4096" required>
+                </label>
+              </div>
+              <div class="security-password-requirements">
+                <label class="check"><input name="passwordRequireLowercase" type="checkbox"> Строчная буква</label>
+                <label class="check"><input name="passwordRequireUppercase" type="checkbox"> Прописная буква</label>
+                <label class="check"><input name="passwordRequireDigit" type="checkbox"> Цифра</label>
+                <label class="check"><input name="passwordRequireSpecial" type="checkbox"> Спецсимвол</label>
+              </div>
+              <p class="security-info">Политика применяется к пользовательской смене пароля, заданным вручную паролям и новым временным паролям.</p>
+            </fieldset>
             <button type="submit">Сохранить параметры</button>
             <p id="security-settings-message" class="security-message" role="status"></p>
           </form>
@@ -283,8 +300,6 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           <div class="security-role-grid">
             ${roleCheckbox('canManageData', 'Управление данными', user.canManageData, protectedUser)}
             ${roleCheckbox('canManageInterface', 'Настройка интерфейса', user.canManageInterface, protectedUser)}
-            ${roleCheckbox('canEditGeometries', 'Редактор геометрий', user.canEditGeometries, protectedUser)}
-            ${roleCheckbox('canEditOsm', 'Редактор OSM-дерева', user.canEditOsm, protectedUser)}
             ${roleCheckbox('canManageUsers', 'Управление пользователями', user.canManageUsers, protectedUser)}
             ${roleCheckbox('canViewAudit', 'Просмотр аудита', user.canViewAudit, protectedUser)}
             ${roleCheckbox('canManageSecurity', 'Управление безопасностью', user.canManageSecurity, protectedUser)}
@@ -327,8 +342,6 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
             email: form.elements.email.value.trim() || null,
             canManageData: form.elements.canManageData.checked,
             canManageInterface: form.elements.canManageInterface.checked,
-            canEditGeometries: form.elements.canEditGeometries.checked,
-            canEditOsm: form.elements.canEditOsm.checked,
             canManageUsers: form.elements.canManageUsers.checked,
             canViewAudit: form.elements.canViewAudit.checked,
             canManageSecurity: form.elements.canManageSecurity.checked,
@@ -409,8 +422,6 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           <div class="security-role-grid">
             ${roleCheckbox('canManageData', 'Управление данными', false, false)}
             ${roleCheckbox('canManageInterface', 'Настройка интерфейса', false, false)}
-            ${roleCheckbox('canEditGeometries', 'Редактор геометрий', false, false)}
-            ${roleCheckbox('canEditOsm', 'Редактор OSM-дерева', false, false)}
             ${roleCheckbox('canManageUsers', 'Управление пользователями', false, false)}
             ${roleCheckbox('canViewAudit', 'Просмотр аудита', false, false)}
             ${roleCheckbox('canManageSecurity', 'Управление безопасностью', false, false)}
@@ -434,8 +445,6 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
             email: form.elements.email.value.trim() || null,
             canManageData: form.elements.canManageData.checked,
             canManageInterface: form.elements.canManageInterface.checked,
-            canEditGeometries: form.elements.canEditGeometries.checked,
-            canEditOsm: form.elements.canEditOsm.checked,
             canManageUsers: form.elements.canManageUsers.checked,
             canViewAudit: form.elements.canViewAudit.checked,
             canManageSecurity: form.elements.canManageSecurity.checked,
@@ -457,9 +466,31 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     button.setAttribute('role', 'option');
     const state = user.isBlocked ? 'BLOCKED' : user.mustChangePassword ? 'TEMP' : 'ACTIVE';
     button.innerHTML = `
+      <span class="security-user-avatar" aria-hidden="true">
+        <span class="security-user-avatar-fallback"></span>
+      </span>
       <span class="security-user-row-main"><strong></strong><small></small></span>
       <span class="security-user-row-state is-${state.toLowerCase()}">${state}</span>
     `;
+    const avatar = button.querySelector('.security-user-avatar');
+    const fallback = button.querySelector('.security-user-avatar-fallback');
+    fallback.textContent = auditAvatarFallback(user.displayName ?? user.username);
+    if (user.hasAvatar) {
+      const image = document.createElement('img');
+      image.alt = '';
+      image.decoding = 'async';
+      image.hidden = true;
+      image.addEventListener('load', () => {
+        image.hidden = false;
+        fallback.hidden = true;
+      }, { once: true });
+      image.addEventListener('error', () => {
+        image.remove();
+        fallback.hidden = false;
+      }, { once: true });
+      image.src = `/api/admin/security/users/${encodeURIComponent(user.id)}/avatar?v=${Date.now()}`;
+      avatar.append(image);
+    }
     button.querySelector('strong').textContent = user.displayName ?? user.username;
     button.querySelector('small').textContent = `@${user.username}${user.email ? ` · ${user.email}` : ''}`;
     button.classList.toggle('is-selected', user.id === selectedUserId);
@@ -933,7 +964,10 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     try {
       const payload = await api('/api/admin/security/settings');
       for (const [key, value] of Object.entries(payload.settings)) {
-        if (form.elements[key]) form.elements[key].value = value;
+        const control = form.elements[key];
+        if (!control) continue;
+        if (control.type === 'checkbox') control.checked = Boolean(value);
+        else control.value = value;
       }
       setMessage(message, 'Параметры загружены.');
     } catch (error) {
@@ -945,16 +979,25 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     event.preventDefault();
     const form = event.currentTarget;
     if (!form.reportValidity()) return;
-    const keys = [
+    const numericKeys = [
       'maxFailedAttempts','failureWindowSeconds','lockoutSeconds',
       'ipMaxFailedAttempts','ipFailureWindowSeconds','ipLockoutSeconds',
       'sessionIdleSeconds','sessionAbsoluteSeconds','auditRetentionDays',
+      'passwordMinLength','passwordMaxLength',
     ];
+    const booleanKeys = [
+      'passwordRequireLowercase','passwordRequireUppercase',
+      'passwordRequireDigit','passwordRequireSpecial',
+    ];
+    const settings = Object.fromEntries([
+      ...numericKeys.map((key) => [key, Number(form.elements[key].value)]),
+      ...booleanKeys.map((key) => [key, form.elements[key].checked]),
+    ]);
     try {
       await api('/api/admin/security/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(Object.fromEntries(keys.map((key) => [key, Number(form.elements[key].value)]))),
+        body: JSON.stringify(settings),
       });
       setMessage(host.querySelector('#security-settings-message'), 'Параметры сохранены.', 'success');
     } catch (error) {
