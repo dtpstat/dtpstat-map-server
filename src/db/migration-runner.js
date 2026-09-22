@@ -215,7 +215,10 @@ export async function migrateDatabase(
       'SELECT pg_advisory_unlock(hashtext($1))',
       [lockKey],
     ).catch(() => {});
-    client.release?.();
-    await client.end?.().catch?.(() => {});
+    if (typeof client.release === 'function') {
+      client.release();
+    } else if (typeof client.end === 'function') {
+      await client.end().catch(() => {});
+    }
   }
 }
