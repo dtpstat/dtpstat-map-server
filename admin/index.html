@@ -175,7 +175,7 @@
 
                   <fieldset class="osm-config-group">
                     <legend>Как и откуда загружать</legend>
-                    <p class="osm-config-help">Источник, пакетирование, таймауты, лимиты и стратегия повторов.</p>
+                    <p class="osm-config-help">Обычные параметры загрузки остаются на виду; защитные лимиты и retry-настройки вынесены в тонкую настройку.</p>
                     <label>Overpass URL
                       <select name="URL" id="osm-url" required>
                         <option value="">Загрузка настроек…</option>
@@ -188,40 +188,48 @@
                       </label>
                       <label>Пауза между запросами, мс
                         <input name="minDelayMs" type="number" inputmode="numeric"
-                               min="0" step="1" required>
-                      </label>
-                      <label>HTTP timeout, мс
-                        <input name="timeoutMs" type="number" inputmode="numeric"
-                               min="1000" step="1" required>
-                      </label>
-                      <label>Overpass timeout, сек
-                        <input name="queryTimeoutSeconds" type="number" inputmode="numeric"
-                               min="1" step="1" required>
-                      </label>
-                      <label>Лимит одного ответа, байт
-                        <input name="maxResponseBytes" type="number" inputmode="numeric"
-                               min="1048576" step="1" required>
-                      </label>
-                      <label>Общий лимит загрузки, байт
-                        <input name="maxTotalBytes" type="number" inputmode="numeric"
-                               min="1048576" step="1" required>
-                      </label>
-                      <label>Максимум повторов
-                        <input name="maxRetries" type="number" inputmode="numeric"
-                               min="0" step="1" required>
-                      </label>
-                      <label>Начальная пауза повтора, мс
-                        <input name="retryBaseDelayMs" type="number" inputmode="numeric"
-                               min="1000" step="1" required>
-                      </label>
-                      <label>Предел backoff, мс
-                        <input name="retryMaxDelayMs" type="number" inputmode="numeric"
-                               min="1000" step="1" required>
+                               min="0" step="1" required data-human-unit="milliseconds">
                       </label>
                     </div>
+                    <details class="admin-advanced-settings">
+                      <summary>Тонкая настройка загрузки</summary>
+                      <div class="admin-advanced-settings-body">
+                        <p class="admin-advanced-settings-note">Таймауты, ограничения объёма и параметры повторов обычно менять не требуется.</p>
+                        <div class="osm-number-grid">
+                          <label>HTTP timeout, мс
+                            <input name="timeoutMs" type="number" inputmode="numeric"
+                                   min="1000" step="1" required data-human-unit="milliseconds">
+                          </label>
+                          <label>Overpass timeout, сек
+                            <input name="queryTimeoutSeconds" type="number" inputmode="numeric"
+                                   min="1" step="1" required data-human-unit="seconds">
+                          </label>
+                          <label>Лимит одного ответа, байт
+                            <input name="maxResponseBytes" type="number" inputmode="numeric"
+                                   min="1048576" step="1" required data-human-unit="bytes">
+                          </label>
+                          <label>Общий лимит загрузки, байт
+                            <input name="maxTotalBytes" type="number" inputmode="numeric"
+                                   min="1048576" step="1" required data-human-unit="bytes">
+                          </label>
+                          <label>Максимум повторов
+                            <input name="maxRetries" type="number" inputmode="numeric"
+                                   min="0" step="1" required>
+                          </label>
+                          <label>Начальная пауза повтора, мс
+                            <input name="retryBaseDelayMs" type="number" inputmode="numeric"
+                                   min="1000" step="1" required data-human-unit="milliseconds">
+                          </label>
+                          <label>Предел backoff, мс
+                            <input name="retryMaxDelayMs" type="number" inputmode="numeric"
+                                   min="1000" step="1" required data-human-unit="milliseconds">
+                          </label>
+                        </div>
+                      </div>
+                    </details>
                   </fieldset>
 
-                  <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
+                  <label class="check"><input name="dryRun" type="checkbox" checked data-dirty-ignore> Только проверка (dryRun)</label>
                 </div>
                 <div class="osm-checkpoint" id="osm-checkpoint" hidden>
                   <div>
@@ -311,14 +319,21 @@
               </p>
               <form id="kml-form" data-task-form="kml" data-task-type="kml-update">
                 <div class="form-fields">
-                  <label>Источники JSON
-                    <textarea name="sources" rows="12" placeholder="Загрузка актуального примера…"></textarea>
-                    <small>Каждый слой: name + multiple (1 или 2) + необязательный type. type — исходное LINE_TYPES.NAME; сопоставление без учёта регистра и внешних пробелов. Отсутствующий NAME создаётся автоматически, CODE назначает БД.</small>
-                  </label>
-                  <label>Буфер города, м
-                    <input name="cityBufferMeters" type="number" inputmode="numeric"
-                           min="0" step="1" placeholder="из ENV">
-                  </label>
+                  <p class="osm-config-help">Без тонкой настройки используются источники и параметры из конфигурации сервера.</p>
+                  <details class="admin-advanced-settings">
+                    <summary>Тонкая настройка источника</summary>
+                    <div class="admin-advanced-settings-body">
+                      <p class="admin-advanced-settings-note">Нужно только для разового переопределения источников или геометрического буфера.</p>
+                      <label>Источники JSON
+                        <textarea name="sources" rows="12" placeholder="Загрузка актуального примера…"></textarea>
+                        <small>Каждый слой: name + multiple (1 или 2) + необязательный type. type — исходное LINE_TYPES.NAME; сопоставление без учёта регистра и внешних пробелов. Отсутствующий NAME создаётся автоматически, CODE назначает БД.</small>
+                      </label>
+                      <label>Буфер города, м
+                        <input name="cityBufferMeters" type="number" inputmode="numeric"
+                               min="0" step="1" placeholder="из ENV" data-human-unit="meters">
+                      </label>
+                    </div>
+                  </details>
                   <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
                 </div>
                 <button class="task-action" type="submit" data-task-action="kml"
@@ -335,8 +350,8 @@
                   <p>Переносит свойства линий, типы, KML Placemark/name и переносимые связи с городом/OSM-полигоном.</p>
                 </div>
                 <div class="transfer-links">
-                  <a class="secondary-link" href="/api/admin/export/lines" download>GeoJSON</a>
-                  <a class="secondary-link" href="/api/admin/export/lines.zip" download>ZIP</a>
+                  <a class="export-link" href="/api/admin/export/lines" download>↓ Экспорт GeoJSON</a>
+                  <a class="export-link" href="/api/admin/export/lines.zip" download>↓ Экспорт ZIP</a>
                 </div>
               </div>
               <p class="last-success" data-last-success="geojson-import">
@@ -379,8 +394,8 @@
                   <p>Экспорт можно без преобразования загрузить на другой сервер.</p>
                 </div>
                 <div class="transfer-links">
-                  <a class="secondary-link" href="/api/admin/export/populations" download>JSON</a>
-                  <a class="secondary-link" href="/api/admin/export/populations.zip" download>ZIP</a>
+                  <a class="export-link" href="/api/admin/export/populations" download>↓ Экспорт JSON</a>
+                  <a class="export-link" href="/api/admin/export/populations.zip" download>↓ Экспорт ZIP</a>
                 </div>
               </div>
               <p class="last-success" data-last-success="population-update">
@@ -388,14 +403,20 @@
               </p>
               <form id="population-form" data-task-form="population" data-task-type="population-update">
                 <div class="form-fields">
-                  <label>JSON-файл
+                  <label>JSON / ZIP-файл
                     <input name="file" type="file" accept=".json,.zip,application/json,application/zip">
-                    <small>Принимается JSON или ZIP/ZIP64 с одной data entry; имя и расширение entry не важны. Файл собственного экспорта принимается без преобразования, включая schemaVersion/exportedAt и индивидуальные asOf/source.</small>
+                    <small>Принимается JSON или ZIP/ZIP64 с одной data entry; имя и расширение entry не важны. Файл собственного экспорта принимается без преобразования.</small>
                   </label>
-                  <label>Или данные JSON
-                    <textarea name="payload" rows="16" placeholder="Загрузка актуального примера…"></textarea>
-                    <small>schemaVersion 2: regions[] с name/attributes и cities[]; у города обязательны name и population (число или null). Общие asOf/source в корне используются как значения по умолчанию.</small>
-                  </label>
+                  <details class="admin-advanced-settings">
+                    <summary>Вставить JSON вручную</summary>
+                    <div class="admin-advanced-settings-body">
+                      <p class="admin-advanced-settings-note">Ручной ввод удобен для диагностики и небольших корректировок. Для штатного импорта предпочтителен файл.</p>
+                      <label>Данные JSON
+                        <textarea name="payload" rows="16" placeholder="Загрузка актуального примера…"></textarea>
+                        <small>schemaVersion 2: regions[] с name/attributes и cities[]; у города обязательны name и population (число или null). Общие asOf/source в корне используются как значения по умолчанию.</small>
+                      </label>
+                    </div>
+                  </details>
                 </div>
                 <button class="task-action" type="submit" data-task-action="population"
                         data-task-type="population-update" data-start-label="Обновить население">Обновить население</button>
@@ -716,17 +737,6 @@
             </div>
           </div>
 
-          <div id="osm-boundary-confirm-overlay" class="osm-boundary-confirm-overlay" hidden>
-            <section class="osm-boundary-confirm-dialog" role="dialog" aria-modal="true"
-                     aria-labelledby="osm-boundary-confirm-title">
-              <h3 id="osm-boundary-confirm-title">Подтверждение</h3>
-              <p id="osm-boundary-confirm-message"></p>
-              <div class="osm-boundary-confirm-actions">
-                <button type="button" class="secondary" data-osm-boundary-confirm-cancel>Отмена</button>
-                <button type="button" data-osm-boundary-confirm-accept>Продолжить</button>
-              </div>
-            </section>
-          </div>
         </section>
       </div>
     </section>
