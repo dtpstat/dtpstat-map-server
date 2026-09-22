@@ -395,7 +395,7 @@ export function createProjectSettingsTransferService(pool) {
           JSON.stringify(reportConfig.metrics),
           JSON.stringify(reportConfig.tableColumns),
           JSON.stringify(reportConfig.csvColumns),
-          JSON.stringify(reportConfig.rank),
+          JSON.stringify({ sort: reportConfig.rank.sort }),
         ]);
         await client.query(UPDATE_SECURITY_SETTINGS_SQL, [
           securitySettings.maxFailedAttempts,
