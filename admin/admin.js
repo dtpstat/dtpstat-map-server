@@ -343,6 +343,30 @@ function processingProgress(task) {
     label = 'Сохранение существующих связей';
   } else if (phase === 'replace-boundaries') {
     label = 'Замена геометрий';
+  } else if (phase === 'hierarchy') {
+    label = 'Построение иерархии территорий';
+    const processed = Number(details.processed);
+    const total = Number(details.total);
+    const batch = Number(details.batch);
+    const batchCount = Number(details.batchCount);
+    if (Number.isFinite(processed) && Number.isFinite(total) && total > 0) {
+      ratio = Math.min(1, processed / total);
+      amount =
+        `${processed.toLocaleString('ru-RU')} / ` +
+        total.toLocaleString('ru-RU') +
+        ' объектов';
+    }
+    if (
+      Number.isFinite(batch) &&
+      Number.isFinite(batchCount) &&
+      batchCount > 0
+    ) {
+      detail =
+        `Пакет ${batch.toLocaleString('ru-RU')} / ` +
+        batchCount.toLocaleString('ru-RU');
+    } else {
+      detail = 'Поиск непосредственного родителя по геометрическому покрытию.';
+    }
   } else if (phase === 'restore-links') {
     label = 'Восстановление связей';
   } else if (phase === 'database') {
