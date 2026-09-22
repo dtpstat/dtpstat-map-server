@@ -165,22 +165,26 @@
   overflow: hidden;
 }
 .osm-boundary-details-header {
-  padding: .6rem .7rem;
+  padding: .55rem .65rem;
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: .55rem;
   border-bottom: 1px solid var(--line);
   background: #101b1f;
 }
 .osm-boundary-primary-actions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: .4rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: .35rem;
+  white-space: nowrap;
 }
 .osm-boundary-primary-actions button {
+  width: auto;
   min-width: 0;
-  padding: .48rem .5rem;
+  padding: .42rem .5rem;
   border-radius: 7px;
-  font-size: .68rem;
+  font-size: .66rem;
 }
 .osm-boundary-details-scroll {
   min-height: 0;
@@ -210,6 +214,28 @@
   margin: 0;
   color: #dbe9eb;
   font-size: .76rem;
+}
+.osm-boundary-group-help {
+  margin: -.2rem 0 0;
+  color: var(--muted);
+  font-size: .66rem;
+  line-height: 1.4;
+}
+.osm-boundary-edit-group-display {
+  border-color: #315d59;
+  background: rgb(18 45 44 / 42%);
+}
+.osm-boundary-edit-group-source {
+  border-color: #334953;
+  background: rgb(14 27 32 / 78%);
+}
+.osm-boundary-edit-group-territory {
+  border-color: #4c4731;
+  background: rgb(35 30 18 / 42%);
+}
+.osm-boundary-edit-group-geometry {
+  border-color: #35445b;
+  background: rgb(17 26 41 / 52%);
 }
 .osm-boundary-edit-group > label {
   min-width: 0;
@@ -262,11 +288,10 @@
     max-height: 22rem;
   }
   .osm-boundary-details-header {
-    grid-template-columns: minmax(0, 1fr) minmax(24rem, auto);
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
   }
   .osm-boundary-primary-actions {
-    grid-template-columns: repeat(3, minmax(7rem, auto));
     justify-content: end;
   }
   #osm-boundary-form {
@@ -298,8 +323,8 @@
     grid-template-columns: minmax(0, 1fr);
   }
   .osm-boundary-primary-actions {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    justify-content: stretch;
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
   .osm-boundary-details-scroll {
     overflow: visible;
@@ -318,8 +343,7 @@
 @media (max-width: 650px) {
   .osm-selection-grid,
   .osm-number-grid,
-  .osm-level-grid,
-  .osm-boundary-primary-actions {
+  .osm-level-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
