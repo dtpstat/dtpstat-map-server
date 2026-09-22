@@ -38,7 +38,6 @@ npm ci
 cp .env.example .env
 # заполнить .env
 npm run db:init
-npm run db:migrate
 npm start
 ```
 
@@ -47,7 +46,6 @@ npm start
 ```bash
 docker compose up -d database
 npm run db:init
-npm run db:migrate
 npm start
 ```
 
@@ -122,7 +120,7 @@ HTTP_PORT=3002
 <DATABASE_SCHEMA>.schema_versions
 ```
 
-`npm start` **не применяет migrations автоматически**, но перед остальным startup проверяет, что DB schema соответствует последней migration из `db/migrations`. При stale/newer/gapped history процесс завершается с понятной ошибкой до открытия HTTP listeners. После `git pull` с новыми migrations нужно выполнить `npm run db:migrate` перед restart.
+`npm start` автоматически применяет все pending migrations из `db/migrations` **до** bootstrap и открытия HTTP/HTTPS listeners. Migration runner использует PostgreSQL advisory lock, поэтому параллельные старты одного schema не применяют одну migration дважды. Checksum/history по-прежнему проверяются; при modified/gapped/newer history или SQL-ошибке startup завершается и приложение не начинает обслуживать запросы. `npm run db:migrate` остаётся доступной ручной preflight-командой.
 
 ## Большие portable JSON / ZIP transfers
 
