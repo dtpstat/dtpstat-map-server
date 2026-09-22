@@ -1,3 +1,5 @@
+import { publishDerivedDataChange } from '/js/derived-data-events.js';
+
 export function buildBoundaryTreeIndex(items) {
   const byId = new Map();
   const childrenByParent = new Map();
@@ -637,7 +639,12 @@ if (typeof document !== 'undefined') {
         await load();
         const updated = state.boundaries.find((item) => item.id === payload.boundary.id);
         if (updated) applySelection(updated);
-        setMessage('Настройки OSM-объекта сохранены.', 'success');
+        setMessage(
+          'Настройки OSM-объекта сохранены. Таблица и линии пересчитаны.',
+          'success',
+        );
+        publishDerivedDataChange('osm-boundary');
+        publishDerivedDataChange('osm-boundary-subtree');
         window.dispatchEvent(new CustomEvent('dtpstat:osm-boundary-changed'));
       } catch (error) {
         setMessage(error.message, 'error');
