@@ -1,3 +1,5 @@
+import { publishDerivedDataChange } from '/js/derived-data-events.js';
+
 if (typeof document !== 'undefined') {
   const session = await globalThis.dtpstatAdminSession?.catch(() => null);
   const user = session?.user;
@@ -477,6 +479,7 @@ if (typeof document !== 'undefined') {
             'Настройки проекта сохранены. Таблицы рейтинга пересчитаны.',
             'success',
           );
+          publishDerivedDataChange('project-settings');
           window.dispatchEvent(new CustomEvent('dtpstat:project-settings-changed'));
         } catch (error) {
           setMessage(error.message, 'error');
