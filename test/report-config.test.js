@@ -53,6 +53,13 @@ test('public table headers normalize short labels, tooltips and explicit weight'
     () => validateReportConfig(config),
     /headerTooltip must contain at most 240 characters/,
   );
+
+  config.tableColumns[2].headerTooltip = null;
+  config.tableColumns[2].headerBold = 'yes';
+  assert.throws(
+    () => validateReportConfig(config),
+    /headerBold must be a boolean/,
+  );
 });
 
 test('city area and median geometry aggregation are available in the catalog', () => {
