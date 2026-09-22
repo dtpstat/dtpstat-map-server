@@ -66,3 +66,16 @@ test('current user and audit rows render profile avatars with fallback initials'
   assert.match(route, /\/admin\/security\/users\/:userId\/avatar/);
   assert.match(route, /adminAuth\.requireAudit/);
 });
+
+test('profile avatar hides fallback only after successful image load', async () => {
+  const [profile, styles] = await Promise.all([
+    read('admin/profile-editor.js'),
+    read('admin/profile.css'),
+  ]);
+
+  assert.match(profile, /image\.onload = \(\) => \{/);
+  assert.match(profile, /image\.onerror = \(\) => \{/);
+  assert.match(profile, /image\.hidden = false;[\s\S]*fallback\.hidden = true;/);
+  assert.match(profile, /image\.hidden = true;[\s\S]*fallback\.hidden = false;/);
+  assert.match(styles, /\.profile-avatar\[hidden\] \{ display: none !important; \}/);
+});
