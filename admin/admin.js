@@ -239,15 +239,15 @@ function processingProgress(task) {
     }
   } else if (phase === 'normalize-stage') {
     label = 'Нормализация данных';
-    const rootProgress =
-      Number.isFinite(Number(details.processedRoots)) &&
-      Number.isFinite(Number(details.parsedRoots)) &&
-      Number(details.parsedRoots) > 0;
-    const processed = rootProgress
-      ? Number(details.processedRoots)
+    const regionProgress =
+      Number.isFinite(Number(details.processedRegions)) &&
+      Number.isFinite(Number(details.parsedRegions)) &&
+      Number(details.parsedRegions) > 0;
+    const processed = regionProgress
+      ? Number(details.processedRegions)
       : Number(details.processedFeatures ?? details.staged);
-    const total = rootProgress
-      ? Number(details.parsedRoots)
+    const total = regionProgress
+      ? Number(details.parsedRegions)
       : Number(details.parsedFeatures ?? details.parsedRecords);
     if (
       Number.isFinite(processed) &&
@@ -258,11 +258,11 @@ function processingProgress(task) {
       amount =
         `${processed.toLocaleString('ru-RU')} / ` +
         total.toLocaleString('ru-RU') +
-        (rootProgress ? ' корней' : '');
+        (regionProgress ? ' регионов' : '');
     }
-    if (rootProgress && Number.isFinite(Number(details.staged))) {
+    if (regionProgress && Number.isFinite(Number(details.staged))) {
       detail =
-        `Территорий подготовлено: ` +
+        `Городов подготовлено: ` +
         Number(details.staged).toLocaleString('ru-RU');
     } else if (Number.isFinite(Number(details.stagedGeometries))) {
       detail =
