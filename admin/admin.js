@@ -239,12 +239,16 @@ function processingProgress(task) {
     }
   } else if (phase === 'normalize-stage') {
     label = 'Нормализация данных';
-    const processed = Number(
-      details.processedFeatures ?? details.staged,
-    );
-    const total = Number(
-      details.parsedFeatures ?? details.parsedRecords,
-    );
+    const rootProgress =
+      Number.isFinite(Number(details.processedRoots)) &&
+      Number.isFinite(Number(details.parsedRoots)) &&
+      Number(details.parsedRoots) > 0;
+    const processed = rootProgress
+      ? Number(details.processedRoots)
+      : Number(details.processedFeatures ?? details.staged);
+    const total = rootProgress
+      ? Number(details.parsedRoots)
+      : Number(details.parsedFeatures ?? details.parsedRecords);
     if (
       Number.isFinite(processed) &&
       Number.isFinite(total) &&
@@ -253,9 +257,14 @@ function processingProgress(task) {
       ratio = Math.min(1, processed / total);
       amount =
         `${processed.toLocaleString('ru-RU')} / ` +
-        total.toLocaleString('ru-RU');
+        total.toLocaleString('ru-RU') +
+        (rootProgress ? ' корней' : '');
     }
-    if (Number.isFinite(Number(details.stagedGeometries))) {
+    if (rootProgress && Number.isFinite(Number(details.staged))) {
+      detail =
+        `Территорий подготовлено: ` +
+        Number(details.staged).toLocaleString('ru-RU');
+    } else if (Number.isFinite(Number(details.stagedGeometries))) {
       detail =
         `Геометрий подготовлено: ` +
         Number(details.stagedGeometries).toLocaleString('ru-RU');
