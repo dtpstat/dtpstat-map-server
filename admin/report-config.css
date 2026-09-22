@@ -1,9 +1,13 @@
 .report-interface-panel {
   min-height: 0;
   flex: 1 1 0;
+  padding: 0;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .report-interface-panel #report-config-form {
