@@ -32,148 +32,296 @@ function normalizeSource(value, field) {
   return value.trim();
 }
 
-function normalizeType(value, field) {
-  if (value === null || value === undefined || value === '') return null;
+function normalizeText(value, field, max = 160) {
   if (typeof value !== 'string') {
-    throw new PopulationValidationError(
-      `${field} must be a string or null`,
-    );
+    throw new PopulationValidationError(`${field} must be a string`);
   }
   const normalized = value.trim().normalize('NFC');
-  if (!normalized || normalized.length > 80) {
+  if (!normalized || normalized.length > max) {
     throw new PopulationValidationError(
-      `${field} must contain 1-80 characters`,
+      `${field} must contain 1-${max} characters`,
     );
   }
   return normalized;
 }
 
-function comparable(value) {
-  return String(value ?? '')
-    .replace(/\s+/gu, '')
-    .toLocaleLowerCase('ru-RU');
+function normalizeOsmType(value, field) {
+  if (!['way', 'relation'].includes(value)) {
+    throw new PopulationValidationError(
+      `${field} must be way or relation`,
+    );
+  }
+  return value;
 }
 
-export function createPopulationAccumulator({
+function normalizeOsmId(value, field) {
+  const text = String(value ?? '').trim();
+  if (!/^[1-9]\d*$/.test(text)) {
+    throw new PopulationValidationError(
+      `${field} must be a positive OSM integer identifier`,
+    );
+  }
+  const number = Number(text);
+  if (!Number.isSafeInteger(number)) {
+    throw new PopulationValidationError(
+      `${field} exceeds the supported safe integer range`,
+    );
+  }
+  return text;
+}
+
+function normalizePopulation(value, field) {
+  if (value === null) return null;
+  const population = Number(value);
+  if (
+    !Number.isSafeInteger(population) ||
+    population <= 0 ||
+    population > 2147483647
+  ) {
+    throw new PopulationValidationError(
+      `${field} must be a positive integer up to 2147483647 or null`,
+    );
+  }
+  return population;
+}
+
+function normalizeAttributes(value, field) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new PopulationValidationError(
+      `${field} must be a JSON object`,
+    );
+  }
+  return value;
+}
+
+function normalizeOptionalAdminLevel(value, field) {
+  if (value === null || value === undefined || value === '') return null;
+  const level = Number(value);
+  if (!Number.isInteger(level) || level < 1 || level > 20) {
+    throw new PopulationValidationError(
+      `${field} must be an integer between 1 and 20 or null`,
+    );
+  }
+  return level;
+}
+
+function normalizeOptionalPlaceType(value, field) {
+  if (value === null || value === undefined || value === '') return null;
+  if (!['city', 'town'].includes(value)) {
+    throw new PopulationValidationError(
+      `${field} must be city, town or null`,
+    );
+  }
+  return value;
+}
+
+function normalizeSchemaVersion(value) {
+  const version = Number(value);
+  if (version !== 2) {
+    throw new PopulationValidationError(
+      'Population hierarchy schemaVersion must equal 2',
+    );
+  }
+  return version;
+}
+
+function object(value, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new PopulationValidationError(`${label} must be an object`);
+  }
+  return value;
+}
+
+function identity(osmType, osmId) {
+  return `${osmType}/${osmId}`;
+}
+
+function normalizeTerritory(
+  raw,
+  path,
+  defaults,
+  parent,
+  seen,
+  rows,
+  limits,
+) {
+  const item = object(raw, `Territory ${path}`);
+  const allowed = new Set([
+    'osmType',
+    'osmId',
+    'name',
+    'type',
+    'placeType',
+    'adminLevel',
+    'population',
+    'asOf',
+    'source',
+    'attributes',
+    'children',
+  ]);
+  const unknown = Object.keys(item).filter((key) => !allowed.has(key));
+  if (unknown.length > 0) {
+    throw new PopulationValidationError(
+      `Territory ${path} contains unsupported properties: ${unknown.join(', ')}`,
+    );
+  }
+
+  const osmType = normalizeOsmType(
+    item.osmType,
+    `Territory ${path} osmType`,
+  );
+  const osmId = normalizeOsmId(
+    item.osmId,
+    `Territory ${path} osmId`,
+  );
+  const key = identity(osmType, osmId);
+  if (seen.has(key)) {
+    throw new PopulationValidationError(
+      `Duplicate OSM territory identity: ${key}`,
+    );
+  }
+  seen.add(key);
+
+  if (!Object.hasOwn(item, 'population')) {
+    throw new PopulationValidationError(
+      `Territory ${path} must contain population (integer or null)`,
+    );
+  }
+  if (!Object.hasOwn(item, 'attributes')) {
+    throw new PopulationValidationError(
+      `Territory ${path} must contain attributes`,
+    );
+  }
+
+  const row = {
+    osmType,
+    osmId,
+    name: normalizeText(item.name, `Territory ${path} name`),
+    type: normalizeText(item.type, `Territory ${path} type`, 80),
+    placeType: normalizeOptionalPlaceType(
+      item.placeType,
+      `Territory ${path} placeType`,
+    ),
+    adminLevel: normalizeOptionalAdminLevel(
+      item.adminLevel,
+      `Territory ${path} adminLevel`,
+    ),
+    population: normalizePopulation(
+      item.population,
+      `Territory ${path} population`,
+    ),
+    asOf: item.asOf === undefined
+      ? defaults.asOf
+      : normalizeDate(item.asOf, `Territory ${path} asOf`),
+    source: item.source === undefined
+      ? defaults.source
+      : normalizeSource(item.source, `Territory ${path} source`),
+    attributes: normalizeAttributes(
+      item.attributes,
+      `Territory ${path} attributes`,
+    ),
+    parentOsmType: parent?.osmType ?? null,
+    parentOsmId: parent?.osmId ?? null,
+  };
+
+  rows.push(row);
+  if (rows.length > limits.maxItems) {
+    throw new PopulationValidationError(
+      `Population hierarchy contains more than ${limits.maxItems} territories`,
+    );
+  }
+
+  const children = item.children ?? [];
+  if (!Array.isArray(children)) {
+    throw new PopulationValidationError(
+      `Territory ${path} children must be an array`,
+    );
+  }
+  for (const [index, child] of children.entries()) {
+    normalizeTerritory(
+      child,
+      `${path}.children[${index}]`,
+      defaults,
+      row,
+      seen,
+      rows,
+      limits,
+    );
+  }
+}
+
+export function createPopulationHierarchyAccumulator({
   asOf: rawAsOf,
   source: rawSource,
-  collectPopulations = false,
+  maxItems = 5_000_000,
+  collectTerritories = false,
 } = {}) {
-  const asOf = normalizeDate(rawAsOf, 'asOf');
-  const source = normalizeSource(rawSource, 'source');
-  const names = new Set();
-  const populations = collectPopulations ? [] : null;
-  let populationCount = 0;
+  const defaults = {
+    asOf: normalizeDate(rawAsOf, 'asOf'),
+    source: normalizeSource(rawSource, 'source'),
+  };
+  const seen = new Set();
+  const collected = collectTerritories ? [] : null;
+  let territoryCount = 0;
+  let rootCount = 0;
 
   return {
-    addItem(item, index = populationCount) {
-      if (!item || typeof item !== 'object' || Array.isArray(item)) {
-        throw new PopulationValidationError(
-          `Population item ${index} must be an object`,
-        );
-      }
-      const name = typeof item.name === 'string' ? item.name.trim() : '';
-      if (!name) {
-        throw new PopulationValidationError(
-          `Population item ${index} has an invalid name`,
-        );
-      }
-      const type = normalizeType(
-        item.type,
-        `Population item ${index} type`,
+    addRoot(root, rootIndex = rootCount) {
+      const rows = [];
+      normalizeTerritory(
+        root,
+        `territories[${rootIndex}]`,
+        defaults,
+        null,
+        seen,
+        rows,
+        { maxItems: maxItems - territoryCount },
       );
-      const identity = `${comparable(type)}|${comparable(name)}`;
-      if (names.has(identity)) {
-        throw new PopulationValidationError(
-          `Duplicate city identity: ${type ? `${type} / ` : ''}${name}`,
-        );
-      }
-      names.add(identity);
-
-      const population = Number(item.population);
-      if (
-        !Number.isSafeInteger(population) ||
-        population <= 0 ||
-        population > 2147483647
-      ) {
-        throw new PopulationValidationError(
-          `Population item ${index} has an invalid population`,
-        );
-      }
-      const attributes = item.attributes ?? {};
-      if (
-        !attributes ||
-        typeof attributes !== 'object' ||
-        Array.isArray(attributes)
-      ) {
-        throw new PopulationValidationError(
-          `Population item ${index} has invalid attributes`,
-        );
-      }
-
-      const normalized = {
-        name,
-        ...(type === null ? {} : { type }),
-        population,
-        asOf: item.asOf === undefined
-          ? asOf
-          : normalizeDate(
-              item.asOf,
-              `Population item ${index} asOf`,
-            ),
-        source: item.source === undefined
-          ? source
-          : normalizeSource(
-              item.source,
-              `Population item ${index} source`,
-            ),
-        attributes,
-      };
-      populationCount += 1;
-      populations?.push(normalized);
-      return normalized;
+      territoryCount += rows.length;
+      rootCount += 1;
+      collected?.push(...rows);
+      return rows;
     },
 
-    finish() {
-      if (populationCount === 0) {
+    finish(metadata = {}) {
+      normalizeSchemaVersion(metadata.schemaVersion);
+      if (rootCount === 0 || territoryCount === 0) {
         throw new PopulationValidationError(
-          'Request body must contain a non-empty populations array',
+          'Request body must contain a non-empty territories array',
         );
       }
       return {
-        asOf,
-        source,
-        populationCount,
-        populations: populations ?? [],
+        schemaVersion: 2,
+        asOf: defaults.asOf,
+        source: defaults.source,
+        rootCount,
+        territoryCount,
+        territories: collected ?? [],
       };
     },
   };
 }
 
-export function buildPopulationPlan(payload) {
+export function buildPopulationPlan(payload, options = {}) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new PopulationValidationError(
       'Request body must be a JSON object',
     );
   }
-  if (!Array.isArray(payload.populations)) {
+  if (!Array.isArray(payload.territories)) {
     throw new PopulationValidationError(
-      'Request body must contain a non-empty populations array',
+      'Request body must contain a non-empty territories array',
     );
   }
 
-  const accumulator = createPopulationAccumulator({
+  const accumulator = createPopulationHierarchyAccumulator({
     asOf: payload.asOf,
     source: payload.source,
-    collectPopulations: true,
+    maxItems: options.maxItems,
+    collectTerritories: true,
   });
-  for (const [index, item] of payload.populations.entries()) {
-    accumulator.addItem(item, index);
+  for (const [index, root] of payload.territories.entries()) {
+    accumulator.addRoot(root, index);
   }
-  const result = accumulator.finish();
-  return {
-    asOf: result.asOf,
-    source: result.source,
-    populations: result.populations,
-  };
+  return accumulator.finish({ schemaVersion: payload.schemaVersion });
 }
