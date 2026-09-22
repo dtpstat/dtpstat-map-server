@@ -442,7 +442,7 @@ export function createAdminSecurityRouter({ securityService, adminAuth, maxBodyB
 
   router.get(
     '/admin/security/users/:userId/avatar',
-    adminAuth.requireAudit,
+    adminAuth.requireUsersOrAudit,
     async (request, response, next) => {
       const userId = parsePositiveInteger(request.params.userId);
       if (!userId) {
