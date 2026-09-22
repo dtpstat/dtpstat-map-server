@@ -481,7 +481,12 @@ export function createAdminSecurityRepository(database) {
         SELECT id::integer AS id, created_at AS "createdAt", event_type AS "eventType",
           operation_type AS "operationType", status,
           duration_ms::double precision AS "durationMs", ip_address AS "ipAddress",
-          user_id::integer AS "userId", username, details
+          user_id::integer AS "userId", username, details,
+          COALESCE((
+            SELECT admin_user.avatar_data IS NOT NULL
+            FROM admin_users AS admin_user
+            WHERE admin_user.id = admin_audit_log.user_id
+          ), FALSE) AS "hasAvatar"
         FROM admin_audit_log
         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
         ORDER BY created_at DESC, id DESC
