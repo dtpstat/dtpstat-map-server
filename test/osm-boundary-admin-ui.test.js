@@ -11,11 +11,13 @@ async function read(relativePath) {
 }
 
 test('OSM object editor is a top-level admin section with population editing', async () => {
-  const [html, shell, editor, styles] = await Promise.all([
+  const [html, shell, editor, styles, publicApp, derivedEvents] = await Promise.all([
     read('admin/index.html'),
     read('admin/admin-shell.js'),
     read('admin/osm-boundary-editor.js'),
     read('admin/osm-boundary-editor.css'),
+    read('public/js/app.js'),
+    read('public/js/derived-data-events.js'),
   ]);
 
   assert.match(
@@ -112,6 +114,22 @@ test('OSM object editor is a top-level admin section with population editing', a
     /\/api\/admin\/osm-boundaries\/\$\{encodeURIComponent\(item\.id\)\}\/subtree/,
   );
   assert.match(editor, /window\.confirm\(/);
+  assert.match(editor, /publishDerivedDataChange\('osm-boundary'\)/);
+  assert.match(editor, /publishDerivedDataChange\('osm-boundary-subtree'\)/);
+  assert.match(
+    editor,
+    /await api\([\s\S]*publishDerivedDataChange\('osm-boundary'\)/,
+  );
+  assert.match(derivedEvents, /new BroadcastChannel\(CHANNEL_NAME\)/);
+  assert.match(derivedEvents, /window\.localStorage\.setItem\(STORAGE_KEY/);
+  assert.match(publicApp, /subscribeDerivedDataChanges\(/);
+  assert.match(publicApp, /async function refreshDerivedData\(\)/);
+  assert.match(
+    publicApp,
+    /Promise\.all\(\[[\s\S]*loadCities\(\)[\s\S]*loadLineTypes\(\)/,
+  );
+  assert.match(publicApp, /mapController\.setCities\(cities\)/);
+  assert.match(publicApp, /mapController\.refreshViewport\(\)/);
   assert.match(editor, /enableBranch\?\.addEventListener\('click'/);
   assert.match(editor, /disableBranch\?\.addEventListener\('click'/);
   assert.match(html, /\/vendor\/mapbox-gl\/mapbox-gl\.css/);
