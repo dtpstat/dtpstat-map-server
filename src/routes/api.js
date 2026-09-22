@@ -175,6 +175,14 @@ export function createApiRouter({
       message =
         `PostgreSQL/PostGIS: staging-пакет ${progress.batch ?? '?'} записан; ` +
         `всего ${progress.stagedPlaces ?? '?'} объектов`;
+    } else if (progress.phase === 'delete-boundaries') {
+      message =
+        `Удаление старого snapshot территорий` +
+        (progress.places ? `; новый snapshot: ${progress.places} объектов` : '');
+    } else if (progress.phase === 'insert-boundaries') {
+      message =
+        `Вставка нового snapshot территорий` +
+        (progress.places ? `; объектов: ${progress.places}` : '');
     } else if (progress.phase === 'hierarchy') {
       message =
         `Иерархия территорий: ${progress.processed ?? 0}/${progress.total ?? '?'}` +
