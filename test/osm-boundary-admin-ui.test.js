@@ -192,3 +192,26 @@ test('admin task UI distinguishes partial import success', async () => {
   assert.match(styles, /\.result-warning\s*\{/);
   assert.match(styles, /\.result-warning summary\s*\{[^}]*var\(--warning\)/);
 });
+
+
+test('admin clears previous task status immediately when a new operation starts', async () => {
+  const [admin, notices, security] = await Promise.all([
+    read('admin/admin.js'),
+    read('admin/task-notices.js'),
+    read('admin/security-editor-v2.js'),
+  ]);
+
+  assert.match(admin, /function clearTaskStatusForStart\(/);
+  assert.match(
+    admin,
+    /clearTaskStatusForStart\(taskKey\);[\s\S]*showTransferOverlay/,
+  );
+  assert.match(
+    admin,
+    /async function start\([\s\S]*clearTaskStatusForStart\(taskKey\)/,
+  );
+  assert.match(admin, /taskNotices\.clear\(taskKey\)/);
+  assert.match(notices, /clear\(taskKey\)/);
+  assert.match(security, /entry\.details\?\.taskLog/);
+  assert.match(security, /Журнал \(\$\{taskLogCount\}\)/);
+});
