@@ -18,7 +18,6 @@ npm ci
 cp .env.example .env
 # заполнить .env
 npm run db:init
-npm run db:migrate
 npm start
 ```
 
@@ -110,7 +109,7 @@ V032__boundary_population_attributes.sql
 
 Следующая migration: **V033+**. Опубликованные migration files не изменяются задним числом.
 
-Startup migrations автоматически не применяет. Перед запуском сервер сверяет `<DATABASE_SCHEMA>.schema_versions` с набором `db/migrations`; stale/newer/gapped schema считается startup error. Стандартный deploy-порядок остаётся `git pull → npm run db:migrate → restart`.
+Startup автоматически применяет pending migrations под PostgreSQL advisory lock, затем повторно сверяет `<DATABASE_SCHEMA>.schema_versions` с набором `db/migrations`. Modified/gapped/newer history или ошибка SQL считаются startup error: HTTP listeners не открываются. `npm run db:migrate` остаётся ручной preflight-командой, но для обычного restart больше не обязателен.
 
 ## Большие portable JSON / ZIP transfers
 
@@ -220,9 +219,10 @@ pm2 save
 
 ```bash
 git pull
-npm run db:migrate
 pm2 restart tramlanes
 ```
+
+При restart приложение само применит pending migrations до открытия порта. Для явной проверки заранее по-прежнему можно выполнить `npm run db:migrate`.
 
 После изменения `.env`:
 
