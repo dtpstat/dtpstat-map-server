@@ -145,7 +145,9 @@ test('admin report endpoint requires auth and returns fixed catalogs', async () 
 test('saving report materializes values, sequential ranking and public snapshots', async () => {
   await withServer(async (baseUrl, state) => {
     const config = structuredClone(DEFAULT_REPORT_CONFIG);
-    config.tableColumns[2].title = 'длина сети (км)';
+    config.tableColumns[2].title = 'сеть';
+    config.tableColumns[2].headerTooltip = 'Полная длина сети, км';
+    config.tableColumns[2].headerBold = false;
     config.tableColumns[2].formatRules = [{
       min: 10,
       max: null,
@@ -175,7 +177,9 @@ test('saving report materializes values, sequential ranking and public snapshots
     assert.equal(response.status, 200);
     const payload = await response.json();
 
-    assert.equal(payload.config.tableColumns[2].title, 'длина сети (км)');
+    assert.equal(payload.config.tableColumns[2].title, 'сеть');
+    assert.equal(payload.config.tableColumns[2].headerTooltip, 'Полная длина сети, км');
+    assert.equal(payload.config.tableColumns[2].headerBold, false);
     assert.equal(payload.config.tableColumns[2].formatRules[0].color, '#112233');
     assert.deepEqual(payload.config.rank.sort, config.rank.sort);
     assert.deepEqual(payload.materialized.rankSort, config.rank.sort);
