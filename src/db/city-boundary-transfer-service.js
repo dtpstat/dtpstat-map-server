@@ -5,6 +5,7 @@ import {
 } from '../data/city-boundary-geojson-plan.js';
 import { parseStreamingJsonObject } from '../data/streaming-json.js';
 import { acquireDataImportLock } from './database-locks.js';
+import { rebuildCityBoundaryHierarchy } from './city-boundary-hierarchy.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 // Keep each PostgreSQL jsonb/PostGIS conversion request bounded. The portable
@@ -65,6 +66,7 @@ const CREATE_STAGE_SQL = `
     city_name text,
     geom geometry(MultiPolygon, 4326) NOT NULL,
     bounds geometry(Polygon, 4326) NOT NULL,
+    area_m2 double precision NOT NULL,
     PRIMARY KEY (osm_type, osm_id)
   ) ON COMMIT DROP
 `;
@@ -104,6 +106,12 @@ const INSERT_STAGE_SQL = `
       ) AS geom
     FROM payload_rows
   )
+  , measured AS (
+    SELECT
+      prepared.*,
+      ST_Area(prepared.geom::geography) AS area_m2
+    FROM prepared
+  )
   INSERT INTO city_boundary_transfer_stage (
     place_type,
     admin_level,
@@ -123,7 +131,8 @@ const INSERT_STAGE_SQL = `
     city_slug,
     city_name,
     geom,
-    bounds
+    bounds,
+    area_m2
   )
   SELECT
     "placeType",
@@ -144,8 +153,9 @@ const INSERT_STAGE_SQL = `
     "citySlug",
     "cityName",
     geom,
-    ST_Envelope(geom)
-  FROM prepared
+    ST_Envelope(geom),
+    area_m2
+  FROM measured
 `;
 
 const INVALID_STAGE_SQL = `
@@ -153,7 +163,7 @@ const INVALID_STAGE_SQL = `
   FROM city_boundary_transfer_stage
   WHERE ST_IsEmpty(geom)
      OR NOT ST_IsValid(geom)
-     OR ST_Area(geom::geography) <= 0
+     OR area_m2 <= 0
   ORDER BY osm_type, osm_id
 `;
 
@@ -213,7 +223,7 @@ const INSERT_BOUNDARIES_SQL = `
     stage.population_as_of,
     stage.population_source,
     stage.attributes,
-    ST_Area(stage.geom::geography)
+    stage.area_m2
   FROM city_boundary_transfer_stage AS stage
   ORDER BY stage.osm_type, stage.osm_id
 `;
@@ -380,7 +390,14 @@ export function createCityBoundaryTransferService(pool) {
           throw new Error('Not every city boundary was imported');
         }
 
-        await client.query('SELECT rebuild_city_boundary_hierarchy()');
+        await rebuildCityBoundaryHierarchy(client, {
+          signal: operation.signal,
+          onProgress: operation.onProgress,
+        });
+        operation.onProgress?.({
+          phase: 'restore-links',
+          places: inserted.rowCount,
+        });
         const restored = await client.query(RESTORE_GEOMETRY_LINKS_SQL);
         await client.query('SELECT sync_active_boundary_cities()');
         await client.query('SELECT sync_active_boundary_populations()');
@@ -522,11 +539,14 @@ export function createCityBoundaryTransferService(pool) {
         if (inserted.rowCount !== plan.boundaries.length) {
           throw new Error('Not every city boundary was imported');
         }
+        await rebuildCityBoundaryHierarchy(client, {
+          signal: operation.signal,
+          onProgress: operation.onProgress,
+        });
         operation.onProgress?.({
           phase: 'restore-links',
           places: inserted.rowCount,
         });
-        await client.query('SELECT rebuild_city_boundary_hierarchy()');
         const restored = await client.query(RESTORE_GEOMETRY_LINKS_SQL);
         // Restore boundary_id first: synchronizing active boundaries may
         // reassign their application city and must update existing line rows
