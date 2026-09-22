@@ -13,7 +13,7 @@ await client.connect();
 try {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const migrations = await loadMigrations(path.join(root, 'db', 'migrations'));
-  const throughV036 = migrations.filter((migration) => migration.version <= 36);
+  const throughV036 = migrations.filter((migration) => migration.version <= 37);
 
   const version36Result = await applyMigrations(client, throughV036, { schema });
   const version36 = version36Result.version;
