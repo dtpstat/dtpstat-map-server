@@ -56,6 +56,23 @@ test('OSM object editor is a top-level admin section with population editing', a
   assert.match(editor, /#admin-section-osm-objects/);
   assert.match(editor, /population\.dataset\.initialValue/);
   assert.match(editor, /changes\.population/);
+  assert.match(
+    editor,
+    /\[active, displayName, displayType, population, save\]/,
+  );
+  assert.doesNotMatch(
+    editor,
+    /population\.disabled\s*=\s*!active\.checked/,
+  );
+  assert.match(editor, /population\.addEventListener\('input'/);
+  assert.match(
+    editor,
+    /if \(changed && !active\.checked\)[\s\S]*active\.checked = true/,
+  );
+  assert.match(
+    html,
+    /Если объект выключен, изменение населения включит его при сохранении/,
+  );
   assert.match(editor, /function normalizeSearchText\(value\)/);
   assert.match(editor, /\.toLocaleLowerCase\('ru-RU'\)[\s\S]*\.replace\(\/\\s\+\/gu, ''\)/);
   assert.match(editor, /function compareBoundaries\(a, b\)/);
