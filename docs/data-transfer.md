@@ -60,6 +60,7 @@ Boundary properties schemaVersion 2 включают:
 - `osmId`;
 - `osmName`;
 - OSM tags/timestamp;
+- boundary-owned `population/populationAsOf/populationSource/attributes`;
 - geometry `Polygon`/`MultiPolygon`;
 - linked city slug/name/fullName/displayType/attributes.
 
