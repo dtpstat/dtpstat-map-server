@@ -128,9 +128,26 @@ function classicDescriptorZip(nameValue, dataValue) {
   ]);
 }
 
-function zip64DirectoryInfo(buffer) {
+function directoryInfo(buffer) {
   const eocd = buffer.length - 22;
   assert.equal(buffer.readUInt32LE(eocd), 0x06054b50);
+  const entries = buffer.readUInt16LE(eocd + 10);
+  const centralSize = buffer.readUInt32LE(eocd + 12);
+  const centralOffset = buffer.readUInt32LE(eocd + 16);
+  const zip64 =
+    entries === 0xffff ||
+    centralSize === 0xffffffff ||
+    centralOffset === 0xffffffff;
+
+  if (!zip64) {
+    return {
+      eocd,
+      zip64: false,
+      zip64Eocd: null,
+      centralOffset,
+    };
+  }
+
   const locator = eocd - 20;
   assert.equal(buffer.readUInt32LE(locator), 0x07064b50);
   const zip64Eocd = Number(buffer.readBigUInt64LE(locator + 8));
@@ -138,6 +155,7 @@ function zip64DirectoryInfo(buffer) {
   return {
     eocd,
     locator,
+    zip64: true,
     zip64Eocd,
     centralOffset: Number(buffer.readBigUInt64LE(zip64Eocd + 48)),
   };
@@ -176,11 +194,13 @@ async function sevenZipFromStdin(file, payload) {
     child.once('close', (...args) => resolve(args));
   });
   if (code !== 0) {
+    const message = Buffer.concat(errors).toString('utf8');
+    if (/E_NOTIMPL|not implemented/i.test(message)) return false;
     throw new Error(
-      `7z failed with exit code ${code}: ` +
-      Buffer.concat(errors).toString('utf8'),
+      `7z failed with exit code ${code}: ` + message,
     );
   }
+  return true;
 }
 
 async function sevenZipExtractStdout(file) {
@@ -244,9 +264,14 @@ test('single-file ZIP reader rejects archives that claim multiple entries', asyn
       createWriteStream(file),
     );
     const buffer = await fs.readFile(file);
-    const { zip64Eocd } = zip64DirectoryInfo(buffer);
-    buffer.writeBigUInt64LE(2n, zip64Eocd + 24);
-    buffer.writeBigUInt64LE(2n, zip64Eocd + 32);
+    const directory = directoryInfo(buffer);
+    if (directory.zip64) {
+      buffer.writeBigUInt64LE(2n, directory.zip64Eocd + 24);
+      buffer.writeBigUInt64LE(2n, directory.zip64Eocd + 32);
+    } else {
+      buffer.writeUInt16LE(2, directory.eocd + 8);
+      buffer.writeUInt16LE(2, directory.eocd + 10);
+    }
     await fs.writeFile(file, buffer);
 
     await assert.rejects(
@@ -274,7 +299,7 @@ test('single-file ZIP reader verifies CRC and decoded size limits', async () => 
     );
 
     const buffer = await fs.readFile(file);
-    const { centralOffset } = zip64DirectoryInfo(buffer);
+    const { centralOffset } = directoryInfo(buffer);
     const originalCrc = buffer.readUInt32LE(centralOffset + 16);
     const wrongCrc = (originalCrc + 1) >>> 0;
     buffer.writeUInt32LE(wrongCrc, centralOffset + 16);
@@ -306,7 +331,7 @@ test('ZIP writer refuses directory paths as the only JSON entry', () => {
 });
 
 
-test('ZIP64 writer uses a data descriptor so source size can remain unknown', async () => {
+test('streaming writer keeps ZIP64 local metadata but uses a classic directory for small output', async () => {
   const json = Buffer.from('{"stream":true}');
   const archive = await collect(createSingleFileZipStream(
     'stdin',
@@ -316,15 +341,26 @@ test('ZIP64 writer uses a data descriptor so source size can remain unknown', as
     })(),
   ));
 
-  const { zip64Eocd, centralOffset } = zip64DirectoryInfo(archive);
-  assert.ok(zip64Eocd > centralOffset);
+  const directory = directoryInfo(archive);
+  assert.equal(directory.zip64, false);
   assert.equal(archive.readUInt32LE(0), 0x04034b50);
+  assert.equal(archive.readUInt16LE(4), 45);
   assert.equal(archive.readUInt16LE(6) & 0x0008, 0x0008);
   assert.equal(archive.readUInt32LE(18), 0xffffffff);
   assert.equal(archive.readUInt32LE(22), 0xffffffff);
-  assert.equal(archive.readUInt32LE(centralOffset), 0x02014b50);
-  assert.equal(archive.readUInt32LE(centralOffset + 20), 0xffffffff);
-  assert.equal(archive.readUInt32LE(centralOffset + 24), 0xffffffff);
+  assert.equal(archive.readUInt32LE(directory.centralOffset), 0x02014b50);
+  assert.notEqual(
+    archive.readUInt32LE(directory.centralOffset + 20),
+    0xffffffff,
+  );
+  assert.notEqual(
+    archive.readUInt32LE(directory.centralOffset + 24),
+    0xffffffff,
+  );
+  assert.equal(
+    archive.readUInt32LE(directory.centralOffset - 24),
+    0x08074b50,
+  );
 });
 
 test('single-file ZIP reader enforces compression-ratio limit', async () => {
@@ -399,7 +435,7 @@ test('ZIP reader rejects a data descriptor that disagrees with central metadata'
     const archive = await collect(
       createSingleFileZipStream('stdin', [json]),
     );
-    const { centralOffset } = zip64DirectoryInfo(archive);
+    const { centralOffset } = directoryInfo(archive);
     const descriptorOffset = centralOffset - 24;
     assert.equal(archive.readUInt32LE(descriptorOffset), 0x08074b50);
     const crc = archive.readUInt32LE(descriptorOffset + 4);
@@ -417,14 +453,17 @@ test('ZIP reader rejects a data descriptor that disagrees with central metadata'
 test(
   'ZIP reader accepts an archive whose only entry was created by 7-Zip from stdin',
   { skip: !sevenZipAvailable() },
-  async () => {
+  async (context) => {
     await withTempZip(async (file) => {
       const json = Buffer.from(JSON.stringify({
         producer: '7z-stdin',
         values: Array.from({ length: 200 }, (_value, index) => index),
       }));
 
-      await sevenZipFromStdin(file, json);
+      if (!await sevenZipFromStdin(file, json)) {
+        context.skip('installed 7-Zip does not support creating ZIP from stdin');
+        return;
+      }
 
       const entry = await openSingleFileZip(file, {
         maxUncompressedBytes: 1024 * 1024,
