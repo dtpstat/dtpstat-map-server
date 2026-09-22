@@ -42,47 +42,49 @@ function exportPool() {
       if (/FROM report_config/i.test(text)) {
         return {
           rows: [{
-            metrics: [
-              {
-                key: 'population',
-                name: 'Население',
-                source: { kind: 'field', field: 'city.population' },
-                operations: [],
+            config: {
+              metrics: [
+                {
+                  key: 'population',
+                  name: 'Население',
+                  source: { kind: 'field', field: 'city.population' },
+                  operations: [],
+                },
+                {
+                  key: 'area',
+                  name: 'Площадь',
+                  source: { kind: 'field', field: 'city.area_m2' },
+                  operations: [],
+                },
+              ],
+              table_columns: [
+                { kind: 'city', title: 'город' },
+                {
+                  kind: 'metric',
+                  metricKey: 'population',
+                  title: 'население',
+                  scale: 1,
+                  decimals: 0,
+                  formatRules: [],
+                },
+              ],
+              csv_columns: [
+                { kind: 'city', title: 'city' },
+                {
+                  kind: 'metric',
+                  metricKey: 'population',
+                  title: 'population',
+                  scale: 1,
+                  decimals: null,
+                },
+              ],
+              rank: {
+                sort: [
+                  { metricKey: 'population', direction: 'desc' },
+                  { metricKey: 'area', direction: 'asc' },
+                ],
               },
-              {
-                key: 'area',
-                name: 'Площадь',
-                source: { kind: 'field', field: 'city.area_m2' },
-                operations: [],
-              },
-            ],
-            tableColumns: [
-              { kind: 'city', title: 'город' },
-              {
-                kind: 'metric',
-                metricKey: 'population',
-                title: 'население',
-                scale: 1,
-                decimals: 0,
-                formatRules: [],
-              },
-            ],
-            csvColumns: [
-              { kind: 'city', title: 'city' },
-              {
-                kind: 'metric',
-                metricKey: 'population',
-                title: 'population',
-                scale: 1,
-                decimals: null,
-              },
-            ],
-            rankSort: [
-              { metricKey: 'population', direction: 'desc' },
-              { metricKey: 'area', direction: 'asc' },
-            ],
-            rankMetricKey: 'population',
-            rankDirection: 'desc',
+            },
           }],
         };
       }
