@@ -3,15 +3,25 @@ import test from 'node:test';
 import { createPopulationImportService } from '../src/db/population-import-service.js';
 
 const upload = {
+  schemaVersion: 2,
   asOf: '2026-01-01',
   source: 'test',
-  populations: [{ name: 'Тестоград', population: 2000 }],
+  territories: [{
+    osmType: 'relation',
+    osmId: '123',
+    name: 'Тестоград',
+    type: 'city',
+    placeType: 'city',
+    adminLevel: 6,
+    population: 2000,
+    attributes: {},
+    children: [],
+  }],
 };
 
 function createFakePool({
-  unknownCities = [],
-  ambiguousCities = [],
-  updatedCities = 1,
+  statuses = [{ osmType: 'relation', osmId: '123', name: 'Тестоград', status: 'matched' }],
+  updatedTerritories = 1,
 } = {}) {
   const queries = [];
   let released = false;
@@ -19,6 +29,7 @@ function createFakePool({
     async query(text, values = []) {
       const normalized = text.trim();
       queries.push(normalized);
+
       if (
         normalized.startsWith('INSERT INTO population_transfer_raw') ||
         normalized.startsWith('INSERT INTO population_transfer_stage')
@@ -28,15 +39,14 @@ function createFakePool({
           rowCount: values[0] ? JSON.parse(values[0]).length : 0,
         };
       }
-      if (normalized.includes('COUNT(boundary.id)::integer AS match_count')) {
-        const rows = [
-          ...unknownCities.map((name) => ({ name, type: null, match_count: 0 })),
-          ...ambiguousCities.map((name) => ({ name, type: null, match_count: 2 })),
-        ];
-        return { rows, rowCount: rows.length };
+      if (normalized.startsWith('SELECT') && normalized.includes('AS status')) {
+        return { rows: statuses, rowCount: statuses.length };
       }
-      if (normalized.includes('INSERT INTO city_populations')) {
-        return { rows: [], rowCount: updatedCities };
+      if (normalized.startsWith('UPDATE city_boundaries AS boundary')) {
+        return {
+          rows: Array.from({ length: updatedTerritories }, (_v, index) => ({ id: index + 1 })),
+          rowCount: updatedTerritories,
+        };
       }
       return { rows: [], rowCount: 0 };
     },
@@ -47,87 +57,87 @@ function createFakePool({
 
   return {
     queries,
-    get released() {
-      return released;
-    },
-    async connect() {
-      return client;
-    },
+    get released() { return released; },
+    async connect() { return client; },
   };
 }
 
-test('population update upserts data and recalculates city statistics', async () => {
+test('population update writes territory data and refreshes active projection', async () => {
   const pool = createFakePool();
   const service = createPopulationImportService(pool);
 
   const result = await service.updateFromJson(upload);
 
-  assert.equal(result.cities, 1);
-  assert.equal(result.requestedCities, 1);
+  assert.equal(result.territories, 1);
+  assert.equal(result.requestedTerritories, 1);
   assert.equal(result.skippedCount, 0);
-  assert.deepEqual(result.skippedCities, []);
-  assert.equal(result.ambiguousCount, 0);
-  assert.deepEqual(result.ambiguousCities, []);
+  assert.deepEqual(result.skippedTerritories, []);
   assert.equal(result.asOf, '2026-01-01');
   assert.equal(pool.queries[0], 'BEGIN');
+  assert.ok(pool.queries.includes('SELECT sync_active_boundary_populations()'));
   assert.match(pool.queries.at(-2), /^WITH geometry_statistics AS/);
   assert.equal(pool.queries.at(-1), 'COMMIT');
   assert.equal(pool.released, true);
 });
 
-test('population update skips cities that are absent from the database', async () => {
+test('population update skips OSM territories absent from target', async () => {
   const pool = createFakePool({
-    unknownCities: ['Киров'],
-    updatedCities: 1,
+    statuses: [
+      { osmType: 'relation', osmId: '123', name: 'Тестоград', status: 'matched' },
+      { osmType: 'relation', osmId: '999', name: 'Нет в БД', status: 'missing' },
+    ],
+    updatedTerritories: 1,
   });
   const service = createPopulationImportService(pool);
-  const mixedUpload = {
+  const mixed = {
     ...upload,
-    populations: [
-      { name: 'Тестоград', population: 2000 },
-      { name: 'Киров', population: 450000 },
+    territories: [
+      upload.territories[0],
+      {
+        ...upload.territories[0],
+        osmId: '999',
+        name: 'Нет в БД',
+      },
     ],
   };
 
-  const result = await service.updateFromJson(mixedUpload);
+  const result = await service.updateFromJson(mixed);
 
-  assert.equal(result.cities, 1);
-  assert.equal(result.requestedCities, 2);
+  assert.equal(result.territories, 1);
+  assert.equal(result.requestedTerritories, 2);
   assert.equal(result.skippedCount, 1);
-  assert.deepEqual(result.skippedCities, ['Киров']);
+  assert.deepEqual(
+    result.skippedTerritories,
+    ['relation/999 Нет в БД'],
+  );
   assert.equal(pool.queries.at(-1), 'COMMIT');
-  assert.equal(pool.released, true);
-  assert.match(pool.queries.join('\n'), /INSERT INTO city_populations/);
 });
 
-
-test('population update reports ambiguous legacy names instead of guessing', async () => {
+test('population update rejects a hierarchy mismatch for known territories', async () => {
   const pool = createFakePool({
-    ambiguousCities: ['Октябрьский'],
-    updatedCities: 0,
+    statuses: [
+      { osmType: 'relation', osmId: '123', name: 'Тестоград', status: 'hierarchy' },
+    ],
+    updatedTerritories: 0,
   });
   const service = createPopulationImportService(pool);
 
-  const result = await service.updateFromJson({
-    populations: [{ name: 'Октябрьский', population: 10000 }],
-  });
-
-  assert.equal(result.cities, 0);
-  assert.equal(result.skippedCount, 0);
-  assert.equal(result.ambiguousCount, 1);
-  assert.deepEqual(result.ambiguousCities, ['Октябрьский']);
-  assert.equal(pool.queries.at(-1), 'COMMIT');
+  await assert.rejects(
+    service.updateFromJson(upload),
+    /hierarchy does not match/,
+  );
+  assert.equal(pool.queries.at(-1), 'ROLLBACK');
 });
 
-
-test('streamed population import rolls back staged records when JSON fails late', async () => {
-  const populations = Array.from({ length: 101 }, (_value, index) => ({
-    name: `Город ${index}`,
-    population: 1000 + index,
+test('streamed population import rolls back staged roots when JSON fails late', async () => {
+  const roots = Array.from({ length: 101 }, (_value, index) => ({
+    ...upload.territories[0],
+    osmId: String(1000 + index),
+    name: `Территория ${index}`,
   }));
   const malformed =
-    '{"asOf":"2026-01-01","populations":' +
-    JSON.stringify(populations) +
+    '{"schemaVersion":2,"territories":' +
+    JSON.stringify(roots) +
     ',"broken":';
 
   async function* source() {
@@ -144,6 +154,8 @@ test('streamed population import rolls back staged records when JSON fails late'
     service.updateFromJsonStream(source(), {
       maxJsonBytes: Buffer.byteLength(malformed) + 1,
       maxItemBytes: 1024 * 1024,
+      maxJsonItems: 1000,
+      maxJsonDepth: 128,
     }),
     /Unexpected end|JSON value/,
   );
@@ -156,6 +168,5 @@ test('streamed population import rolls back staged records when JSON fails late'
   );
   assert.equal(pool.queries.at(-1), 'ROLLBACK');
   assert.equal(pool.queries.includes('COMMIT'), false);
-  assert.doesNotMatch(pool.queries.join('\n'), /INSERT INTO city_populations/);
   assert.equal(pool.released, true);
 });
