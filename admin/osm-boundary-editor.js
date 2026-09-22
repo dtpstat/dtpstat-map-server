@@ -1,3 +1,5 @@
+import { adminConfirm } from './admin-dialog.js';
+
 import { publishDerivedDataChange } from './derived-data-events.js';
 
 export function buildBoundaryTreeIndex(items) {
@@ -73,50 +75,6 @@ if (typeof document !== 'undefined') {
     const save = document.querySelector('#osm-boundary-save');
     const enableBranch = document.querySelector('#osm-boundary-enable-branch');
     const disableBranch = document.querySelector('#osm-boundary-disable-branch');
-    const confirmOverlay = document.querySelector('#osm-boundary-confirm-overlay');
-    const confirmTitle = document.querySelector('#osm-boundary-confirm-title');
-    const confirmMessage = document.querySelector('#osm-boundary-confirm-message');
-    const confirmAccept = document.querySelector('[data-osm-boundary-confirm-accept]');
-    const confirmCancel = document.querySelector('[data-osm-boundary-confirm-cancel]');
-    let confirmResolver = null;
-
-    function closeConfirm(result = false) {
-      if (!confirmOverlay || confirmOverlay.hidden) return;
-      confirmOverlay.hidden = true;
-      const resolve = confirmResolver;
-      confirmResolver = null;
-      resolve?.(result);
-    }
-
-    function confirmBranchChange({ nextActive, item, total, changed }) {
-      if (!confirmOverlay || !confirmTitle || !confirmMessage || !confirmAccept) {
-        return Promise.resolve(false);
-      }
-      confirmTitle.textContent = nextActive ? 'Включить ветку?' : 'Отключить ветку?';
-      confirmMessage.textContent =
-        `${nextActive ? 'Будут включены' : 'Будут отключены'} выбранный объект ` +
-        `«${item.displayName}» и вложенные объекты. ` +
-        `Объектов в ветке: ${total}; изменится: ${changed}.`;
-      confirmAccept.textContent = nextActive ? 'Включить ветку' : 'Отключить ветку';
-      confirmAccept.classList.toggle('danger', !nextActive);
-      confirmOverlay.hidden = false;
-      confirmAccept.focus();
-      return new Promise((resolve) => {
-        confirmResolver = resolve;
-      });
-    }
-
-    confirmCancel?.addEventListener('click', () => closeConfirm(false));
-    confirmAccept?.addEventListener('click', () => closeConfirm(true));
-    confirmOverlay?.addEventListener('click', (event) => {
-      if (event.target === confirmOverlay) closeConfirm(false);
-    });
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && confirmOverlay && !confirmOverlay.hidden) {
-        closeConfirm(false);
-      }
-    });
-
     function setMessage(text, tone = '') {
       message.textContent = text;
       message.className = 'notice';
@@ -713,11 +671,15 @@ if (typeof document !== 'undefined') {
       ).length;
       if (changedCount === 0) return;
 
-      const confirmed = await confirmBranchChange({
-        nextActive,
-        item,
-        total: items.length,
-        changed: changedCount,
+      const confirmed = await adminConfirm({
+        title: nextActive ? 'Включить ветку?' : 'Отключить ветку?',
+        message:
+          `${nextActive ? 'Будут включены' : 'Будут отключены'} выбранный объект ` +
+          `«${item.displayName}» и вложенные объекты. ` +
+          `Объектов в ветке: ${items.length}; изменится: ${changedCount}.`,
+        confirmLabel: nextActive ? 'Включить ветку' : 'Отключить ветку',
+        cancelLabel: 'Отмена',
+        destructive: !nextActive,
       });
       if (!confirmed) return;
 
