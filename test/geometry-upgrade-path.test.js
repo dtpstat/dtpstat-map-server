@@ -24,7 +24,7 @@ test('schema CI contains a V037-to-current detached geometry upgrade scenario', 
     'utf8',
   );
 
-  assert.match(source, /migration\.version <= 36/);
+  assert.match(source, /migration\.version <= 37/);
   assert.match(source, /generate_series\(1, 10\)/);
   assert.match(source, /city_id IS NULL/);
   assert.match(source, /boundary_id IS NULL/);
