@@ -20,7 +20,7 @@
   overflow: visible;
 }
 
-.report-interface-panel > .report-config-editor {
+.report-interface-panel .report-config-editor {
   padding: 0;
   border: 0;
   border-radius: 0;
