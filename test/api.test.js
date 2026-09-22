@@ -267,6 +267,7 @@ test('API exposes public config, health, and ordered cities', async () => {
       status: 'ok',
       database: 'reachable',
     });
+    assert.equal(citiesResponse.headers.get('cache-control'), 'no-store');
     assert.deepEqual((await citiesResponse.json()).cities, cities);
   });
 });
