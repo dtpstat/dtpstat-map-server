@@ -192,3 +192,38 @@ test('streaming JSON parser rejects excessive selected-array item count', async 
   );
   assert.deepEqual(seen, [{ id: 1 }, { id: 2 }]);
 });
+
+
+test('streaming JSON parser reports byte progress while one large item is still being read', async () => {
+  const largeText = 'x'.repeat(5 * 1024 * 1024);
+  const document = {
+    type: 'FeatureCollection',
+    features: [{ id: 1, text: largeText }],
+  };
+  const buffer = Buffer.from(JSON.stringify(document));
+  const progress = [];
+
+  const result = await parseStreamingJsonObject(
+    chunked(buffer, [256 * 1024]),
+    {
+      arrayKey: 'features',
+      metadataKeys: new Set(['type']),
+      maxBytes: buffer.length + 1,
+      maxItemBytes: buffer.length,
+      maxDepth: 16,
+      maxItems: 10,
+      onItem() {},
+      onProgress(value) {
+        progress.push(value);
+      },
+    },
+  );
+
+  assert.equal(result.itemCount, 1);
+  const reading = progress.filter((value) =>
+    value.phase === 'parse' && value.activity === 'read');
+  assert.ok(reading.length >= 1);
+  assert.ok(reading.some((value) => value.items === 0));
+  assert.ok(reading.some((value) => value.decodedBytes >= 4 * 1024 * 1024));
+  assert.equal(progress.at(-1).phase, 'parsed');
+});
