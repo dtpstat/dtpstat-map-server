@@ -539,8 +539,9 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         image.remove();
         fallback.hidden = false;
       }, { once: true });
-      image.src =
-        `/api/admin/security/users/${encodeURIComponent(entry.userId)}/avatar`;
+      image.src = entry.userId === currentUser?.id
+        ? `/api/admin/profile/avatar?v=${Date.now()}`
+        : `/api/admin/security/users/${encodeURIComponent(entry.userId)}/avatar`;
       avatar.append(image);
     }
 
