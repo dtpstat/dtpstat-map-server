@@ -206,7 +206,14 @@ Portable KML использует тот же NAME-based business-type matching,
 
 Подробнее: [kml-transfer.md](kml-transfer.md).
 
-# Население
+# Население и атрибуты территорий
+
+Население и произвольные attributes принадлежат точному OSM boundary и
+хранятся независимо от флага `active`. Изменение этих данных никогда не
+активирует и не деактивирует объект.
+
+Для активных boundaries сервер отдельно синхронизирует рабочую проекцию
+`CITY_POPULATIONS`, которую используют отчёты и public API.
 
 ## Export
 
@@ -219,7 +226,56 @@ GET /api/admin/export/populations
 - `GET /api/admin/export/populations` → `populations.json`;
 - `GET /api/admin/export/populations.zip` → `populations.zip`, внутри ровно один `populations.json`.
 
-Для каждой записи переносятся type/name/citySlug/population/asOf/source/attributes.
+Canonical format — `schemaVersion: 2`. Он повторяет hierarchy
+`CITY_BOUNDARIES.PARENT_ID`:
+
+```json
+{
+  "schemaVersion": 2,
+  "exportedAt": "2026-09-22T12:00:00.000Z",
+  "asOf": "2026-01-01",
+  "source": "Росстат",
+  "territories": [
+    {
+      "osmType": "relation",
+      "osmId": "253256",
+      "name": "Республика Татарстан",
+      "type": "administrative",
+      "placeType": null,
+      "adminLevel": 4,
+      "population": 4004212,
+      "asOf": "2026-01-01",
+      "source": "Росстат",
+      "attributes": {},
+      "children": [
+        {
+          "osmType": "relation",
+          "osmId": "79379",
+          "name": "Казань",
+          "type": "city",
+          "placeType": "city",
+          "adminLevel": 6,
+          "population": 1320000,
+          "asOf": "2025-01-01",
+          "source": "Татарстанстат",
+          "attributes": {},
+          "children": []
+        }
+      ]
+    }
+  ]
+}
+```
+
+`name/type/placeType/adminLevel` делают snapshot читаемым человеком.
+Import identity — строго `osmType + osmId`; имена не используются как ключи.
+
+`population` обязателен для каждого узла и может быть `null`, что очищает
+население этой территории. `attributes` также обязателен и является JSON
+object. `asOf/source` могут наследоваться от top-level значений или
+переопределяться на конкретном узле.
+
+Поле `active` в population format отсутствует намеренно.
 
 ## Import
 
@@ -232,27 +288,35 @@ POST /api/admin/populations
 Content-Type: application/zip
 ```
 
-Population matching выполняется только по активным OSM boundaries. Основная
-identity — нормализованные `type + name` без учёта регистра и whitespace.
-Legacy запись без `type` принимается только если имя соответствует ровно одному
-активному объекту; неоднозначные записи не угадываются.
+Import:
 
-Записи без совпадения пропускаются без падения всей операции.
+1. потоково читает top-level `territories[]`;
+2. разворачивает каждый hierarchy root в bounded staging batches;
+3. проверяет уникальность `osmType/osmId` и структуру children;
+4. сопоставляет target boundaries по точной OSM identity;
+5. проверяет hierarchy известных target-узлов;
+6. обновляет `population/asOf/source/attributes` непосредственно в
+   `CITY_BOUNDARIES`;
+7. не изменяет `IS_ACTIVE`;
+8. после staging синхронизирует данные активных объектов в
+   `CITY_POPULATIONS` и пересчитывает статистику;
+9. фиксирует всё одной транзакцией.
 
-Result содержит, в частности:
+OSM identities, которых нет на target, пропускаются и возвращаются в
+`skippedTerritories`. Известный объект с несовместимой hierarchy считается
+ошибкой snapshot и приводит к rollback.
+
+Пример result:
 
 ```json
 {
-  "cities": 71,
-  "requestedCities": 72,
+  "territories": 71,
+  "requestedTerritories": 72,
+  "roots": 5,
   "skippedCount": 1,
-  "skippedCities": ["Киров"],
-  "ambiguousCount": 0,
-  "ambiguousCities": []
+  "skippedTerritories": ["relation/123456 Нет на target"]
 }
 ```
-
-Invalid population values, conflicts и malformed payload по-прежнему являются ошибками.
 
 # Streaming JSON / ZIP и body limits
 
