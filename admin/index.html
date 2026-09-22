@@ -313,14 +313,21 @@
               </p>
               <form id="kml-form" data-task-form="kml" data-task-type="kml-update">
                 <div class="form-fields">
-                  <label>Источники JSON
-                    <textarea name="sources" rows="12" placeholder="Загрузка актуального примера…"></textarea>
-                    <small>Каждый слой: name + multiple (1 или 2) + необязательный type. type — исходное LINE_TYPES.NAME; сопоставление без учёта регистра и внешних пробелов. Отсутствующий NAME создаётся автоматически, CODE назначает БД.</small>
-                  </label>
-                  <label>Буфер города, м
-                    <input name="cityBufferMeters" type="number" inputmode="numeric"
-                           min="0" step="1" placeholder="из ENV">
-                  </label>
+                  <p class="osm-config-help">Без тонкой настройки используются источники и параметры из конфигурации сервера.</p>
+                  <details class="admin-advanced-settings">
+                    <summary>Тонкая настройка источника</summary>
+                    <div class="admin-advanced-settings-body">
+                      <p class="admin-advanced-settings-note">Нужно только для разового переопределения источников или геометрического буфера.</p>
+                      <label>Источники JSON
+                        <textarea name="sources" rows="12" placeholder="Загрузка актуального примера…"></textarea>
+                        <small>Каждый слой: name + multiple (1 или 2) + необязательный type. type — исходное LINE_TYPES.NAME; сопоставление без учёта регистра и внешних пробелов. Отсутствующий NAME создаётся автоматически, CODE назначает БД.</small>
+                      </label>
+                      <label>Буфер города, м
+                        <input name="cityBufferMeters" type="number" inputmode="numeric"
+                               min="0" step="1" placeholder="из ENV" data-human-unit="meters">
+                      </label>
+                    </div>
+                  </details>
                   <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
                 </div>
                 <button class="task-action" type="submit" data-task-action="kml"
@@ -390,14 +397,20 @@
               </p>
               <form id="population-form" data-task-form="population" data-task-type="population-update">
                 <div class="form-fields">
-                  <label>JSON-файл
+                  <label>JSON / ZIP-файл
                     <input name="file" type="file" accept=".json,.zip,application/json,application/zip">
-                    <small>Принимается JSON или ZIP/ZIP64 с одной data entry; имя и расширение entry не важны. Файл собственного экспорта принимается без преобразования, включая schemaVersion/exportedAt и индивидуальные asOf/source.</small>
+                    <small>Принимается JSON или ZIP/ZIP64 с одной data entry; имя и расширение entry не важны. Файл собственного экспорта принимается без преобразования.</small>
                   </label>
-                  <label>Или данные JSON
-                    <textarea name="payload" rows="16" placeholder="Загрузка актуального примера…"></textarea>
-                    <small>schemaVersion 2: regions[] с name/attributes и cities[]; у города обязательны name и population (число или null). Общие asOf/source в корне используются как значения по умолчанию.</small>
-                  </label>
+                  <details class="admin-advanced-settings">
+                    <summary>Вставить JSON вручную</summary>
+                    <div class="admin-advanced-settings-body">
+                      <p class="admin-advanced-settings-note">Ручной ввод удобен для диагностики и небольших корректировок. Для штатного импорта предпочтителен файл.</p>
+                      <label>Данные JSON
+                        <textarea name="payload" rows="16" placeholder="Загрузка актуального примера…"></textarea>
+                        <small>schemaVersion 2: regions[] с name/attributes и cities[]; у города обязательны name и population (число или null). Общие asOf/source в корне используются как значения по умолчанию.</small>
+                      </label>
+                    </div>
+                  </details>
                 </div>
                 <button class="task-action" type="submit" data-task-action="population"
                         data-task-type="population-update" data-start-label="Обновить население">Обновить население</button>
