@@ -391,15 +391,16 @@ function stableProcessingView(task) {
     }
   }
 
-  const decodedBytes = Math.max(
-    ...parseEntries.map((entry) => Number(entry.details.decodedBytes)),
-  );
-  const itemCount = Math.max(
-    0,
-    ...parseEntries
-      .map((entry) => Number(entry.details?.items))
-      .filter(Number.isFinite),
-  );
+  let decodedBytes = 0;
+  let itemCount = 0;
+  for (const entry of parseEntries) {
+    decodedBytes = Math.max(
+      decodedBytes,
+      Number(entry.details?.decodedBytes) || 0,
+    );
+    const items = Number(entry.details?.items);
+    if (Number.isFinite(items)) itemCount = Math.max(itemCount, items);
+  }
   const ratio =
     Number.isFinite(expectedJsonBytes) && expectedJsonBytes > 0
       ? Math.min(1, decodedBytes / expectedJsonBytes)
