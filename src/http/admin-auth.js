@@ -60,6 +60,9 @@ function hasPermission(user, permission) {
   if (permission === 'interface') return Boolean(user.canManageInterface);
   if (permission === 'users') return Boolean(user.canManageUsers);
   if (permission === 'audit') return Boolean(user.canViewAudit);
+  if (permission === 'users-or-audit') {
+    return Boolean(user.canManageUsers || user.canViewAudit);
+  }
   if (permission === 'security') return Boolean(user.canManageSecurity);
   if (permission === 'superuser') return false;
   return false;
@@ -191,6 +194,7 @@ export function createAdminAuthorization(securityService) {
     requireInterface: middleware('interface'),
     requireUsers: middleware('users'),
     requireAudit: middleware('audit'),
+    requireUsersOrAudit: middleware('users-or-audit'),
     requireSecurity: middleware('security'),
     requireSuperuser: middleware('superuser'),
 
