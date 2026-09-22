@@ -290,6 +290,21 @@ function processingProgress(task) {
           places.toLocaleString('ru-RU');
       }
     }
+  } else if (phase === 'warnings') {
+    label = 'Есть предупреждения';
+    const warningCount = Number(details.warningCount);
+    const skippedCount = Number(details.skippedCount);
+    if (Number.isFinite(warningCount)) {
+      amount = `${warningCount.toLocaleString('ru-RU')} предупреждений`;
+    }
+    if (Number.isFinite(skippedCount)) {
+      detail =
+        `Пропущено записей: ` +
+        skippedCount.toLocaleString('ru-RU') +
+        '. Остальные данные будут сохранены.';
+    } else {
+      detail = 'Остальные корректные данные будут сохранены.';
+    }
   } else if (phase === 'validated' || phase === 'validate-stage') {
     label = 'Проверка данных завершена';
     detail = 'Подготавливаются изменения базы данных.';
@@ -568,7 +583,9 @@ function renderResult(task) {
     elements.resultPanel.open = true;
     elements.result.textContent = pretty({ error: task.error });
   } else if (task.result !== undefined) {
-    elements.resultPanel.classList.add('result-success');
+    elements.resultPanel.classList.add(
+      task.result?.partial ? 'result-warning' : 'result-success',
+    );
     elements.resultPanel.open = true;
     elements.result.textContent = pretty(task.result);
   } else {
@@ -708,8 +725,15 @@ function render() {
     elements.status.className = 'status status-idle';
     elements.status.textContent = 'нет задачи';
   } else {
-    elements.status.className = `status status-${task.status}`;
-    elements.status.textContent = statusLabels[task.status] ?? task.status;
+    const partial =
+      task.status === 'succeeded' &&
+      Boolean(task.result?.partial);
+    elements.status.className = partial
+      ? 'status status-partial'
+      : `status status-${task.status}`;
+    elements.status.textContent = partial
+      ? 'с предупреждениями'
+      : (statusLabels[task.status] ?? task.status);
     elements.meta.append(
       metaItem('ID', task.id, true),
       metaItem('Тип', task.type),
@@ -745,7 +769,19 @@ function applyTask(task, announce = false) {
   if (announce && task && task.status !== previousStatus) {
     const taskKey = taskTypeTabs[task.type];
     if (task.status === 'succeeded') {
-      setTaskNotice(taskKey, 'операция завершена успешно.', 'success');
+      if (task.result?.partial) {
+        const skipped = Number(task.result.skippedCount ?? 0);
+        const suffix = Number.isFinite(skipped) && skipped > 0
+          ? ` Пропущено записей: ${skipped.toLocaleString('ru-RU')}.`
+          : '';
+        setTaskNotice(
+          taskKey,
+          `операция завершена с предупреждениями.${suffix}`,
+          'warning',
+        );
+      } else {
+        setTaskNotice(taskKey, 'операция завершена успешно.', 'success');
+      }
     } else if (task.status === 'failed') {
       setTaskNotice(taskKey, 'операция завершилась с ошибкой.', 'error');
     } else if (task.status === 'cancelled') {
