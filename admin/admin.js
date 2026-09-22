@@ -468,10 +468,32 @@ function stableProcessingView(task) {
     databaseStatus = `PostgreSQL/PostGIS: ${parts.join(' · ')}`;
   }
 
-  const currentPhase = reverseFind(
+  const currentEntry = reverseFind(
     logs,
     (entry) => typeof entry.details?.phase === 'string',
-  )?.details?.phase;
+  );
+  const currentPhase = currentEntry?.details?.phase;
+  if (currentPhase === 'hierarchy') {
+    const hierarchy = currentEntry.details ?? {};
+    const processed = Number(hierarchy.processed);
+    const total = Number(hierarchy.total);
+    const batch = Number(hierarchy.batch);
+    const batchCount = Number(hierarchy.batchCount);
+    const parts = [];
+    if (Number.isFinite(processed) && Number.isFinite(total)) {
+      parts.push(
+        `иерархия ${processed.toLocaleString('ru-RU')} / ` +
+        total.toLocaleString('ru-RU'),
+      );
+    }
+    if (Number.isFinite(batch) && Number.isFinite(batchCount)) {
+      parts.push(
+        `пакет ${batch.toLocaleString('ru-RU')} / ` +
+        batchCount.toLocaleString('ru-RU'),
+      );
+    }
+    databaseStatus = `PostgreSQL/PostGIS: ${parts.join(' · ')}`;
+  }
   const interleaved = ['parse', 'stage-write', 'stage'].includes(currentPhase);
   const label = parsed
     ? (interleaved ? 'Входной JSON прочитан' : current.label)
