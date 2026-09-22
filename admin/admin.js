@@ -1,4 +1,8 @@
 import { createTaskNotices } from './task-notices.js';
+import { adminConfirm } from './admin-dialog.js';
+import { trackDirtyForm } from './admin-dirty-state.js';
+import { bindHumanUnits } from './admin-human-units.js';
+import { readTabState, writeTabState } from './admin-tab-state.js';
 
 const taskTypeTabs = Object.freeze({
   'osm-city-update': 'osm',
@@ -51,11 +55,11 @@ const state = {
   osmSettings: null,
   osmCheckpoint: null,
   lastSuccessfulUpdates: {},
-  selected: 'osm',
+  selected: readTabState('data-task', ['osm', 'kml', 'population'], 'osm'),
   selectedOperations: {
-    osm: 'osm-update',
-    kml: 'kml-external',
-    population: 'population-json',
+    osm: readTabState('data-operation-osm', ['osm-update', 'osm-geojson'], 'osm-update'),
+    kml: readTabState('data-operation-kml', ['kml-external', 'kml-geojson'], 'kml-external'),
+    population: readTabState('data-operation-population', ['population-json'], 'population-json'),
   },
   socket: null,
   reconnectTimer: null,
@@ -93,6 +97,10 @@ const elements = {
 };
 const taskNotices = createTaskNotices(elements.notices, taskNames);
 const transferOverlay = createTransferOverlay();
+const osmSettingsDirty = trackDirtyForm(elements.osmForm, {
+  label: 'Настройки OSM-загрузки',
+});
+bindHumanUnits(document);
 
 function formatTransferBytes(bytes) {
   const value = Number(bytes);
@@ -709,6 +717,7 @@ function selectOperation(operationKey) {
   if (!selectedTab) return;
   const group = selectedTab.dataset.operationGroup;
   state.selectedOperations[group] = operationKey;
+  writeTabState(`data-operation-${group}`, operationKey);
 
   for (const tab of elements.operationTabs) {
     if (tab.dataset.operationGroup !== group) continue;
@@ -725,6 +734,7 @@ function selectOperation(operationKey) {
 function selectTab(taskKey) {
   if (!elements.tabs.some((tab) => tab.dataset.taskTab === taskKey)) return;
   state.selected = taskKey;
+  writeTabState('data-task', taskKey);
   for (const tab of elements.tabs) {
     const selected = tab.dataset.taskTab === taskKey;
     tab.setAttribute('aria-selected', String(selected));
@@ -1231,6 +1241,8 @@ function applyOsmSettings(config) {
       input.max = String(maximum);
     }
   }
+  bindHumanUnits(form);
+  osmSettingsDirty?.markClean();
 }
 
 function osmSettingsPayload(form = elements.osmForm) {
@@ -1420,12 +1432,17 @@ elements.osmForm.addEventListener('submit', async (event) => {
   const restart = Boolean(state.osmCheckpoint);
   if (restart) {
     const checkpoint = state.osmCheckpoint;
-    const confirmed = window.confirm(
-      'Есть сохранённый прогресс OSM: ' +
-      checkpoint.stagedObjects + '/' + checkpoint.totalObjects +
-      ' объектов. Начать заново? Старый checkpoint будет удалён только ' +
-      'после успешного получения нового OSM-индекса.',
-    );
+    const confirmed = await adminConfirm({
+      title: 'Начать OSM-загрузку заново?',
+      message:
+        'Есть сохранённый прогресс OSM: ' +
+        checkpoint.stagedObjects + '/' + checkpoint.totalObjects +
+        ' объектов. Старый checkpoint будет удалён только после успешного ' +
+        'получения нового OSM-индекса.',
+      confirmLabel: 'Начать заново',
+      cancelLabel: 'Оставить checkpoint',
+      destructive: true,
+    });
     if (!confirmed) return;
   }
 
@@ -1478,11 +1495,16 @@ elements.osmResume?.addEventListener('click', async () => {
 elements.osmCheckpointDiscard?.addEventListener('click', async () => {
   const checkpoint = state.osmCheckpoint;
   if (active(state.task) || !checkpoint) return;
-  const confirmed = window.confirm(
-    'Удалить сохранённый прогресс OSM ' +
-    checkpoint.stagedObjects + '/' + checkpoint.totalObjects +
-    '? Возобновить эту загрузку после удаления будет невозможно.',
-  );
+  const confirmed = await adminConfirm({
+    title: 'Удалить сохранённый прогресс?',
+    message:
+      'OSM checkpoint: ' + checkpoint.stagedObjects + '/' +
+      checkpoint.totalObjects +
+      ' объектов. Возобновить эту загрузку после удаления будет невозможно.',
+    confirmLabel: 'Удалить checkpoint',
+    cancelLabel: 'Отмена',
+    destructive: true,
+  });
   if (!confirmed) return;
   try {
     await api('/api/admin/osm-checkpoint', { method: 'DELETE' });
@@ -1567,12 +1589,6 @@ elements.populationForm.addEventListener('submit', async (event) => {
 });
 
 elements.refresh.addEventListener('click', () => refresh());
-
-window.addEventListener('beforeunload', (event) => {
-  if (!state.transfer) return;
-  event.preventDefault();
-  event.returnValue = '';
-});
 
 function setConnection(status, text) {
   elements.connection.className = `connection connection-${status}`;
