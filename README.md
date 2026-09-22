@@ -90,7 +90,7 @@ HTTP_PORT=3002
 
 ## Миграции
 
-Текущая последовательность: `V001…V032`.
+Текущая последовательность: `V001…V040`.
 
 Последние изменения:
 
@@ -111,8 +111,16 @@ HTTP_PORT=3002
 | `V030` | накопительный счётчик фактически сохранённых geometry batches в checkpoint |
 | `V031` | диагностика OSM-объектов без построенной geometry в resumable checkpoint |
 | `V032` | population/asOf/source/attributes на `CITY_BOUNDARIES` и активная проекция в `CITY_POPULATIONS` |
+| `V033` | отдельные права редактора геометрий и OSM-дерева |
+| `V034` | универсальная модель `CITY_GEOMETRIES` для Point/Line/Polygon |
+| `V035` | staging/conflict model для geometry import |
+| `V036` | синхронизация городов редактора геометрий |
+| `V037` | invariants и derived normalization geometry model |
+| `V038` | identity/pending guards для city/boundary/geometry |
+| `V039` | effective geometry ownership для public/metrics |
+| `V040` | финальные ограничения geometry model |
 
-Следующая migration: **V033+**. Уже опубликованные migrations не редактируются задним числом.
+Следующая migration: **V041+**. Уже опубликованные migrations не редактируются задним числом.
 
 История хранится в:
 
