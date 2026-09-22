@@ -92,7 +92,7 @@ HTTP_PORT=3002
 
 ## Миграции
 
-Текущая последовательность: `V001…V030`.
+Текущая последовательность: `V001…V032`.
 
 Последние изменения:
 
@@ -111,14 +111,18 @@ HTTP_PORT=3002
 | `V028` | раздельные лимиты одного Overpass response / всей загрузки и база для adaptive geometry batching |
 | `V029` | durable checkpoint + persistent geometry staging для возобновления OSM update после ошибки/рестарта |
 | `V030` | накопительный счётчик фактически сохранённых geometry batches в checkpoint |
+| `V031` | диагностика OSM-объектов без построенной geometry в resumable checkpoint |
+| `V032` | population/asOf/source/attributes на `CITY_BOUNDARIES` и активная проекция в `CITY_POPULATIONS` |
 
-Следующая migration: **V031+**. Уже опубликованные migrations не редактируются задним числом.
+Следующая migration: **V033+**. Уже опубликованные migrations не редактируются задним числом.
 
 История хранится в:
 
 ```text
 <DATABASE_SCHEMA>.schema_versions
 ```
+
+`npm start` **не применяет migrations автоматически**, но перед остальным startup проверяет, что DB schema соответствует последней migration из `db/migrations`. При stale/newer/gapped history процесс завершается с понятной ошибкой до открытия HTTP listeners. После `git pull` с новыми migrations нужно выполнить `npm run db:migrate` перед restart.
 
 ## Большие portable JSON / ZIP transfers
 
