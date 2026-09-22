@@ -167,6 +167,14 @@ export function createApiRouter({
         : `OSM: пакет ${progress.batch} слишком большой; разделён ${progress.objectCount} → ${progress.splitSizes.join(' + ')} объектов`;
     } else if (progress.phase === 'kml-source') {
       message = `KML: обработан источник ${progress.source}/${progress.sourceCount}`;
+    } else if (progress.phase === 'stage-write') {
+      message =
+        `PostgreSQL/PostGIS: запись staging-пакета ${progress.batch ?? '?'}` +
+        ` (${progress.batchPlaces ?? '?'} объектов)`;
+    } else if (progress.phase === 'stage') {
+      message =
+        `PostgreSQL/PostGIS: staging-пакет ${progress.batch ?? '?'} записан; ` +
+        `всего ${progress.stagedPlaces ?? '?'} объектов`;
     } else if (progress.phase === 'validated') {
       message = 'Входные данные проверены';
     } else if (progress.phase === 'warnings') {
