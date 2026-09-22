@@ -149,10 +149,9 @@ const EXPORT_LINE_TYPES_SQL = `
 `;
 
 const EXPORT_REPORT_CONFIG_SQL = `
-  SELECT metrics, table_columns AS "tableColumns", csv_columns AS "csvColumns",
-    rank_sort AS "rankSort",
-    rank_metric_key AS "rankMetricKey", rank_direction AS "rankDirection"
-  FROM report_config WHERE id = 1
+  SELECT jsonb_object_agg(config_key, config_value) AS config
+  FROM report_config
+  WHERE config_key IN ('metrics', 'table_columns', 'csv_columns', 'rank')
 `;
 
 const EXPORT_SECURITY_SETTINGS_SQL = `
@@ -222,16 +221,14 @@ const INSERT_MISSING_LINE_TYPES_SQL = `
 `;
 
 const SAVE_REPORT_CONFIG_SQL = `
-  INSERT INTO report_config(
-    id,metrics,table_columns,csv_columns,rank_sort,rank_metric_key,rank_direction,updated_at
-  ) VALUES (1,$1::jsonb,$2::jsonb,$3::jsonb,$4::jsonb,$5,$6,NOW())
-  ON CONFLICT(id) DO UPDATE SET
-    metrics=EXCLUDED.metrics,
-    table_columns=EXCLUDED.table_columns,
-    csv_columns=EXCLUDED.csv_columns,
-    rank_sort=EXCLUDED.rank_sort,
-    rank_metric_key=EXCLUDED.rank_metric_key,
-    rank_direction=EXCLUDED.rank_direction,
+  INSERT INTO report_config(config_key, config_value, updated_at)
+  VALUES
+    ('metrics', $1::jsonb, NOW()),
+    ('table_columns', $2::jsonb, NOW()),
+    ('csv_columns', $3::jsonb, NOW()),
+    ('rank', $4::jsonb, NOW())
+  ON CONFLICT(config_key) DO UPDATE SET
+    config_value=EXCLUDED.config_value,
     updated_at=NOW()
 `;
 
@@ -318,12 +315,14 @@ export function createProjectSettingsTransferService(pool) {
           throw new Error('Project settings are incomplete; run database migrations');
         }
         await client.query('COMMIT');
-        const rankSort = Array.isArray(reportRow.rankSort) && reportRow.rankSort.length > 0
-          ? reportRow.rankSort
-          : [{
-              metricKey: reportRow.rankMetricKey,
-              direction: reportRow.rankDirection,
-            }];
+        const storedReportConfig = reportRow.config;
+        if (
+          !storedReportConfig ||
+          typeof storedReportConfig !== 'object' ||
+          Array.isArray(storedReportConfig)
+        ) {
+          throw new Error('Report configuration is incomplete; run database migrations');
+        }
         return {
           _dtpstat: {
             kind: SETTINGS_TRANSFER_KIND,
@@ -333,10 +332,10 @@ export function createProjectSettingsTransferService(pool) {
           projectSettings,
           lineTypes: lineTypes.rows,
           reportConfig: {
-            metrics: reportRow.metrics,
-            tableColumns: reportRow.tableColumns,
-            csvColumns: reportRow.csvColumns,
-            rank: { sort: rankSort },
+            metrics: storedReportConfig.metrics,
+            tableColumns: storedReportConfig.table_columns,
+            csvColumns: storedReportConfig.csv_columns,
+            rank: storedReportConfig.rank,
           },
           securitySettings,
         };
@@ -389,14 +388,11 @@ export function createProjectSettingsTransferService(pool) {
           projectSettings.largeCityPopulationThreshold,
           projectSettings.largeCityAreaKm2Threshold,
         ]);
-        const primaryRank = reportConfig.rank.sort[0];
         await client.query(SAVE_REPORT_CONFIG_SQL, [
           JSON.stringify(reportConfig.metrics),
           JSON.stringify(reportConfig.tableColumns),
           JSON.stringify(reportConfig.csvColumns),
-          JSON.stringify(reportConfig.rank.sort),
-          primaryRank.metricKey,
-          primaryRank.direction,
+          JSON.stringify({ sort: reportConfig.rank.sort }),
         ]);
         await client.query(UPDATE_SECURITY_SETTINGS_SQL, [
           securitySettings.maxFailedAttempts,

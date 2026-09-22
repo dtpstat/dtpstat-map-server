@@ -1,10 +1,10 @@
 const DEFAULT_REPORT_CONFIG = Object.freeze({
   tableColumns: Object.freeze([
-    Object.freeze({ kind: 'rank', title: '№', formatRules: Object.freeze([]) }),
-    Object.freeze({ kind: 'city', title: 'город' }),
-    Object.freeze({ kind: 'metric', metricKey: 'lane_length_m', title: 'длина ВП (км)', scale: 0.001, decimals: 1, formatRules: Object.freeze([]) }),
-    Object.freeze({ kind: 'metric', metricKey: 'population', title: 'жители (тыс.)', scale: 0.001, decimals: 0, formatRules: Object.freeze([]) }),
-    Object.freeze({ kind: 'metric', metricKey: 'lane_m_per_1000', title: 'ВП (м/1000 чел.)', scale: 1, decimals: 1, formatRules: Object.freeze([]) }),
+    Object.freeze({ kind: 'rank', title: '№', headerBold: true, headerTooltip: null, formatRules: Object.freeze([]) }),
+    Object.freeze({ kind: 'city', title: 'город', headerBold: true, headerTooltip: null }),
+    Object.freeze({ kind: 'metric', metricKey: 'lane_length_m', title: 'длина ВП (км)', headerBold: true, headerTooltip: null, scale: 0.001, decimals: 1, formatRules: Object.freeze([]) }),
+    Object.freeze({ kind: 'metric', metricKey: 'population', title: 'жители (тыс.)', headerBold: true, headerTooltip: null, scale: 0.001, decimals: 0, formatRules: Object.freeze([]) }),
+    Object.freeze({ kind: 'metric', metricKey: 'lane_m_per_1000', title: 'ВП (м/1000 чел.)', headerBold: true, headerTooltip: null, scale: 1, decimals: 1, formatRules: Object.freeze([]) }),
   ]),
   rank: Object.freeze({
     sort: Object.freeze([
@@ -179,6 +179,8 @@ export function createCityList(elements) {
 
       button.classList.toggle('is-active', isActive);
       button.dataset.sortDirection = direction;
+      const headerTooltip = button.dataset.headerTooltip?.trim() ?? '';
+      let sortHint;
       if (isActive) {
         const nextDirection = direction === 'asc' ? 'убыванию' : 'возрастанию';
         const currentDirection =
@@ -187,11 +189,14 @@ export function createCityList(elements) {
           'aria-sort',
           direction === 'asc' ? 'ascending' : 'descending',
         );
-        button.title = `Отсортировано ${currentDirection}. Сортировать по ${nextDirection}`;
+        sortHint = `Отсортировано ${currentDirection}. Сортировать по ${nextDirection}`;
       } else {
         header?.removeAttribute('aria-sort');
-        button.title = `Сортировать по столбцу «${label}»`;
+        sortHint = `Сортировать по столбцу «${label}»`;
       }
+      button.title = headerTooltip
+        ? `${headerTooltip}\n${sortHint}`
+        : sortHint;
     }
   }
 
@@ -202,15 +207,18 @@ export function createCityList(elements) {
       const header = document.createElement('th');
       header.scope = 'col';
       header.className = cellClass(column, reportConfig);
+      header.classList.toggle('is-header-bold', column.headerBold !== false);
       const field = sortField(column);
       if (field) {
         const button = document.createElement('button');
         button.type = 'button';
         button.dataset.sort = field;
+        button.dataset.headerTooltip = column.headerTooltip ?? '';
         button.textContent = column.title;
         header.append(button);
       } else {
         header.textContent = column.title;
+        if (column.headerTooltip) header.title = column.headerTooltip;
       }
       row.append(header);
     }

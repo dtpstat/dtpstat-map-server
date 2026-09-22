@@ -72,7 +72,7 @@ MAPBOX_ACCESS_TOKEN=pk....
 
 ## Миграции
 
-Текущий набор: `V001…V040`.
+Текущий набор: `V001…V041`.
 
 Последние migrations:
 
@@ -100,9 +100,10 @@ V037__geometry_model_invariants.sql
 V038__city_boundary_identity_and_pending_guards.sql
 V039__effective_geometry_ownership.sql
 V040__geometry_final_state_constraints.sql
+V041__vertical_report_config.sql
 ```
 
-Назначение `V023…V040`:
+Назначение `V023…V041`:
 
 - `V023` — logical `FULL_NAME` OSM boundary, merge relation fragments по `PLACE_TYPE + FULL_NAME`, sync `CITIES.FULL_NAME`;
 - `V024` — ordered `REPORT_CONFIG.RANK_SORT`;
@@ -121,9 +122,10 @@ V040__geometry_final_state_constraints.sql
 - `V037` — geometry invariants/derived normalization;
 - `V038` — identity и pending-import guards;
 - `V039` — effective geometry ownership;
-- `V040` — финальные ограничения geometry model.
+- `V040` — финальные ограничения geometry model;
+- `V041` — перенос `REPORT_CONFIG` на вертикальное `CONFIG_KEY/CONFIG_VALUE` storage без изменения внешнего report API.
 
-Следующая migration: **V041+**. Опубликованные migration files не изменяются задним числом.
+Следующая migration: **V042+**. Опубликованные migration files не изменяются задним числом.
 
 Startup автоматически применяет pending migrations под PostgreSQL advisory lock, затем повторно сверяет `<DATABASE_SCHEMA>.schema_versions` с набором `db/migrations`. Modified/gapped/newer history или ошибка SQL считаются startup error: HTTP listeners не открываются. `npm run db:migrate` остаётся ручной preflight-командой, но для обычного restart больше не обязателен.
 

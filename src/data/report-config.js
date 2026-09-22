@@ -210,12 +210,25 @@ export const DEFAULT_REPORT_CONFIG = Object.freeze({
     }),
   ]),
   tableColumns: Object.freeze([
-    Object.freeze({ kind: 'rank', title: '№', formatRules: Object.freeze([]) }),
-    Object.freeze({ kind: 'city', title: 'город' }),
+    Object.freeze({
+      kind: 'rank',
+      title: '№',
+      headerBold: true,
+      headerTooltip: null,
+      formatRules: Object.freeze([]),
+    }),
+    Object.freeze({
+      kind: 'city',
+      title: 'город',
+      headerBold: true,
+      headerTooltip: null,
+    }),
     Object.freeze({
       kind: 'metric',
       metricKey: 'lane_length_m',
       title: 'длина ВП (км)',
+      headerBold: true,
+      headerTooltip: null,
       scale: 0.001,
       decimals: 1,
       formatRules: Object.freeze([]),
@@ -224,6 +237,8 @@ export const DEFAULT_REPORT_CONFIG = Object.freeze({
       kind: 'metric',
       metricKey: 'population',
       title: 'жители (тыс.)',
+      headerBold: true,
+      headerTooltip: null,
       scale: 0.001,
       decimals: 0,
       formatRules: Object.freeze([]),
@@ -232,6 +247,8 @@ export const DEFAULT_REPORT_CONFIG = Object.freeze({
       kind: 'metric',
       metricKey: 'lane_m_per_1000',
       title: 'ВП (м/1000 чел.)',
+      headerBold: true,
+      headerTooltip: null,
       scale: 1,
       decimals: 1,
       formatRules: Object.freeze([]),
@@ -285,6 +302,19 @@ function text(value, label, max = 120) {
   const normalized = value.trim();
   if (!normalized || normalized.length > max) {
     throw new ReportConfigValidationError(`${label} must contain 1-${max} characters`);
+  }
+  return normalized;
+}
+
+function optionalText(value, label, max = 240) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string') {
+    throw new ReportConfigValidationError(`${label} must be a string or null`);
+  }
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (normalized.length > max) {
+    throw new ReportConfigValidationError(`${label} must contain at most ${max} characters`);
   }
   return normalized;
 }
@@ -562,6 +592,17 @@ function normalizeColumn(value, index, metricKeys, allowedKinds, label) {
     kind,
     title: text(column.title, `${label}[${index}].title`, 100),
   };
+  if (label === 'tableColumns') {
+    if (column.headerBold !== undefined && typeof column.headerBold !== 'boolean') {
+      throw new ReportConfigValidationError(`${label}[${index}].headerBold must be a boolean`);
+    }
+    normalized.headerBold = column.headerBold !== false;
+    normalized.headerTooltip = optionalText(
+      column.headerTooltip,
+      `${label}[${index}].headerTooltip`,
+      240,
+    );
+  }
   if (kind === 'metric') {
     const key = metricKey(column.metricKey, `${label}[${index}].metricKey`);
     if (!metricKeys.has(key)) {
