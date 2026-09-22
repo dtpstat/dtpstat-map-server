@@ -61,13 +61,13 @@ test('admin report builder is catalog-driven, four-tabbed and has no free-form e
   assert.match(rangeUi, /< 91; ≥ 91 и < 201; ≥ 201/);
   assert.match(css, /report-view-tabs/);
   assert.match(css, /report-format-rule-row/);
+  assert.match(editor, /report-column-row-public/);
+  assert.match(editor, /details\.childElementCount > 0/);
   assert.match(css, /#report-table-columns \.report-column-row/);
   assert.match(css, /#report-table-columns \.report-column-details/);
   assert.match(css, /#report-table-columns \.report-column-header-options/);
-  assert.match(
-    css,
-    /#report-table-columns \.report-column-row,[\s\S]*grid-template-columns: 1fr;/,
-  );
+  assert.match(css, /grid-template-columns: minmax\(9rem, \.65fr\) minmax\(14rem, 1\.35fr\) auto/);
+  assert.match(css, /grid-template-columns: minmax\(14rem, 1\.5fr\) repeat\(2, minmax\(8rem, \.65fr\)\)/);
   assert.doesNotMatch(editor, /<textarea/i);
 
   assert.match(reportConfig, /key: 'city\.area_m2'/);
