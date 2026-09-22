@@ -140,6 +140,14 @@ Account manual block fields находятся в `ADMIN_USERS`.
 | `SESSION_ABSOLUTE_SECONDS` | 43200 |
 | `AUDIT_RETENTION_DAYS` | 365 |
 
+Во время browser upload и пока background admin task находится в
+`queued/running/cancelling`, web-admin удерживает idle-session активной:
+раз в 30 секунд выполняется same-origin `GET /api/admin/me`. Клиентский
+idle-redirect на это время приостанавливается, а сервер обновляет
+`last_seen_at` не реже половины configured idle window (с верхней границей
+60 секунд). `SESSION_ABSOLUTE_SECONDS` остаётся жёстким пределом и keepalive
+его не продлевает.
+
 ## Основные HTTP responses
 
 ```text
