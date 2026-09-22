@@ -100,7 +100,7 @@ const transferOverlay = createTransferOverlay();
 const osmSettingsDirty = trackDirtyForm(elements.osmForm, {
   label: 'Настройки OSM-загрузки',
 });
-bindHumanUnits(elements.osmForm);
+bindHumanUnits(document);
 
 function formatTransferBytes(bytes) {
   const value = Number(bytes);
