@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relative) => fs.readFile(path.join(root, relative), 'utf8');
 
 test('city/boundary normalized identity is a deferred database invariant', async () => {
-  const migration = await read('db/migrations/V039__city_boundary_identity_and_pending_guards.sql');
+  const migration = await read('db/migrations/V040__city_boundary_identity_and_pending_guards.sql');
   assert.match(migration, /VALIDATE_CITY_BOUNDARY_IDENTITY/);
   assert.match(migration, /CREATE CONSTRAINT TRIGGER CITIES_BOUNDARY_IDENTITY_CHECK/);
   assert.match(migration, /CREATE CONSTRAINT TRIGGER CITY_BOUNDARIES_IDENTITY_CHECK/);
