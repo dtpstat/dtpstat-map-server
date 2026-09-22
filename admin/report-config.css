@@ -252,35 +252,25 @@
 }
 
 /*
- * Public table columns are deliberately edited as vertical forms. Column
- * presentation keeps growing over time, so a horizontal row would make every
- * new option compete for another slice of the available width.
+ * Public table column settings are split into vertical semantic rows while
+ * keeping tightly related controls horizontal inside each row.
  */
-#report-table-columns .report-column-row,
-#report-table-columns .report-column-details,
-#report-table-columns .report-column-header-options {
-  grid-template-columns: 1fr;
-}
-
 #report-table-columns .report-column-row {
-  align-items: stretch;
+  grid-template-columns: minmax(9rem, .65fr) minmax(14rem, 1.35fr) auto;
 }
 
 #report-table-columns .report-column-details {
+  grid-template-columns: minmax(14rem, 1.5fr) repeat(2, minmax(8rem, .65fr));
   gap: .55rem;
 }
 
 #report-table-columns .report-column-header-options {
-  align-items: stretch;
+  grid-template-columns: minmax(14rem, 1fr) auto;
 }
 
 #report-table-columns .report-row-actions {
-  justify-self: start;
-  justify-content: start;
-}
-
-#report-table-columns .report-header-bold-control {
-  min-height: auto;
+  justify-self: end;
+  justify-content: end;
 }
 
 .report-header-bold-control {
@@ -461,7 +451,10 @@
   .report-column-details,
   .report-column-header-options,
   .report-format-rule-row,
-  .report-rank-grid {
+  .report-rank-grid,
+  #report-table-columns .report-column-row,
+  #report-table-columns .report-column-details,
+  #report-table-columns .report-column-header-options {
     grid-template-columns: 1fr;
   }
 
@@ -471,7 +464,9 @@
     justify-self: start;
   }
 
-  .report-row-actions {
+  .report-row-actions,
+  #report-table-columns .report-row-actions {
+    justify-self: start;
     justify-content: start;
   }
 
