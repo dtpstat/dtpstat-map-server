@@ -383,8 +383,15 @@ export function createCityBoundaryTransferService(pool) {
 
         operation.onProgress?.({ phase: 'preserve-links' });
         await client.query(PRESERVE_GEOMETRY_LINKS_SQL);
-        operation.onProgress?.({ phase: 'replace-boundaries' });
+        operation.onProgress?.({
+          phase: 'delete-boundaries',
+          places: stagedPlaces,
+        });
         await client.query('DELETE FROM city_boundaries');
+        operation.onProgress?.({
+          phase: 'insert-boundaries',
+          places: stagedPlaces,
+        });
         const inserted = await client.query(INSERT_BOUNDARIES_SQL);
         if (inserted.rowCount !== stagedPlaces) {
           throw new Error('Not every city boundary was imported');
@@ -533,8 +540,15 @@ export function createCityBoundaryTransferService(pool) {
 
         operation.onProgress?.({ phase: 'preserve-links' });
         await client.query(PRESERVE_GEOMETRY_LINKS_SQL);
-        operation.onProgress?.({ phase: 'replace-boundaries' });
+        operation.onProgress?.({
+          phase: 'delete-boundaries',
+          places: plan.boundaries.length,
+        });
         await client.query('DELETE FROM city_boundaries');
+        operation.onProgress?.({
+          phase: 'insert-boundaries',
+          places: plan.boundaries.length,
+        });
         const inserted = await client.query(INSERT_BOUNDARIES_SQL);
         if (inserted.rowCount !== plan.boundaries.length) {
           throw new Error('Not every city boundary was imported');
