@@ -64,6 +64,9 @@ if (typeof document !== 'undefined') {
     const displayName = field('displayName');
     const displayType = field('displayType');
     const population = field('population');
+    const populationAsOf = field('populationAsOf');
+    const populationSource = field('populationSource');
+    const attributes = field('attributes');
     const save = form.querySelector('button[type="submit"]');
     const enableBranch = document.querySelector('#osm-boundary-enable-branch');
     const disableBranch = document.querySelector('#osm-boundary-disable-branch');
@@ -340,12 +343,27 @@ if (typeof document !== 'undefined') {
     function applySelection(item) {
       state.selectedId = item?.id ?? null;
       const enabled = Boolean(item);
-      for (const control of [active, displayName, displayType, population, save]) {
+      for (const control of [
+        active,
+        displayName,
+        displayType,
+        population,
+        populationAsOf,
+        populationSource,
+        attributes,
+        save,
+      ]) {
         control.disabled = !enabled;
       }
       if (!item) {
         population.value = '';
         population.dataset.initialValue = '';
+        populationAsOf.value = '';
+        populationAsOf.dataset.initialValue = '';
+        populationSource.value = '';
+        populationSource.dataset.initialValue = '';
+        attributes.value = '{}';
+        attributes.dataset.initialValue = '{}';
         title.textContent = 'Выберите объект в дереве';
         meta.replaceChildren();
         updateBranchActions(null);
@@ -360,6 +378,15 @@ if (typeof document !== 'undefined') {
       population.dataset.initialValue = item.population === null || item.population === undefined
         ? ''
         : String(item.population);
+      populationAsOf.value = item.populationAsOf
+        ? String(item.populationAsOf).slice(0, 10)
+        : '';
+      populationAsOf.dataset.initialValue = populationAsOf.value;
+      populationSource.value = item.populationSource ?? '';
+      populationSource.dataset.initialValue = populationSource.value;
+      const territoryAttributes = item.attributes ?? {};
+      attributes.value = JSON.stringify(territoryAttributes, null, 2);
+      attributes.dataset.initialValue = JSON.stringify(territoryAttributes);
       title.textContent = item.displayName;
       meta.replaceChildren(
         metaItem('OSM', `${item.osmType}/${item.osmId}`),
@@ -564,6 +591,44 @@ if (typeof document !== 'undefined') {
                 changes.population = populationValue === ''
                   ? null
                   : Number(populationValue);
+              }
+
+              const populationAsOfValue = populationAsOf.value.trim();
+              if (
+                populationAsOfValue !==
+                (populationAsOf.dataset.initialValue ?? '')
+              ) {
+                changes.populationAsOf =
+                  populationAsOfValue === '' ? null : populationAsOfValue;
+              }
+
+              const populationSourceValue = populationSource.value.trim();
+              if (
+                populationSourceValue !==
+                (populationSource.dataset.initialValue ?? '')
+              ) {
+                changes.populationSource =
+                  populationSourceValue === '' ? null : populationSourceValue;
+              }
+
+              let attributesValue;
+              try {
+                attributesValue = JSON.parse(attributes.value.trim() || '{}');
+              } catch {
+                throw new Error('Атрибуты территории должны быть корректным JSON object.');
+              }
+              if (
+                !attributesValue ||
+                typeof attributesValue !== 'object' ||
+                Array.isArray(attributesValue)
+              ) {
+                throw new Error('Атрибуты территории должны быть JSON object.');
+              }
+              if (
+                JSON.stringify(attributesValue) !==
+                (attributes.dataset.initialValue ?? '{}')
+              ) {
+                changes.attributes = attributesValue;
               }
               return changes;
             })()),
