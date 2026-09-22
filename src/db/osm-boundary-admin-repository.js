@@ -1,28 +1,31 @@
 import { acquireDataImportLock } from './database-locks.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
+const BOUNDARY_COLUMNS_SQL = `
+  boundary.id::integer AS id,
+  boundary.parent_id::integer AS "parentId",
+  boundary.osm_type AS "osmType",
+  boundary.osm_id::text AS "osmId",
+  boundary.osm_name AS "osmName",
+  boundary.place_type AS "placeType",
+  boundary.admin_level::integer AS "adminLevel",
+  boundary.is_active AS active,
+  boundary.display_name AS "displayName",
+  boundary.display_type AS "displayType",
+  boundary.area_m2 / 1000000.0 AS "areaKm2",
+  boundary.city_id::integer AS "cityId",
+  boundary.population::integer AS population,
+  boundary.population_as_of AS "populationAsOf",
+  boundary.population_source AS "populationSource",
+  boundary.attributes,
+  boundary.tags,
+  boundary.updated_at AS "updatedAt"
+`;
+
 const LIST_SQL = `
   SELECT
-    boundary.id::integer AS id,
-    boundary.parent_id::integer AS "parentId",
-    boundary.osm_type AS "osmType",
-    boundary.osm_id::text AS "osmId",
-    boundary.osm_name AS "osmName",
-    boundary.place_type AS "placeType",
-    boundary.admin_level::integer AS "adminLevel",
-    boundary.is_active AS active,
-    boundary.display_name AS "displayName",
-    boundary.display_type AS "displayType",
-    boundary.area_m2 / 1000000.0 AS "areaKm2",
-    boundary.city_id::integer AS "cityId",
-    population.population::integer AS population,
-    population.as_of AS "populationAsOf",
-    population.source AS "populationSource",
-    boundary.tags,
-    boundary.updated_at AS "updatedAt"
+    ${BOUNDARY_COLUMNS_SQL}
   FROM city_boundaries AS boundary
-  LEFT JOIN city_populations AS population
-    ON population.city_id = boundary.city_id
   ORDER BY
     COALESCE(boundary.parent_id, 0),
     boundary.display_name,
@@ -72,17 +75,54 @@ function normalizedText(value, name, max = 160) {
   return normalized;
 }
 
+function nullableText(value, name, max = 500) {
+  if (value === null || value === undefined || value === '') return null;
+  return normalizedText(value, name, max);
+}
+
+function nullableDate(value, name) {
+  if (value === null || value === undefined || value === '') return null;
+  if (
+    typeof value !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+    Number.isNaN(Date.parse(`${value}T00:00:00.000Z`))
+  ) {
+    throw new OsmBoundaryAdminValidationError(
+      `${name} must use YYYY-MM-DD format or null`,
+    );
+  }
+  return value;
+}
+
+function attributesObject(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new OsmBoundaryAdminValidationError(
+      'attributes must be a JSON object',
+    );
+  }
+  return value;
+}
+
 function normalizePayload(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new OsmBoundaryAdminValidationError('Request body must be an object');
   }
-  const allowed = new Set(['active', 'displayName', 'displayType', 'population']);
+  const allowed = new Set([
+    'active',
+    'displayName',
+    'displayType',
+    'population',
+    'populationAsOf',
+    'populationSource',
+    'attributes',
+  ]);
   const unknown = Object.keys(value).filter((key) => !allowed.has(key));
   if (unknown.length > 0) {
     throw new OsmBoundaryAdminValidationError(
       `Unsupported OSM boundary fields: ${unknown.join(', ')}`,
     );
   }
+
   const result = {};
   if ('active' in value) {
     if (typeof value.active !== 'boolean') {
@@ -113,6 +153,22 @@ function normalizePayload(value) {
       result.population = population;
     }
   }
+  if ('populationAsOf' in value) {
+    result.populationAsOf = nullableDate(
+      value.populationAsOf,
+      'populationAsOf',
+    );
+  }
+  if ('populationSource' in value) {
+    result.populationSource = nullableText(
+      value.populationSource,
+      'populationSource',
+    );
+  }
+  if ('attributes' in value) {
+    result.attributes = attributesObject(value.attributes);
+  }
+
   if (Object.keys(result).length === 0) {
     throw new OsmBoundaryAdminValidationError('No OSM boundary changes supplied');
   }
@@ -122,9 +178,15 @@ function normalizePayload(value) {
 function positiveId(value) {
   const id = Number(value);
   if (!Number.isSafeInteger(id) || id <= 0) {
-    throw new OsmBoundaryAdminValidationError('boundaryId must be a positive integer');
+    throw new OsmBoundaryAdminValidationError(
+      'boundaryId must be a positive integer',
+    );
   }
   return id;
+}
+
+function own(value, key) {
+  return Object.hasOwn(value, key);
 }
 
 /** @param {{ query: Function, connect: Function }} pool */
@@ -181,8 +243,10 @@ export function createOsmBoundaryAdminRepository(pool) {
         }
 
         const ids = subtree.rows.map((row) => row.id);
-        const previousActiveCount = subtree.rows.filter((row) => row.active).length;
-        const previousInactiveCount = subtree.rowCount - previousActiveCount;
+        const previousActiveCount = subtree.rows
+          .filter((row) => row.active).length;
+        const previousInactiveCount =
+          subtree.rowCount - previousActiveCount;
         const changedCount = active
           ? previousInactiveCount
           : previousActiveCount;
@@ -197,31 +261,14 @@ export function createOsmBoundaryAdminRepository(pool) {
             [ids, active],
           );
           await client.query('SELECT sync_active_boundary_cities()');
+          await client.query('SELECT sync_active_boundary_populations()');
           await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         }
 
         const rootResult = await client.query(
           `SELECT
-             boundary.id::integer AS id,
-             boundary.parent_id::integer AS "parentId",
-             boundary.osm_type AS "osmType",
-             boundary.osm_id::text AS "osmId",
-             boundary.osm_name AS "osmName",
-             boundary.place_type AS "placeType",
-             boundary.admin_level::integer AS "adminLevel",
-             boundary.is_active AS active,
-             boundary.display_name AS "displayName",
-             boundary.display_type AS "displayType",
-             boundary.area_m2 / 1000000.0 AS "areaKm2",
-             boundary.city_id::integer AS "cityId",
-             population.population::integer AS population,
-             population.as_of AS "populationAsOf",
-             population.source AS "populationSource",
-             boundary.tags,
-             boundary.updated_at AS "updatedAt"
+             ${BOUNDARY_COLUMNS_SQL}
            FROM city_boundaries AS boundary
-           LEFT JOIN city_populations AS population
-             ON population.city_id = boundary.city_id
            WHERE boundary.id = $1`,
           [id],
         );
@@ -253,144 +300,87 @@ export function createOsmBoundaryAdminRepository(pool) {
       const id = positiveId(boundaryId);
       const normalized = normalizePayload(changes);
       const client = await pool.connect();
+
       try {
         await client.query('BEGIN');
         await acquireDataImportLock(client, pool);
+
         const current = await client.query(
           `SELECT
-                  boundary.id,
-                  boundary.is_active AS active,
-                  boundary.display_name AS "displayName",
-                  boundary.display_type AS "displayType",
-                  boundary.city_id::integer AS "cityId",
-                  population.population::integer AS population
-             FROM city_boundaries AS boundary
-             LEFT JOIN city_populations AS population
-               ON population.city_id = boundary.city_id
-            WHERE boundary.id = $1
-            FOR UPDATE OF boundary`,
+             boundary.id,
+             boundary.is_active AS active,
+             boundary.display_name AS "displayName",
+             boundary.display_type AS "displayType",
+             boundary.population::integer AS population,
+             boundary.population_as_of AS "populationAsOf",
+             boundary.population_source AS "populationSource",
+             boundary.attributes
+           FROM city_boundaries AS boundary
+           WHERE boundary.id = $1
+           FOR UPDATE OF boundary`,
           [id],
         );
         if (!current.rows[0]) {
           await client.query('ROLLBACK');
           return null;
         }
+
+        const previous = current.rows[0];
         const next = {
-          active: normalized.active ?? current.rows[0].active,
-          displayName: normalized.displayName ?? current.rows[0].displayName,
-          displayType: normalized.displayType ?? current.rows[0].displayType,
+          active: own(normalized, 'active')
+            ? normalized.active
+            : previous.active,
+          displayName: own(normalized, 'displayName')
+            ? normalized.displayName
+            : previous.displayName,
+          displayType: own(normalized, 'displayType')
+            ? normalized.displayType
+            : previous.displayType,
+          population: own(normalized, 'population')
+            ? normalized.population
+            : previous.population,
+          populationAsOf: own(normalized, 'populationAsOf')
+            ? normalized.populationAsOf
+            : previous.populationAsOf,
+          populationSource: own(normalized, 'populationSource')
+            ? normalized.populationSource
+            : previous.populationSource,
+          attributes: own(normalized, 'attributes')
+            ? normalized.attributes
+            : previous.attributes,
         };
+
         await client.query(
           `UPDATE city_boundaries
               SET is_active = $2,
                   display_name = $3,
                   display_type = $4,
+                  population = $5,
+                  population_as_of = $6,
+                  population_source = $7,
+                  attributes = $8::jsonb,
                   updated_at = now()
             WHERE id = $1`,
-          [id, next.active, next.displayName, next.displayType],
+          [
+            id,
+            next.active,
+            next.displayName,
+            next.displayType,
+            next.population,
+            next.populationAsOf,
+            next.populationSource,
+            JSON.stringify(next.attributes ?? {}),
+          ],
         );
+
         await client.query('SELECT sync_active_boundary_cities()');
-
-        const resolvedResult = await client.query(
-          `SELECT city_id::integer AS "cityId"
-             FROM city_boundaries
-            WHERE id = $1`,
-          [id],
-        );
-        const oldCityId = current.rows[0].cityId;
-        const cityId = resolvedResult.rows[0]?.cityId ?? null;
-
-        if (Object.hasOwn(normalized, 'population')) {
-          if (!next.active) {
-            throw new OsmBoundaryAdminValidationError(
-              'population can only be edited for an active OSM boundary',
-            );
-          }
-          if (cityId === null) {
-            throw new OsmBoundaryAdminValidationError(
-              'Active OSM boundary has no linked city',
-              409,
-            );
-          }
-          if (normalized.population === null) {
-            await client.query(
-              'DELETE FROM city_populations WHERE city_id = $1',
-              [cityId],
-            );
-          } else {
-            await client.query(
-              `INSERT INTO city_populations (city_id, population)
-               VALUES ($1, $2)
-               ON CONFLICT (city_id) DO UPDATE SET
-                 population = EXCLUDED.population,
-                 updated_at = now()`,
-              [cityId, normalized.population],
-            );
-          }
-        } else if (
-          next.active &&
-          oldCityId !== null &&
-          cityId !== null &&
-          oldCityId !== cityId &&
-          current.rows[0].population !== null
-        ) {
-          // Renaming/retyping an active boundary may rebind it to another
-          // application city. Preserve its existing population when the target
-          // city has no population of its own.
-          await client.query(
-            `INSERT INTO city_populations (
-               city_id, population, as_of, source, attributes
-             )
-             SELECT $2, population, as_of, source, attributes
-             FROM city_populations
-             WHERE city_id = $1
-             ON CONFLICT (city_id) DO NOTHING`,
-            [oldCityId, cityId],
-          );
-        }
-
-        if (oldCityId !== null && cityId !== oldCityId) {
-          await client.query(
-            `DELETE FROM city_populations AS population
-             WHERE population.city_id = $1
-               AND NOT EXISTS (
-                 SELECT 1
-                 FROM city_boundaries AS boundary
-                 WHERE boundary.city_id = $1
-                   AND boundary.is_active
-               )
-               AND NOT EXISTS (
-                 SELECT 1
-                 FROM city_geometries AS geometry
-                 WHERE geometry.city_id = $1
-               )`,
-            [oldCityId],
-          );
-        }
-
+        await client.query('SELECT sync_active_boundary_populations()');
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
+
         const finalResult = await client.query(
           `SELECT
-             boundary.id::integer AS id,
-             boundary.parent_id::integer AS "parentId",
-             boundary.osm_type AS "osmType",
-             boundary.osm_id::text AS "osmId",
-             boundary.osm_name AS "osmName",
-             boundary.place_type AS "placeType",
-             boundary.admin_level::integer AS "adminLevel",
-             boundary.is_active AS active,
-             boundary.display_name AS "displayName",
-             boundary.display_type AS "displayType",
-             boundary.area_m2 / 1000000.0 AS "areaKm2",
-             boundary.city_id::integer AS "cityId",
-             population.population::integer AS population,
-             population.as_of AS "populationAsOf",
-             population.source AS "populationSource",
-             boundary.tags,
-             boundary.updated_at AS "updatedAt"
+             ${BOUNDARY_COLUMNS_SQL}
            FROM city_boundaries AS boundary
-           LEFT JOIN city_populations AS population
-             ON population.city_id = boundary.city_id
            WHERE boundary.id = $1`,
           [id],
         );
