@@ -38,7 +38,6 @@ function ensureIndicator(form) {
 function refresh(state) {
   state.dirty = snapshot(state.form) !== state.cleanSnapshot;
   state.indicator.hidden = !state.dirty;
-  if (!state.dirty) state.acknowledged = false;
   state.form.classList.toggle('is-dirty', state.dirty);
 }
 
@@ -53,20 +52,17 @@ export function trackDirtyForm(form, { label = 'Настройки' } = {}) {
     indicator: ensureIndicator(form),
     cleanSnapshot: snapshot(form),
     dirty: false,
-    acknowledged: false,
     controller: null,
   };
 
   const markClean = () => {
     state.cleanSnapshot = snapshot(form);
     state.dirty = false;
-    state.acknowledged = false;
     state.indicator.hidden = true;
     form.classList.remove('is-dirty');
   };
   const markDirty = () => {
     state.dirty = true;
-    state.acknowledged = false;
     state.indicator.hidden = false;
     form.classList.add('is-dirty');
   };
@@ -87,7 +83,7 @@ function dirtyLeavingForTab(tab) {
   const targetId = tab.getAttribute('aria-controls');
   const target = targetId ? document.getElementById(targetId) : null;
   return [...states.values()].filter((state) => {
-    if (!state.dirty || state.acknowledged) return false;
+    if (!state.dirty) return false;
     if (!target) return true;
     return !target.contains(state.form) && !state.form.contains(target);
   });
@@ -97,7 +93,7 @@ export async function confirmDirtyNavigation({
   title = 'Есть несохранённые изменения',
   message = null,
 } = {}) {
-  const dirty = [...states.values()].filter((state) => state.dirty && !state.acknowledged);
+  const dirty = [...states.values()].filter((state) => state.dirty);
   if (dirty.length === 0) return true;
   const names = dirty.map((state) => state.label).join(', ');
   const accepted = await adminConfirm({
@@ -106,9 +102,6 @@ export async function confirmDirtyNavigation({
     confirmLabel: 'Перейти',
     cancelLabel: 'Остаться',
   });
-  if (accepted) {
-    for (const state of dirty) state.acknowledged = true;
-  }
   return accepted;
 }
 
@@ -136,7 +129,6 @@ export function installDirtyTabGuard() {
       cancelLabel: 'Остаться',
     });
     if (!accepted) return;
-    for (const state of dirty) state.acknowledged = true;
     bypassTabs.add(tab);
     tab.click();
   }, true);
