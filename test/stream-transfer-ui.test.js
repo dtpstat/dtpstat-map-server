@@ -25,12 +25,14 @@ test('portable transfer UI offers ZIP and uploads selected files without file.te
     /accept="[^"]*\.zip[^"]*application\/zip/,
   );
 
-  assert.match(admin, /function portableFileOptions\(file, jsonContentType\)/);
-  assert.match(admin, /body:\s*file/);
+  assert.match(admin, /function portableFileContentType\(file, jsonContentType\)/);
+  assert.match(admin, /new XMLHttpRequest\(\)/);
+  assert.match(admin, /xhr\.upload\.addEventListener\('progress'/);
+  assert.match(admin, /xhr\.send\(file\)/);
   assert.match(admin, /'application\/zip'/);
   assert.match(
     admin,
-    /importGeoJsonFile[\s\S]*portableFileOptions\(file, 'application\/geo\+json'\)/,
+    /importGeoJsonFile[\s\S]*uploadPortableFile\([\s\S]*'application\/geo\+json'/,
   );
 
   const geoJsonImport = admin.match(
@@ -41,8 +43,13 @@ test('portable transfer UI offers ZIP and uploads selected files without file.te
   const populationHandler = admin.match(
     /elements\.populationForm\.addEventListener[\s\S]*?\n}\);/,
   )?.[0] ?? '';
-  assert.match(populationHandler, /portableFileOptions\(file, 'application\/json'\)/);
+  assert.match(populationHandler, /uploadPortableFile\([\s\S]*'application\/json'/);
   assert.doesNotMatch(populationHandler, /file\.text\(/);
 
+  assert.match(admin, /admin-transfer-overlay/);
+  assert.match(admin, /beforeunload/);
+  assert.match(admin, /fileImportTaskTypes/);
   assert.match(styles, /\.transfer-links\s*\{/);
+  assert.match(styles, /\.admin-transfer-overlay\s*\{/);
+  assert.match(styles, /body\.admin-transfer-locked/);
 });
