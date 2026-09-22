@@ -192,49 +192,57 @@ const STREAM_LINES_SQL = `
   ORDER BY geometry.id
 `;
 
-const POPULATION_TERRITORIES_SQL = `
-  WITH RECURSIVE territory_tree AS (
+const POPULATION_REGIONS_SQL = `
+  WITH RECURSIVE ancestry AS (
     SELECT
-      boundary.id,
-      boundary.parent_id,
-      0::integer AS depth,
-      ARRAY[boundary.id]::bigint[] AS sort_path
-    FROM city_boundaries AS boundary
-    WHERE boundary.parent_id IS NULL
+      city.id AS city_id,
+      city.id AS boundary_id,
+      0::integer AS depth
+    FROM city_boundaries AS city
+    WHERE city.place_type IN ('city', 'town')
 
     UNION ALL
 
     SELECT
-      child.id,
-      child.parent_id,
-      parent.depth + 1,
-      parent.sort_path || child.id
-    FROM city_boundaries AS child
-    JOIN territory_tree AS parent
-      ON child.parent_id = parent.id
+      ancestry.city_id,
+      parent.id AS boundary_id,
+      ancestry.depth + 1
+    FROM ancestry
+    JOIN city_boundaries AS current
+      ON current.id = ancestry.boundary_id
+    JOIN city_boundaries AS parent
+      ON parent.id = current.parent_id
+  ),
+  city_regions AS (
+    SELECT DISTINCT ON (ancestry.city_id)
+      ancestry.city_id,
+      region.id AS region_id
+    FROM ancestry
+    JOIN city_boundaries AS region
+      ON region.id = ancestry.boundary_id
+     AND region.admin_level = 4
+    ORDER BY ancestry.city_id, ancestry.depth
   )
   SELECT
-    boundary.id::integer AS id,
-    boundary.parent_id::integer AS "parentId",
-    tree.depth::integer AS depth,
-    EXISTS (
-      SELECT 1
-      FROM city_boundaries AS child
-      WHERE child.parent_id = boundary.id
-    ) AS "hasChildren",
-    boundary.osm_type AS "osmType",
-    boundary.osm_id::text AS "osmId",
-    boundary.display_name AS name,
-    boundary.display_type AS type,
-    boundary.place_type AS "placeType",
-    boundary.admin_level::integer AS "adminLevel",
-    boundary.population::integer AS population,
-    boundary.population_as_of AS "asOf",
-    boundary.population_source AS source,
-    boundary.attributes
-  FROM territory_tree AS tree
-  JOIN city_boundaries AS boundary ON boundary.id = tree.id
-  ORDER BY tree.sort_path
+    region.id::integer AS "regionId",
+    region.display_name AS "regionName",
+    region.attributes AS "regionAttributes",
+    city.id::integer AS "cityId",
+    city.display_name AS "cityName",
+    city.population::integer AS population,
+    city.population_as_of AS "asOf",
+    city.population_source AS source,
+    city.attributes
+  FROM city_regions AS link
+  JOIN city_boundaries AS region
+    ON region.id = link.region_id
+  JOIN city_boundaries AS city
+    ON city.id = link.city_id
+  ORDER BY
+    region.display_name,
+    region.id,
+    city.display_name,
+    city.id
 `;
 
 async function* cursorRows(client, cursorName, sql, fetchSize = 100) {
@@ -275,14 +283,9 @@ function dateOnly(value) {
   return String(value).slice(0, 10);
 }
 
-function populationNode(row) {
+function populationCity(row) {
   return {
-    osmType: row.osmType,
-    osmId: String(row.osmId),
-    name: row.name,
-    type: row.type,
-    placeType: row.placeType ?? null,
-    adminLevel: row.adminLevel ?? null,
+    name: row.cityName,
     population: row.population ?? null,
     asOf: dateOnly(row.asOf),
     source: row.source ?? null,
@@ -290,69 +293,53 @@ function populationNode(row) {
   };
 }
 
-function buildPopulationHierarchy(rows) {
-  const nodes = new Map();
-  const roots = [];
+function buildPopulationRegions(rows) {
+  const regions = [];
+  let current = null;
   for (const row of rows) {
-    const node = { ...populationNode(row), children: [] };
-    nodes.set(row.id, node);
-    if (row.parentId === null || row.parentId === undefined) {
-      roots.push(node);
-      continue;
+    if (!current || current.id !== row.regionId) {
+      current = {
+        id: row.regionId,
+        value: {
+          name: row.regionName,
+          attributes: row.regionAttributes ?? {},
+          cities: [],
+        },
+      };
+      regions.push(current);
     }
-    const parent = nodes.get(row.parentId);
-    if (!parent) {
-      throw new Error(
-        `Population export hierarchy is not in parent-first order at boundary ${row.id}`,
-      );
-    }
-    parent.children.push(node);
+    current.value.cities.push(populationCity(row));
   }
-  return roots;
+  return regions.map((region) => region.value);
 }
 
-async function* streamPopulationHierarchy(rows) {
-  let previousDepth = -1;
-  let first = true;
+async function* streamPopulationRegions(rows) {
+  let currentRegionId = null;
+  let firstRegion = true;
+  let firstCity = true;
 
   for await (const row of rows) {
-    const depth = Number(row.depth);
-    if (!Number.isInteger(depth) || depth < 0) {
-      throw new Error('Population export produced an invalid hierarchy depth');
-    }
-    if (!first && depth > previousDepth + 1) {
-      throw new Error('Population export hierarchy skipped a parent level');
+    if (row.regionId !== currentRegionId) {
+      if (currentRegionId !== null) yield ']}';
+      if (!firstRegion) yield ',';
+      firstRegion = false;
+      currentRegionId = row.regionId;
+      firstCity = true;
+
+      const region = JSON.stringify({
+        name: row.regionName,
+        attributes: row.regionAttributes ?? {},
+      });
+      yield region.slice(0, -1);
+      yield ',"cities":[';
     }
 
-    if (!first) {
-      if (depth === previousDepth) {
-        yield ',';
-      } else if (depth < previousDepth) {
-        for (let level = previousDepth; level > depth; level -= 1) {
-          yield ']}';
-        }
-        yield ',';
-      }
-    }
-
-    const node = populationNode(row);
-    if (row.hasChildren) {
-      const serialized = JSON.stringify(node);
-      yield serialized.slice(0, -1);
-      yield ',"children":[';
-    } else {
-      yield JSON.stringify({ ...node, children: [] });
-    }
-
-    previousDepth = depth;
-    first = false;
+    if (!firstCity) yield ',';
+    firstCity = false;
+    yield JSON.stringify(populationCity(row));
   }
 
-  if (!first) {
-    for (let level = previousDepth; level > 0; level -= 1) {
-      yield ']}';
-    }
-  }
+  if (currentRegionId !== null) yield ']}';
 }
 
 /**
@@ -442,12 +429,12 @@ export function createDataExportRepository(database) {
         );
         yield '{"schemaVersion":2,"exportedAt":';
         yield JSON.stringify(timestamp.rows[0]?.exportedAt ?? new Date());
-        yield ',"territories":[';
-        yield* streamPopulationHierarchy(
+        yield ',"regions":[';
+        yield* streamPopulationRegions(
           cursorRows(
             client,
             'portable_population_export',
-            POPULATION_TERRITORIES_SQL,
+            POPULATION_REGIONS_SQL,
           ),
         );
         yield ']}\n';
@@ -468,12 +455,12 @@ export function createDataExportRepository(database) {
     async exportPopulations() {
       const [timestamp, rows] = await Promise.all([
         database.query('SELECT now() AS "exportedAt"'),
-        database.query(POPULATION_TERRITORIES_SQL),
+        database.query(POPULATION_REGIONS_SQL),
       ]);
       return {
         schemaVersion: 2,
         exportedAt: timestamp.rows[0]?.exportedAt ?? new Date(),
-        territories: buildPopulationHierarchy(rows.rows),
+        regions: buildPopulationRegions(rows.rows),
       };
     },
   };
