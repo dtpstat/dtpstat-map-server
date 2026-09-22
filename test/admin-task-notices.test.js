@@ -26,4 +26,9 @@ test('admin notices stay attached to their own task tabs', () => {
   assert.equal(kml.className, 'notice notice-error');
   assert.equal(osm.textContent, '');
   assert.equal(osm.className, 'notice');
+
+  assert.equal(notices.clear('kml'), true);
+  assert.equal(kml.textContent, '');
+  assert.equal(kml.className, 'notice');
+  assert.equal(notices.clear('missing'), false);
 });
