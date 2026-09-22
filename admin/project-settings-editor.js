@@ -1,4 +1,4 @@
-import { publishDerivedDataChange } from '/js/derived-data-events.js';
+import { publishDerivedDataChange } from './derived-data-events.js';
 
 if (typeof document !== 'undefined') {
   const session = await globalThis.dtpstatAdminSession?.catch(() => null);
