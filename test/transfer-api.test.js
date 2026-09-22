@@ -166,14 +166,33 @@ async function collect(source) {
   return Buffer.concat(chunks);
 }
 
-function zip64DirectoryInfo(buffer) {
+function directoryInfo(buffer) {
   const eocd = buffer.length - 22;
   assert.equal(buffer.readUInt32LE(eocd), 0x06054b50);
+  const entries = buffer.readUInt16LE(eocd + 10);
+  const centralSize = buffer.readUInt32LE(eocd + 12);
+  const centralOffset = buffer.readUInt32LE(eocd + 16);
+  const zip64 =
+    entries === 0xffff ||
+    centralSize === 0xffffffff ||
+    centralOffset === 0xffffffff;
+
+  if (!zip64) {
+    return {
+      eocd,
+      zip64: false,
+      zip64Eocd: null,
+      centralOffset,
+    };
+  }
+
   const locator = eocd - 20;
   assert.equal(buffer.readUInt32LE(locator), 0x07064b50);
   const zip64Eocd = Number(buffer.readBigUInt64LE(locator + 8));
   assert.equal(buffer.readUInt32LE(zip64Eocd), 0x06064b50);
   return {
+    eocd,
+    zip64: true,
     zip64Eocd,
     centralOffset: Number(buffer.readBigUInt64LE(zip64Eocd + 48)),
   };
@@ -240,11 +259,13 @@ async function createSevenZipFromStdin(file, payload) {
     child.once('close', (...args) => resolve(args));
   });
   if (code !== 0) {
+    const message = Buffer.concat(errors).toString('utf8');
+    if (/E_NOTIMPL|not implemented/i.test(message)) return false;
     throw new Error(
-      `7z failed with exit code ${code}: ` +
-      Buffer.concat(errors).toString('utf8'),
+      `7z failed with exit code ${code}: ` + message,
     );
   }
+  return true;
 }
 
 async function readZipBuffer(buffer) {
@@ -428,7 +449,7 @@ test('chunked ZIP64 import accepts an stdin-style entry with unknown source size
 test(
   'chunked HTTP import accepts ZIP produced by 7-Zip from stdin',
   { skip: !sevenZipAvailable() },
-  async () => {
+  async (context) => {
     let received;
     const directory = await fs.mkdtemp(
       path.join(os.tmpdir(), 'dtpstat-7z-http-'),
@@ -447,7 +468,10 @@ test(
     };
 
     try {
-      await createSevenZipFromStdin(archivePath, payload);
+      if (!await createSevenZipFromStdin(archivePath, payload)) {
+        context.skip('installed 7-Zip does not support creating ZIP from stdin');
+        return;
+      }
 
       await withServer(async (baseUrl) => {
         const response = await postChunked(
@@ -480,9 +504,14 @@ test(
 
 test('ZIP import with more than one entry fails the admin task', async () => {
   const archive = await zipBuffer('lines.geojson', lineSnapshot);
-  const { zip64Eocd } = zip64DirectoryInfo(archive);
-  archive.writeBigUInt64LE(2n, zip64Eocd + 24);
-  archive.writeBigUInt64LE(2n, zip64Eocd + 32);
+  const directory = directoryInfo(archive);
+  if (directory.zip64) {
+    archive.writeBigUInt64LE(2n, directory.zip64Eocd + 24);
+    archive.writeBigUInt64LE(2n, directory.zip64Eocd + 32);
+  } else {
+    archive.writeUInt16LE(2, directory.eocd + 8);
+    archive.writeUInt16LE(2, directory.eocd + 10);
+  }
 
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/admin/import/lines`, {
