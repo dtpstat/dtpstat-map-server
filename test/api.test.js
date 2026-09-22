@@ -50,7 +50,11 @@ const importResult = {
 };
 
 const populationResult = {
-  cities: 1,
+  territories: 1,
+  requestedTerritories: 1,
+  roots: 1,
+  skippedCount: 0,
+  skippedTerritories: [],
   asOf: '2026-01-01',
   source: 'test',
   updatedAt: '2026-08-31T12:00:00.000Z',
@@ -604,9 +608,20 @@ test('authenticated population endpoint updates a separate data source', async (
   };
   const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
   const body = {
+    schemaVersion: 2,
     asOf: '2026-01-01',
     source: 'test',
-    populations: [{ name: 'Казань', population: 1300000 }],
+    territories: [{
+      osmType: 'relation',
+      osmId: '123',
+      name: 'Казань',
+      type: 'city',
+      placeType: 'city',
+      adminLevel: 6,
+      population: 1300000,
+      attributes: {},
+      children: [],
+    }],
   };
 
   await withServer(async (baseUrl) => {
@@ -928,7 +943,18 @@ test('one active admin task blocks every other mutating admin route', async () =
     layers: [{ name: 'Линии', multiple: 1 }],
   }];
   const populationBody = {
-    populations: [{ name: 'Казань', population: 1300000 }],
+    schemaVersion: 2,
+    territories: [{
+      osmType: 'relation',
+      osmId: '123',
+      name: 'Казань',
+      type: 'city',
+      placeType: 'city',
+      adminLevel: 6,
+      population: 1300000,
+      attributes: {},
+      children: [],
+    }],
   };
 
   await withServer(async (baseUrl) => {
