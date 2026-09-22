@@ -13,31 +13,24 @@ export const POPULATION_JSON_EXAMPLE = {
   exportedAt: '2026-01-01T00:00:00.000Z',
   asOf: '2026-01-01',
   source: 'Росстат',
-  territories: [
+  regions: [
     {
-      osmType: 'relation',
-      osmId: '253256',
       name: 'Республика Татарстан',
-      type: 'administrative',
-      placeType: null,
-      adminLevel: 4,
-      population: 4004212,
-      attributes: {},
-      children: [
+      attributes: {
+        federalDistrict: 'Приволжский федеральный округ',
+      },
+      cities: [
         {
-          osmType: 'relation',
-          osmId: '79379',
           name: 'Казань',
-          type: 'city',
-          placeType: 'city',
-          adminLevel: 6,
           population: 1320000,
+          attributes: {},
+        },
+        {
+          name: 'Набережные Челны',
+          population: 544000,
           asOf: '2025-01-01',
           source: 'Татарстанстат',
-          attributes: {
-            comment: 'asOf/source можно переопределить для отдельной территории',
-          },
-          children: [],
+          attributes: {},
         },
       ],
     },
