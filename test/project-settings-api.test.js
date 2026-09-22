@@ -18,6 +18,8 @@ function createRepository() {
     themePreset: 'classic',
     showLineLabels: false,
     showLinePopups: true,
+    largeCityPopulationThreshold: 400000,
+    largeCityAreaKm2Threshold: null,
     publicDownloadName: 'bus-lanes',
     mapboxAccessTokenConfigured: false,
     updatedAt: '2026-09-05T12:00:00.000Z',
@@ -29,12 +31,18 @@ function createRepository() {
         showLineLabels = false,
         showLinePopups = settings.showLinePopups,
         mapboxAccessToken = null,
+        largeCityPopulationThreshold =
+          settings.largeCityPopulationThreshold,
+        largeCityAreaKm2Threshold =
+          settings.largeCityAreaKm2Threshold,
         ...base
       } = payload;
       settings = {
         ...buildProjectSettingsPlan(base),
         showLineLabels,
         showLinePopups,
+        largeCityPopulationThreshold,
+        largeCityAreaKm2Threshold,
         publicDownloadName: settings.publicDownloadName,
         mapboxAccessTokenConfigured: Boolean(mapboxAccessToken),
         updatedAt: '2026-09-05T13:00:00.000Z',
@@ -77,6 +85,7 @@ async function withServer(callback, options = {}) {
     securityService: { async appendAudit() {} },
     maxBodyBytes: 1024 * 1024,
     afterPublicDownloadNameSave: options.afterPublicDownloadNameSave,
+    afterSettingsSave: options.afterSettingsSave,
   }));
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -168,6 +177,50 @@ test('admin can update project settings including independent line labels and po
     });
     assert.equal(invalidTheme.status, 400);
     assert.match((await invalidTheme.json()).error, /themePreset/);
+  });
+});
+
+test('saving large-city thresholds waits for derived report refresh', async () => {
+  let refreshes = 0;
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/admin/project-settings`, {
+      method: 'PUT',
+      headers: {
+        Authorization: authorization,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        projectName: 'Выделенные полосы в России',
+        themePreset: 'classic',
+        showLineLabels: false,
+        showLinePopups: true,
+        largeCityPopulationThreshold: 500000,
+        largeCityAreaKm2Threshold: 250,
+        keywords: ['транспорт'],
+        yandexMetrikaId: null,
+        googleAnalyticsId: null,
+        footerHtml: '<p>Описание</p>',
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.settings.largeCityPopulationThreshold, 500000);
+    assert.equal(payload.settings.largeCityAreaKm2Threshold, 250);
+    assert.deepEqual(payload.derived, {
+      reports: { cities: 12 },
+      downloads: { csvRows: 12 },
+    });
+    assert.equal(refreshes, 1);
+  }, {
+    async afterSettingsSave() {
+      refreshes += 1;
+      await Promise.resolve();
+      return {
+        reports: { cities: 12 },
+        downloads: { csvRows: 12 },
+      };
+    },
   });
 });
 
