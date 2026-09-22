@@ -177,31 +177,6 @@ const EXPORT_GEOMETRIES_SQL = `
   LEFT JOIN line_types AS line_type ON line_type.id = geometry.line_type_id
 `;
 
-const EXPORT_POPULATIONS_SQL = `
-  SELECT json_build_object(
-    'schemaVersion', 1,
-    'exportedAt', now(),
-    'populations', COALESCE(
-      json_agg(
-        json_build_object(
-          'name', city.name,
-          'type', city.display_type,
-          'citySlug', city.slug,
-          'population', population.population,
-          'asOf', population.as_of,
-          'source', population.source,
-          'attributes', population.attributes
-        )
-        ORDER BY city.name
-      ),
-      '[]'::json
-    )
-  ) AS payload
-  FROM city_populations AS population
-  JOIN cities AS city ON city.id = population.city_id
-`;
-
-
 const STREAM_CITY_BOUNDARIES_SQL = `
   SELECT json_build_object(
     'type', 'Feature',
