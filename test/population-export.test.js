@@ -195,5 +195,7 @@ test('streaming population export emits the same nested hierarchy', async () => 
     '300',
   );
   assert.equal(payload.territories[0].children[1].osmId, '400');
+  assert.deepEqual(payload.territories[0].children[1].children, []);
   assert.equal(payload.territories[1].osmId, '500');
+  assert.deepEqual(payload.territories[1].children, []);
 });
