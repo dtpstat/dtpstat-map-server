@@ -102,8 +102,10 @@ const TRANSFER_STATUS_SQL = `
       WHEN stage.parent_osm_id IS NULL AND boundary.parent_id IS NOT NULL
         THEN 'hierarchy'
       WHEN stage.parent_osm_id IS NOT NULL
-       AND expected_parent.id IS NOT NULL
-       AND boundary.parent_id IS DISTINCT FROM expected_parent.id
+       AND (
+         expected_parent.id IS NULL
+         OR boundary.parent_id IS DISTINCT FROM expected_parent.id
+       )
         THEN 'hierarchy'
       ELSE 'matched'
     END AS status
