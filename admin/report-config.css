@@ -244,6 +244,19 @@
   gap: .45rem;
 }
 
+.report-column-header-options {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) auto;
+  align-items: end;
+  gap: .65rem;
+}
+
+.report-header-bold-control {
+  min-height: 2.15rem;
+  align-items: center;
+  white-space: nowrap;
+}
+
 .report-row-actions {
   display: flex;
   gap: .3rem;
