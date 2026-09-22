@@ -6,6 +6,7 @@ import {
   AdminTaskAlreadyRunningError,
 } from '../data/admin-task-manager.js';
 import { adminAuditPayloadFingerprint } from '../data/admin-audit-details.js';
+import { GeometryImportSessionError } from '../db/geometry-import-repository.js';
 import {
   KmlUpdateValidationError,
   resolveKmlUpdateRequest,
@@ -39,6 +40,7 @@ import {
  * @typedef {{
  *   exportCityBoundaries: () => Promise<object>,
  *   exportLines: () => Promise<object>,
+ *   exportGeometries: () => Promise<object>,
  *   exportPopulations: () => Promise<object>
  * }} DataExportRepository
  */
@@ -57,6 +59,11 @@ import {
  *   cityBoundaryTransferService: CityBoundaryTransferService,
  *   populationService: PopulationImportService,
  *   kmlUpdateService: KmlUpdateService,
+ *   geometryImportRepository: {
+ *     pending: Function,
+ *     discard: Function,
+ *     apply: Function
+ *   },
  *   osmCityUpdateService: OsmCityUpdateService,
  *   adminTasks: ReturnType<import('../data/admin-task-manager.js').createAdminTaskManager>,
  *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
@@ -84,6 +91,7 @@ export function createApiRouter({
   cityBoundaryTransferService,
   populationService,
   kmlUpdateService,
+  geometryImportRepository,
   osmCityUpdateService,
   adminTasks,
   adminAuth,
@@ -196,6 +204,13 @@ export function createApiRouter({
         `Импорт продолжен с предупреждениями: ` +
         `${progress.warningCount ?? 0}; пропущено записей: ` +
         `${progress.skippedCount ?? 0}`;
+    } else if (progress.phase === 'import-conflicts') {
+      message =
+        `KML: конфликтующих геометрий ${progress.conflictGeometries}; ` +
+        'требуется решение в редакторе геометрий';
+    } else if (progress.phase === 'import-conflicts-apply') {
+      message =
+        `KML: применяем решения конфликтов session ${progress.sessionId}`;
     } else if (progress.phase === 'database') {
       message = 'Изменения базы данных подготовлены';
     }
@@ -466,6 +481,7 @@ export function createApiRouter({
     exportRepository,
   );
   const lineStream = exportRepository?.streamLines?.bind(exportRepository);
+  const geometryStream = exportRepository?.streamGeometries?.bind(exportRepository);
   const populationStream = exportRepository?.streamPopulations?.bind(
     exportRepository,
   );
@@ -516,6 +532,30 @@ export function createApiRouter({
       true,
     ),
   );
+  router.get(
+    '/admin/export/geometries',
+    adminAuth.requireGeometryEditor,
+    operationAudit('geometry.export'),
+    streamingExportRoute(
+      'geometries.geojson',
+      'application/geo+json',
+      geometryStream,
+      () => exportRepository.exportGeometries(),
+    ),
+  );
+  router.get(
+    '/admin/export/geometries.zip',
+    adminAuth.requireGeometryEditor,
+    operationAudit('geometry.export-zip'),
+    streamingExportRoute(
+      'geometries.geojson',
+      'application/geo+json',
+      geometryStream,
+      () => exportRepository.exportGeometries(),
+      true,
+    ),
+  );
+
   router.get(
     '/admin/export/populations',
     adminAuth.requireData,
@@ -769,6 +809,85 @@ export function createApiRouter({
       }
     },
   );
+
+  if (geometryImportRepository) {
+    router.get(
+      '/admin/geometry-import/pending',
+      adminAuth.requireGeometryEditor,
+      async (_request, response, next) => {
+        try {
+          const session = await geometryImportRepository.pending();
+          response.set('Cache-Control', 'no-store');
+          response.json({ session });
+        } catch (error) {
+          next(error);
+        }
+      },
+    );
+
+    router.delete(
+      '/admin/geometry-import/:sessionId',
+      adminAuth.requireGeometryEditor,
+      rejectWhileAdminTaskActive,
+      operationAudit('geometry.import.discard'),
+      async (request, response, next) => {
+        const sessionId = Number(request.params.sessionId);
+        if (!Number.isSafeInteger(sessionId) || sessionId <= 0) {
+          response.status(400).json({ error: 'sessionId must be a positive integer' });
+          return;
+        }
+        try {
+          const discarded = await geometryImportRepository.discard(sessionId);
+          if (!discarded) {
+            response.status(404).json({ error: 'Pending import session not found' });
+            return;
+          }
+          response.set('Cache-Control', 'no-store').json({ discarded });
+        } catch (error) {
+          if (error instanceof GeometryImportSessionError) {
+            response.status(error.statusCode).json({ error: error.message });
+            return;
+          }
+          next(error);
+        }
+      },
+    );
+
+    router.post(
+      '/admin/geometry-import/:sessionId/apply',
+      adminAuth.requireGeometryEditor,
+      rejectWhileAdminTaskActive,
+      jsonBody(importApi.maxBodyBytes, 'application/json'),
+      (request, response, next) => {
+        const sessionId = Number(request.params.sessionId);
+        if (!Number.isSafeInteger(sessionId) || sessionId <= 0) {
+          response.status(400).json({ error: 'sessionId must be a positive integer' });
+          return;
+        }
+        if (!request.body || !Array.isArray(request.body.decisions)) {
+          response.status(400).json({ error: 'decisions must be an array' });
+          return;
+        }
+        startAdminTask(request, response, next, {
+          type: 'kml-update',
+          endpoint: `/api/admin/geometry-import/${sessionId}/apply`,
+          recordsSuccessfulUpdate: true,
+          parameters: {
+            importSessionId: sessionId,
+            conflictDecisions: request.body.decisions.length,
+          },
+        }, async (context) => geometryImportRepository.apply(
+          sessionId,
+          request.body.decisions,
+          {
+            signal: context.signal,
+            onCommit: () => context.beginCommit(),
+            onProgress: (progress) => progressLog(context, progress),
+          },
+        ));
+      },
+    );
+  }
 
   router.get(
     '/admin/config',
