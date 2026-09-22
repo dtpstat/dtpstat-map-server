@@ -9,22 +9,37 @@ export const KML_SOURCES_EXAMPLE = [
 ];
 
 export const POPULATION_JSON_EXAMPLE = {
+  schemaVersion: 2,
+  exportedAt: '2026-01-01T00:00:00.000Z',
   asOf: '2026-01-01',
   source: 'Росстат',
-  populations: [
+  territories: [
     {
-      name: 'Москва',
-      population: 13274285,
+      osmType: 'relation',
+      osmId: '253256',
+      name: 'Республика Татарстан',
+      type: 'administrative',
+      placeType: null,
+      adminLevel: 4,
+      population: 4004212,
       attributes: {},
-    },
-    {
-      name: 'Санкт-Петербург',
-      population: 5655257,
-      asOf: '2025-01-01',
-      source: 'Петростат',
-      attributes: {
-        comment: 'asOf/source можно переопределить для отдельного города',
-      },
+      children: [
+        {
+          osmType: 'relation',
+          osmId: '79379',
+          name: 'Казань',
+          type: 'city',
+          placeType: 'city',
+          adminLevel: 6,
+          population: 1320000,
+          asOf: '2025-01-01',
+          source: 'Татарстанстат',
+          attributes: {
+            comment: 'asOf/source можно переопределить для отдельной территории',
+          },
+          children: [],
+        },
+      ],
     },
   ],
 };
