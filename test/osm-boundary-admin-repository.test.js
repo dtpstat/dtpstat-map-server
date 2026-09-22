@@ -65,8 +65,9 @@ function createPool({
       }
 
       if (
-        /^SELECTs+boundary.id::integer AS id/i.test(normalized) &&
-        /boundary.population::integer AS population/i.test(normalized)
+        normalized.startsWith('SELECT') &&
+        normalized.includes('boundary.id::integer AS id') &&
+        normalized.includes('boundary.population::integer AS population')
       ) {
         return { rows: [finalRow()], rowCount: 1 };
       }
@@ -184,11 +185,10 @@ test('activating one OSM object never activates parents or descendants', async (
     /^UPDATE city_boundaries/i.test(query),
   );
   assert.ok(updateIndex >= 0);
-  assert.match(pool.queries[updateIndex], /WHERE id = $1$/i);
-  assert.doesNotMatch(
-    pool.queries[updateIndex],
-    /parent_id|WITH RECURSIVE|ANY\\(/i,
-  );
+  assert.ok(pool.queries[updateIndex].endsWith('WHERE id = $1'));
+  assert.equal(pool.queries[updateIndex].includes('parent_id'), false);
+  assert.equal(pool.queries[updateIndex].includes('WITH RECURSIVE'), false);
+  assert.equal(pool.queries[updateIndex].includes('ANY('), false);
 });
 
 test('OSM subtree deactivation updates selected node and descendants once', async () => {
