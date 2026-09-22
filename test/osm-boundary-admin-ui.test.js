@@ -214,4 +214,12 @@ test('admin clears previous task status immediately when a new operation starts'
   assert.match(notices, /clear\(taskKey\)/);
   assert.match(security, /entry\.details\?\.taskLog/);
   assert.match(security, /Журнал \(\$\{taskLogCount\}\)/);
+  assert.match(admin, /phase === 'stage-write'/);
+  assert.match(admin, /Ожидаем PostgreSQL\/PostGIS/);
+  assert.match(admin, /function syncSessionActivityHold\(/);
+  assert.match(admin, /dtpstatAdminSessionGuard\?\.setActivityHold/);
+  assert.match(
+    admin,
+    /Boolean\(state\.transfer\) \|\| Boolean\(active\(state\.task\)\)/,
+  );
 });
