@@ -56,6 +56,39 @@ test('admin task retains its accumulated log and result until another starts', a
   unsubscribe();
 });
 
+test('admin task keeps succeeded status but warns for partial results', async () => {
+  const manager = createAdminTaskManager({
+    randomUUID: () => 'partial-task',
+  });
+
+  manager.start({
+    type: 'population-update',
+    endpoint: '/api/admin/populations',
+    recordsSuccessfulUpdate: true,
+  }, async () => ({
+    cities: 1117,
+    requestedCities: 1119,
+    skippedCount: 2,
+    warningCount: 2,
+    partial: true,
+  }));
+
+  await nextTurn();
+
+  const completed = manager.get('partial-task');
+  assert.equal(completed.status, 'succeeded');
+  assert.equal(completed.result.partial, true);
+  assert.equal(completed.log.at(-1).level, 'warning');
+  assert.equal(
+    completed.log.at(-1).message,
+    'Задача завершена с предупреждениями',
+  );
+  assert.deepEqual(completed.log.at(-1).details, {
+    warningCount: 2,
+    skippedCount: 2,
+  });
+});
+
 test('admin task cancellation is cooperative and disabled during atomic commit', async () => {
   let finishTask;
   const manager = createAdminTaskManager({ randomUUID: () => 'cancel-task' });
