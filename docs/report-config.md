@@ -187,6 +187,14 @@ A + (B × C)
 
 HTML table и CSV независимо задают `scale` и `decimals`.
 
+Для каждой колонки HTML-таблицы отдельно задаются:
+
+- короткое отображаемое название (`title`);
+- необязательная подсказка заголовка при наведении (`headerTooltip`);
+- жирное/обычное начертание заголовка (`headerBold`).
+
+Это позволяет оставить компактный заголовок в узкой колонке, а полное пояснение перенести в tooltip. Старые конфигурации без `headerBold` считаются жирными для обратной совместимости.
+
 Например:
 
 ```text
@@ -306,6 +314,7 @@ GET /api/report-config
 - metricKey;
 - scale/decimals;
 - conditional rules;
+- header display name / tooltip / boldness;
 - `rank.sort`;
 - compatibility aliases первого ranking criterion.
 
