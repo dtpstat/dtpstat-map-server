@@ -1,3 +1,4 @@
+import { adminConfirm } from './admin-dialog.js';
 import { publishDerivedDataChange } from './derived-data-events.js';
 
 const section = document.querySelector('#admin-section-geometries');
@@ -1376,10 +1377,16 @@ if (section) {
   async function discardPendingImport() {
     const session = state.importSession;
     if (!session) return;
-    if (!window.confirm(
-      'Отбросить staged KML import session #' + session.id +
-      '? Production-геометрии не изменятся.',
-    )) return;
+    const confirmed = await adminConfirm({
+      title: 'Отбросить подготовленный импорт?',
+      message:
+        'Staged KML import session #' + session.id +
+        ' будет удалена. Production-геометрии не изменятся.',
+      confirmLabel: 'Отбросить импорт',
+      cancelLabel: 'Отмена',
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       await api('/api/admin/geometry-import/' + session.id, { method: 'DELETE' });
       state.importSession = null;
@@ -1696,7 +1703,14 @@ if (section) {
   deleteButton.addEventListener('click', async () => {
     const item = state.current;
     if (!item?.id) return;
-    if (!window.confirm(`Удалить «${displayName(item)}»? Это действие необратимо.`)) return;
+    const confirmed = await adminConfirm({
+      title: 'Удалить геометрию?',
+      message: `«${displayName(item)}» будет удалена. Это действие необратимо.`,
+      confirmLabel: 'Удалить геометрию',
+      cancelLabel: 'Отмена',
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       await api(`/api/admin/geometry-editor/geometries/${item.id}`, { method: 'DELETE' });
       state.selectedSet.delete(item.id);
@@ -1714,7 +1728,16 @@ if (section) {
   mergeButton.addEventListener('click', async () => {
     const ids = [...state.selectedSet];
     if (ids.length < 2) return;
-    if (!window.confirm(`Объединить выбранные геометрии (${ids.length})? Исходные записи, кроме первой, будут удалены.`)) return;
+    const confirmed = await adminConfirm({
+      title: 'Объединить геометрии?',
+      message:
+        `Будет объединено геометрий: ${ids.length}. ` +
+        'Исходные записи, кроме первой, будут удалены.',
+      confirmLabel: 'Объединить',
+      cancelLabel: 'Отмена',
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       const payload = await api('/api/admin/geometry-editor/merge', {
         method: 'POST',
