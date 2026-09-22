@@ -16,6 +16,7 @@ import {
   resolveOsmCityUpdateRequest,
 } from '../data/osm-city-update-options.js';
 import { acquireDataImportLock } from './database-locks.js';
+import { rebuildCityBoundaryHierarchy } from './city-boundary-hierarchy.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 const RETRYABLE_HTTP_STATUS_CODES = new Set([429, 502, 503, 504]);
@@ -1139,7 +1140,10 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           throw new Error('Not every buildable OSM boundary was inserted');
         }
         await client.query(ACTIVATE_NEW_PLACES_SQL);
-        await client.query('SELECT rebuild_city_boundary_hierarchy()');
+        await rebuildCityBoundaryHierarchy(client, {
+          signal: operation.signal,
+          onProgress: operation.onProgress,
+        });
         const restoredLinksResult = await client.query(
           RESTORE_GEOMETRY_LINKS_SQL,
         );
