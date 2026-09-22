@@ -20,7 +20,13 @@
       <h1>Администрирование</h1>
     </div>
     <div class="topbar-status">
-      <span class="admin-user" id="admin-user">Пользователь…</span>
+      <span class="admin-user" id="admin-user">
+        <span class="admin-user-avatar" aria-hidden="true">
+          <img id="admin-user-avatar-image" alt="" hidden>
+          <span id="admin-user-avatar-fallback">?</span>
+        </span>
+        <span id="admin-user-label">Пользователь…</span>
+      </span>
       <div class="connection connection-pending" id="connection-state">WebSocket: ожидание…</div>
     </div>
   </header>
