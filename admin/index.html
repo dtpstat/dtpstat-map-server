@@ -169,7 +169,7 @@
 
                   <fieldset class="osm-config-group">
                     <legend>Как и откуда загружать</legend>
-                    <p class="osm-config-help">Источник, пакетирование, таймауты, лимиты и стратегия повторов.</p>
+                    <p class="osm-config-help">Обычные параметры загрузки остаются на виду; защитные лимиты и retry-настройки вынесены в тонкую настройку.</p>
                     <label>Overpass URL
                       <select name="URL" id="osm-url" required>
                         <option value="">Загрузка настроек…</option>
@@ -182,37 +182,45 @@
                       </label>
                       <label>Пауза между запросами, мс
                         <input name="minDelayMs" type="number" inputmode="numeric"
-                               min="0" step="1" required>
-                      </label>
-                      <label>HTTP timeout, мс
-                        <input name="timeoutMs" type="number" inputmode="numeric"
-                               min="1000" step="1" required>
-                      </label>
-                      <label>Overpass timeout, сек
-                        <input name="queryTimeoutSeconds" type="number" inputmode="numeric"
-                               min="1" step="1" required>
-                      </label>
-                      <label>Лимит одного ответа, байт
-                        <input name="maxResponseBytes" type="number" inputmode="numeric"
-                               min="1048576" step="1" required>
-                      </label>
-                      <label>Общий лимит загрузки, байт
-                        <input name="maxTotalBytes" type="number" inputmode="numeric"
-                               min="1048576" step="1" required>
-                      </label>
-                      <label>Максимум повторов
-                        <input name="maxRetries" type="number" inputmode="numeric"
-                               min="0" step="1" required>
-                      </label>
-                      <label>Начальная пауза повтора, мс
-                        <input name="retryBaseDelayMs" type="number" inputmode="numeric"
-                               min="1000" step="1" required>
-                      </label>
-                      <label>Предел backoff, мс
-                        <input name="retryMaxDelayMs" type="number" inputmode="numeric"
-                               min="1000" step="1" required>
+                               min="0" step="1" required data-human-unit="milliseconds">
                       </label>
                     </div>
+                    <details class="admin-advanced-settings">
+                      <summary>Тонкая настройка загрузки</summary>
+                      <div class="admin-advanced-settings-body">
+                        <p class="admin-advanced-settings-note">Таймауты, ограничения объёма и параметры повторов обычно менять не требуется.</p>
+                        <div class="osm-number-grid">
+                          <label>HTTP timeout, мс
+                            <input name="timeoutMs" type="number" inputmode="numeric"
+                                   min="1000" step="1" required data-human-unit="milliseconds">
+                          </label>
+                          <label>Overpass timeout, сек
+                            <input name="queryTimeoutSeconds" type="number" inputmode="numeric"
+                                   min="1" step="1" required data-human-unit="seconds">
+                          </label>
+                          <label>Лимит одного ответа, байт
+                            <input name="maxResponseBytes" type="number" inputmode="numeric"
+                                   min="1048576" step="1" required data-human-unit="bytes">
+                          </label>
+                          <label>Общий лимит загрузки, байт
+                            <input name="maxTotalBytes" type="number" inputmode="numeric"
+                                   min="1048576" step="1" required data-human-unit="bytes">
+                          </label>
+                          <label>Максимум повторов
+                            <input name="maxRetries" type="number" inputmode="numeric"
+                                   min="0" step="1" required>
+                          </label>
+                          <label>Начальная пауза повтора, мс
+                            <input name="retryBaseDelayMs" type="number" inputmode="numeric"
+                                   min="1000" step="1" required data-human-unit="milliseconds">
+                          </label>
+                          <label>Предел backoff, мс
+                            <input name="retryMaxDelayMs" type="number" inputmode="numeric"
+                                   min="1000" step="1" required data-human-unit="milliseconds">
+                          </label>
+                        </div>
+                      </div>
+                    </details>
                   </fieldset>
 
                   <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
