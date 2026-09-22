@@ -214,13 +214,13 @@ DETAILS JSONB
 }
 ```
 
-Synchronous settings editors строят field-level `before → after`. Background data tasks записывают input parameters, SHA-256/byte-size загруженного payload там, где он есть, и sanitized `changeSummary` из результата операции. Тот же sanitized summary пишется в server service log (`admin.operation` / `admin.data-operation`), поэтому разбор инцидента возможен даже при проблеме записи DB audit.
+Synchronous settings editors строят field-level `before → after`. Background data tasks записывают input parameters, SHA-256/byte-size загруженного payload там, где он есть, sanitized `changeSummary` из результата операции и **полный `taskLog` задачи** от принятия до финального status. Наружный массив `taskLog` намеренно не ограничивается общим лимитом 100 элементов: для анализа сохраняются все log entries. Содержимое каждой записи по-прежнему проходит redaction/size/depth guards, поэтому password/token/Authorization-like values не сохраняются открытым текстом. В server service log вместо полного массива пишется только `taskLogEntries`, чтобы не дублировать большой журнал.
 
 Audit deliberately **не хранит concrete values security/profile operations**. Пароли, temporary passwords, session/cookie/Authorization values, hashes, secrets, credentials, private/API keys и поля с token-like именами не попадают в clear text. Для token-like полей несекретной конфигурации audit может показать сам факт изменения, но значения будут `[redacted]`. `settings.import` сравнивает только `projectSettings`, `lineTypes` и `reportConfig`; `securitySettings` из value-level diff исключены целиком.
 
-Чтобы `DETAILS` не превращался в копию данных, строки/depth/collections/change count ограничены; бинарные значения сохраняются только как metadata, а `createdAt/updatedAt` игнорируются как audit noise. Для больших data imports payload не сохраняется в audit: сохраняется fingerprint, позволяющий доказать, какой именно файл/JSON был применён.
+Чтобы `DETAILS` не превращался в копию импортируемых данных, строки/depth/обычные collections/change count ограничены; бинарные значения сохраняются только как metadata, а `createdAt/updatedAt` игнорируются как audit noise. Единственное специальное исключение по длине коллекции — верхний массив background-task `taskLog`: он хранится полностью, потому что это журнал выполнения, а не копия payload. Для больших data imports сам payload в audit не сохраняется: сохраняется fingerprint, позволяющий доказать, какой именно файл/JSON был применён.
 
-В web-admin JSON-details показывают `Изменения (N)`, когда change-set присутствует. CSV export продолжает включать `DETAILS` как JSON.
+В web-admin JSON-details показывают `Изменения (N)`, `Журнал (M)` или оба счётчика одновременно. CSV export продолжает включать весь `DETAILS`, включая `taskLog`, как JSON.
 
 `V018` добавил indexes для filters по event/operation/status/username/IP. Новая детализация использует существующий `DETAILS JSONB`, поэтому отдельная DB migration не требуется.
 
