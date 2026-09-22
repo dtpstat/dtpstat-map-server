@@ -57,6 +57,10 @@ const CREATE_STAGE_SQL = `
     tags jsonb NOT NULL,
     osm_timestamp timestamptz,
     updated_at timestamptz,
+    population integer,
+    population_as_of date,
+    population_source text,
+    attributes jsonb NOT NULL,
     city_slug text,
     city_name text,
     geom geometry(MultiPolygon, 4326) NOT NULL,
@@ -80,6 +84,10 @@ const INSERT_STAGE_SQL = `
       tags jsonb,
       "osmTimestamp" timestamptz,
       "updatedAt" timestamptz,
+      population integer,
+      "populationAsOf" date,
+      "populationSource" text,
+      attributes jsonb,
       "citySlug" text,
       "cityName" text,
       geometry jsonb
@@ -108,6 +116,10 @@ const INSERT_STAGE_SQL = `
     tags,
     osm_timestamp,
     updated_at,
+    population,
+    population_as_of,
+    population_source,
+    attributes,
     city_slug,
     city_name,
     geom,
@@ -125,6 +137,10 @@ const INSERT_STAGE_SQL = `
     tags,
     "osmTimestamp",
     "updatedAt",
+    population,
+    "populationAsOf",
+    "populationSource",
+    attributes,
     "citySlug",
     "cityName",
     geom,
@@ -164,6 +180,10 @@ const INSERT_BOUNDARIES_SQL = `
     is_active,
     display_name,
     display_type,
+    population,
+    population_as_of,
+    population_source,
+    attributes,
     area_m2
   )
   SELECT
@@ -189,6 +209,10 @@ const INSERT_BOUNDARIES_SQL = `
     stage.active,
     stage.display_name,
     stage.display_type,
+    stage.population,
+    stage.population_as_of,
+    stage.population_source,
+    stage.attributes,
     ST_Area(stage.geom::geography)
   FROM city_boundary_transfer_stage AS stage
   ORDER BY stage.osm_type, stage.osm_id
@@ -350,6 +374,7 @@ export function createCityBoundaryTransferService(pool) {
         await client.query('SELECT rebuild_city_boundary_hierarchy()');
         const restored = await client.query(RESTORE_GEOMETRY_LINKS_SQL);
         await client.query('SELECT sync_active_boundary_cities()');
+        await client.query('SELECT sync_active_boundary_populations()');
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
 
@@ -488,6 +513,7 @@ export function createCityBoundaryTransferService(pool) {
         // reassign their application city and must update existing line rows
         // against the restored exact OSM object.
         await client.query('SELECT sync_active_boundary_cities()');
+        await client.query('SELECT sync_active_boundary_populations()');
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
 
