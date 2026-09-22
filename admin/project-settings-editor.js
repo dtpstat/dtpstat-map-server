@@ -53,7 +53,19 @@ if (typeof document !== 'undefined') {
           </p>
 
           <form id="project-settings-form">
+            <nav class="project-settings-tabs" role="tablist" aria-label="Разделы настроек проекта">
+              <button type="button" role="tab" data-project-settings-tab="general"
+                      aria-selected="true" aria-controls="project-settings-general">Основное</button>
+              <button type="button" role="tab" data-project-settings-tab="map"
+                      aria-selected="false" aria-controls="project-settings-map">Карта</button>
+              <button type="button" role="tab" data-project-settings-tab="metadata"
+                      aria-selected="false" aria-controls="project-settings-metadata">Метаданные и API</button>
+              <button type="button" role="tab" data-project-settings-tab="footer"
+                      aria-selected="false" aria-controls="project-settings-footer">Подвал</button>
+            </nav>
             <div class="form-fields project-settings-grid">
+              <section class="project-settings-page" id="project-settings-general"
+                       role="tabpanel" data-project-settings-panel="general">
               <label>Название проекта
                 <input name="projectName" type="text" maxlength="160" required
                        placeholder="Например: Выделенные полосы в России">
@@ -93,6 +105,10 @@ if (typeof document !== 'undefined') {
                 </div>
               </section>
 
+              </section>
+
+              <section class="project-settings-page" id="project-settings-map"
+                       role="tabpanel" data-project-settings-panel="map" hidden>
               <section class="project-settings-section" aria-labelledby="project-city-category-title">
                 <div>
                   <h5 id="project-city-category-title">Разделение больших и малых городов</h5>
@@ -146,6 +162,10 @@ if (typeof document !== 'undefined') {
                 </div>
               </section>
 
+              </section>
+
+              <section class="project-settings-page" id="project-settings-metadata"
+                       role="tabpanel" data-project-settings-panel="metadata" hidden>
               <label>Ключевые слова
                 <textarea name="keywords" rows="5"
                           placeholder="выделенные полосы\nобщественный транспорт\nрейтинг городов"></textarea>
@@ -179,6 +199,10 @@ if (typeof document !== 'undefined') {
                 </div>
               </section>
 
+              </section>
+
+              <section class="project-settings-page" id="project-settings-footer"
+                       role="tabpanel" data-project-settings-panel="footer" hidden>
               <label>Информационный блок / подвал — HTML
                 <div class="project-settings-toolbar" id="project-html-toolbar" aria-label="Готовые HTML-стили">
                   <button type="button" data-project-snippet="h2">H2</button>
@@ -201,6 +225,7 @@ if (typeof document !== 'undefined') {
                 <div><strong>Стили проекта:</strong> <code id="project-allowed-classes">загрузка…</code></div>
                 <div>Inline style, script, iframe, обработчики событий и неизвестные классы сервер не принимает.</div>
               </div>
+              </section>
             </div>
             <button class="task-action" type="submit">Сохранить настройки проекта</button>
           </form>
@@ -213,6 +238,27 @@ if (typeof document !== 'undefined') {
     const form = document.querySelector('#project-settings-form');
 
     if (form) {
+      const projectTabs = [...form.querySelectorAll('[data-project-settings-tab]')];
+      const projectPanels = [...form.querySelectorAll('[data-project-settings-panel]')];
+      const selectProjectPanel = (key) => {
+        for (const tab of projectTabs) {
+          const active = tab.dataset.projectSettingsTab === key;
+          tab.setAttribute('aria-selected', String(active));
+          tab.tabIndex = active ? 0 : -1;
+        }
+        for (const panel of projectPanels) {
+          panel.hidden = panel.dataset.projectSettingsPanel !== key;
+        }
+      };
+      for (const tab of projectTabs) {
+        tab.addEventListener('click', () => selectProjectPanel(tab.dataset.projectSettingsTab));
+      }
+      form.addEventListener('invalid', (event) => {
+        const panel = event.target.closest('[data-project-settings-panel]');
+        if (panel) selectProjectPanel(panel.dataset.projectSettingsPanel);
+      }, true);
+      selectProjectPanel('general');
+
       const projectName = form.elements.namedItem('projectName');
       const themePreset = form.elements.namedItem('themePreset');
       const showLineLabels = form.elements.namedItem('showLineLabels');
