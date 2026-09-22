@@ -943,16 +943,14 @@ test('one active admin task blocks every other mutating admin route', async () =
   }];
   const populationBody = {
     schemaVersion: 2,
-    territories: [{
-      osmType: 'relation',
-      osmId: '123',
-      name: 'Казань',
-      type: 'city',
-      placeType: 'city',
-      adminLevel: 6,
-      population: 1300000,
+    regions: [{
+      name: 'Республика Татарстан',
       attributes: {},
-      children: [],
+      cities: [{
+        name: 'Казань',
+        population: 1300000,
+        attributes: {},
+      }],
     }],
   };
 
