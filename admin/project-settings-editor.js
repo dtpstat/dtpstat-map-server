@@ -155,7 +155,7 @@ if (typeof document !== 'undefined') {
                     <span id="project-city-marker-state">Загружаем состояние…</span>
                   </div>
                   <label>Новая иконка PNG
-                    <input name="cityMarkerIcon" type="file" accept="image/png">
+                    <input name="cityMarkerIcon" type="file" accept="image/png" data-dirty-ignore>
                     <small>Квадратный PNG 16×16…256×256 px, не более 256 КБ. Прозрачность поддерживается.</small>
                   </label>
                   <div class="project-city-marker-actions">
