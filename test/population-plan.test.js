@@ -46,7 +46,11 @@ test('population plan flattens region and city hierarchy', () => {
 
   assert.equal(plan.schemaVersion, 2);
   assert.equal(plan.regionCount, 1);
+  assert.equal(plan.uniqueRegionCount, 1);
   assert.equal(plan.cityCount, 2);
+  assert.equal(plan.encounteredCityCount, 2);
+  assert.equal(plan.skippedCityCount, 0);
+  assert.equal(plan.warnings.length, 0);
   assert.equal(plan.cities[0].regionName, 'Тестовая область');
   assert.equal(plan.cities[0].cityName, 'Тестоград');
   assert.equal(plan.cities[0].population, 1300000);
@@ -70,9 +74,66 @@ test('same city name is allowed in different regions', () => {
     ],
   });
   assert.equal(plan.cityCount, 2);
+  assert.equal(plan.skippedCityCount, 0);
 });
 
-test('population plan rejects invalid schema and duplicate names inside one region', () => {
+test('duplicate regions merge while invalid or duplicate cities become warnings', () => {
+  const plan = buildPopulationPlan({
+    schemaVersion: 2,
+    regions: [
+      region({
+        cities: [
+          { name: 'Первый', population: 1000 },
+          { name: 'Плохой', population: 0 },
+        ],
+      }),
+      region({
+        name: '  тестовая ОБЛАСТЬ ',
+        cities: [
+          { name: 'Второй', population: 2000 },
+          { name: 'Первый', population: 3000 },
+        ],
+      }),
+    ],
+  });
+
+  assert.equal(plan.regionCount, 2);
+  assert.equal(plan.uniqueRegionCount, 1);
+  assert.equal(plan.encounteredCityCount, 4);
+  assert.equal(plan.cityCount, 2);
+  assert.equal(plan.skippedCityCount, 2);
+  assert.deepEqual(
+    plan.cities.map((city) => city.cityName),
+    ['Первый', 'Второй'],
+  );
+  assert.ok(plan.warnings.some((item) =>
+    item.code === 'duplicate-region-merged' && item.skipped === false));
+  assert.ok(plan.warnings.some((item) =>
+    item.code === 'invalid-city-data' && item.cityName === 'Плохой'));
+  assert.ok(plan.warnings.some((item) =>
+    item.code === 'duplicate-city' && item.cityName === 'Первый'));
+});
+
+test('invalid individual regions do not discard valid regions', () => {
+  const plan = buildPopulationPlan({
+    schemaVersion: 2,
+    regions: [
+      { name: '', cities: [{ name: 'Потерянный', population: 1000 }] },
+      region(),
+    ],
+  });
+
+  assert.equal(plan.regionCount, 2);
+  assert.equal(plan.uniqueRegionCount, 1);
+  assert.equal(plan.cityCount, 1);
+  assert.equal(plan.encounteredCityCount, 2);
+  assert.equal(plan.skippedCityCount, 1);
+  assert.equal(plan.skippedRegionCount, 1);
+  assert.ok(plan.warnings.some((item) =>
+    item.code === 'invalid-region-name' && item.skipped));
+});
+
+test('document-level schema/date errors and empty hierarchy remain fatal', () => {
   assert.throws(
     () => buildPopulationPlan({
       schemaVersion: 1,
@@ -91,22 +152,8 @@ test('population plan rejects invalid schema and duplicate names inside one regi
   assert.throws(
     () => buildPopulationPlan({
       schemaVersion: 2,
-      regions: [region({
-        cities: [{ name: 'Тестоград', population: 0 }],
-      })],
+      regions: [],
     }),
-    /positive integer/,
-  );
-  assert.throws(
-    () => buildPopulationPlan({
-      schemaVersion: 2,
-      regions: [region({
-        cities: [
-          { name: 'Тестоград', population: 1000 },
-          { name: 'Тестоград', population: 2000 },
-        ],
-      })],
-    }),
-    /Duplicate city name/,
+    /non-empty regions array/,
   );
 });
