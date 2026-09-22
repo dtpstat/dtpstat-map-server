@@ -73,7 +73,7 @@ MAPBOX_ACCESS_TOKEN=pk....
 
 ## Миграции
 
-Текущий набор: `V001…V030`.
+Текущий набор: `V001…V032`.
 
 Последние migrations:
 
@@ -91,9 +91,11 @@ V027__osm_boundary_management.sql
 V028__osm_download_size_limits.sql
 V029__resumable_osm_updates.sql
 V030__osm_checkpoint_batch_count.sql
+V031__unbuildable_osm_checkpoint_geometry.sql
+V032__boundary_population_attributes.sql
 ```
 
-Назначение `V023…V030`:
+Назначение `V023…V032`:
 
 - `V023` — logical `FULL_NAME` OSM boundary, merge relation fragments по `PLACE_TYPE + FULL_NAME`, sync `CITIES.FULL_NAME`;
 - `V024` — ordered `REPORT_CONFIG.RANK_SORT`;
@@ -102,9 +104,13 @@ V030__osm_checkpoint_batch_count.sql
 - `V027` — отмена name-based relation merge, active/display OSM identity, containment hierarchy, DB-backed import settings и large/small thresholds;
 - `V028` — отдельные single-response/total byte limits для OSM и adaptive split слишком крупных geometry batches;
 - `V029` — persistent OSM checkpoint/index/stage для resume после failure/cancel/Node restart;
-- `V030` — cumulative staged batch count для resumable OSM update.
+- `V030` — cumulative staged batch count для resumable OSM update;
+- `V031` — сохранение/диагностика OSM objects, для которых geometry не удалось построить;
+- `V032` — boundary-owned population/asOf/source/attributes и синхронизация активной population projection.
 
-Следующая migration: **V031+**. Опубликованные migration files не изменяются задним числом.
+Следующая migration: **V033+**. Опубликованные migration files не изменяются задним числом.
+
+Startup migrations автоматически не применяет. Перед запуском сервер сверяет `<DATABASE_SCHEMA>.schema_versions` с набором `db/migrations`; stale/newer/gapped schema считается startup error. Стандартный deploy-порядок остаётся `git pull → npm run db:migrate → restart`.
 
 ## Большие portable JSON / ZIP transfers
 
