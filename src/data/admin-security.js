@@ -470,7 +470,11 @@ export function createAdminSecurityService(repository) {
       }
     }
     let lastSeenAt = new Date(session.sessionLastSeenAt);
-    if (now.valueOf() - lastSeenAt.valueOf() > 60000) {
+    const idleTouchIntervalMs = Math.min(
+      60_000,
+      Math.max(1_000, Math.floor(settings.sessionIdleSeconds * 1000 / 2)),
+    );
+    if (now.valueOf() - lastSeenAt.valueOf() >= idleTouchIntervalMs) {
       lastSeenAt = now;
       await repository.touchSession(session.sessionId, now.toISOString());
     }
