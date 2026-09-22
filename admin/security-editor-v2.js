@@ -283,6 +283,8 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           <div class="security-role-grid">
             ${roleCheckbox('canManageData', 'Управление данными', user.canManageData, protectedUser)}
             ${roleCheckbox('canManageInterface', 'Настройка интерфейса', user.canManageInterface, protectedUser)}
+            ${roleCheckbox('canEditGeometries', 'Редактор геометрий', user.canEditGeometries, protectedUser)}
+            ${roleCheckbox('canEditOsm', 'Редактор OSM-дерева', user.canEditOsm, protectedUser)}
             ${roleCheckbox('canManageUsers', 'Управление пользователями', user.canManageUsers, protectedUser)}
             ${roleCheckbox('canViewAudit', 'Просмотр аудита', user.canViewAudit, protectedUser)}
             ${roleCheckbox('canManageSecurity', 'Управление безопасностью', user.canManageSecurity, protectedUser)}
@@ -325,6 +327,8 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
             email: form.elements.email.value.trim() || null,
             canManageData: form.elements.canManageData.checked,
             canManageInterface: form.elements.canManageInterface.checked,
+            canEditGeometries: form.elements.canEditGeometries.checked,
+            canEditOsm: form.elements.canEditOsm.checked,
             canManageUsers: form.elements.canManageUsers.checked,
             canViewAudit: form.elements.canViewAudit.checked,
             canManageSecurity: form.elements.canManageSecurity.checked,
@@ -405,6 +409,8 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           <div class="security-role-grid">
             ${roleCheckbox('canManageData', 'Управление данными', false, false)}
             ${roleCheckbox('canManageInterface', 'Настройка интерфейса', false, false)}
+            ${roleCheckbox('canEditGeometries', 'Редактор геометрий', false, false)}
+            ${roleCheckbox('canEditOsm', 'Редактор OSM-дерева', false, false)}
             ${roleCheckbox('canManageUsers', 'Управление пользователями', false, false)}
             ${roleCheckbox('canViewAudit', 'Просмотр аудита', false, false)}
             ${roleCheckbox('canManageSecurity', 'Управление безопасностью', false, false)}
@@ -428,6 +434,8 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
             email: form.elements.email.value.trim() || null,
             canManageData: form.elements.canManageData.checked,
             canManageInterface: form.elements.canManageInterface.checked,
+            canEditGeometries: form.elements.canEditGeometries.checked,
+            canEditOsm: form.elements.canEditOsm.checked,
             canManageUsers: form.elements.canManageUsers.checked,
             canViewAudit: form.elements.canViewAudit.checked,
             canManageSecurity: form.elements.canManageSecurity.checked,
