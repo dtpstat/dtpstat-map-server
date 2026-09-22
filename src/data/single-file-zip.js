@@ -560,6 +560,12 @@ export async function openSingleFileZip(zipPath, options) {
         'ZIP local and central-directory filenames do not match',
       );
     }
+    const localExtra = await readExactly(
+      handle,
+      localExtraLength,
+      selectedEntry.localOffset + 30 + localNameLength,
+    );
+    const localZip64 = parseExtraFields(localExtra).has(ZIP64_EXTRA_FIELD);
 
     const dataOffset =
       selectedEntry.localOffset +
@@ -581,7 +587,8 @@ export async function openSingleFileZip(zipPath, options) {
       }
       const prefix = await readExactly(handle, 4, dataEnd);
       const hasSignature = prefix.readUInt32LE(0) === DATA_DESCRIPTOR;
-      const descriptorLength = selectedEntry.zip64Sizes
+      const descriptorZip64 = selectedEntry.zip64Sizes || localZip64;
+      const descriptorLength = descriptorZip64
         ? (hasSignature ? 24 : 20)
         : (hasSignature ? 16 : 12);
       if (dataEnd + descriptorLength > directory.centralOffset) {
@@ -597,14 +604,14 @@ export async function openSingleFileZip(zipPath, options) {
       let offset = hasSignature ? 4 : 0;
       const descriptorCrc = descriptor.readUInt32LE(offset);
       offset += 4;
-      const descriptorCompressed = selectedEntry.zip64Sizes
+      const descriptorCompressed = descriptorZip64
         ? safeNumber(
             descriptor.readBigUInt64LE(offset),
             'data-descriptor compressed size',
           )
         : descriptor.readUInt32LE(offset);
-      offset += selectedEntry.zip64Sizes ? 8 : 4;
-      const descriptorUncompressed = selectedEntry.zip64Sizes
+      offset += descriptorZip64 ? 8 : 4;
+      const descriptorUncompressed = descriptorZip64
         ? safeNumber(
             descriptor.readBigUInt64LE(offset),
             'data-descriptor uncompressed size',
@@ -777,6 +784,47 @@ function zip64CentralHeader(
   return { header, extra };
 }
 
+function classicCentralHeader(
+  nameLength,
+  crc,
+  compressedSize,
+  uncompressedSize,
+  localOffset,
+) {
+  const header = Buffer.alloc(46);
+  header.writeUInt32LE(CENTRAL_DIRECTORY_HEADER, 0);
+  header.writeUInt16LE(45, 4);
+  header.writeUInt16LE(45, 6);
+  header.writeUInt16LE(ZIP_FLAGS_UTF8_DATA_DESCRIPTOR, 8);
+  header.writeUInt16LE(8, 10);
+  header.writeUInt16LE(0, 12);
+  header.writeUInt16LE(0x21, 14);
+  header.writeUInt32LE(crc, 16);
+  header.writeUInt32LE(Number(compressedSize), 20);
+  header.writeUInt32LE(Number(uncompressedSize), 24);
+  header.writeUInt16LE(nameLength, 28);
+  header.writeUInt16LE(0, 30);
+  header.writeUInt16LE(0, 32);
+  header.writeUInt16LE(0, 34);
+  header.writeUInt16LE(0, 36);
+  header.writeUInt32LE(0, 38);
+  header.writeUInt32LE(Number(localOffset), 42);
+  return header;
+}
+
+function classicEndOfCentralDirectory(centralSize, centralOffset) {
+  const record = Buffer.alloc(22);
+  record.writeUInt32LE(END_OF_CENTRAL_DIRECTORY, 0);
+  record.writeUInt16LE(0, 4);
+  record.writeUInt16LE(0, 6);
+  record.writeUInt16LE(1, 8);
+  record.writeUInt16LE(1, 10);
+  record.writeUInt32LE(Number(centralSize), 12);
+  record.writeUInt32LE(Number(centralOffset), 16);
+  record.writeUInt16LE(0, 20);
+  return record;
+}
+
 function zip64EndOfCentralDirectory(
   centralSize,
   centralOffset,
@@ -818,10 +866,12 @@ function zip64LegacyEndOfCentralDirectory() {
 }
 
 /**
- * Produce a single-entry DEFLATE ZIP64 as a stream without materializing
+ * Produce a single-entry DEFLATE ZIP as a stream without materializing
  * either JSON or the archive. The local header is ZIP64 from the start, so the
  * source may be stdin/another stream and neither compressed nor decoded size
- * has to be known before bytes are emitted.
+ * has to be known before bytes are emitted. Once the final sizes are known,
+ * ordinary files use a classic central directory/EOCD for maximum tool
+ * compatibility; true large files retain ZIP64 central-directory records.
  *
  * @param {string} fileName
  * @param {AsyncIterable<Buffer | Uint8Array | string>} source
@@ -880,6 +930,26 @@ export function createSingleFileZipStream(fileName, source, options = {}) {
       local.header.length + name.length + local.extra.length,
     );
     const centralOffset = localSize + compressedSize + BigInt(descriptor.length);
+    const useClassicDirectory =
+      compressedSize < BigInt(MAX_UINT32) &&
+      uncompressedSize < BigInt(MAX_UINT32) &&
+      centralOffset < BigInt(MAX_UINT32);
+
+    if (useClassicDirectory) {
+      const central = classicCentralHeader(
+        name.length,
+        checksum,
+        compressedSize,
+        uncompressedSize,
+        0n,
+      );
+      yield central;
+      yield name;
+      const centralSize = BigInt(central.length + name.length);
+      yield classicEndOfCentralDirectory(centralSize, centralOffset);
+      return;
+    }
+
     const central = zip64CentralHeader(
       name.length,
       checksum,
