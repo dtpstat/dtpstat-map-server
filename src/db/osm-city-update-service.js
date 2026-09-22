@@ -1137,6 +1137,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         await client.query('BEGIN');
         inTransaction = true;
         await acquireDataImportLock(client, pool);
+        await client.query('SELECT assert_no_pending_geometry_import()');
         await client.query(PRESERVE_LINKS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
         await client.query('DELETE FROM city_boundaries');
@@ -1162,6 +1163,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         // city_id so renamed/reassigned active boundaries can realign existing
         // line rows as part of the same transaction.
         await client.query('SELECT sync_active_boundary_cities()');
+        await client.query('SELECT assert_city_geometry_invariants()');
         await client.query('SELECT sync_active_boundary_populations()');
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         throwIfAdminTaskCancelled(operation.signal);

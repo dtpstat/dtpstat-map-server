@@ -281,6 +281,9 @@ export function createCityBoundaryTransferService(pool) {
       try {
         await client.query('BEGIN');
         await acquireDataImportLock(client, pool);
+        if (!operation.dryRun) {
+          await client.query('SELECT assert_no_pending_geometry_import()');
+        }
         throwIfAdminTaskCancelled(operation.signal);
         await client.query(CREATE_STAGE_SQL);
 
@@ -407,6 +410,7 @@ export function createCityBoundaryTransferService(pool) {
         });
         const restored = await client.query(RESTORE_GEOMETRY_LINKS_SQL);
         await client.query('SELECT sync_active_boundary_cities()');
+        await client.query('SELECT assert_city_geometry_invariants()');
         await client.query('SELECT sync_active_boundary_populations()');
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
@@ -474,6 +478,9 @@ export function createCityBoundaryTransferService(pool) {
       try {
         await client.query('BEGIN');
         await acquireDataImportLock(client, pool);
+        if (!operation.dryRun) {
+          await client.query('SELECT assert_no_pending_geometry_import()');
+        }
         throwIfAdminTaskCancelled(operation.signal);
 
         if (plan.cities.length > 0) {
@@ -566,6 +573,7 @@ export function createCityBoundaryTransferService(pool) {
         // reassign their application city and must update existing line rows
         // against the restored exact OSM object.
         await client.query('SELECT sync_active_boundary_cities()');
+        await client.query('SELECT assert_city_geometry_invariants()');
         await client.query('SELECT sync_active_boundary_populations()');
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         throwIfAdminTaskCancelled(operation.signal);

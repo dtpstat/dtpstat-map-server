@@ -221,6 +221,7 @@ export function createOsmBoundaryAdminRepository(pool) {
       try {
         await client.query('BEGIN');
         await acquireDataImportLock(client, pool);
+        await client.query('SELECT assert_no_pending_geometry_import()');
 
         const subtree = await client.query(
           `WITH RECURSIVE subtree AS (
@@ -269,6 +270,7 @@ export function createOsmBoundaryAdminRepository(pool) {
             [ids, active],
           );
           await client.query('SELECT sync_active_boundary_cities()');
+          await client.query('SELECT assert_city_geometry_invariants()');
           await client.query('SELECT sync_active_boundary_populations()');
           await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         }
@@ -298,6 +300,9 @@ export function createOsmBoundaryAdminRepository(pool) {
             409,
           );
         }
+        if (error?.code === '55000') {
+          throw new OsmBoundaryAdminValidationError(error.message, 409);
+        }
         throw error;
       } finally {
         client.release();
@@ -312,6 +317,7 @@ export function createOsmBoundaryAdminRepository(pool) {
       try {
         await client.query('BEGIN');
         await acquireDataImportLock(client, pool);
+        await client.query('SELECT assert_no_pending_geometry_import()');
 
         const current = await client.query(
           `SELECT
@@ -382,6 +388,7 @@ export function createOsmBoundaryAdminRepository(pool) {
         );
 
         await client.query('SELECT sync_active_boundary_cities()');
+        await client.query('SELECT assert_city_geometry_invariants()');
         await client.query('SELECT sync_active_boundary_populations()');
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
 
@@ -401,6 +408,9 @@ export function createOsmBoundaryAdminRepository(pool) {
             'An active OSM object with the same normalized type and name already exists',
             409,
           );
+        }
+        if (error?.code === '55000') {
+          throw new OsmBoundaryAdminValidationError(error.message, 409);
         }
         throw error;
       } finally {
