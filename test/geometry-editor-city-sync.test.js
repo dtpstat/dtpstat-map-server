@@ -21,7 +21,7 @@ test('geometry editor repairs active OSM boundaries missing city links before li
 
 test('geometry editor migration backfills active boundary city links', async () => {
   const migration = await fs.readFile(
-    path.join(root, 'db/migrations/V035__sync_geometry_editor_cities.sql'),
+    path.join(root, 'db/migrations/V036__sync_geometry_editor_cities.sql'),
     'utf8',
   );
   assert.match(migration, /SYNC_ACTIVE_BOUNDARY_CITIES\(\)/i);
