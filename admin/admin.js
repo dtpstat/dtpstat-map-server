@@ -485,6 +485,14 @@ function setTaskNotice(taskKey, message, tone = 'warning') {
   taskNotices.setForTask(taskKey, message, tone);
 }
 
+function clearTaskStatusForStart(taskKey = state.selected) {
+  if (active(state.task)) return false;
+  taskNotices.clear(taskKey);
+  state.task = null;
+  render();
+  return true;
+}
+
 function selectOperation(operationKey) {
   const selectedTab = elements.operationTabs.find(
     (tab) => tab.dataset.operationTab === operationKey,
@@ -830,6 +838,7 @@ async function uploadPortableFile(
   taskKey,
   taskType,
 ) {
+  clearTaskStatusForStart(taskKey);
   showTransferOverlay({ file, taskKey, taskType });
 
   return new Promise((resolve) => {
@@ -1124,6 +1133,7 @@ async function refresh({ quiet = false } = {}) {
 }
 
 async function start(path, options, taskKey = state.selected) {
+  clearTaskStatusForStart(taskKey);
   try {
     const payload = await api(path, { method: 'POST', ...options });
     applyTask(payload.task);
