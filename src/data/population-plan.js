@@ -45,31 +45,6 @@ function normalizeText(value, field, max = 160) {
   return normalized;
 }
 
-function normalizeOsmType(value, field) {
-  if (!['way', 'relation'].includes(value)) {
-    throw new PopulationValidationError(
-      `${field} must be way or relation`,
-    );
-  }
-  return value;
-}
-
-function normalizeOsmId(value, field) {
-  const text = String(value ?? '').trim();
-  if (!/^[1-9]\d*$/.test(text)) {
-    throw new PopulationValidationError(
-      `${field} must be a positive OSM integer identifier`,
-    );
-  }
-  const number = Number(text);
-  if (!Number.isSafeInteger(number)) {
-    throw new PopulationValidationError(
-      `${field} exceeds the supported safe integer range`,
-    );
-  }
-  return text;
-}
-
 function normalizePopulation(value, field) {
   if (value === null) return null;
   const population = Number(value);
@@ -86,30 +61,10 @@ function normalizePopulation(value, field) {
 }
 
 function normalizeAttributes(value, field) {
+  if (value === undefined) return {};
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new PopulationValidationError(
       `${field} must be a JSON object`,
-    );
-  }
-  return value;
-}
-
-function normalizeOptionalAdminLevel(value, field) {
-  if (value === null || value === undefined || value === '') return null;
-  const level = Number(value);
-  if (!Number.isInteger(level) || level < 1 || level > 20) {
-    throw new PopulationValidationError(
-      `${field} must be an integer between 1 and 20 or null`,
-    );
-  }
-  return level;
-}
-
-function normalizeOptionalPlaceType(value, field) {
-  if (value === null || value === undefined || value === '') return null;
-  if (!['city', 'town'].includes(value)) {
-    throw new PopulationValidationError(
-      `${field} must be city, town or null`,
     );
   }
   return value;
@@ -132,171 +87,168 @@ function object(value, label) {
   return value;
 }
 
-function identity(osmType, osmId) {
-  return `${osmType}/${osmId}`;
+function nameKey(value) {
+  return value
+    .normalize('NFC')
+    .toLocaleLowerCase('ru-RU')
+    .replaceAll('ё', 'е')
+    .replace(/[^\p{L}\p{N}]+/gu, '');
 }
 
-function normalizeTerritory(
-  raw,
-  path,
-  defaults,
-  parent,
-  seen,
-  rows,
-  limits,
-) {
-  const item = object(raw, `Territory ${path}`);
-  const allowed = new Set([
-    'osmType',
-    'osmId',
-    'name',
-    'type',
-    'placeType',
-    'adminLevel',
-    'population',
-    'asOf',
-    'source',
-    'attributes',
-    'children',
-  ]);
-  const unknown = Object.keys(item).filter((key) => !allowed.has(key));
-  if (unknown.length > 0) {
+function normalizeRegion(raw, regionIndex, defaults, seenRegions, seenCities) {
+  const region = object(raw, `Region regions[${regionIndex}]`);
+  const allowedRegion = new Set(['name', 'attributes', 'cities']);
+  const unknownRegion = Object.keys(region)
+    .filter((key) => !allowedRegion.has(key));
+  if (unknownRegion.length > 0) {
     throw new PopulationValidationError(
-      `Territory ${path} contains unsupported properties: ${unknown.join(', ')}`,
+      `Region regions[${regionIndex}] contains unsupported properties: ` +
+      unknownRegion.join(', '),
     );
   }
 
-  const osmType = normalizeOsmType(
-    item.osmType,
-    `Territory ${path} osmType`,
+  const regionName = normalizeText(
+    region.name,
+    `Region regions[${regionIndex}] name`,
   );
-  const osmId = normalizeOsmId(
-    item.osmId,
-    `Territory ${path} osmId`,
+  const regionKey = nameKey(regionName);
+  if (seenRegions.has(regionKey)) {
+    throw new PopulationValidationError(
+      `Duplicate region name: ${regionName}`,
+    );
+  }
+  seenRegions.add(regionKey);
+
+  const regionAttributes = normalizeAttributes(
+    region.attributes,
+    `Region regions[${regionIndex}] attributes`,
   );
-  const key = identity(osmType, osmId);
-  if (seen.has(key)) {
-    throw new PopulationValidationError(
-      `Duplicate OSM territory identity: ${key}`,
-    );
-  }
-  seen.add(key);
 
-  if (!Object.hasOwn(item, 'population')) {
+  if (!Array.isArray(region.cities) || region.cities.length === 0) {
     throw new PopulationValidationError(
-      `Territory ${path} must contain population (integer or null)`,
-    );
-  }
-  if (!Object.hasOwn(item, 'attributes')) {
-    throw new PopulationValidationError(
-      `Territory ${path} must contain attributes`,
+      `Region regions[${regionIndex}] must contain a non-empty cities array`,
     );
   }
 
-  const row = {
-    osmType,
-    osmId,
-    name: normalizeText(item.name, `Territory ${path} name`),
-    type: normalizeText(item.type, `Territory ${path} type`, 80),
-    placeType: normalizeOptionalPlaceType(
-      item.placeType,
-      `Territory ${path} placeType`,
-    ),
-    adminLevel: normalizeOptionalAdminLevel(
-      item.adminLevel,
-      `Territory ${path} adminLevel`,
-    ),
-    population: normalizePopulation(
-      item.population,
-      `Territory ${path} population`,
-    ),
-    asOf: item.asOf === undefined
-      ? defaults.asOf
-      : normalizeDate(item.asOf, `Territory ${path} asOf`),
-    source: item.source === undefined
-      ? defaults.source
-      : normalizeSource(item.source, `Territory ${path} source`),
-    attributes: normalizeAttributes(
-      item.attributes,
-      `Territory ${path} attributes`,
-    ),
-    parentOsmType: parent?.osmType ?? null,
-    parentOsmId: parent?.osmId ?? null,
-  };
+  const rows = [];
+  for (const [cityIndex, rawCity] of region.cities.entries()) {
+    const city = object(
+      rawCity,
+      `City regions[${regionIndex}].cities[${cityIndex}]`,
+    );
+    const allowedCity = new Set([
+      'name',
+      'population',
+      'asOf',
+      'source',
+      'attributes',
+    ]);
+    const unknownCity = Object.keys(city)
+      .filter((key) => !allowedCity.has(key));
+    if (unknownCity.length > 0) {
+      throw new PopulationValidationError(
+        `City regions[${regionIndex}].cities[${cityIndex}] contains unsupported properties: ` +
+        unknownCity.join(', '),
+      );
+    }
+    if (!Object.hasOwn(city, 'population')) {
+      throw new PopulationValidationError(
+        `City regions[${regionIndex}].cities[${cityIndex}] must contain population`,
+      );
+    }
 
-  rows.push(row);
-  if (rows.length > limits.maxItems) {
-    throw new PopulationValidationError(
-      `Population hierarchy contains more than ${limits.maxItems} territories`,
+    const cityName = normalizeText(
+      city.name,
+      `City regions[${regionIndex}].cities[${cityIndex}] name`,
     );
+    const cityIdentity = `${regionKey}/${nameKey(cityName)}`;
+    if (seenCities.has(cityIdentity)) {
+      throw new PopulationValidationError(
+        `Duplicate city name inside region ${regionName}: ${cityName}`,
+      );
+    }
+    seenCities.add(cityIdentity);
+
+    rows.push({
+      regionName,
+      regionAttributes,
+      cityName,
+      population: normalizePopulation(
+        city.population,
+        `City regions[${regionIndex}].cities[${cityIndex}] population`,
+      ),
+      asOf: city.asOf === undefined
+        ? defaults.asOf
+        : normalizeDate(
+          city.asOf,
+          `City regions[${regionIndex}].cities[${cityIndex}] asOf`,
+        ),
+      source: city.source === undefined
+        ? defaults.source
+        : normalizeSource(
+          city.source,
+          `City regions[${regionIndex}].cities[${cityIndex}] source`,
+        ),
+      attributes: normalizeAttributes(
+        city.attributes,
+        `City regions[${regionIndex}].cities[${cityIndex}] attributes`,
+      ),
+    });
   }
 
-  const children = item.children ?? [];
-  if (!Array.isArray(children)) {
-    throw new PopulationValidationError(
-      `Territory ${path} children must be an array`,
-    );
-  }
-  for (const [index, child] of children.entries()) {
-    normalizeTerritory(
-      child,
-      `${path}.children[${index}]`,
-      defaults,
-      row,
-      seen,
-      rows,
-      limits,
-    );
-  }
+  return { regionName, regionAttributes, rows };
 }
 
 export function createPopulationHierarchyAccumulator({
   asOf: rawAsOf,
   source: rawSource,
   maxItems = 5_000_000,
-  collectTerritories = false,
+  collectCities = false,
 } = {}) {
   const defaults = {
     asOf: normalizeDate(rawAsOf, 'asOf'),
     source: normalizeSource(rawSource, 'source'),
   };
-  const seen = new Set();
-  const collected = collectTerritories ? [] : null;
-  let territoryCount = 0;
-  let rootCount = 0;
+  const seenRegions = new Set();
+  const seenCities = new Set();
+  const collected = collectCities ? [] : null;
+  let regionCount = 0;
+  let cityCount = 0;
 
   return {
-    addRoot(root, rootIndex = rootCount) {
-      const rows = [];
-      normalizeTerritory(
-        root,
-        `territories[${rootIndex}]`,
+    addRegion(region, regionIndex = regionCount) {
+      const normalized = normalizeRegion(
+        region,
+        regionIndex,
         defaults,
-        null,
-        seen,
-        rows,
-        { maxItems: maxItems - territoryCount },
+        seenRegions,
+        seenCities,
       );
-      territoryCount += rows.length;
-      rootCount += 1;
-      collected?.push(...rows);
-      return rows;
+      if (cityCount + normalized.rows.length > maxItems) {
+        throw new PopulationValidationError(
+          `Population hierarchy contains more than ${maxItems} cities`,
+        );
+      }
+      regionCount += 1;
+      cityCount += normalized.rows.length;
+      collected?.push(...normalized.rows);
+      return normalized;
     },
 
     finish(metadata = {}) {
       normalizeSchemaVersion(metadata.schemaVersion);
-      if (rootCount === 0 || territoryCount === 0) {
+      if (regionCount === 0 || cityCount === 0) {
         throw new PopulationValidationError(
-          'Request body must contain a non-empty territories array',
+          'Request body must contain a non-empty regions array',
         );
       }
       return {
         schemaVersion: 2,
         asOf: defaults.asOf,
         source: defaults.source,
-        rootCount,
-        territoryCount,
-        territories: collected ?? [],
+        regionCount,
+        cityCount,
+        cities: collected ?? [],
       };
     },
   };
@@ -308,9 +260,9 @@ export function buildPopulationPlan(payload, options = {}) {
       'Request body must be a JSON object',
     );
   }
-  if (!Array.isArray(payload.territories)) {
+  if (!Array.isArray(payload.regions)) {
     throw new PopulationValidationError(
-      'Request body must contain a non-empty territories array',
+      'Request body must contain a non-empty regions array',
     );
   }
 
@@ -318,10 +270,10 @@ export function buildPopulationPlan(payload, options = {}) {
     asOf: payload.asOf,
     source: payload.source,
     maxItems: options.maxItems,
-    collectTerritories: true,
+    collectCities: true,
   });
-  for (const [index, root] of payload.territories.entries()) {
-    accumulator.addRoot(root, index);
+  for (const [index, region] of payload.regions.entries()) {
+    accumulator.addRegion(region, index);
   }
   return accumulator.finish({ schemaVersion: payload.schemaVersion });
 }
