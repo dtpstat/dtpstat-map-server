@@ -278,6 +278,44 @@
 }
 .osm-boundary-map .mapboxgl-ctrl-attrib { font-size: 9px; }
 
+.osm-boundary-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1700;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(0 0 0 / 72%);
+  backdrop-filter: blur(4px);
+}
+.osm-boundary-confirm-overlay[hidden] { display: none; }
+.osm-boundary-confirm-dialog {
+  width: min(34rem, 100%);
+  padding: 1.1rem;
+  border: 1px solid #4e666d;
+  border-radius: 14px;
+  background: #0d171a;
+  box-shadow: 0 1.5rem 5rem rgb(0 0 0 / 55%);
+}
+.osm-boundary-confirm-dialog h3 { margin-bottom: .45rem; }
+.osm-boundary-confirm-dialog p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.osm-boundary-confirm-actions {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: .55rem;
+}
+.osm-boundary-confirm-actions button { width: auto; }
+.osm-boundary-confirm-actions .danger {
+  background: #51211f;
+  border-color: #8e3a36;
+  color: #ffd0cc;
+}
+
 @media (max-width: 1250px) {
   .osm-boundary-layout,
   .osm-boundary-section-card .osm-boundary-layout {
