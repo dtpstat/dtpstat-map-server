@@ -174,3 +174,21 @@ test('OSM update UI exposes explicit resume restart and discard controls', async
   assert.match(styles, /\.osm-checkpoint\s*\{/);
   assert.match(styles, /\.osm-checkpoint-actions/);
 });
+
+
+test('admin task UI distinguishes partial import success', async () => {
+  const [admin, styles] = await Promise.all([
+    read('admin/admin.js'),
+    read('admin/admin.css'),
+  ]);
+
+  assert.match(admin, /phase === 'warnings'/);
+  assert.match(admin, /Есть предупреждения/);
+  assert.match(admin, /task\.result\?\.partial/);
+  assert.match(admin, /result-warning/);
+  assert.match(admin, /status-partial/);
+  assert.match(admin, /операция завершена с предупреждениями/);
+  assert.match(styles, /\.status-partial\s*\{[^}]*var\(--warning\)/);
+  assert.match(styles, /\.result-warning\s*\{/);
+  assert.match(styles, /\.result-warning summary\s*\{[^}]*var\(--warning\)/);
+});
