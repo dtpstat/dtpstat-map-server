@@ -340,10 +340,9 @@ if (typeof document !== 'undefined') {
     function applySelection(item) {
       state.selectedId = item?.id ?? null;
       const enabled = Boolean(item);
-      for (const control of [active, displayName, displayType, save]) {
+      for (const control of [active, displayName, displayType, population, save]) {
         control.disabled = !enabled;
       }
-      population.disabled = !enabled || !item?.active;
       if (!item) {
         population.value = '';
         population.dataset.initialValue = '';
@@ -361,7 +360,7 @@ if (typeof document !== 'undefined') {
       population.dataset.initialValue = item.population === null || item.population === undefined
         ? ''
         : String(item.population);
-      population.disabled = !active.checked;
+      delete population.dataset.autoActivated;
       title.textContent = item.displayName;
       meta.replaceChildren(
         metaItem('OSM', `${item.osmType}/${item.osmId}`),
@@ -637,8 +636,30 @@ if (typeof document !== 'undefined') {
       }
     }
 
+    population.addEventListener('input', () => {
+      if (!state.selectedId) return;
+      const changed =
+        population.value.trim() !== (population.dataset.initialValue ?? '');
+      if (changed && !active.checked) {
+        active.checked = true;
+        population.dataset.autoActivated = 'true';
+        setMessage(
+          'Изменение населения включает выбранный OSM-объект при сохранении.',
+          'warning',
+        );
+        return;
+      }
+      if (!changed && population.dataset.autoActivated === 'true') {
+        active.checked = false;
+        delete population.dataset.autoActivated;
+        setMessage('');
+      }
+    });
+
     active.addEventListener('change', () => {
-      population.disabled = !state.selectedId || !active.checked;
+      if (active.checked) {
+        delete population.dataset.autoActivated;
+      }
     });
 
     enableBranch?.addEventListener('click', () => void setBranchActive(true));
