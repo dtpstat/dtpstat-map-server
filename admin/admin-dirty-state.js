@@ -8,7 +8,7 @@ function snapshot(form) {
   const result = [];
   for (const element of form.elements) {
     if (!(element instanceof HTMLElement) || !element.name) continue;
-    if (element.matches('button,[type="submit"],[type="button"],[type="reset"]')) continue;
+    if (element.matches('[data-dirty-ignore],button,[type="submit"],[type="button"],[type="reset"]')) continue;
     if (element instanceof HTMLInputElement && element.type === 'file') {
       const files = [...(element.files ?? [])].map((file) => [file.name, file.size, file.lastModified]);
       result.push([element.name, files]);
