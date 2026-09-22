@@ -155,6 +155,7 @@ button.danger { color: #210608; background: var(--danger); }
 .status-cancelling { color: var(--warning); }
 .status-failed, .status-cancelled { color: var(--danger); }
 .status-succeeded { color: var(--success); }
+.status-partial { color: var(--warning); }
 .status-idle { color: var(--muted); }
 .task-meta { margin: .9rem 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }
 .task-meta div { min-width: 0; padding: .62rem; border-radius: 9px; background: var(--panel-2); }
@@ -182,6 +183,8 @@ button.danger { color: #210608; background: var(--danger); }
 .result-panel[open] pre { min-height: 0; max-height: 5.5rem; flex: 1 1 auto; overflow: auto; }
 .result-success { border-color: #437b4b; }
 .result-success summary { color: var(--success); }
+.result-warning { border-color: #8a6a32; }
+.result-warning summary { color: var(--warning); }
 .result-error { border-color: #8b3d43; }
 .result-error summary { color: var(--danger); }
 
