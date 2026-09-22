@@ -7,7 +7,7 @@ import {
   loadViewportGeometries,
 } from './api.js';
 import { createCityList } from './city-list.js';
-import { subscribeDerivedDataChanges } from './derived-data-events.js';
+import { subscribeDerivedDataChanges } from '../../admin/derived-data-events.js';
 import {
   createMapController,
   ROAD_DATA_MIN_ZOOM,
