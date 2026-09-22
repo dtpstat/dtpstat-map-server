@@ -529,7 +529,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     if (entry.userId) {
       const image = document.createElement('img');
       image.alt = '';
-      image.loading = 'lazy';
+      image.decoding = 'async';
       image.hidden = true;
       image.addEventListener('load', () => {
         image.hidden = false;
@@ -539,9 +539,11 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         image.remove();
         fallback.hidden = false;
       }, { once: true });
-      image.src = entry.userId === currentUser?.id
+      const currentUserRow =
+        String(entry.userId) === String(currentUser?.id ?? '');
+      image.src = currentUserRow
         ? `/api/admin/profile/avatar?v=${Date.now()}`
-        : `/api/admin/security/users/${encodeURIComponent(entry.userId)}/avatar`;
+        : `/api/admin/security/users/${encodeURIComponent(entry.userId)}/avatar?v=${Date.now()}`;
       avatar.append(image);
     }
 
