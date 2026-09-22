@@ -77,6 +77,7 @@ let lineTypesRefresh = null;
 let lineDisplayRefresh = null;
 let openMapRefresh = null;
 let derivedDataRefresh = null;
+let derivedDataPending = false;
 
 function setMapMessage(message, isError = false) {
   mapMessage.hidden = !message;
@@ -206,9 +207,16 @@ async function refreshOpenMap() {
 }
 
 async function refreshDerivedData() {
-  if (!mapController) return;
-  if (derivedDataRefresh) return derivedDataRefresh;
+  if (!mapController) {
+    derivedDataPending = true;
+    return;
+  }
+  if (derivedDataRefresh) {
+    derivedDataPending = true;
+    return derivedDataRefresh;
+  }
 
+  derivedDataPending = false;
   derivedDataRefresh = (async () => {
     setCityStatus('Обновляем таблицу и линии…');
     try {
@@ -231,6 +239,7 @@ async function refreshDerivedData() {
       console.error('Не удалось обновить производные данные', error);
     } finally {
       derivedDataRefresh = null;
+      if (derivedDataPending) void refreshDerivedData();
     }
   })();
 
@@ -326,6 +335,7 @@ async function start() {
     mapController.onViewportChange((viewport) => {
       void updateViewport(viewport);
     });
+    if (derivedDataPending) void refreshDerivedData();
 
     if (!cities.length) {
       setMapMessage('Данные пока не загружены');
