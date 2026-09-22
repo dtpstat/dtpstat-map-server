@@ -187,7 +187,7 @@ test('activating one OSM object never activates parents or descendants', async (
   assert.match(pool.queries[updateIndex], /WHERE id = $1$/i);
   assert.doesNotMatch(
     pool.queries[updateIndex],
-    /parent_id|WITH RECURSIVE|ANY(/i,
+    /parent_id|WITH RECURSIVE|ANY\\(/i,
   );
 });
 
