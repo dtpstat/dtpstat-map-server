@@ -50,6 +50,35 @@ h4 { margin-bottom: .35rem; font-size: .92rem; }
   font-weight: 800;
 }
 .admin-user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.admin-user-copy {
+  min-width: 0;
+  display: grid;
+  gap: .18rem;
+  line-height: 1.15;
+}
+#admin-user-label {
+  color: var(--text);
+  font-size: .78rem;
+  font-weight: 700;
+}
+.admin-user-roles {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+  flex-wrap: wrap;
+}
+.admin-user-roles[hidden] { display: none; }
+.admin-user-role {
+  padding: .08rem .34rem;
+  border: 1px solid rgb(145 165 171 / 22%);
+  border-radius: 999px;
+  color: rgb(145 165 171 / 72%);
+  background: rgb(145 165 171 / 5%);
+  font-size: .58rem;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: .01em;
+}
 .eyebrow { margin-bottom: .35rem; color: var(--accent); font-size: .7rem; font-weight: 800; letter-spacing: .17em; }
 .connection { padding: .55rem .8rem; border: 1px solid currentColor; border-radius: 999px; color: var(--muted); font-size: .8rem; }
 .connection-online { color: var(--accent); }
