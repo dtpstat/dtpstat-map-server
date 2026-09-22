@@ -834,6 +834,9 @@ async function uploadPortableFile(
           transfer.taskId = payload.task.id;
           transfer.mode = 'processing';
           applyTask(payload.task);
+          syncTransferOverlay(
+            state.task?.id === payload.task.id ? state.task : payload.task,
+          );
           const acceptedTaskKey = taskTypeTabs[payload.task.type] ?? taskKey;
           setTaskNotice(
             acceptedTaskKey,
