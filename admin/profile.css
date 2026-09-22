@@ -35,6 +35,7 @@
   object-fit: cover;
   border: 1px solid var(--line);
 }
+.profile-avatar[hidden] { display: none !important; }
 .profile-avatar-fallback {
   display: grid;
   place-items: center;
