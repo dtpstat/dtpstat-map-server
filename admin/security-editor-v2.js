@@ -1,3 +1,8 @@
+import { adminAlert, adminConfirm } from './admin-dialog.js';
+import { trackDirtyForm } from './admin-dirty-state.js';
+import { bindHumanUnits } from './admin-human-units.js';
+import { readTabState, writeTabState } from './admin-tab-state.js';
+
 const session = await globalThis.dtpstatAdminSession?.catch(() => null);
 const currentUser = session?.user;
 const host = document.querySelector('#security-editor-host');
@@ -117,21 +122,6 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         <div class="security-settings-grid">
           <form id="security-settings-form" class="security-settings-form">
             <h3>Защита входа и сессии</h3>
-            <fieldset><legend>Учётная запись</legend>
-              <label>Попыток до блокировки <input name="maxFailedAttempts" type="number" min="1" max="100" required></label>
-              <label>Окно попыток, сек. <input name="failureWindowSeconds" type="number" min="10" max="86400" required></label>
-              <label>Блокировка, сек. <input name="lockoutSeconds" type="number" min="10" max="604800" required></label>
-            </fieldset>
-            <fieldset><legend>IP</legend>
-              <label>Попыток до IP lockout <input name="ipMaxFailedAttempts" type="number" min="1" max="1000" required></label>
-              <label>Окно IP, сек. <input name="ipFailureWindowSeconds" type="number" min="10" max="86400" required></label>
-              <label>IP lockout, сек. <input name="ipLockoutSeconds" type="number" min="10" max="604800" required></label>
-            </fieldset>
-            <fieldset><legend>Сессии и аудит</legend>
-              <label>Idle timeout, сек. <input name="sessionIdleSeconds" type="number" min="60" max="86400" required></label>
-              <label>Максимальная жизнь сессии, сек. <input name="sessionAbsoluteSeconds" type="number" min="300" max="2592000" required></label>
-              <label>Хранить аудит, дней (0 = бессрочно) <input name="auditRetentionDays" type="number" min="0" max="3650" required></label>
-            </fieldset>
             <fieldset><legend>Политика паролей</legend>
               <div class="security-password-lengths">
                 <label>Минимум символов
@@ -147,8 +137,30 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
                 <label class="check"><input name="passwordRequireDigit" type="checkbox"> Цифра</label>
                 <label class="check"><input name="passwordRequireSpecial" type="checkbox"> Спецсимвол</label>
               </div>
-              <p class="security-info">Политика применяется к пользовательской смене пароля, заданным вручную паролям и новым временным паролям.</p>
+              <p class="security-info">Эти требования видит пользователь при смене временного или обычного пароля.</p>
             </fieldset>
+
+            <details class="admin-advanced-settings">
+              <summary>Тонкая настройка блокировок, сессий и аудита</summary>
+              <div class="admin-advanced-settings-body">
+                <p class="admin-advanced-settings-note">Эти параметры обычно меняет технический администратор. Рядом с секундами показывается привычное время.</p>
+                <fieldset><legend>Учётная запись</legend>
+                  <label>Попыток до блокировки <input name="maxFailedAttempts" type="number" min="1" max="100" required></label>
+                  <label>Окно попыток, сек. <input name="failureWindowSeconds" type="number" min="10" max="86400" required data-human-unit="seconds"></label>
+                  <label>Блокировка, сек. <input name="lockoutSeconds" type="number" min="10" max="604800" required data-human-unit="seconds"></label>
+                </fieldset>
+                <fieldset><legend>IP</legend>
+                  <label>Попыток до IP lockout <input name="ipMaxFailedAttempts" type="number" min="1" max="1000" required></label>
+                  <label>Окно IP, сек. <input name="ipFailureWindowSeconds" type="number" min="10" max="86400" required data-human-unit="seconds"></label>
+                  <label>IP lockout, сек. <input name="ipLockoutSeconds" type="number" min="10" max="604800" required data-human-unit="seconds"></label>
+                </fieldset>
+                <fieldset><legend>Сессии и аудит</legend>
+                  <label>Idle timeout, сек. <input name="sessionIdleSeconds" type="number" min="60" max="86400" required data-human-unit="seconds"></label>
+                  <label>Максимальная жизнь сессии, сек. <input name="sessionAbsoluteSeconds" type="number" min="300" max="2592000" required data-human-unit="seconds"></label>
+                  <label>Хранить аудит, дней (0 = бессрочно) <input name="auditRetentionDays" type="number" min="0" max="3650" required data-human-unit="days"></label>
+                </fieldset>
+              </div>
+            </details>
             <button type="submit">Сохранить параметры</button>
             <p id="security-settings-message" class="security-message" role="status"></p>
           </form>
@@ -207,6 +219,12 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
 
   const tabs = [...host.querySelectorAll('[data-security-tab]')];
   const panels = [...host.querySelectorAll('[data-security-panel]')];
+  const securitySettingsForm = host.querySelector('#security-settings-form');
+  const securitySettingsDirty = trackDirtyForm(
+    securitySettingsForm,
+    { label: 'Параметры безопасности' },
+  );
+  bindHumanUnits(host);
   const userById = new Map();
   let selectedUserId = null;
   let auditOffset = 0;
@@ -217,6 +235,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   const jsonBranchRenderers = new WeakMap();
 
   function selectTab(key) {
+    writeTabState('security', key);
     for (const tab of tabs) {
       const active = tab.dataset.securityTab === key;
       tab.setAttribute('aria-selected', String(active));
@@ -227,7 +246,8 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     if (key === 'security') void Promise.all([loadSettings(), loadIpBlocks()]);
   }
   for (const tab of tabs) tab.addEventListener('click', () => selectTab(tab.dataset.securityTab));
-  selectTab(tabs[0]?.dataset.securityTab);
+  const securityTabKeys = tabs.map((tab) => tab.dataset.securityTab);
+  selectTab(readTabState('security', securityTabKeys, securityTabKeys[0]));
 
   function showTemporaryPassword(password, username) {
     const overlay = host.querySelector('#security-secret-overlay');
@@ -356,7 +376,14 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     });
 
     detail.querySelector('#security-temp-password').addEventListener('click', async () => {
-      if (!window.confirm(`Сбросить пароль ${user.username}, завершить его сессии и выдать временный пароль?`)) return;
+      const confirmed = await adminConfirm({
+        title: 'Выдать временный пароль?',
+        message: `Пароль пользователя ${user.username} будет сброшен, а его активные сессии завершены.`,
+        confirmLabel: 'Сбросить пароль',
+        cancelLabel: 'Отмена',
+        destructive: true,
+      });
+      if (!confirmed) return;
       try {
         const payload = await api(`/api/admin/security/users/${user.id}/temporary-password`, { method: 'POST' });
         showTemporaryPassword(payload.temporaryPassword, user.username);
@@ -394,7 +421,14 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       }
     });
     detail.querySelector('#security-user-delete').addEventListener('click', async () => {
-      if (!window.confirm(`Удалить пользователя ${user.username}? Это действие необратимо.`)) return;
+      const confirmed = await adminConfirm({
+        title: 'Удалить пользователя?',
+        message: `Пользователь ${user.username} будет удалён. Это действие необратимо.`,
+        confirmLabel: 'Удалить пользователя',
+        cancelLabel: 'Отмена',
+        destructive: true,
+      });
+      if (!confirmed) return;
       try {
         await api(`/api/admin/security/users/${user.id}`, { method: 'DELETE' });
         selectedUserId = null;
@@ -779,10 +813,20 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     if (!canManageUsers || !entry.userId) return;
     const target = userById.get(entry.userId);
     if (target?.isBootstrap) {
-      window.alert('Bootstrap-администратор не может быть заблокирован вручную.');
+      await adminAlert({
+        title: 'Блокировка недоступна',
+        message: 'Bootstrap-администратор не может быть заблокирован вручную.',
+      });
       return;
     }
-    if (!window.confirm(`Заблокировать ${entry.username ?? `user #${entry.userId}`} на 1 час?`)) return;
+    const confirmed = await adminConfirm({
+      title: 'Заблокировать учётную запись?',
+      message: `${entry.username ?? `user #${entry.userId}`} будет заблокирован на 1 час.`,
+      confirmLabel: 'Заблокировать',
+      cancelLabel: 'Отмена',
+      destructive: true,
+    });
+    if (!confirmed) return;
     await api(`/api/admin/security/users/${entry.userId}/block`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -796,7 +840,14 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
 
   async function quickBlockIp(entry) {
     if (!canManageSecurity || !entry.ipAddress) return;
-    if (!window.confirm(`Заблокировать IP ${entry.ipAddress} на 1 час?`)) return;
+    const confirmed = await adminConfirm({
+      title: 'Заблокировать IP?',
+      message: `IP ${entry.ipAddress} будет заблокирован на 1 час.`,
+      confirmLabel: 'Заблокировать IP',
+      cancelLabel: 'Отмена',
+      destructive: true,
+    });
+    if (!confirmed) return;
     await api('/api/admin/security/ip-blocks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -969,6 +1020,8 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         if (control.type === 'checkbox') control.checked = Boolean(value);
         else control.value = value;
       }
+      bindHumanUnits(form);
+      securitySettingsDirty?.markClean();
       setMessage(message, 'Параметры загружены.');
     } catch (error) {
       setMessage(message, error.message, 'error');
@@ -999,6 +1052,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
       });
+      securitySettingsDirty?.markClean();
       setMessage(host.querySelector('#security-settings-message'), 'Параметры сохранены.', 'success');
     } catch (error) {
       setMessage(host.querySelector('#security-settings-message'), error.message, 'error');
