@@ -89,6 +89,72 @@ test('admin task keeps succeeded status but warns for partial results', async ()
   });
 });
 
+test('completed task status can be cleared while full log remains in audit', async () => {
+  const audits = [];
+  const events = [];
+  const manager = createAdminTaskManager({
+    randomUUID: () => 'audit-task',
+    recordTaskAudit: async (entry) => audits.push(entry),
+  });
+  manager.subscribe((event) => events.push(event));
+
+  manager.start({
+    type: 'population-update',
+    endpoint: '/api/admin/populations',
+    actor: {
+      userId: 7,
+      username: 'auditor',
+      ipAddress: '127.0.0.1',
+    },
+  }, async (context) => {
+    for (let index = 0; index < 125; index += 1) {
+      context.log(`step-${index}`, {
+        index,
+        password: `secret-${index}`,
+      });
+    }
+    return { cities: 125 };
+  });
+
+  await nextTurn();
+  const completed = manager.current();
+  assert.equal(completed.status, 'succeeded');
+  assert.equal(completed.log.length, 128);
+  assert.equal(audits.length, 1);
+  assert.equal(audits[0].details.taskLog.length, 128);
+  assert.equal(audits[0].details.taskLog[0].message, 'Задача принята сервером');
+  assert.equal(audits[0].details.taskLog.at(-1).message, 'Задача успешно завершена');
+  assert.equal(audits[0].details.taskLog[2].details.password, '[redacted]');
+
+  assert.equal(manager.clearCompleted(), true);
+  assert.equal(manager.current(), null);
+  assert.equal(manager.get('audit-task'), null);
+  assert.ok(events.some((event) =>
+    event.type === 'task' && event.task === null));
+  assert.equal(audits[0].details.taskLog.length, 128);
+});
+
+test('active task status cannot be cleared', async () => {
+  let finish;
+  const manager = createAdminTaskManager({
+    randomUUID: () => 'active-clear-task',
+  });
+  manager.start({
+    type: 'population-update',
+    endpoint: '/api/admin/populations',
+  }, () => new Promise((resolve) => {
+    finish = resolve;
+  }));
+  await nextTurn();
+
+  assert.equal(manager.current().status, 'running');
+  assert.equal(manager.clearCompleted(), false);
+  assert.equal(manager.current().id, 'active-clear-task');
+
+  finish({ cities: 1 });
+  await nextTurn();
+});
+
 test('admin task cancellation is cooperative and disabled during atomic commit', async () => {
   let finishTask;
   const manager = createAdminTaskManager({ randomUUID: () => 'cancel-task' });
