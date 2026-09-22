@@ -16,6 +16,7 @@ import {
   resolveOsmCityUpdateRequest,
 } from '../data/osm-city-update-options.js';
 import { acquireDataImportLock } from './database-locks.js';
+import { rebuildCityBoundaryHierarchy } from './city-boundary-hierarchy.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 const RETRYABLE_HTTP_STATUS_CODES = new Set([429, 502, 503, 504]);
@@ -154,7 +155,11 @@ const PRESERVE_LINKS_SQL = `
     city_id,
     is_active,
     display_name,
-    display_type
+    display_type,
+    population,
+    population_as_of,
+    population_source,
+    attributes
   FROM city_boundaries;
 
   CREATE TEMP TABLE old_geometry_boundary_links ON COMMIT DROP AS
@@ -247,6 +252,10 @@ const INSERT_BOUNDARIES_SQL = `
     is_active,
     display_name,
     display_type,
+    population,
+    population_as_of,
+    population_source,
+    attributes,
     area_m2
   )
   SELECT
@@ -271,6 +280,10 @@ const INSERT_BOUNDARIES_SQL = `
       stage.place_type,
       'administrative'
     ),
+    old_link.population,
+    old_link.population_as_of,
+    old_link.population_source,
+    COALESCE(old_link.attributes, '{}'::jsonb),
     ST_Area(stage.geom::geography)
   FROM osm_city_boundary_stage AS stage
   LEFT JOIN old_city_boundary_links AS old_link
@@ -496,6 +509,13 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
       console.warn(
         `OSM geometry batch ${progress.batch}: ${reason}; split ` +
         `${progress.objectCount} objects into ${progress.splitSizes.join('+')}`,
+      );
+      return;
+    }
+    if (progress.phase === 'hierarchy') {
+      console.info(
+        `OSM boundary hierarchy ${progress.processed}/${progress.total}: ` +
+        `batch ${progress.batch}/${progress.batchCount}`,
       );
       return;
     }
@@ -1128,7 +1148,13 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           throw new Error('Not every buildable OSM boundary was inserted');
         }
         await client.query(ACTIVATE_NEW_PLACES_SQL);
-        await client.query('SELECT rebuild_city_boundary_hierarchy()');
+        await rebuildCityBoundaryHierarchy(client, {
+          signal: operation.signal,
+          onProgress(progress) {
+            reportProgress(progress);
+            operation.onProgress?.(progress);
+          },
+        });
         const restoredLinksResult = await client.query(
           RESTORE_GEOMETRY_LINKS_SQL,
         );
@@ -1138,6 +1164,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         // line rows as part of the same transaction.
         await client.query('SELECT sync_active_boundary_cities()');
         await client.query('SELECT assert_city_geometry_invariants()');
+        await client.query('SELECT sync_active_boundary_populations()');
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
 

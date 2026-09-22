@@ -3,40 +3,92 @@ import test from 'node:test';
 import { createPopulationImportService } from '../src/db/population-import-service.js';
 
 const upload = {
+  schemaVersion: 2,
   asOf: '2026-01-01',
   source: 'test',
-  populations: [{ name: 'Тестоград', population: 2000 }],
+  regions: [{
+    name: 'Тестовая область',
+    attributes: { federalDistrict: 'Тестовый округ' },
+    cities: [{
+      name: 'Тестоград',
+      population: 2000,
+      attributes: {},
+    }],
+  }],
 };
 
 function createFakePool({
-  unknownCities = [],
-  ambiguousCities = [],
-  updatedCities = 1,
+  statuses = null,
+  updatedRegions = null,
+  updatedCities = null,
 } = {}) {
   const queries = [];
+  const rawRows = [];
+  const stageRows = [];
   let released = false;
+
   const client = {
     async query(text, values = []) {
       const normalized = text.trim();
       queries.push(normalized);
-      if (
-        normalized.startsWith('INSERT INTO population_transfer_raw') ||
-        normalized.startsWith('INSERT INTO population_transfer_stage')
-      ) {
-        return {
-          rows: [],
-          rowCount: values[0] ? JSON.parse(values[0]).length : 0,
-        };
+
+      if (normalized.startsWith('INSERT INTO population_transfer_raw')) {
+        const rows = values[0] ? JSON.parse(values[0]) : [];
+        rawRows.push(...rows);
+        return { rows: [], rowCount: rows.length };
       }
-      if (normalized.includes('COUNT(boundary.id)::integer AS match_count')) {
-        const rows = [
-          ...unknownCities.map((name) => ({ name, type: null, match_count: 0 })),
-          ...ambiguousCities.map((name) => ({ name, type: null, match_count: 2 })),
-        ];
+      if (normalized.startsWith('INSERT INTO population_transfer_stage')) {
+        const rows = values[0] ? JSON.parse(values[0]) : [];
+        stageRows.push(...rows);
+        return { rows: [], rowCount: rows.length };
+      }
+      if (
+        normalized.startsWith('SELECT seq::text AS seq, item') &&
+        normalized.includes('FROM population_transfer_raw')
+      ) {
+        const after = Number(values[0]);
+        const limit = Number(values[1]);
+        const rows = rawRows
+          .filter((row) => Number(row.seq) > after)
+          .sort((a, b) => Number(a.seq) - Number(b.seq))
+          .slice(0, limit)
+          .map((row) => ({ seq: String(row.seq), item: row.item }));
         return { rows, rowCount: rows.length };
       }
-      if (normalized.includes('INSERT INTO city_populations')) {
-        return { rows: [], rowCount: updatedCities };
+      if (
+        normalized.startsWith('SELECT') &&
+        normalized.includes('FROM population_transfer_resolved')
+      ) {
+        const rows = statuses ?? stageRows.map((row) => ({
+          regionName: row.regionName,
+          cityName: row.cityName,
+          status: 'matched',
+        }));
+        return { rows, rowCount: rows.length };
+      }
+      if (
+        normalized.startsWith('UPDATE city_boundaries AS boundary') &&
+        normalized.includes('source.region_attributes')
+      ) {
+        const count = updatedRegions ??
+          new Set(stageRows.map((row) => row.regionName)).size;
+        return {
+          rows: Array.from({ length: count }, (_v, index) => ({ id: index + 1 })),
+          rowCount: count,
+        };
+      }
+      if (
+        normalized.startsWith('UPDATE city_boundaries AS boundary') &&
+        normalized.includes('population = stage.population')
+      ) {
+        const matched = statuses === null
+          ? stageRows.length
+          : statuses.filter((row) => row.status === 'matched').length;
+        const count = updatedCities ?? matched;
+        return {
+          rows: Array.from({ length: count }, (_v, index) => ({ id: index + 1 })),
+          rowCount: count,
+        };
       }
       return { rows: [], rowCount: 0 };
     },
@@ -47,87 +99,189 @@ function createFakePool({
 
   return {
     queries,
-    get released() {
-      return released;
-    },
-    async connect() {
-      return client;
-    },
+    rawRows,
+    stageRows,
+    get released() { return released; },
+    async connect() { return client; },
   };
 }
 
-test('population update upserts data and recalculates city statistics', async () => {
+test('population update matches city names inside a named region', async () => {
   const pool = createFakePool();
   const service = createPopulationImportService(pool);
 
   const result = await service.updateFromJson(upload);
 
+  assert.equal(result.regions, 1);
+  assert.equal(result.requestedRegions, 1);
   assert.equal(result.cities, 1);
   assert.equal(result.requestedCities, 1);
   assert.equal(result.skippedCount, 0);
+  assert.equal(result.partial, false);
   assert.deepEqual(result.skippedCities, []);
-  assert.equal(result.ambiguousCount, 0);
-  assert.deepEqual(result.ambiguousCities, []);
   assert.equal(result.asOf, '2026-01-01');
   assert.equal(pool.queries[0], 'BEGIN');
+  assert.ok(
+    pool.queries.some((query) =>
+      query.startsWith('CREATE TEMP TABLE population_transfer_resolved')),
+  );
+  assert.ok(pool.queries.includes('SELECT sync_active_boundary_populations()'));
   assert.match(pool.queries.at(-2), /^WITH geometry_statistics AS/);
   assert.equal(pool.queries.at(-1), 'COMMIT');
   assert.equal(pool.released, true);
 });
 
-test('population update skips cities that are absent from the database', async () => {
+test('missing and ambiguous names are skipped and valid cities still commit', async () => {
+  const statuses = [
+    {
+      regionName: 'Тестовая область',
+      cityName: 'Тестоград',
+      status: 'matched',
+    },
+    {
+      regionName: 'Тестовая область',
+      cityName: 'Нет в БД',
+      status: 'city-missing',
+    },
+    {
+      regionName: 'Тестовая область',
+      cityName: 'Дубль в БД',
+      status: 'city-ambiguous',
+    },
+  ];
   const pool = createFakePool({
-    unknownCities: ['Киров'],
+    statuses,
     updatedCities: 1,
   });
   const service = createPopulationImportService(pool);
-  const mixedUpload = {
+  const mixed = {
     ...upload,
-    populations: [
-      { name: 'Тестоград', population: 2000 },
-      { name: 'Киров', population: 450000 },
+    regions: [{
+      ...upload.regions[0],
+      cities: [
+        upload.regions[0].cities[0],
+        { name: 'Нет в БД', population: 1000, attributes: {} },
+        { name: 'Дубль в БД', population: 2000, attributes: {} },
+      ],
+    }],
+  };
+  const progress = [];
+
+  const result = await service.updateFromJson(mixed, {
+    onProgress(value) { progress.push(value); },
+  });
+
+  assert.equal(result.cities, 1);
+  assert.equal(result.requestedCities, 3);
+  assert.equal(result.skippedCount, 2);
+  assert.equal(result.warningCount, 2);
+  assert.equal(result.partial, true);
+  assert.deepEqual(
+    result.skippedCities,
+    [
+      'Тестовая область / Нет в БД',
+      'Тестовая область / Дубль в БД',
     ],
+  );
+  assert.ok(result.warnings.some((item) => item.code === 'city-missing'));
+  assert.ok(result.warnings.some((item) => item.code === 'city-ambiguous'));
+  assert.ok(progress.some((item) =>
+    item.phase === 'warnings' &&
+    item.warningCount === 2 &&
+    item.skippedCount === 2));
+  assert.equal(pool.queries.at(-1), 'COMMIT');
+  assert.equal(pool.queries.includes('ROLLBACK'), false);
+});
+
+test('invalid individual city is skipped before database staging', async () => {
+  const pool = createFakePool();
+  const service = createPopulationImportService(pool);
+  const mixed = {
+    ...upload,
+    regions: [{
+      ...upload.regions[0],
+      cities: [
+        upload.regions[0].cities[0],
+        { name: 'Плохой', population: 0, attributes: {} },
+      ],
+    }],
   };
 
-  const result = await service.updateFromJson(mixedUpload);
+  const result = await service.updateFromJson(mixed);
 
   assert.equal(result.cities, 1);
   assert.equal(result.requestedCities, 2);
+  assert.equal(result.normalizedCities, 1);
   assert.equal(result.skippedCount, 1);
-  assert.deepEqual(result.skippedCities, ['Киров']);
+  assert.equal(result.partial, true);
+  assert.equal(pool.stageRows.length, 1);
+  assert.equal(pool.stageRows[0].cityName, 'Тестоград');
   assert.equal(pool.queries.at(-1), 'COMMIT');
-  assert.equal(pool.released, true);
-  assert.match(pool.queries.join('\n'), /INSERT INTO city_populations/);
 });
 
-
-test('population update reports ambiguous legacy names instead of guessing', async () => {
-  const pool = createFakePool({
-    ambiguousCities: ['Октябрьский'],
-    updatedCities: 0,
+test('streamed population cursor keeps numeric region order without rereading', async () => {
+  const regions = Array.from({ length: 12 }, (_value, index) => ({
+    name: `Область ${index}`,
+    attributes: {},
+    cities: [{
+      name: `Город ${index}`,
+      population: 1000 + index,
+      attributes: {},
+    }],
+  }));
+  const document = JSON.stringify({
+    schemaVersion: 2,
+    regions,
   });
+
+  async function* source() {
+    const buffer = Buffer.from(document);
+    for (let offset = 0; offset < buffer.length; offset += 37) {
+      yield buffer.subarray(offset, offset + 37);
+    }
+  }
+
+  const pool = createFakePool();
   const service = createPopulationImportService(pool);
-
-  const result = await service.updateFromJson({
-    populations: [{ name: 'Октябрьский', population: 10000 }],
+  const progress = [];
+  const result = await service.updateFromJsonStream(source(), {
+    maxJsonBytes: Buffer.byteLength(document) + 1,
+    maxItemBytes: 1024 * 1024,
+    maxJsonItems: 1000,
+    maxJsonDepth: 128,
+    onProgress(value) { progress.push(value); },
   });
 
-  assert.equal(result.cities, 0);
-  assert.equal(result.skippedCount, 0);
-  assert.equal(result.ambiguousCount, 1);
-  assert.deepEqual(result.ambiguousCities, ['Октябрьский']);
-  assert.equal(pool.queries.at(-1), 'COMMIT');
+  assert.equal(result.requestedRegions, 12);
+  assert.equal(result.requestedCities, 12);
+  assert.equal(result.cities, 12);
+  assert.equal(result.warningCount, 0);
+  assert.deepEqual(
+    progress
+      .filter((item) => item.phase === 'normalize-stage')
+      .map((item) => item.processedRegions),
+    Array.from({ length: 12 }, (_value, index) => index + 1),
+  );
+  const cursorSql = pool.queries.find((query) =>
+    query.includes('FROM population_transfer_raw') &&
+    query.includes('SELECT seq::text AS seq, item'));
+  assert.match(cursorSql, /WHERE seq > \$1::bigint/);
+  assert.match(cursorSql, /ORDER BY population_transfer_raw\.seq/);
 });
 
-
-test('streamed population import rolls back staged records when JSON fails late', async () => {
-  const populations = Array.from({ length: 101 }, (_value, index) => ({
-    name: `Город ${index}`,
-    population: 1000 + index,
+test('streamed population import rolls back when JSON fails late', async () => {
+  const regions = Array.from({ length: 101 }, (_value, index) => ({
+    name: `Область ${index}`,
+    attributes: {},
+    cities: [{
+      name: `Город ${index}`,
+      population: 1000 + index,
+      attributes: {},
+    }],
   }));
   const malformed =
-    '{"asOf":"2026-01-01","populations":' +
-    JSON.stringify(populations) +
+    '{"schemaVersion":2,"regions":' +
+    JSON.stringify(regions) +
     ',"broken":';
 
   async function* source() {
@@ -144,6 +298,8 @@ test('streamed population import rolls back staged records when JSON fails late'
     service.updateFromJsonStream(source(), {
       maxJsonBytes: Buffer.byteLength(malformed) + 1,
       maxItemBytes: 1024 * 1024,
+      maxJsonItems: 1000,
+      maxJsonDepth: 128,
     }),
     /Unexpected end|JSON value/,
   );
@@ -156,6 +312,5 @@ test('streamed population import rolls back staged records when JSON fails late'
   );
   assert.equal(pool.queries.at(-1), 'ROLLBACK');
   assert.equal(pool.queries.includes('COMMIT'), false);
-  assert.doesNotMatch(pool.queries.join('\n'), /INSERT INTO city_populations/);
   assert.equal(pool.released, true);
 });

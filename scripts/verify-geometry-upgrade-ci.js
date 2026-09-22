@@ -1,5 +1,7 @@
 import 'dotenv/config';
 import assert from 'node:assert/strict';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createDatabaseClient } from './database.js';
 import { loadDatabaseSchema } from '../src/db/database-environment.js';
 import { applyMigrations, loadMigrations } from './migrate.js';
@@ -9,17 +11,19 @@ const client = createDatabaseClient();
 
 await client.connect();
 try {
-  const migrations = await loadMigrations();
-  const throughV035 = migrations.filter((migration) => migration.version <= 35);
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const migrations = await loadMigrations(path.join(root, 'db', 'migrations'));
+  const throughV036 = migrations.filter((migration) => migration.version <= 36);
 
-  const version35 = await applyMigrations(client, throughV035, { schema });
-  assert.equal(version35, 35, 'Expected pre-upgrade schema version 35');
+  const version36Result = await applyMigrations(client, throughV036, { schema });
+  const version36 = version36Result.version;
+  assert.equal(version36, 36, 'Expected pre-upgrade schema version 36');
 
   const lineType = await client.query(
     'SELECT id::bigint AS id FROM line_types ORDER BY id LIMIT 1',
   );
   const lineTypeId = Number(lineType.rows[0]?.id);
-  assert(lineTypeId > 0, 'V035 schema has no line type for legacy geometry seed');
+  assert(lineTypeId > 0, 'V036 schema has no line type for legacy geometry seed');
 
   const inserted = await client.query(`
     WITH legacy AS (
@@ -77,8 +81,9 @@ try {
   `);
   assert.equal(before.rows[0]?.count, 10, 'Legacy detached seed is invalid');
 
-  const finalVersion = await applyMigrations(client, migrations, { schema });
-  assert.equal(finalVersion, 39, 'Expected final schema version 39');
+  const finalResult = await applyMigrations(client, migrations, { schema });
+  const finalVersion = finalResult.version;
+  assert.equal(finalVersion, 40, 'Expected final schema version 40');
 
   const after = await client.query(`
     SELECT COUNT(*)::integer AS count
@@ -112,7 +117,7 @@ try {
   );
 
   console.log(JSON.stringify({
-    fromVersion: 35,
+    fromVersion: 36,
     toVersion: finalVersion,
     preservedDetachedGeometries: after.rows[0].count,
     effectiveDetachedGeometries: effective.rows[0].count,

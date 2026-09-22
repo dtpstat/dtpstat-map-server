@@ -40,6 +40,11 @@ const statusOrder = Object.freeze({
   succeeded: 3,
   failed: 3,
 });
+const fileImportTaskTypes = new Set([
+  'city-geojson-import',
+  'geojson-import',
+  'population-update',
+]);
 const state = {
   task: null,
   adminConfig: null,
@@ -54,6 +59,7 @@ const state = {
   },
   socket: null,
   reconnectTimer: null,
+  transfer: null,
 };
 const elements = {
   connection: document.querySelector('#connection-state'),
@@ -86,6 +92,590 @@ const elements = {
   populationForm: document.querySelector('#population-form'),
 };
 const taskNotices = createTaskNotices(elements.notices, taskNames);
+const transferOverlay = createTransferOverlay();
+
+function formatTransferBytes(bytes) {
+  const value = Number(bytes);
+  if (!Number.isFinite(value) || value < 0) return '—';
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+  let size = value;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  const digits = unit === 0 ? 0 : size >= 100 ? 0 : size >= 10 ? 1 : 2;
+  return `${size.toFixed(digits)} ${units[unit]}`;
+}
+
+function formatTransferDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return null;
+  const rounded = Math.max(0, Math.round(seconds));
+  if (rounded < 60) return `${rounded} сек`;
+  const minutes = Math.floor(rounded / 60);
+  const remainder = rounded % 60;
+  return remainder === 0
+    ? `${minutes} мин`
+    : `${minutes} мин ${remainder} сек`;
+}
+
+function createTransferOverlay() {
+  const root = document.createElement('div');
+  root.className = 'admin-transfer-overlay';
+  root.hidden = true;
+  root.setAttribute('role', 'dialog');
+  root.setAttribute('aria-modal', 'true');
+  root.setAttribute('aria-labelledby', 'admin-transfer-title');
+  root.innerHTML = `
+    <section class="admin-transfer-dialog">
+      <p class="eyebrow">ИМПОРТ ДАННЫХ</p>
+      <h2 id="admin-transfer-title">Выполняется импорт</h2>
+      <p class="admin-transfer-file"></p>
+      <p class="admin-transfer-phase">Подготовка…</p>
+      <div class="admin-transfer-progress-row">
+        <progress class="admin-transfer-progress" max="100"></progress>
+        <strong class="admin-transfer-percent"></strong>
+      </div>
+      <p class="admin-transfer-amount"></p>
+      <div class="admin-transfer-processing-status" hidden>
+        <p class="admin-transfer-json-status"></p>
+        <p class="admin-transfer-db-status"></p>
+      </div>
+      <p class="admin-transfer-detail"></p>
+      <button class="danger admin-transfer-cancel" type="button">Отменить</button>
+    </section>
+  `;
+  document.body.append(root);
+
+  const overlay = {
+    root,
+    file: root.querySelector('.admin-transfer-file'),
+    phase: root.querySelector('.admin-transfer-phase'),
+    progress: root.querySelector('.admin-transfer-progress'),
+    percent: root.querySelector('.admin-transfer-percent'),
+    amount: root.querySelector('.admin-transfer-amount'),
+    processingStatus: root.querySelector('.admin-transfer-processing-status'),
+    jsonStatus: root.querySelector('.admin-transfer-json-status'),
+    dbStatus: root.querySelector('.admin-transfer-db-status'),
+    detail: root.querySelector('.admin-transfer-detail'),
+    cancel: root.querySelector('.admin-transfer-cancel'),
+  };
+
+  overlay.cancel.addEventListener('click', () => {
+    const transfer = state.transfer;
+    if (!transfer || transfer.cancelRequested) return;
+    transfer.cancelRequested = true;
+    renderTransferOverlay();
+
+    if (transfer.mode === 'upload' && transfer.xhr) {
+      transfer.xhr.abort();
+      return;
+    }
+    if (transfer.mode === 'processing' && transfer.taskId) {
+      void cancelActiveTask();
+    }
+  });
+
+  return overlay;
+}
+
+function reverseFind(values, predicate) {
+  for (let index = values.length - 1; index >= 0; index -= 1) {
+    if (predicate(values[index])) return values[index];
+  }
+  return null;
+}
+
+function processingProgress(task) {
+  const logs = task?.log ?? [];
+  const prepared = logs.find((entry) =>
+    entry.message === 'Входной поток подготовлен');
+  const commitStarted = logs.some((entry) =>
+    entry.message === 'Начата атомарная фиксация изменений');
+  const progressEntry = reverseFind(
+    logs,
+    (entry) => typeof entry.details?.phase === 'string',
+  );
+  const details = progressEntry?.details ?? {};
+  const phase = commitStarted ? 'commit' : details.phase ?? 'accepted';
+
+  let expectedJsonBytes = Number(prepared?.details?.expectedJsonBytes);
+  if (!Number.isFinite(expectedJsonBytes) || expectedJsonBytes <= 0) {
+    const transport = task?.parameters?.transport;
+    if (transport !== 'application/zip') {
+      expectedJsonBytes = Number(task?.parameters?.uploadBytes);
+    }
+  }
+
+  let label = 'Сервер обрабатывает файл…';
+  let ratio = null;
+  let amount = '';
+  let detail = progressEntry?.message ?? '';
+
+  if (phase === 'parse') {
+    label = 'Разбор JSON';
+    const decodedBytes = Number(details.decodedBytes);
+    if (
+      Number.isFinite(decodedBytes) &&
+      decodedBytes >= 0 &&
+      Number.isFinite(expectedJsonBytes) &&
+      expectedJsonBytes > 0
+    ) {
+      ratio = Math.min(1, decodedBytes / expectedJsonBytes);
+      amount =
+        `${formatTransferBytes(decodedBytes)} / ` +
+        formatTransferBytes(expectedJsonBytes);
+    }
+    if (Number.isFinite(Number(details.items))) {
+      detail = `Разобрано записей: ${Number(details.items).toLocaleString('ru-RU')}`;
+    }
+  } else if (phase === 'parsed') {
+    label = 'JSON разобран';
+    ratio = 1;
+    const decodedBytes = Number(details.decodedBytes);
+    if (Number.isFinite(decodedBytes)) {
+      amount = formatTransferBytes(decodedBytes);
+    }
+    if (Number.isFinite(Number(details.items))) {
+      detail = `Записей: ${Number(details.items).toLocaleString('ru-RU')}`;
+    }
+  } else if (phase === 'raw-stage') {
+    label = 'Подготовка входных данных';
+    if (Number.isFinite(Number(details.features))) {
+      detail = `Подготовлен пакет: ${Number(details.features).toLocaleString('ru-RU')} записей`;
+    }
+  } else if (phase === 'normalize-stage') {
+    label = 'Нормализация данных';
+    const regionProgress =
+      Number.isFinite(Number(details.processedRegions)) &&
+      Number.isFinite(Number(details.parsedRegions)) &&
+      Number(details.parsedRegions) > 0;
+    const processed = regionProgress
+      ? Number(details.processedRegions)
+      : Number(details.processedFeatures ?? details.staged);
+    const total = regionProgress
+      ? Number(details.parsedRegions)
+      : Number(details.parsedFeatures ?? details.parsedRecords);
+    if (
+      Number.isFinite(processed) &&
+      Number.isFinite(total) &&
+      total > 0
+    ) {
+      ratio = Math.min(1, processed / total);
+      amount =
+        `${processed.toLocaleString('ru-RU')} / ` +
+        total.toLocaleString('ru-RU') +
+        (regionProgress ? ' регионов' : '');
+    }
+    if (regionProgress && Number.isFinite(Number(details.staged))) {
+      detail =
+        `Городов подготовлено: ` +
+        Number(details.staged).toLocaleString('ru-RU');
+    } else if (Number.isFinite(Number(details.stagedGeometries))) {
+      detail =
+        `Геометрий подготовлено: ` +
+        Number(details.stagedGeometries).toLocaleString('ru-RU');
+    }
+  } else if (phase === 'stage-write') {
+    label = 'Запись пакета в PostgreSQL/PostGIS';
+    const batch = Number(details.batch);
+    const batchPlaces = Number(details.batchPlaces);
+    const stagedPlaces = Number(details.stagedPlaces);
+    if (Number.isFinite(batch)) {
+      amount = `Пакет ${batch.toLocaleString('ru-RU')}`;
+    }
+    const parts = [];
+    if (Number.isFinite(batchPlaces)) {
+      parts.push(
+        `объектов в пакете: ${batchPlaces.toLocaleString('ru-RU')}`,
+      );
+    }
+    if (Number.isFinite(stagedPlaces)) {
+      parts.push(
+        `уже записано: ${stagedPlaces.toLocaleString('ru-RU')}`,
+      );
+    }
+    detail = parts.length > 0
+      ? `Ожидаем PostgreSQL/PostGIS · ${parts.join(' · ')}`
+      : 'Ожидаем завершения PostgreSQL/PostGIS.';
+  } else if (phase === 'stage') {
+    label = 'Подготовка данных в БД';
+    const batch = Number(details.batch);
+    const batchCount = Number(details.batchCount);
+    if (
+      Number.isFinite(batch) &&
+      Number.isFinite(batchCount) &&
+      batchCount > 0
+    ) {
+      ratio = Math.min(1, batch / batchCount);
+      amount = `Пакет ${batch.toLocaleString('ru-RU')} / ${batchCount.toLocaleString('ru-RU')}`;
+    } else {
+      const staged = Number(details.stagedPlaces);
+      const places = Number(details.places);
+      if (Number.isFinite(staged) && Number.isFinite(places) && places > 0) {
+        ratio = Math.min(1, staged / places);
+        amount =
+          `${staged.toLocaleString('ru-RU')} / ` +
+          places.toLocaleString('ru-RU');
+      }
+    }
+  } else if (phase === 'warnings') {
+    label = 'Есть предупреждения';
+    const warningCount = Number(details.warningCount);
+    const skippedCount = Number(details.skippedCount);
+    if (Number.isFinite(warningCount)) {
+      amount = `${warningCount.toLocaleString('ru-RU')} предупреждений`;
+    }
+    if (Number.isFinite(skippedCount)) {
+      detail =
+        `Пропущено записей: ` +
+        skippedCount.toLocaleString('ru-RU') +
+        '. Остальные данные будут сохранены.';
+    } else {
+      detail = 'Остальные корректные данные будут сохранены.';
+    }
+  } else if (phase === 'validated' || phase === 'validate-stage') {
+    label = 'Проверка данных завершена';
+    detail = 'Подготавливаются изменения базы данных.';
+  } else if (phase === 'cities') {
+    label = 'Подготовка городов';
+  } else if (phase === 'preserve-links') {
+    label = 'Сохранение существующих связей';
+  } else if (phase === 'delete-boundaries') {
+    label = 'Удаление старых территорий';
+    detail = 'Сохраняемые связи уже зафиксированы; удаляется прежний snapshot.';
+  } else if (phase === 'insert-boundaries') {
+    label = 'Вставка новых территорий';
+    const places = Number(details.places);
+    detail = Number.isFinite(places)
+      ? `Записывается ${places.toLocaleString('ru-RU')} объектов.`
+      : 'Записывается новый snapshot территорий.';
+  } else if (phase === 'replace-boundaries') {
+    label = 'Замена геометрий';
+  } else if (phase === 'hierarchy') {
+    label = 'Построение иерархии территорий';
+    const processed = Number(details.processed);
+    const total = Number(details.total);
+    const batch = Number(details.batch);
+    const batchCount = Number(details.batchCount);
+    if (Number.isFinite(processed) && Number.isFinite(total) && total > 0) {
+      ratio = Math.min(1, processed / total);
+      amount =
+        `${processed.toLocaleString('ru-RU')} / ` +
+        total.toLocaleString('ru-RU') +
+        ' объектов';
+    }
+    if (
+      Number.isFinite(batch) &&
+      Number.isFinite(batchCount) &&
+      batchCount > 0
+    ) {
+      detail =
+        `Пакет ${batch.toLocaleString('ru-RU')} / ` +
+        batchCount.toLocaleString('ru-RU');
+    } else {
+      detail = 'Поиск непосредственного родителя по геометрическому покрытию.';
+    }
+  } else if (phase === 'restore-links') {
+    label = 'Восстановление связей';
+  } else if (phase === 'database') {
+    label = 'Изменения базы данных подготовлены';
+    detail = 'Ожидается атомарная фиксация транзакции.';
+  } else if (phase === 'commit') {
+    label = 'Фиксация транзакции';
+    detail = 'Отмена на этом этапе уже недоступна.';
+  }
+
+  return { label, ratio, amount, detail };
+}
+
+function stableProcessingView(task) {
+  const logs = task?.log ?? [];
+  const prepared = logs.find((entry) =>
+    entry.message === 'Входной поток подготовлен');
+  const parseEntries = logs.filter((entry) =>
+    ['parse', 'parsed'].includes(entry.details?.phase) &&
+    Number.isFinite(Number(entry.details?.decodedBytes)));
+  const latestParse = parseEntries.at(-1) ?? null;
+  const parsed = reverseFind(
+    logs,
+    (entry) => entry.details?.phase === 'parsed',
+  );
+  const databaseEntry = reverseFind(
+    logs,
+    (entry) => ['stage-write', 'stage'].includes(entry.details?.phase),
+  );
+  const current = processingProgress(task);
+
+  if (!latestParse) {
+    return {
+      ...current,
+      jsonStatus: '',
+      databaseStatus: '',
+      stableInputProgress: false,
+    };
+  }
+
+  let expectedJsonBytes = Number(prepared?.details?.expectedJsonBytes);
+  if (!Number.isFinite(expectedJsonBytes) || expectedJsonBytes <= 0) {
+    const transport = task?.parameters?.transport;
+    if (transport !== 'application/zip') {
+      expectedJsonBytes = Number(task?.parameters?.uploadBytes);
+    }
+  }
+
+  let decodedBytes = 0;
+  let itemCount = 0;
+  for (const entry of parseEntries) {
+    decodedBytes = Math.max(
+      decodedBytes,
+      Number(entry.details?.decodedBytes) || 0,
+    );
+    const items = Number(entry.details?.items);
+    if (Number.isFinite(items)) itemCount = Math.max(itemCount, items);
+  }
+  const ratio =
+    Number.isFinite(expectedJsonBytes) && expectedJsonBytes > 0
+      ? Math.min(1, decodedBytes / expectedJsonBytes)
+      : (parsed ? 1 : null);
+  const amount =
+    Number.isFinite(expectedJsonBytes) && expectedJsonBytes > 0
+      ? `${formatTransferBytes(decodedBytes)} / ${formatTransferBytes(expectedJsonBytes)}`
+      : formatTransferBytes(decodedBytes);
+
+  const jsonStatus = [
+    `JSON: ${formatTransferBytes(decodedBytes)}` +
+      (Number.isFinite(expectedJsonBytes) && expectedJsonBytes > 0
+        ? ` / ${formatTransferBytes(expectedJsonBytes)}`
+        : ''),
+    itemCount > 0
+      ? `${itemCount.toLocaleString('ru-RU')} записей`
+      : null,
+  ].filter(Boolean).join(' · ');
+
+  let databaseStatus = '';
+  if (databaseEntry) {
+    const details = databaseEntry.details ?? {};
+    const batch = Number(details.batch);
+    const staged = Number(details.stagedPlaces);
+    const batchPlaces = Number(details.batchPlaces);
+    const writing = details.phase === 'stage-write';
+    const parts = [
+      Number.isFinite(batch)
+        ? `пакет ${batch.toLocaleString('ru-RU')}`
+        : null,
+      writing
+        ? 'запись…'
+        : 'записан',
+      Number.isFinite(staged)
+        ? `всего ${staged.toLocaleString('ru-RU')} объектов`
+        : null,
+      writing && Number.isFinite(batchPlaces)
+        ? `в пакете ${batchPlaces.toLocaleString('ru-RU')}`
+        : null,
+    ].filter(Boolean);
+    databaseStatus = `PostgreSQL/PostGIS: ${parts.join(' · ')}`;
+  }
+
+  const currentEntry = reverseFind(
+    logs,
+    (entry) => typeof entry.details?.phase === 'string',
+  );
+  const currentPhase = currentEntry?.details?.phase;
+  if (currentPhase === 'hierarchy') {
+    const hierarchy = currentEntry.details ?? {};
+    const processed = Number(hierarchy.processed);
+    const total = Number(hierarchy.total);
+    const batch = Number(hierarchy.batch);
+    const batchCount = Number(hierarchy.batchCount);
+    const parts = [];
+    if (Number.isFinite(processed) && Number.isFinite(total)) {
+      parts.push(
+        `иерархия ${processed.toLocaleString('ru-RU')} / ` +
+        total.toLocaleString('ru-RU'),
+      );
+    }
+    if (Number.isFinite(batch) && Number.isFinite(batchCount)) {
+      parts.push(
+        `пакет ${batch.toLocaleString('ru-RU')} / ` +
+        batchCount.toLocaleString('ru-RU'),
+      );
+    }
+    databaseStatus = `PostgreSQL/PostGIS: ${parts.join(' · ')}`;
+  }
+  const interleaved = ['parse', 'stage-write', 'stage'].includes(currentPhase);
+  const label = parsed
+    ? (interleaved ? 'Входной JSON прочитан' : current.label)
+    : 'Чтение и подготовка входного JSON';
+  const detail = interleaved
+    ? 'JSON и staging обрабатываются потоково; индикатор выше показывает только реальный прогресс чтения входного JSON.'
+    : current.detail;
+
+  return {
+    ...current,
+    label,
+    ratio,
+    amount,
+    detail,
+    jsonStatus,
+    databaseStatus,
+    stableInputProgress: true,
+  };
+}
+
+function showTransferOverlay({ file, taskKey, taskType }) {
+  state.transfer = {
+    mode: 'upload',
+    taskId: null,
+    taskKey,
+    taskType,
+    fileName: file.name,
+    loaded: 0,
+    total: file.size,
+    startedAt: performance.now(),
+    speed: 0,
+    xhr: null,
+    cancelRequested: false,
+  };
+  syncSessionActivityHold();
+  renderTransferOverlay();
+}
+
+function hideTransferOverlay() {
+  state.transfer = null;
+  syncSessionActivityHold();
+  transferOverlay.root.hidden = true;
+  document.body.classList.remove('admin-transfer-locked');
+}
+
+function renderTransferOverlay() {
+  const transfer = state.transfer;
+  if (!transfer) {
+    transferOverlay.root.hidden = true;
+    document.body.classList.remove('admin-transfer-locked');
+    return;
+  }
+
+  transferOverlay.root.hidden = false;
+  document.body.classList.add('admin-transfer-locked');
+  transferOverlay.file.textContent = transfer.fileName
+    ? `Файл: ${transfer.fileName}`
+    : 'Файловый импорт';
+  transferOverlay.cancel.textContent = transfer.cancelRequested
+    ? 'Отмена запрошена…'
+    : 'Отменить';
+
+  if (transfer.mode === 'upload') {
+    transferOverlay.processingStatus.hidden = true;
+    const total = Math.max(0, Number(transfer.total) || 0);
+    const loaded = Math.min(total || Number.MAX_SAFE_INTEGER, Number(transfer.loaded) || 0);
+    const ratio = total > 0 ? Math.min(1, loaded / total) : null;
+    transferOverlay.phase.textContent = 'Загрузка файла на сервер';
+    if (ratio === null) {
+      transferOverlay.progress.removeAttribute('value');
+      transferOverlay.percent.textContent = '';
+    } else {
+      transferOverlay.progress.value = ratio * 100;
+      transferOverlay.percent.textContent = `${Math.floor(ratio * 100)} %`;
+    }
+    transferOverlay.amount.textContent = total > 0
+      ? `${formatTransferBytes(loaded)} / ${formatTransferBytes(total)}`
+      : formatTransferBytes(loaded);
+
+    const details = [];
+    if (transfer.speed > 0) {
+      details.push(`${formatTransferBytes(transfer.speed)}/с`);
+      if (total > loaded) {
+        const eta = formatTransferDuration((total - loaded) / transfer.speed);
+        if (eta) details.push(`осталось ~${eta}`);
+      }
+    }
+    transferOverlay.detail.textContent = details.join(' · ') ||
+      'Передача файла…';
+    transferOverlay.cancel.disabled = transfer.cancelRequested;
+    return;
+  }
+
+  if (transfer.mode === 'waiting') {
+    transferOverlay.processingStatus.hidden = true;
+    transferOverlay.phase.textContent = 'Файл передан';
+    transferOverlay.progress.removeAttribute('value');
+    transferOverlay.percent.textContent = '';
+    transferOverlay.amount.textContent = transfer.total > 0
+      ? formatTransferBytes(transfer.total)
+      : '';
+    transferOverlay.detail.textContent =
+      'Сервер завершает приём файла и создаёт задачу импорта…';
+    transferOverlay.cancel.disabled = true;
+    return;
+  }
+
+  const task = state.task?.id === transfer.taskId ? state.task : null;
+  const progress = stableProcessingView(task);
+  transferOverlay.processingStatus.hidden = !progress.stableInputProgress;
+  transferOverlay.jsonStatus.textContent = progress.jsonStatus ?? '';
+  transferOverlay.dbStatus.textContent = progress.databaseStatus ?? '';
+  transferOverlay.phase.textContent = progress.label;
+  if (progress.ratio === null) {
+    transferOverlay.progress.removeAttribute('value');
+    transferOverlay.percent.textContent = '';
+  } else {
+    const percent = Math.max(0, Math.min(100, progress.ratio * 100));
+    transferOverlay.progress.value = percent;
+    transferOverlay.percent.textContent = `${Math.floor(percent)} %`;
+  }
+  transferOverlay.amount.textContent = progress.amount;
+  transferOverlay.detail.textContent = progress.detail ||
+    'Импорт выполняется одной транзакцией.';
+  transferOverlay.cancel.disabled =
+    transfer.cancelRequested ||
+    !task ||
+    !task.cancellable ||
+    task.status === 'cancelling';
+}
+
+function syncTransferOverlay(task) {
+  if (
+    !state.transfer &&
+    task &&
+    active(task) &&
+    fileImportTaskTypes.has(task.type)
+  ) {
+    state.transfer = {
+      mode: 'processing',
+      taskId: task.id,
+      taskKey: taskTypeTabs[task.type] ?? state.selected,
+      taskType: task.type,
+      fileName: null,
+      loaded: Number(task.parameters?.uploadBytes) || 0,
+      total: Number(task.parameters?.uploadBytes) || 0,
+      startedAt: performance.now(),
+      speed: 0,
+      xhr: null,
+      cancelRequested: false,
+    };
+  }
+
+  const transfer = state.transfer;
+  if (!transfer || !transfer.taskId || !task || task.id !== transfer.taskId) {
+    renderTransferOverlay();
+    return;
+  }
+
+  if (['failed', 'cancelled', 'succeeded'].includes(task.status)) {
+    hideTransferOverlay();
+    return;
+  }
+
+  transfer.mode = 'processing';
+  renderTransferOverlay();
+}
+
+function syncSessionActivityHold() {
+  window.dtpstatAdminSessionGuard?.setActivityHold?.(
+    Boolean(state.transfer) || Boolean(active(state.task)),
+  );
+}
 
 function active(task) {
   return task && ['queued', 'running', 'cancelling'].includes(task.status);
@@ -102,6 +692,14 @@ function setNotice(message, tone = 'warning', taskKey = state.selected) {
 function setTaskNotice(taskKey, message, tone = 'warning') {
   if (!taskKey) return;
   taskNotices.setForTask(taskKey, message, tone);
+}
+
+function clearTaskStatusForStart(taskKey = state.selected) {
+  if (active(state.task)) return false;
+  taskNotices.clear(taskKey);
+  state.task = null;
+  render();
+  return true;
 }
 
 function selectOperation(operationKey) {
@@ -202,7 +800,9 @@ function renderResult(task) {
     elements.resultPanel.open = true;
     elements.result.textContent = pretty({ error: task.error });
   } else if (task.result !== undefined) {
-    elements.resultPanel.classList.add('result-success');
+    elements.resultPanel.classList.add(
+      task.result?.partial ? 'result-warning' : 'result-success',
+    );
     elements.resultPanel.open = true;
     elements.result.textContent = pretty(task.result);
   } else {
@@ -342,8 +942,15 @@ function render() {
     elements.status.className = 'status status-idle';
     elements.status.textContent = 'нет задачи';
   } else {
-    elements.status.className = `status status-${task.status}`;
-    elements.status.textContent = statusLabels[task.status] ?? task.status;
+    const partial =
+      task.status === 'succeeded' &&
+      Boolean(task.result?.partial);
+    elements.status.className = partial
+      ? 'status status-partial'
+      : `status status-${task.status}`;
+    elements.status.textContent = partial
+      ? 'с предупреждениями'
+      : (statusLabels[task.status] ?? task.status);
     elements.meta.append(
       metaItem('ID', task.id, true),
       metaItem('Тип', task.type),
@@ -358,6 +965,8 @@ function render() {
   renderControls(task);
   renderSuccessfulUpdates();
   renderOsmCheckpoint();
+  syncTransferOverlay(task);
+  syncSessionActivityHold();
 }
 
 function applyTask(task, announce = false) {
@@ -378,7 +987,19 @@ function applyTask(task, announce = false) {
   if (announce && task && task.status !== previousStatus) {
     const taskKey = taskTypeTabs[task.type];
     if (task.status === 'succeeded') {
-      setTaskNotice(taskKey, 'операция завершена успешно.', 'success');
+      if (task.result?.partial) {
+        const skipped = Number(task.result.skippedCount ?? 0);
+        const suffix = Number.isFinite(skipped) && skipped > 0
+          ? ` Пропущено записей: ${skipped.toLocaleString('ru-RU')}.`
+          : '';
+        setTaskNotice(
+          taskKey,
+          `операция завершена с предупреждениями.${suffix}`,
+          'warning',
+        );
+      } else {
+        setTaskNotice(taskKey, 'операция завершена успешно.', 'success');
+      }
     } else if (task.status === 'failed') {
       setTaskNotice(taskKey, 'операция завершилась с ошибкой.', 'error');
     } else if (task.status === 'cancelled') {
@@ -404,16 +1025,123 @@ async function api(path, options = {}) {
   return payload;
 }
 
-function portableFileOptions(file, jsonContentType) {
+function portableFileContentType(file, jsonContentType) {
   const zip =
     file.type === 'application/zip' ||
     file.name.toLocaleLowerCase('en-US').endsWith('.zip');
-  return {
-    headers: {
-      'Content-Type': zip ? 'application/zip' : jsonContentType,
-    },
-    body: file,
-  };
+  return zip ? 'application/zip' : jsonContentType;
+}
+
+function parseXhrPayload(xhr) {
+  if (!xhr.responseText) return null;
+  try {
+    return JSON.parse(xhr.responseText);
+  } catch {
+    return null;
+  }
+}
+
+async function uploadPortableFile(
+  path,
+  file,
+  jsonContentType,
+  taskKey,
+  taskType,
+) {
+  clearTaskStatusForStart(taskKey);
+  showTransferOverlay({ file, taskKey, taskType });
+
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    state.transfer.xhr = xhr;
+    xhr.open('POST', path);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader('Accept', 'application/json');
+    xhr.setRequestHeader(
+      'Content-Type',
+      portableFileContentType(file, jsonContentType),
+    );
+
+    xhr.upload.addEventListener('progress', (event) => {
+      const transfer = state.transfer;
+      if (!transfer || transfer.xhr !== xhr) return;
+      transfer.loaded = event.loaded;
+      transfer.total = event.lengthComputable && event.total > 0
+        ? event.total
+        : file.size;
+      const elapsedSeconds = Math.max(
+        0.001,
+        (performance.now() - transfer.startedAt) / 1000,
+      );
+      transfer.speed = event.loaded / elapsedSeconds;
+      renderTransferOverlay();
+    });
+
+    xhr.upload.addEventListener('load', () => {
+      const transfer = state.transfer;
+      if (!transfer || transfer.xhr !== xhr) return;
+      transfer.loaded = transfer.total || file.size;
+      transfer.mode = 'waiting';
+      renderTransferOverlay();
+    });
+
+    xhr.addEventListener('load', () => {
+      void (async () => {
+        const payload = parseXhrPayload(xhr);
+        if (xhr.status >= 200 && xhr.status < 300 && payload?.task) {
+          const transfer = state.transfer;
+          if (!transfer || transfer.xhr !== xhr) {
+            resolve(payload);
+            return;
+          }
+          transfer.xhr = null;
+          transfer.taskId = payload.task.id;
+          transfer.mode = 'processing';
+          applyTask(payload.task);
+          syncTransferOverlay(
+            state.task?.id === payload.task.id ? state.task : payload.task,
+          );
+          const acceptedTaskKey = taskTypeTabs[payload.task.type] ?? taskKey;
+          setTaskNotice(
+            acceptedTaskKey,
+            `задача ${payload.taskId} принята.`,
+            'success',
+          );
+          resolve(payload);
+          return;
+        }
+
+        hideTransferOverlay();
+        const errorMessage = payload?.error ?? `HTTP ${xhr.status || 0}`;
+        if (payload?.taskId) {
+          await refresh({ quiet: true });
+          const activeTaskKey = taskTypeTabs[state.task?.type] ?? taskKey;
+          setTaskNotice(
+            activeTaskKey,
+            `уже выполняется задача ${payload.taskId}.`,
+            'error',
+          );
+        } else {
+          setTaskNotice(taskKey, errorMessage, 'error');
+        }
+        resolve(null);
+      })();
+    });
+
+    xhr.addEventListener('error', () => {
+      hideTransferOverlay();
+      setTaskNotice(taskKey, 'ошибка сети при загрузке файла.', 'error');
+      resolve(null);
+    });
+
+    xhr.addEventListener('abort', () => {
+      hideTransferOverlay();
+      setTaskNotice(taskKey, 'загрузка файла отменена.', 'warning');
+      resolve(null);
+    });
+
+    xhr.send(file);
+  });
 }
 
 async function encodedJsonBody(text, contentType) {
@@ -615,6 +1343,7 @@ async function refresh({ quiet = false } = {}) {
 }
 
 async function start(path, options, taskKey = state.selected) {
+  clearTaskStatusForStart(taskKey);
   try {
     const payload = await api(path, { method: 'POST', ...options });
     applyTask(payload.task);
@@ -658,10 +1387,12 @@ async function importGeoJsonFile(form, endpoint, taskKey, query = '') {
   if (!form.reportValidity()) return;
   const file = new FormData(form).get('file');
   if (!(file instanceof File) || file.size === 0) return;
-  await start(
+  await uploadPortableFile(
     `${endpoint}${query}`,
-    portableFileOptions(file, 'application/geo+json'),
+    file,
+    'application/geo+json',
     taskKey,
+    form.dataset.taskType,
   );
 }
 
@@ -808,10 +1539,12 @@ elements.populationForm.addEventListener('submit', async (event) => {
   const file = data.get('file');
 
   if (file instanceof File && file.size > 0) {
-    await start(
+    await uploadPortableFile(
       '/api/admin/populations',
-      portableFileOptions(file, 'application/json'),
+      file,
+      'application/json',
       'population',
+      'population-update',
     );
     return;
   }
@@ -834,6 +1567,12 @@ elements.populationForm.addEventListener('submit', async (event) => {
 });
 
 elements.refresh.addEventListener('click', () => refresh());
+
+window.addEventListener('beforeunload', (event) => {
+  if (!state.transfer) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
 
 function setConnection(status, text) {
   elements.connection.className = `connection connection-${status}`;

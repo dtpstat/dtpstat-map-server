@@ -25,6 +25,8 @@ import {createProjectSettingsTransferService} from './db/project-settings-transf
 import {createPublicDownloadRepository} from './db/public-download-repository.js';
 import {createReportConfigService} from './db/report-config-service.js';
 import {createPool} from './db/pool.js';
+import {migrateDatabase} from './db/migration-runner.js';
+import {verifyDatabaseMigrationState} from './db/migration-state.js';
 import {createAdminAuthorization} from './http/admin-auth.js';
 import {createAdminWebSocketGateway} from './http/admin-websocket.js';
 import {cleanupStreamUploads} from './http/stream-upload.js';
@@ -65,6 +67,38 @@ async function main() {
   });
 
   const pool = createPool(config.database);
+  await runServiceOperation(
+    'database.migrations.apply',
+    () => migrateDatabase(pool, {
+      projectRoot: config.projectRoot,
+      schema: config.database.schema,
+      logger(event) {
+        if (event.status !== 'applied') return;
+        serviceLog('info', 'database.migration:applied', {
+          version: event.migration.version,
+          fileName: event.migration.fileName,
+        });
+      },
+    }),
+    {
+      successDetails: (result) => ({
+        currentVersion: result.version,
+        applied: result.appliedCount,
+        known: result.totalCount,
+      }),
+    },
+  );
+  await runServiceOperation(
+    'database.migrations.verify',
+    () => verifyDatabaseMigrationState(pool, {
+      projectRoot: config.projectRoot,
+      schema: config.database.schema,
+    }),
+    {
+      successDetails: (state) => state,
+    },
+  );
+
   const repository = createCitiesRepository(pool);
   const lineTypesRepository = createLineTypesRepository(pool);
   const projectSettingsRepository = createProjectSettingsRepository(pool, config.publicMap);

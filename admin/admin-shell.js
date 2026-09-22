@@ -291,7 +291,12 @@ function setupPrimarySections(user) {
 
 function updateUserBadge(user) {
   const badge = document.querySelector('#admin-user');
-  if (!badge) return;
+  const label = document.querySelector('#admin-user-label');
+  const rolesHost = document.querySelector('#admin-user-roles');
+  const image = document.querySelector('#admin-user-avatar-image');
+  const fallback = document.querySelector('#admin-user-avatar-fallback');
+  if (!badge || !label || !rolesHost || !image || !fallback) return;
+
   const roles = [
     user.isSuperuser ? 'superuser' : null,
     user.canManageData ? 'данные' : null,
@@ -301,9 +306,41 @@ function updateUserBadge(user) {
     user.canManageUsers ? 'пользователи' : null,
     user.canViewAudit ? 'аудит' : null,
     user.canManageSecurity ? 'безопасность' : null,
-  ].filter(Boolean).join(' · ');
-  badge.textContent = `${user.displayName ?? user.username}${roles ? ` — ${roles}` : ''}`;
+  ].filter(Boolean);
+
+  label.textContent = user.displayName ?? user.username;
+  rolesHost.replaceChildren(...roles.map((role) => {
+    const tag = document.createElement('span');
+    tag.className = 'admin-user-role';
+    tag.textContent = role;
+    return tag;
+  }));
+  rolesHost.hidden = roles.length === 0;
+
+  fallback.textContent = String(
+    user.displayName ?? user.username ?? '?',
+  ).trim().slice(0, 1).toLocaleUpperCase('ru-RU') || '?';
+
+  if (!user.hasAvatar) {
+    image.hidden = true;
+    image.removeAttribute('src');
+    fallback.hidden = false;
+    return;
+  }
+
+  image.hidden = true;
+  fallback.hidden = false;
+  image.onload = () => {
+    image.hidden = false;
+    fallback.hidden = true;
+  };
+  image.onerror = () => {
+    image.hidden = true;
+    fallback.hidden = false;
+  };
+  image.src = `/api/admin/profile/avatar?v=${Date.now()}`;
 }
+
 
 async function startAdminShell() {
   const userBadge = document.querySelector('#admin-user');

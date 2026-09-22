@@ -5,6 +5,7 @@ import {
 } from '../data/city-boundary-geojson-plan.js';
 import { parseStreamingJsonObject } from '../data/streaming-json.js';
 import { acquireDataImportLock } from './database-locks.js';
+import { rebuildCityBoundaryHierarchy } from './city-boundary-hierarchy.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 // Keep each PostgreSQL jsonb/PostGIS conversion request bounded. The portable
@@ -57,10 +58,15 @@ const CREATE_STAGE_SQL = `
     tags jsonb NOT NULL,
     osm_timestamp timestamptz,
     updated_at timestamptz,
+    population integer,
+    population_as_of date,
+    population_source text,
+    attributes jsonb NOT NULL,
     city_slug text,
     city_name text,
     geom geometry(MultiPolygon, 4326) NOT NULL,
     bounds geometry(Polygon, 4326) NOT NULL,
+    area_m2 double precision NOT NULL,
     PRIMARY KEY (osm_type, osm_id)
   ) ON COMMIT DROP
 `;
@@ -80,6 +86,10 @@ const INSERT_STAGE_SQL = `
       tags jsonb,
       "osmTimestamp" timestamptz,
       "updatedAt" timestamptz,
+      population integer,
+      "populationAsOf" date,
+      "populationSource" text,
+      attributes jsonb,
       "citySlug" text,
       "cityName" text,
       geometry jsonb
@@ -96,6 +106,12 @@ const INSERT_STAGE_SQL = `
       ) AS geom
     FROM payload_rows
   )
+  , measured AS (
+    SELECT
+      prepared.*,
+      ST_Area(prepared.geom::geography) AS area_m2
+    FROM prepared
+  )
   INSERT INTO city_boundary_transfer_stage (
     place_type,
     admin_level,
@@ -108,10 +124,15 @@ const INSERT_STAGE_SQL = `
     tags,
     osm_timestamp,
     updated_at,
+    population,
+    population_as_of,
+    population_source,
+    attributes,
     city_slug,
     city_name,
     geom,
-    bounds
+    bounds,
+    area_m2
   )
   SELECT
     "placeType",
@@ -125,11 +146,16 @@ const INSERT_STAGE_SQL = `
     tags,
     "osmTimestamp",
     "updatedAt",
+    population,
+    "populationAsOf",
+    "populationSource",
+    attributes,
     "citySlug",
     "cityName",
     geom,
-    ST_Envelope(geom)
-  FROM prepared
+    ST_Envelope(geom),
+    area_m2
+  FROM measured
 `;
 
 const INVALID_STAGE_SQL = `
@@ -137,7 +163,7 @@ const INVALID_STAGE_SQL = `
   FROM city_boundary_transfer_stage
   WHERE ST_IsEmpty(geom)
      OR NOT ST_IsValid(geom)
-     OR ST_Area(geom::geography) <= 0
+     OR area_m2 <= 0
   ORDER BY osm_type, osm_id
 `;
 
@@ -164,6 +190,10 @@ const INSERT_BOUNDARIES_SQL = `
     is_active,
     display_name,
     display_type,
+    population,
+    population_as_of,
+    population_source,
+    attributes,
     area_m2
   )
   SELECT
@@ -189,7 +219,11 @@ const INSERT_BOUNDARIES_SQL = `
     stage.active,
     stage.display_name,
     stage.display_type,
-    ST_Area(stage.geom::geography)
+    stage.population,
+    stage.population_as_of,
+    stage.population_source,
+    stage.attributes,
+    stage.area_m2
   FROM city_boundary_transfer_stage AS stage
   ORDER BY stage.osm_type, stage.osm_id
 `;
@@ -216,9 +250,10 @@ function errorDetails(error) {
 /**
  * Atomically replace the complete OSM city/town boundary snapshot from a
  * portable GeoJSON export. Existing line-to-boundary links survive when the
- * same OSM object exists in the imported snapshot. Linked ranked-city records
- * restore their portable attributes but all derived statistics remain local
- * and are recalculated by line/population imports.
+ * same OSM object exists in the imported snapshot. Exact-boundary population
+ * metadata and attributes travel with the boundary snapshot; active boundaries
+ * are then projected into application-city population data before statistics
+ * are recalculated.
  *
  * @param {{ connect: () => Promise<any>, databaseSchema?: string }} pool
  */
@@ -260,12 +295,20 @@ export function createCityBoundaryTransferService(pool) {
         const flush = async () => {
           if (batch.length === 0) return;
           const payload = JSON.stringify(batch);
+          const nextBatch = batchNumber + 1;
+          operation.onProgress?.({
+            phase: 'stage-write',
+            batch: nextBatch,
+            batchPlaces: batch.length,
+            stagedPlaces,
+            payloadBytes: Buffer.byteLength(payload),
+          });
           const stageResult = await client.query(INSERT_STAGE_SQL, [payload]);
           if (stageResult.rowCount !== batch.length) {
             throw new Error('Not every city boundary was staged');
           }
           stagedPlaces += stageResult.rowCount;
-          batchNumber += 1;
+          batchNumber = nextBatch;
           operation.onProgress?.({
             phase: 'stage',
             batch: batchNumber,
@@ -343,17 +386,32 @@ export function createCityBoundaryTransferService(pool) {
 
         operation.onProgress?.({ phase: 'preserve-links' });
         await client.query(PRESERVE_GEOMETRY_LINKS_SQL);
-        operation.onProgress?.({ phase: 'replace-boundaries' });
+        operation.onProgress?.({
+          phase: 'delete-boundaries',
+          places: stagedPlaces,
+        });
         await client.query('DELETE FROM city_boundaries');
+        operation.onProgress?.({
+          phase: 'insert-boundaries',
+          places: stagedPlaces,
+        });
         const inserted = await client.query(INSERT_BOUNDARIES_SQL);
         if (inserted.rowCount !== stagedPlaces) {
           throw new Error('Not every city boundary was imported');
         }
 
-        await client.query('SELECT rebuild_city_boundary_hierarchy()');
+        await rebuildCityBoundaryHierarchy(client, {
+          signal: operation.signal,
+          onProgress: operation.onProgress,
+        });
+        operation.onProgress?.({
+          phase: 'restore-links',
+          places: inserted.rowCount,
+        });
         const restored = await client.query(RESTORE_GEOMETRY_LINKS_SQL);
         await client.query('SELECT sync_active_boundary_cities()');
         await client.query('SELECT assert_city_geometry_invariants()');
+        await client.query('SELECT sync_active_boundary_populations()');
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
 
@@ -445,6 +503,16 @@ export function createCityBoundaryTransferService(pool) {
           throwIfAdminTaskCancelled(operation.signal);
           const batch = plan.boundaries.slice(offset, offset + STAGE_BATCH_SIZE);
           const payload = JSON.stringify(batch);
+          const batchNumber = Math.floor(offset / STAGE_BATCH_SIZE) + 1;
+          operation.onProgress?.({
+            phase: 'stage-write',
+            batch: batchNumber,
+            batchCount,
+            batchPlaces: batch.length,
+            stagedPlaces,
+            places: plan.boundaries.length,
+            payloadBytes: Buffer.byteLength(payload),
+          });
           const stageResult = await client.query(INSERT_STAGE_SQL, [payload]);
           if (stageResult.rowCount !== batch.length) {
             throw new Error('Not every city boundary was staged');
@@ -452,7 +520,7 @@ export function createCityBoundaryTransferService(pool) {
           stagedPlaces += stageResult.rowCount;
           operation.onProgress?.({
             phase: 'stage',
-            batch: Math.floor(offset / STAGE_BATCH_SIZE) + 1,
+            batch: batchNumber,
             batchCount,
             batchPlaces: batch.length,
             stagedPlaces,
@@ -479,23 +547,34 @@ export function createCityBoundaryTransferService(pool) {
 
         operation.onProgress?.({ phase: 'preserve-links' });
         await client.query(PRESERVE_GEOMETRY_LINKS_SQL);
-        operation.onProgress?.({ phase: 'replace-boundaries' });
+        operation.onProgress?.({
+          phase: 'delete-boundaries',
+          places: plan.boundaries.length,
+        });
         await client.query('DELETE FROM city_boundaries');
+        operation.onProgress?.({
+          phase: 'insert-boundaries',
+          places: plan.boundaries.length,
+        });
         const inserted = await client.query(INSERT_BOUNDARIES_SQL);
         if (inserted.rowCount !== plan.boundaries.length) {
           throw new Error('Not every city boundary was imported');
         }
+        await rebuildCityBoundaryHierarchy(client, {
+          signal: operation.signal,
+          onProgress: operation.onProgress,
+        });
         operation.onProgress?.({
           phase: 'restore-links',
           places: inserted.rowCount,
         });
-        await client.query('SELECT rebuild_city_boundary_hierarchy()');
         const restored = await client.query(RESTORE_GEOMETRY_LINKS_SQL);
         // Restore boundary_id first: synchronizing active boundaries may
         // reassign their application city and must update existing line rows
         // against the restored exact OSM object.
         await client.query('SELECT sync_active_boundary_cities()');
         await client.query('SELECT assert_city_geometry_invariants()');
+        await client.query('SELECT sync_active_boundary_populations()');
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
 

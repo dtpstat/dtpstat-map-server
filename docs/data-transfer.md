@@ -60,6 +60,7 @@ Boundary properties schemaVersion 2 включают:
 - `osmId`;
 - `osmName`;
 - OSM tags/timestamp;
+- boundary-owned `population/populationAsOf/populationSource/attributes`;
 - geometry `Polygon`/`MultiPolygon`;
 - linked city slug/name/fullName/displayType/attributes.
 
@@ -208,6 +209,12 @@ Portable KML использует тот же NAME-based business-type matching,
 
 # Население
 
+Население и связанные с ним attributes хранятся независимо от флага
+`active`. Импорт населения никогда не активирует и не деактивирует OSM-объекты.
+
+Для активных boundaries сервер отдельно синхронизирует рабочую проекцию
+`CITY_POPULATIONS`, которую используют отчёты и public API.
+
 ## Export
 
 ```text
@@ -219,7 +226,50 @@ GET /api/admin/export/populations
 - `GET /api/admin/export/populations` → `populations.json`;
 - `GET /api/admin/export/populations.zip` → `populations.zip`, внутри ровно один `populations.json`.
 
-Для каждой записи переносятся type/name/citySlug/population/asOf/source/attributes.
+Canonical format — `schemaVersion: 2`. Population snapshot содержит только
+человекочитаемую hierarchy `регион → города`; OSM type/id в этом формате
+отсутствуют намеренно.
+
+```json
+{
+  "schemaVersion": 2,
+  "exportedAt": "2026-09-22T12:00:00.000Z",
+  "asOf": "2026-01-01",
+  "source": "Росстат",
+  "regions": [
+    {
+      "name": "Республика Татарстан",
+      "attributes": {
+        "federalDistrict": "Приволжский федеральный округ"
+      },
+      "cities": [
+        {
+          "name": "Казань",
+          "population": 1320000,
+          "attributes": {}
+        },
+        {
+          "name": "Набережные Челны",
+          "population": 544000,
+          "asOf": "2025-01-01",
+          "source": "Татарстанстат",
+          "attributes": {}
+        }
+      ]
+    }
+  ]
+}
+```
+
+На уровне региона обязательны `name` и непустой `cities[]`; `attributes`
+необязателен и по умолчанию равен `{}`.
+
+У города обязательны `name` и `population`. `population` может быть
+`null`, что очищает население найденного города. `asOf/source` могут
+наследоваться от top-level значений или переопределяться для конкретного
+города. `attributes` необязателен и по умолчанию равен `{}`.
+
+Поле `active` в population format отсутствует намеренно.
 
 ## Import
 
@@ -232,27 +282,56 @@ POST /api/admin/populations
 Content-Type: application/zip
 ```
 
-Population matching выполняется только по активным OSM boundaries. Основная
-identity — нормализованные `type + name` без учёта регистра и whitespace.
-Legacy запись без `type` принимается только если имя соответствует ровно одному
-активному объекту; неоднозначные записи не угадываются.
+Import:
 
-Записи без совпадения пропускаются без падения всей операции.
+1. потоково читает top-level `regions[]`;
+2. нормализует имена без учёта регистра, `ё/е`, пробелов и пунктуации;
+3. повторные блоки одного региона объединяет; повторный город внутри того же
+   региона пропускает с warning;
+4. невалидный отдельный регион/город пропускает с warning, не отменяя
+   корректную часть файла;
+5. находит регион по имени среди региональных boundaries;
+6. ищет город по имени только внутри поддерева найденного региона;
+7. отсутствующие **и неоднозначные** регионы/города пропускает с warning;
+8. обновляет `population/asOf/source/attributes` только успешно
+   сопоставленных городов и `attributes` успешно найденных регионов;
+9. не изменяет `IS_ACTIVE`;
+10. синхронизирует активную проекцию `CITY_POPULATIONS`, пересчитывает
+    статистику и фиксирует корректную часть одной транзакцией.
 
-Result содержит, в частности:
+Если хотя бы одна запись была пропущена, task технически завершается
+`succeeded`, но result содержит `partial: true`, а журнал получает
+`WARNING Задача завершена с предупреждениями`. Полный rollback остаётся для
+ошибок всего документа/transport (битый JSON/ZIP, несовместимый
+`schemaVersion`, превышение лимитов), отмены задачи и неожиданных ошибок БД.
+
+Пример result:
 
 ```json
 {
-  "cities": 71,
-  "requestedCities": 72,
-  "skippedCount": 1,
-  "skippedCities": ["Киров"],
-  "ambiguousCount": 0,
-  "ambiguousCities": []
+  "regions": 84,
+  "requestedRegions": 85,
+  "cities": 1117,
+  "requestedCities": 1119,
+  "normalizedCities": 1119,
+  "skippedCount": 2,
+  "warningCount": 2,
+  "partial": true,
+  "skippedCities": [
+    "Примерная область / Город не найден",
+    "Другая область / Неоднозначный город"
+  ],
+  "warnings": [
+    {
+      "code": "city-missing",
+      "scope": "city",
+      "regionName": "Примерная область",
+      "cityName": "Город не найден",
+      "skipped": true
+    }
+  ]
 }
 ```
-
-Invalid population values, conflicts и malformed payload по-прежнему являются ошибками.
 
 # Streaming JSON / ZIP и body limits
 
@@ -260,6 +339,12 @@ Invalid population values, conflicts и malformed payload по-прежнему 
 `express.json()`**. HTTP body сначала потоково записывается как сжатый/raw
 spool-файл в `var/import-staging`, после чего background admin task читает его
 потоком. Распакованный JSON целиком ни на диск, ни в RAM не создаётся.
+
+Streaming parser сканирует уже декодированные chunks пакетно, без
+посимвольного async-loop. Для длинного одиночного JSON item byte-progress
+публикуется прямо во время чтения потока, а city-boundary import перед каждым
+PostgreSQL/PostGIS staging batch отдельно публикует фазу `stage-write`.
+Поэтому UI различает собственно чтение JSON и ожидание DB batch.
 
 Для raw JSON/GeoJSON по-прежнему поддерживаются HTTP `gzip`, `deflate` и
 `br`. ZIP передаётся как `Content-Type: application/zip` без дополнительного
@@ -270,8 +355,9 @@ ZIP-контракт намеренно строгий:
 - после игнорирования directory entries должна остаться ровно **одна**
   ordinary data entry;
 - имя и расширение этой entry не определяют формат: допустимы, например,
-  `stdin` или `payload/data`; JSON/GeoJSON определяется и валидируется по
-  содержимому/schema;
+  `stdin`, `payload/data` и даже anonymous entry с пустым именем, который
+  создаёт `7z ... -si` без явного имени; JSON/GeoJSON определяется и
+  валидируется по содержимому/schema;
 - encryption и multi-volume ZIP не поддерживаются;
 - поддерживаются Store и Deflate;
 - поддерживаются classic ZIP и ZIP64, включая streamed archives с data
@@ -350,10 +436,11 @@ JSON-файла на стороне сервера. Имя единственн�
 После полного приёма transport stream сервер отвечает `202` и запускает
 admin task. Полный transport body не держится в heap; spool нужен для проверки
 ZIP central directory/ZIP64 metadata перед транзакционным чтением JSON.
-Синтаксическая ошибка JSON, неправильный ZIP, schema/PostGIS ошибка или отмена
-задачи переводят task в `failed/cancelled`; DB import выполняется в одной
-транзакции и делает `ROLLBACK` целиком. Уже изменённые production rows при
-ошибке не остаются. Временный spool удаляется после завершения task, а orphan
+Синтаксическая ошибка JSON, неправильный ZIP, несовместимый schema, системная
+DB/PostGIS ошибка или отмена задачи переводят task в `failed/cancelled`;
+такие ошибки делают `ROLLBACK` целиком. Ошибки отдельных записей population
+import являются best-effort warnings: проблемные записи не попадают в staging,
+а валидная часть той же транзакции коммитится. Временный spool удаляется после завершения task, а orphan
 spools после process crash чистятся при следующем startup (старше 24 часов).
 
 # Single-task guard

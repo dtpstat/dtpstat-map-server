@@ -18,6 +18,10 @@ const EXPORT_CITY_BOUNDARIES_SQL = `
             'osmType', boundary.osm_type,
             'osmId', boundary.osm_id,
             'osmName', boundary.osm_name,
+            'population', boundary.population,
+            'populationAsOf', boundary.population_as_of,
+            'populationSource', boundary.population_source,
+            'attributes', boundary.attributes,
             'tags', boundary.tags,
             'osmTimestamp', boundary.osm_timestamp,
             'updatedAt', boundary.updated_at,
@@ -35,7 +39,8 @@ const EXPORT_CITY_BOUNDARIES_SQL = `
             END
           )
         )
-        ORDER BY boundary.place_type, boundary.osm_name, boundary.osm_type, boundary.osm_id
+        ORDER BY boundary.place_type, boundary.osm_name,
+                 boundary.osm_type, boundary.osm_id
       ),
       '[]'::json
     )
@@ -210,6 +215,10 @@ const STREAM_CITY_BOUNDARIES_SQL = `
       'osmType', boundary.osm_type,
       'osmId', boundary.osm_id,
       'osmName', boundary.osm_name,
+      'population', boundary.population,
+      'populationAsOf', boundary.population_as_of,
+      'populationSource', boundary.population_source,
+      'attributes', boundary.attributes,
       'tags', boundary.tags,
       'osmTimestamp', boundary.osm_timestamp,
       'updatedAt', boundary.updated_at,
@@ -318,22 +327,60 @@ const STREAM_GEOMETRIES_SQL = `
   ORDER BY geometry.id
 `;
 
-const STREAM_POPULATIONS_SQL = `
-  SELECT json_build_object(
-    'name', city.name,
-    'type', city.display_type,
-    'citySlug', city.slug,
-    'population', population.population,
-    'asOf', population.as_of,
-    'source', population.source,
-    'attributes', population.attributes
-  )::text AS item
-  FROM city_populations AS population
-  JOIN cities AS city ON city.id = population.city_id
-  ORDER BY city.name
+const POPULATION_REGIONS_SQL = `
+  WITH RECURSIVE ancestry AS (
+    SELECT
+      city.id AS city_id,
+      city.id AS boundary_id,
+      0::integer AS depth
+    FROM city_boundaries AS city
+    WHERE city.place_type IN ('city', 'town')
+
+    UNION ALL
+
+    SELECT
+      ancestry.city_id,
+      parent.id AS boundary_id,
+      ancestry.depth + 1
+    FROM ancestry
+    JOIN city_boundaries AS current
+      ON current.id = ancestry.boundary_id
+    JOIN city_boundaries AS parent
+      ON parent.id = current.parent_id
+  ),
+  city_regions AS (
+    SELECT DISTINCT ON (ancestry.city_id)
+      ancestry.city_id,
+      region.id AS region_id
+    FROM ancestry
+    JOIN city_boundaries AS region
+      ON region.id = ancestry.boundary_id
+     AND region.admin_level = 4
+    ORDER BY ancestry.city_id, ancestry.depth
+  )
+  SELECT
+    region.id::integer AS "regionId",
+    region.display_name AS "regionName",
+    region.attributes AS "regionAttributes",
+    city.id::integer AS "cityId",
+    city.display_name AS "cityName",
+    city.population::integer AS population,
+    city.population_as_of AS "asOf",
+    city.population_source AS source,
+    city.attributes
+  FROM city_regions AS link
+  JOIN city_boundaries AS region
+    ON region.id = link.region_id
+  JOIN city_boundaries AS city
+    ON city.id = link.city_id
+  ORDER BY
+    region.display_name,
+    region.id,
+    city.display_name,
+    city.id
 `;
 
-async function* cursorItems(client, cursorName, sql, fetchSize = 100) {
+async function* cursorRows(client, cursorName, sql, fetchSize = 100) {
   await client.query(
     `DECLARE ${cursorName} NO SCROLL CURSOR FOR ${sql}`,
   );
@@ -343,10 +390,16 @@ async function* cursorItems(client, cursorName, sql, fetchSize = 100) {
         `FETCH FORWARD ${fetchSize} FROM ${cursorName}`,
       );
       if (result.rows.length === 0) break;
-      for (const row of result.rows) yield row.item;
+      for (const row of result.rows) yield row;
     }
   } finally {
     await client.query(`CLOSE ${cursorName}`).catch(() => {});
+  }
+}
+
+async function* cursorItems(client, cursorName, sql, fetchSize = 100) {
+  for await (const row of cursorRows(client, cursorName, sql, fetchSize)) {
+    yield row.item;
   }
 }
 
@@ -359,9 +412,74 @@ async function* jsonArray(items) {
   }
 }
 
+function dateOnly(value) {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+}
+
+function populationCity(row) {
+  return {
+    name: row.cityName,
+    population: row.population ?? null,
+    asOf: dateOnly(row.asOf),
+    source: row.source ?? null,
+    attributes: row.attributes ?? {},
+  };
+}
+
+function buildPopulationRegions(rows) {
+  const regions = [];
+  let current = null;
+  for (const row of rows) {
+    if (!current || current.id !== row.regionId) {
+      current = {
+        id: row.regionId,
+        value: {
+          name: row.regionName,
+          attributes: row.regionAttributes ?? {},
+          cities: [],
+        },
+      };
+      regions.push(current);
+    }
+    current.value.cities.push(populationCity(row));
+  }
+  return regions.map((region) => region.value);
+}
+
+async function* streamPopulationRegions(rows) {
+  let currentRegionId = null;
+  let firstRegion = true;
+  let firstCity = true;
+
+  for await (const row of rows) {
+    if (row.regionId !== currentRegionId) {
+      if (currentRegionId !== null) yield ']}';
+      if (!firstRegion) yield ',';
+      firstRegion = false;
+      currentRegionId = row.regionId;
+      firstCity = true;
+
+      const region = JSON.stringify({
+        name: row.regionName,
+        attributes: row.regionAttributes ?? {},
+      });
+      yield region.slice(0, -1);
+      yield ',"cities":[';
+    }
+
+    if (!firstCity) yield ',';
+    firstCity = false;
+    yield JSON.stringify(populationCity(row));
+  }
+
+  if (currentRegionId !== null) yield ']}';
+}
+
 /**
  * Read-only portable snapshots used for backup, transfer and synchronization.
- * @param {{ query: (text: string, values?: unknown[]) => Promise<{rows: any[]}> }} database
+ * @param {{ query: (text: string, values?: unknown[]) => Promise<{rows: any[]}>, connect?: Function }} database
  */
 export function createDataExportRepository(database) {
   async function payload(sql) {
@@ -471,7 +589,7 @@ export function createDataExportRepository(database) {
 
     async *streamPopulations() {
       if (typeof database.connect !== 'function') {
-        yield JSON.stringify(await payload(EXPORT_POPULATIONS_SQL));
+        yield JSON.stringify(await this.exportPopulations());
         yield '\n';
         return;
       }
@@ -481,14 +599,14 @@ export function createDataExportRepository(database) {
         const timestamp = await client.query(
           'SELECT now() AS "exportedAt"',
         );
-        yield '{"schemaVersion":1,"exportedAt":';
+        yield '{"schemaVersion":2,"exportedAt":';
         yield JSON.stringify(timestamp.rows[0]?.exportedAt ?? new Date());
-        yield ',"populations":[';
-        yield* jsonArray(
-          cursorItems(
+        yield ',"regions":[';
+        yield* streamPopulationRegions(
+          cursorRows(
             client,
             'portable_population_export',
-            STREAM_POPULATIONS_SQL,
+            POPULATION_REGIONS_SQL,
           ),
         );
         yield ']}\n';
@@ -501,14 +619,25 @@ export function createDataExportRepository(database) {
     exportCityBoundaries() {
       return payload(EXPORT_CITY_BOUNDARIES_SQL);
     },
+
     exportLines() {
       return payload(EXPORT_LINES_SQL);
     },
+
     exportGeometries() {
       return payload(EXPORT_GEOMETRIES_SQL);
     },
-    exportPopulations() {
-      return payload(EXPORT_POPULATIONS_SQL);
+
+    async exportPopulations() {
+      const [timestamp, rows] = await Promise.all([
+        database.query('SELECT now() AS "exportedAt"'),
+        database.query(POPULATION_REGIONS_SQL),
+      ]);
+      return {
+        schemaVersion: 2,
+        exportedAt: timestamp.rows[0]?.exportedAt ?? new Date(),
+        regions: buildPopulationRegions(rows.rows),
+      };
     },
   };
 }

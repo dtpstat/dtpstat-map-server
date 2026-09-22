@@ -18,7 +18,6 @@ npm ci
 cp .env.example .env
 # заполнить .env
 npm run db:init
-npm run db:migrate
 npm start
 ```
 
@@ -73,7 +72,7 @@ MAPBOX_ACCESS_TOKEN=pk....
 
 ## Миграции
 
-Текущий набор: `V001…V030`.
+Текущий набор: `V001…V040`.
 
 Последние migrations:
 
@@ -91,9 +90,19 @@ V027__osm_boundary_management.sql
 V028__osm_download_size_limits.sql
 V029__resumable_osm_updates.sql
 V030__osm_checkpoint_batch_count.sql
+V031__unbuildable_osm_checkpoint_geometry.sql
+V032__boundary_population_attributes.sql
+V033__geometry_and_osm_editor_roles.sql
+V034__universal_city_geometries.sql
+V035__geometry_import_conflicts.sql
+V036__sync_geometry_editor_cities.sql
+V037__geometry_model_invariants.sql
+V038__city_boundary_identity_and_pending_guards.sql
+V039__effective_geometry_ownership.sql
+V040__geometry_final_state_constraints.sql
 ```
 
-Назначение `V023…V030`:
+Назначение `V023…V040`:
 
 - `V023` — logical `FULL_NAME` OSM boundary, merge relation fragments по `PLACE_TYPE + FULL_NAME`, sync `CITIES.FULL_NAME`;
 - `V024` — ordered `REPORT_CONFIG.RANK_SORT`;
@@ -102,9 +111,21 @@ V030__osm_checkpoint_batch_count.sql
 - `V027` — отмена name-based relation merge, active/display OSM identity, containment hierarchy, DB-backed import settings и large/small thresholds;
 - `V028` — отдельные single-response/total byte limits для OSM и adaptive split слишком крупных geometry batches;
 - `V029` — persistent OSM checkpoint/index/stage для resume после failure/cancel/Node restart;
-- `V030` — cumulative staged batch count для resumable OSM update.
+- `V030` — cumulative staged batch count для resumable OSM update;
+- `V031` — сохранение/диагностика OSM objects, для которых geometry не удалось построить;
+- `V032` — boundary-owned population/asOf/source/attributes и синхронизация активной population projection;
+- `V033` — отдельные admin roles для geometry/OSM editors;
+- `V034` — универсальные Point/Line/Polygon city geometries;
+- `V035` — pending geometry-import conflicts;
+- `V036` — синхронизация geometry editor с city model;
+- `V037` — geometry invariants/derived normalization;
+- `V038` — identity и pending-import guards;
+- `V039` — effective geometry ownership;
+- `V040` — финальные ограничения geometry model.
 
-Следующая migration: **V031+**. Опубликованные migration files не изменяются задним числом.
+Следующая migration: **V041+**. Опубликованные migration files не изменяются задним числом.
+
+Startup автоматически применяет pending migrations под PostgreSQL advisory lock, затем повторно сверяет `<DATABASE_SCHEMA>.schema_versions` с набором `db/migrations`. Modified/gapped/newer history или ошибка SQL считаются startup error: HTTP listeners не открываются. `npm run db:migrate` остаётся ручной preflight-командой, но для обычного restart больше не обязателен.
 
 ## Большие portable JSON / ZIP transfers
 
@@ -214,9 +235,10 @@ pm2 save
 
 ```bash
 git pull
-npm run db:migrate
 pm2 restart tramlanes
 ```
+
+При restart приложение само применит pending migrations до открытия порта. Для явной проверки заранее по-прежнему можно выполнить `npm run db:migrate`.
 
 После изменения `.env`:
 

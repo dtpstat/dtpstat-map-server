@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import { once } from 'node:events';
+import { createReadStream } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -32,8 +34,9 @@ const lineSnapshot = {
   features: [],
 };
 const populationSnapshot = {
-  schemaVersion: 1,
-  populations: [],
+  schemaVersion: 2,
+  exportedAt: '2026-09-05T12:00:00.000Z',
+  regions: [],
 };
 
 function config() {
@@ -164,14 +167,33 @@ async function collect(source) {
   return Buffer.concat(chunks);
 }
 
-function zip64DirectoryInfo(buffer) {
+function directoryInfo(buffer) {
   const eocd = buffer.length - 22;
   assert.equal(buffer.readUInt32LE(eocd), 0x06054b50);
+  const entries = buffer.readUInt16LE(eocd + 10);
+  const centralSize = buffer.readUInt32LE(eocd + 12);
+  const centralOffset = buffer.readUInt32LE(eocd + 16);
+  const zip64 =
+    entries === 0xffff ||
+    centralSize === 0xffffffff ||
+    centralOffset === 0xffffffff;
+
+  if (!zip64) {
+    return {
+      eocd,
+      zip64: false,
+      zip64Eocd: null,
+      centralOffset,
+    };
+  }
+
   const locator = eocd - 20;
   assert.equal(buffer.readUInt32LE(locator), 0x07064b50);
   const zip64Eocd = Number(buffer.readBigUInt64LE(locator + 8));
   assert.equal(buffer.readUInt32LE(zip64Eocd), 0x06064b50);
   return {
+    eocd,
+    zip64: true,
     zip64Eocd,
     centralOffset: Number(buffer.readBigUInt64LE(zip64Eocd + 48)),
   };
@@ -218,6 +240,33 @@ async function zipBuffer(fileName, payload) {
     fileName,
     [Buffer.from(JSON.stringify(payload))],
   ));
+}
+
+function sevenZipAvailable() {
+  return spawnSync('7z', ['i'], { stdio: 'ignore' }).status === 0;
+}
+
+async function createSevenZipFromStdin(file, payload) {
+  const child = spawn(
+    '7z',
+    ['a', '-tzip', '-mx=6', file, '-si'],
+    { stdio: ['pipe', 'ignore', 'pipe'] },
+  );
+  const errors = [];
+  child.stderr.on('data', (chunk) => errors.push(Buffer.from(chunk)));
+  child.stdin.end(Buffer.from(JSON.stringify(payload)));
+  const [code] = await new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (...args) => resolve(args));
+  });
+  if (code !== 0) {
+    const message = Buffer.concat(errors).toString('utf8');
+    if (/E_NOTIMPL|not implemented/i.test(message)) return false;
+    throw new Error(
+      `7z failed with exit code ${code}: ` + message,
+    );
+  }
+  return true;
 }
 
 async function readZipBuffer(buffer) {
@@ -398,11 +447,72 @@ test('chunked ZIP64 import accepts an stdin-style entry with unknown source size
   });
 });
 
+test(
+  'chunked HTTP import accepts ZIP produced by 7-Zip from stdin',
+  { skip: !sevenZipAvailable() },
+  async (context) => {
+    let received;
+    const directory = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'dtpstat-7z-http-'),
+    );
+    const archivePath = path.join(directory, 'stdin.zip');
+    const payload = {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        properties: { short_name: '7z поток', lanes: 1 },
+        geometry: {
+          type: 'LineString',
+          coordinates: [[37, 55], [37.1, 55.1]],
+        },
+      }],
+    };
+
+    try {
+      if (!await createSevenZipFromStdin(archivePath, payload)) {
+        context.skip('installed 7-Zip does not support creating ZIP from stdin');
+        return;
+      }
+
+      await withServer(async (baseUrl) => {
+        const response = await postChunked(
+          baseUrl,
+          '/api/admin/import/lines',
+          createReadStream(archivePath, { highWaterMark: 17 }),
+          {
+            Authorization: authorization,
+            'Content-Type': 'application/zip',
+          },
+        );
+        assert.equal(response.status, 202);
+        const accepted = JSON.parse(response.body.toString('utf8'));
+        const completed = await waitForTask(baseUrl, accepted);
+        assert.equal(completed.status, 'succeeded');
+        assert.deepEqual(received, payload);
+      }, {
+        importService: {
+          async replaceFromGeoJson(body) {
+            received = body;
+            return { geometries: body.features.length };
+          },
+        },
+      });
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+  },
+);
+
 test('ZIP import with more than one entry fails the admin task', async () => {
   const archive = await zipBuffer('lines.geojson', lineSnapshot);
-  const { zip64Eocd } = zip64DirectoryInfo(archive);
-  archive.writeBigUInt64LE(2n, zip64Eocd + 24);
-  archive.writeBigUInt64LE(2n, zip64Eocd + 32);
+  const directory = directoryInfo(archive);
+  if (directory.zip64) {
+    archive.writeBigUInt64LE(2n, directory.zip64Eocd + 24);
+    archive.writeBigUInt64LE(2n, directory.zip64Eocd + 32);
+  } else {
+    archive.writeUInt16LE(2, directory.eocd + 8);
+    archive.writeUInt16LE(2, directory.eocd + 10);
+  }
 
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/admin/import/lines`, {
@@ -496,7 +606,16 @@ test('line and population imports accept gzip request bodies', async () => {
     }],
   };
   const populations = {
-    populations: [{ name: 'Казань', population: 1300000 }],
+    schemaVersion: 2,
+    regions: [{
+      name: 'Республика Татарстан',
+      attributes: {},
+      cities: [{
+        name: 'Казань',
+        population: 1300000,
+        attributes: {},
+      }],
+    }],
   };
 
   await withServer(async (baseUrl) => {

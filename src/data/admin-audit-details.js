@@ -161,6 +161,18 @@ export function sanitizeAdminAuditData(value) {
 }
 
 /**
+ * Preserve every task-log entry for audit reconstruction while still applying
+ * the normal sensitive-field redaction and per-entry size/depth guards.
+ * Unlike sanitizeAdminAuditData(log), this deliberately does not apply the
+ * generic MAX_ARRAY_ITEMS limit to the outer task log.
+ */
+export function sanitizeAdminAuditLog(log) {
+  if (!Array.isArray(log)) return [];
+  return log.map((entry, index) =>
+    sanitize(entry, ['taskLog', index], 0));
+}
+
+/**
  * Produce a content fingerprint for large imported payloads without storing the
  * payload itself. Useful for incident reconstruction and duplicate detection.
  */

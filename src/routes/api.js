@@ -142,6 +142,11 @@ export function createApiRouter({
     next();
   };
 
+  const clearCompletedAdminTask = (_request, _response, next) => {
+    adminTasks.clearCompleted?.();
+    next();
+  };
+
   const progressLog = (context, progress) => {
     let message = `Прогресс: ${progress.phase}`;
     if (progress.phase === 'resume') {
@@ -170,16 +175,50 @@ export function createApiRouter({
         : `OSM: пакет ${progress.batch} слишком большой; разделён ${progress.objectCount} → ${progress.splitSizes.join(' + ')} объектов`;
     } else if (progress.phase === 'kml-source') {
       message = `KML: обработан источник ${progress.source}/${progress.sourceCount}`;
+    } else if (progress.phase === 'stage-write') {
+      message =
+        `PostgreSQL/PostGIS: запись staging-пакета ${progress.batch ?? '?'}` +
+        ` (${progress.batchPlaces ?? '?'} объектов)`;
+    } else if (progress.phase === 'stage') {
+      message =
+        `PostgreSQL/PostGIS: staging-пакет ${progress.batch ?? '?'} записан; ` +
+        `всего ${progress.stagedPlaces ?? '?'} объектов`;
+    } else if (progress.phase === 'delete-boundaries') {
+      message =
+        `Удаление старого snapshot территорий` +
+        (progress.places ? `; новый snapshot: ${progress.places} объектов` : '');
+    } else if (progress.phase === 'insert-boundaries') {
+      message =
+        `Вставка нового snapshot территорий` +
+        (progress.places ? `; объектов: ${progress.places}` : '');
+    } else if (progress.phase === 'hierarchy') {
+      message =
+        `Иерархия территорий: ${progress.processed ?? 0}/${progress.total ?? '?'}` +
+        (progress.batchCount
+          ? `; пакет ${progress.batch ?? 0}/${progress.batchCount}`
+          : '');
     } else if (progress.phase === 'validated') {
       message = 'Входные данные проверены';
+    } else if (progress.phase === 'warnings') {
+      message =
+        `Импорт продолжен с предупреждениями: ` +
+        `${progress.warningCount ?? 0}; пропущено записей: ` +
+        `${progress.skippedCount ?? 0}`;
+    } else if (progress.phase === 'import-conflicts') {
+      message =
+        `KML: конфликтующих геометрий ${progress.conflictGeometries}; ` +
+        'требуется решение в редакторе геометрий';
+    } else if (progress.phase === 'import-conflicts-apply') {
+      message =
+        `KML: применяем решения конфликтов session ${progress.sessionId}`;
     } else if (progress.phase === 'database') {
       message = 'Изменения базы данных подготовлены';
-    } else if (progress.phase === 'import-conflicts') {
-      message = `KML: конфликтующих геометрий ${progress.conflictGeometries}; требуется решение в редакторе геометрий`;
-    } else if (progress.phase === 'import-conflicts-apply') {
-      message = `KML: применяем решения конфликтов session ${progress.sessionId}`;
     }
-    context.log(message, progress);
+    context.log(
+      message,
+      progress,
+      progress.phase === 'warnings' ? 'warning' : 'info',
+    );
   };
 
   const parseCoordinates = (value, count) => {
@@ -366,7 +405,10 @@ export function createApiRouter({
   router.get('/cities', async (_request, response, next) => {
     try {
       const cities = await repository.listCities();
-      response.set('Cache-Control', 'public, max-age=300');
+      // Category and rank are derived from mutable project thresholds and
+      // materialized report values. Never let a browser keep the old
+      // classification after the administrator saves new criteria.
+      response.set('Cache-Control', 'no-store');
       response.json({ cities });
     } catch (error) {
       next(error);
@@ -565,12 +607,14 @@ export function createApiRouter({
     '/admin/import',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
+    clearCompletedAdminTask,
     importLines,
   );
   router.post(
     '/admin/import/lines',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
+    clearCompletedAdminTask,
     importLines,
   );
 
@@ -578,6 +622,7 @@ export function createApiRouter({
     '/admin/import/cities',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
+    clearCompletedAdminTask,
     async (request, response, next) => {
       const dryRun = parseBoolean(request.query.dryRun, false);
       if (dryRun === null) {
@@ -614,6 +659,7 @@ export function createApiRouter({
     '/admin/update',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
+    clearCompletedAdminTask,
     jsonBody(kmlUpdate.maxRequestBodyBytes, 'application/json'),
     (request, response, next) => {
       const hasRequestBody =
@@ -697,6 +743,7 @@ export function createApiRouter({
     '/admin/update/cities',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
+    clearCompletedAdminTask,
     jsonBody(osmCityUpdate.maxRequestBodyBytes, 'application/json'),
     (request, response, next) => {
       const hasRequestBody =
@@ -983,6 +1030,7 @@ export function createApiRouter({
     '/admin/populations',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
+    clearCompletedAdminTask,
     async (request, response, next) => {
       const upload = await receivePortableUpload(request, response, next);
       if (!upload) return;

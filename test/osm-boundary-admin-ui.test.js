@@ -11,11 +11,13 @@ async function read(relativePath) {
 }
 
 test('OSM object editor is a top-level admin section with population editing', async () => {
-  const [html, shell, editor, styles] = await Promise.all([
+  const [html, shell, editor, styles, publicApp, derivedEvents] = await Promise.all([
     read('admin/index.html'),
     read('admin/admin-shell.js'),
     read('admin/osm-boundary-editor.js'),
     read('admin/osm-boundary-editor.css'),
+    read('public/js/app.js'),
+    read('admin/derived-data-events.js'),
   ]);
 
   assert.match(
@@ -42,6 +44,12 @@ test('OSM object editor is a top-level admin section with population editing', a
     html,
     /name="population"[^>]*type="number"[^>]*max="2147483647"/,
   );
+  assert.match(html, /name="populationAsOf"[^>]*type="date"/);
+  assert.match(
+    html,
+    /name="populationSource"[^>]*type="text"[^>]*maxlength="500"/,
+  );
+  assert.match(html, /textarea name="attributes"[^>]*disabled/);
   assert.match(
     html,
     /name="population"[\s\S]*<button type="submit" disabled>Сохранить объект<\/button>[\s\S]*id="osm-boundary-enable-branch"[\s\S]*id="osm-boundary-disable-branch"[\s\S]*id="osm-boundary-meta"/,
@@ -58,6 +66,29 @@ test('OSM object editor is a top-level admin section with population editing', a
   assert.match(editor, /#admin-section-osm-objects/);
   assert.match(editor, /population\.dataset\.initialValue/);
   assert.match(editor, /changes\.population/);
+  assert.match(editor, /const populationAsOf = field\('populationAsOf'\)/);
+  assert.match(editor, /const populationSource = field\('populationSource'\)/);
+  assert.match(editor, /const attributes = field\('attributes'\)/);
+  assert.match(
+    editor,
+    /active,[\s\S]*displayName,[\s\S]*displayType,[\s\S]*population,[\s\S]*populationAsOf,[\s\S]*populationSource,[\s\S]*attributes,[\s\S]*save/,
+  );
+  assert.doesNotMatch(
+    editor,
+    /population\.disabled\s*=\s*!active\.checked/,
+  );
+  assert.doesNotMatch(editor, /population\.addEventListener\('input'/);
+  assert.doesNotMatch(
+    editor,
+    /(?:population|populationAsOf|populationSource|attributes)[\s\S]{0,300}active\.checked\s*=\s*true/,
+  );
+  assert.match(editor, /changes\.populationAsOf/);
+  assert.match(editor, /changes\.populationSource/);
+  assert.match(editor, /changes\.attributes/);
+  assert.match(
+    html,
+    /Данные территории хранятся независимо от флага «Активен»/,
+  );
   assert.match(editor, /function normalizeSearchText\(value\)/);
   assert.match(editor, /\.toLocaleLowerCase\('ru-RU'\)[\s\S]*\.replace\(\/\\s\+\/gu, ''\)/);
   assert.match(editor, /function compareBoundaries\(a, b\)/);
@@ -85,6 +116,22 @@ test('OSM object editor is a top-level admin section with population editing', a
     /\/api\/admin\/osm-boundaries\/\$\{encodeURIComponent\(item\.id\)\}\/subtree/,
   );
   assert.match(editor, /window\.confirm\(/);
+  assert.match(editor, /publishDerivedDataChange\('osm-boundary'\)/);
+  assert.match(editor, /publishDerivedDataChange\('osm-boundary-subtree'\)/);
+  assert.match(
+    editor,
+    /await api\([\s\S]*publishDerivedDataChange\('osm-boundary'\)/,
+  );
+  assert.match(derivedEvents, /new BroadcastChannel\(CHANNEL_NAME\)/);
+  assert.match(derivedEvents, /window\.localStorage\.setItem\(STORAGE_KEY/);
+  assert.match(publicApp, /subscribeDerivedDataChanges\(/);
+  assert.match(publicApp, /async function refreshDerivedData\(\)/);
+  assert.match(
+    publicApp,
+    /Promise\.all\(\[[\s\S]*loadCities\(\)[\s\S]*loadLineTypes\(\)/,
+  );
+  assert.match(publicApp, /mapController\.setCities\(cities\)/);
+  assert.match(publicApp, /mapController\.refreshViewport\(\)/);
   assert.match(editor, /enableBranch\?\.addEventListener\('click'/);
   assert.match(editor, /disableBranch\?\.addEventListener\('click'/);
   assert.match(html, /\/vendor\/mapbox-gl\/mapbox-gl\.css/);
@@ -146,4 +193,66 @@ test('OSM update UI exposes explicit resume restart and discard controls', async
 
   assert.match(styles, /\.osm-checkpoint\s*\{/);
   assert.match(styles, /\.osm-checkpoint-actions/);
+});
+
+
+test('admin task UI distinguishes partial import success', async () => {
+  const [admin, styles] = await Promise.all([
+    read('admin/admin.js'),
+    read('admin/admin.css'),
+  ]);
+
+  assert.match(admin, /phase === 'warnings'/);
+  assert.match(admin, /Есть предупреждения/);
+  assert.match(admin, /task\.result\?\.partial/);
+  assert.match(admin, /result-warning/);
+  assert.match(admin, /status-partial/);
+  assert.match(admin, /операция завершена с предупреждениями/);
+  assert.match(styles, /\.status-partial\s*\{[^}]*var\(--warning\)/);
+  assert.match(styles, /\.result-warning\s*\{/);
+  assert.match(styles, /\.result-warning summary\s*\{[^}]*var\(--warning\)/);
+});
+
+
+test('admin clears previous task status immediately when a new operation starts', async () => {
+  const [admin, notices, security] = await Promise.all([
+    read('admin/admin.js'),
+    read('admin/task-notices.js'),
+    read('admin/security-editor-v2.js'),
+  ]);
+
+  assert.match(admin, /function clearTaskStatusForStart\(/);
+  assert.match(
+    admin,
+    /clearTaskStatusForStart\(taskKey\);[\s\S]*showTransferOverlay/,
+  );
+  assert.match(
+    admin,
+    /async function start\([\s\S]*clearTaskStatusForStart\(taskKey\)/,
+  );
+  assert.match(admin, /taskNotices\.clear\(taskKey\)/);
+  assert.match(notices, /clear\(taskKey\)/);
+  assert.match(security, /entry\.details\?\.taskLog/);
+  assert.match(security, /Журнал \(\$\{taskLogCount\}\)/);
+  assert.match(admin, /phase === 'stage-write'/);
+  assert.match(admin, /Ожидаем PostgreSQL\/PostGIS/);
+  assert.match(admin, /phase === 'delete-boundaries'/);
+  assert.match(admin, /Удаление старых территорий/);
+  assert.match(admin, /phase === 'insert-boundaries'/);
+  assert.match(admin, /Вставка новых территорий/);
+  assert.match(admin, /phase === 'hierarchy'/);
+  assert.match(admin, /Построение иерархии территорий/);
+  assert.match(admin, /function stableProcessingView\(/);
+  assert.match(admin, /Чтение и подготовка входного JSON/);
+  assert.match(admin, /PostgreSQL\/PostGIS:/);
+  assert.match(admin, /processingStatus\.hidden = !progress\.stableInputProgress/);
+  assert.match(admin, /for \(const entry of parseEntries\)/);
+  assert.match(admin, /decodedBytes = Math\.max\(/);
+  assert.match(admin, /itemCount = Math\.max\(/);
+  assert.match(admin, /function syncSessionActivityHold\(/);
+  assert.match(admin, /dtpstatAdminSessionGuard\?\.setActivityHold/);
+  assert.match(
+    admin,
+    /Boolean\(state\.transfer\) \|\| Boolean\(active\(state\.task\)\)/,
+  );
 });

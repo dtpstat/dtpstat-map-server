@@ -1,3 +1,5 @@
+import { publishDerivedDataChange } from './derived-data-events.js';
+
 export function buildBoundaryTreeIndex(items) {
   const byId = new Map();
   const childrenByParent = new Map();
@@ -64,6 +66,9 @@ if (typeof document !== 'undefined') {
     const displayName = field('displayName');
     const displayType = field('displayType');
     const population = field('population');
+    const populationAsOf = field('populationAsOf');
+    const populationSource = field('populationSource');
+    const attributes = field('attributes');
     const save = form.querySelector('button[type="submit"]');
     const enableBranch = document.querySelector('#osm-boundary-enable-branch');
     const disableBranch = document.querySelector('#osm-boundary-disable-branch');
@@ -340,13 +345,27 @@ if (typeof document !== 'undefined') {
     function applySelection(item) {
       state.selectedId = item?.id ?? null;
       const enabled = Boolean(item);
-      for (const control of [active, displayName, displayType, save]) {
+      for (const control of [
+        active,
+        displayName,
+        displayType,
+        population,
+        populationAsOf,
+        populationSource,
+        attributes,
+        save,
+      ]) {
         control.disabled = !enabled;
       }
-      population.disabled = !enabled || !item?.active;
       if (!item) {
         population.value = '';
         population.dataset.initialValue = '';
+        populationAsOf.value = '';
+        populationAsOf.dataset.initialValue = '';
+        populationSource.value = '';
+        populationSource.dataset.initialValue = '';
+        attributes.value = '{}';
+        attributes.dataset.initialValue = '{}';
         title.textContent = 'Выберите объект в дереве';
         meta.replaceChildren();
         updateBranchActions(null);
@@ -361,7 +380,15 @@ if (typeof document !== 'undefined') {
       population.dataset.initialValue = item.population === null || item.population === undefined
         ? ''
         : String(item.population);
-      population.disabled = !active.checked;
+      populationAsOf.value = item.populationAsOf
+        ? String(item.populationAsOf).slice(0, 10)
+        : '';
+      populationAsOf.dataset.initialValue = populationAsOf.value;
+      populationSource.value = item.populationSource ?? '';
+      populationSource.dataset.initialValue = populationSource.value;
+      const territoryAttributes = item.attributes ?? {};
+      attributes.value = JSON.stringify(territoryAttributes, null, 2);
+      attributes.dataset.initialValue = JSON.stringify(territoryAttributes);
       title.textContent = item.displayName;
       meta.replaceChildren(
         metaItem('OSM', `${item.osmType}/${item.osmId}`),
@@ -561,12 +588,49 @@ if (typeof document !== 'undefined') {
               };
               const populationValue = population.value.trim();
               if (
-                active.checked &&
                 populationValue !== (population.dataset.initialValue ?? '')
               ) {
                 changes.population = populationValue === ''
                   ? null
                   : Number(populationValue);
+              }
+
+              const populationAsOfValue = populationAsOf.value.trim();
+              if (
+                populationAsOfValue !==
+                (populationAsOf.dataset.initialValue ?? '')
+              ) {
+                changes.populationAsOf =
+                  populationAsOfValue === '' ? null : populationAsOfValue;
+              }
+
+              const populationSourceValue = populationSource.value.trim();
+              if (
+                populationSourceValue !==
+                (populationSource.dataset.initialValue ?? '')
+              ) {
+                changes.populationSource =
+                  populationSourceValue === '' ? null : populationSourceValue;
+              }
+
+              let attributesValue;
+              try {
+                attributesValue = JSON.parse(attributes.value.trim() || '{}');
+              } catch {
+                throw new Error('Атрибуты территории должны быть корректным JSON object.');
+              }
+              if (
+                !attributesValue ||
+                typeof attributesValue !== 'object' ||
+                Array.isArray(attributesValue)
+              ) {
+                throw new Error('Атрибуты территории должны быть JSON object.');
+              }
+              if (
+                JSON.stringify(attributesValue) !==
+                (attributes.dataset.initialValue ?? '{}')
+              ) {
+                changes.attributes = attributesValue;
               }
               return changes;
             })()),
@@ -575,7 +639,12 @@ if (typeof document !== 'undefined') {
         await load();
         const updated = state.boundaries.find((item) => item.id === payload.boundary.id);
         if (updated) applySelection(updated);
-        setMessage('Настройки OSM-объекта сохранены.', 'success');
+        setMessage(
+          'Настройки OSM-объекта сохранены. Таблица и линии пересчитаны.',
+          'success',
+        );
+        publishDerivedDataChange('osm-boundary');
+        publishDerivedDataChange('osm-boundary-subtree');
         window.dispatchEvent(new CustomEvent('dtpstat:osm-boundary-changed'));
       } catch (error) {
         setMessage(error.message, 'error');
@@ -636,10 +705,6 @@ if (typeof document !== 'undefined') {
         save.disabled = !state.selectedId;
       }
     }
-
-    active.addEventListener('change', () => {
-      population.disabled = !state.selectedId || !active.checked;
-    });
 
     enableBranch?.addEventListener('click', () => void setBranchActive(true));
     disableBranch?.addEventListener('click', () => void setBranchActive(false));

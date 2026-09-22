@@ -97,5 +97,5 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run db:init
-      - name: Exercise V035 upgrade with detached geometries
+      - name: Exercise V036 upgrade with detached geometries
         run: node scripts/verify-geometry-upgrade-ci.js

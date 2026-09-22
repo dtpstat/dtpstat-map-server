@@ -50,7 +50,12 @@ const importResult = {
 };
 
 const populationResult = {
+  regions: 1,
+  requestedRegions: 1,
   cities: 1,
+  requestedCities: 1,
+  skippedCount: 0,
+  skippedCities: [],
   asOf: '2026-01-01',
   source: 'test',
   updatedAt: '2026-08-31T12:00:00.000Z',
@@ -262,6 +267,7 @@ test('API exposes public config, health, and ordered cities', async () => {
       status: 'ok',
       database: 'reachable',
     });
+    assert.equal(citiesResponse.headers.get('cache-control'), 'no-store');
     assert.deepEqual((await citiesResponse.json()).cities, cities);
   });
 });
@@ -604,9 +610,18 @@ test('authenticated population endpoint updates a separate data source', async (
   };
   const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
   const body = {
+    schemaVersion: 2,
     asOf: '2026-01-01',
     source: 'test',
-    populations: [{ name: 'Казань', population: 1300000 }],
+    regions: [{
+      name: 'Республика Татарстан',
+      attributes: {},
+      cities: [{
+        name: 'Казань',
+        population: 1300000,
+        attributes: {},
+      }],
+    }],
   };
 
   await withServer(async (baseUrl) => {
@@ -928,7 +943,16 @@ test('one active admin task blocks every other mutating admin route', async () =
     layers: [{ name: 'Линии', multiple: 1 }],
   }];
   const populationBody = {
-    populations: [{ name: 'Казань', population: 1300000 }],
+    schemaVersion: 2,
+    regions: [{
+      name: 'Республика Татарстан',
+      attributes: {},
+      cities: [{
+        name: 'Казань',
+        population: 1300000,
+        attributes: {},
+      }],
+    }],
   };
 
   await withServer(async (baseUrl) => {

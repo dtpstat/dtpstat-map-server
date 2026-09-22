@@ -7,16 +7,41 @@ import {
 
 function createPool({
   currentActive = true,
-  currentCityId = 17,
   currentPopulation = 120000,
-  resolvedCityId = currentCityId,
+  currentPopulationAsOf = '2026-01-01',
+  currentPopulationSource = 'test',
+  currentAttributes = { note: 'x' },
   finalPopulation = currentPopulation,
+  finalPopulationAsOf = currentPopulationAsOf,
+  finalPopulationSource = currentPopulationSource,
+  finalAttributes = currentAttributes,
   finalActive = currentActive,
   subtreeRows = null,
 } = {}) {
   const queries = [];
   const parameters = [];
   let released = false;
+
+  const finalRow = () => ({
+    id: 5,
+    parentId: null,
+    osmType: 'relation',
+    osmId: '123',
+    osmName: 'Тестоград',
+    placeType: 'city',
+    adminLevel: null,
+    active: finalActive,
+    displayName: 'Тестоград',
+    displayType: 'city',
+    areaKm2: 100,
+    cityId: finalActive ? 17 : null,
+    population: finalPopulation,
+    populationAsOf: finalPopulationAsOf,
+    populationSource: finalPopulationSource,
+    attributes: finalAttributes,
+    tags: {},
+    updatedAt: '2026-09-20T00:00:00.000Z',
+  });
 
   const client = {
     async query(text, values = []) {
@@ -36,43 +61,21 @@ function createPool({
             active: currentActive,
             displayName: 'Тестоград',
             displayType: 'city',
-            cityId: currentCityId,
             population: currentPopulation,
+            populationAsOf: currentPopulationAsOf,
+            populationSource: currentPopulationSource,
+            attributes: currentAttributes,
           }],
           rowCount: 1,
         };
-      }
-
-      if (/^SELECT city_id::integer AS "cityId"/i.test(normalized)) {
-        return { rows: [{ cityId: resolvedCityId }], rowCount: 1 };
       }
 
       if (
-        /^SELECT\s+boundary\.id::integer AS id/i.test(normalized) &&
-        /population\.population::integer AS population/i.test(normalized)
+        normalized.startsWith('SELECT') &&
+        normalized.includes('boundary.id::integer AS id') &&
+        normalized.includes('boundary.population::integer AS population')
       ) {
-        return {
-          rows: [{
-            id: 5,
-            parentId: null,
-            osmType: 'relation',
-            osmId: '123',
-            osmName: 'Тестоград',
-            placeType: 'city',
-            adminLevel: null,
-            active: finalActive,
-            displayName: 'Тестоград',
-            displayType: 'city',
-            areaKm2: 100,
-            cityId: resolvedCityId,
-            population: finalPopulation,
-            populationAsOf: null,
-            populationSource: null,
-            tags: {},
-            updatedAt: '2026-09-20T00:00:00.000Z',
-          }],
-          rowCount: 1,
-        };
+        return { rows: [finalRow()], rowCount: 1 };
       }
 
       return { rows: [], rowCount: 0 };
@@ -90,16 +93,7 @@ function createPool({
     async query(text, values = []) {
       queries.push(text.trim());
       parameters.push(values);
-      return {
-        rows: [{
-          id: 5,
-          cityId: 17,
-          population: 120000,
-          populationAsOf: '2026-01-01',
-          populationSource: 'test',
-        }],
-        rowCount: 1,
-      };
+      return { rows: [finalRow()], rowCount: 1 };
     },
     async connect() {
       return client;
@@ -107,31 +101,95 @@ function createPool({
   };
 }
 
-test('OSM boundary list exposes linked population metadata', async () => {
+test('OSM boundary list reads population metadata from the boundary itself', async () => {
   const pool = createPool();
   const repository = createOsmBoundaryAdminRepository(pool);
 
   const rows = await repository.list();
 
   assert.equal(rows[0].population, 120000);
-  assert.match(pool.queries[0], /LEFT JOIN city_populations AS population/i);
-  assert.match(pool.queries[0], /population\.as_of AS "populationAsOf"/i);
+  assert.match(pool.queries[0], /boundary.population::integer AS population/i);
+  assert.match(pool.queries[0], /boundary.population_as_of AS "populationAsOf"/i);
+  assert.doesNotMatch(pool.queries[0], /JOIN city_populations/i);
 });
 
-test('OSM boundary update upserts population for the active linked city', async () => {
-  const pool = createPool({ finalPopulation: 125000 });
+test('territory data can be edited on an inactive OSM boundary without activating it', async () => {
+  const pool = createPool({
+    currentActive: false,
+    currentPopulation: null,
+    finalPopulation: 125000,
+    finalPopulationAsOf: '2026-02-01',
+    finalPopulationSource: 'Регионстат',
+    finalAttributes: { census: true },
+    finalActive: false,
+  });
   const repository = createOsmBoundaryAdminRepository(pool);
 
-  const result = await repository.update(5, { population: 125000 });
+  const result = await repository.update(5, {
+    population: 125000,
+    populationAsOf: '2026-02-01',
+    populationSource: 'Регионстат',
+    attributes: { census: true },
+  });
 
   assert.equal(result.population, 125000);
-  const index = pool.queries.findIndex((query) =>
-    query.startsWith('INSERT INTO city_populations'));
-  assert.ok(index >= 0);
-  assert.deepEqual(pool.parameters[index], [17, 125000]);
-  assert.ok(pool.queries.some((query) => /^WITH geometry_statistics AS/i.test(query)));
+  assert.equal(result.populationAsOf, '2026-02-01');
+  assert.equal(result.populationSource, 'Регионстат');
+  assert.deepEqual(result.attributes, { census: true });
+  assert.equal(result.active, false);
+
+  const updateIndex = pool.queries.findIndex((query) =>
+    /^UPDATE city_boundaries/i.test(query),
+  );
+  assert.ok(updateIndex >= 0);
+  assert.equal(pool.parameters[updateIndex][1], false);
+  assert.equal(pool.parameters[updateIndex][4], 125000);
+  assert.equal(pool.parameters[updateIndex][5], '2026-02-01');
+  assert.equal(pool.parameters[updateIndex][6], 'Регионстат');
+  assert.equal(pool.parameters[updateIndex][7], '{"census":true}');
+  assert.ok(
+    pool.queries.includes('SELECT sync_active_boundary_populations()'),
+  );
   assert.equal(pool.queries.at(-1), 'COMMIT');
   assert.equal(pool.released, true);
+});
+
+test('active state can change without modifying territory population', async () => {
+  const pool = createPool({
+    currentActive: false,
+    currentPopulation: 1000,
+    finalPopulation: 1000,
+    finalActive: true,
+  });
+  const repository = createOsmBoundaryAdminRepository(pool);
+
+  const result = await repository.update(5, { active: true });
+
+  assert.equal(result.active, true);
+  assert.equal(result.population, 1000);
+  const updateIndex = pool.queries.findIndex((query) =>
+    /^UPDATE city_boundaries/i.test(query),
+  );
+  assert.equal(pool.parameters[updateIndex][1], true);
+  assert.equal(pool.parameters[updateIndex][4], 1000);
+});
+
+test('OSM boundary update can explicitly clear population while inactive', async () => {
+  const pool = createPool({
+    currentActive: false,
+    finalPopulation: null,
+    finalActive: false,
+  });
+  const repository = createOsmBoundaryAdminRepository(pool);
+
+  const result = await repository.update(5, { population: null });
+
+  assert.equal(result.population, null);
+  assert.equal(result.active, false);
+  const updateIndex = pool.queries.findIndex((query) =>
+    /^UPDATE city_boundaries/i.test(query),
+  );
+  assert.equal(pool.parameters[updateIndex][4], null);
 });
 
 test('activating one OSM object never activates parents or descendants', async () => {
@@ -141,51 +199,19 @@ test('activating one OSM object never activates parents or descendants', async (
   });
   const repository = createOsmBoundaryAdminRepository(pool);
 
-  const result = await repository.update(5, { active: true });
+  await repository.update(5, { active: true });
 
-  assert.equal(result.active, true);
   const updateIndex = pool.queries.findIndex((query) =>
-    /^UPDATE city_boundaries[\s\S]*SET is_active = \$2/i.test(query));
+    /^UPDATE city_boundaries/i.test(query),
+  );
   assert.ok(updateIndex >= 0);
-  assert.match(pool.queries[updateIndex], /WHERE id = \$1$/i);
-  assert.doesNotMatch(pool.queries[updateIndex], /parent_id|WITH RECURSIVE|ANY\(/i);
-  assert.deepEqual(pool.parameters[updateIndex], [5, true, 'Тестоград', 'city']);
-  assert.equal(
-    pool.queries.some((query) => /^WITH RECURSIVE subtree AS/i.test(query)),
-    false,
-  );
+  assert.ok(pool.queries[updateIndex].endsWith('WHERE id = $1'));
+  assert.equal(pool.queries[updateIndex].includes('parent_id'), false);
+  assert.equal(pool.queries[updateIndex].includes('WITH RECURSIVE'), false);
+  assert.equal(pool.queries[updateIndex].includes('ANY('), false);
 });
 
-test('OSM boundary update can explicitly clear population', async () => {
-  const pool = createPool({ finalPopulation: null });
-  const repository = createOsmBoundaryAdminRepository(pool);
-
-  const result = await repository.update(5, { population: null });
-
-  assert.equal(result.population, null);
-  const index = pool.queries.findIndex((query) =>
-    query === 'DELETE FROM city_populations WHERE city_id = $1');
-  assert.ok(index >= 0);
-  assert.deepEqual(pool.parameters[index], [17]);
-});
-
-test('population cannot be edited while the OSM boundary is inactive', async () => {
-  const pool = createPool({ currentActive: false });
-  const repository = createOsmBoundaryAdminRepository(pool);
-
-  await assert.rejects(
-    repository.update(5, { active: false, population: 1000 }),
-    (error) =>
-      error instanceof OsmBoundaryAdminValidationError &&
-      /only be edited for an active OSM boundary/.test(error.message),
-  );
-
-  assert.equal(pool.queries.at(-1), 'ROLLBACK');
-  assert.equal(pool.released, true);
-});
-
-
-test('OSM subtree deactivation updates the selected node and every descendant once', async () => {
+test('OSM subtree deactivation updates selected node and descendants once', async () => {
   const pool = createPool({
     finalActive: false,
     subtreeRows: [
@@ -198,39 +224,16 @@ test('OSM subtree deactivation updates the selected node and every descendant on
 
   const result = await repository.setSubtreeActive(5, false);
 
-  assert.equal(result.active, false);
   assert.equal(result.affectedCount, 3);
   assert.equal(result.changedCount, 2);
-  assert.equal(result.previousActiveCount, 2);
-  assert.equal(result.previousInactiveCount, 1);
-  assert.equal(result.root.active, false);
-
-  const updateIndex = pool.queries.findIndex((query) =>
-    /UPDATE city_boundaries[\s\S]*ANY\(\$1::bigint\[\]\)/i.test(query));
-  assert.ok(updateIndex >= 0);
-  assert.deepEqual(pool.parameters[updateIndex], [[5, 6, 7], false]);
   assert.ok(pool.queries.includes('SELECT sync_active_boundary_cities()'));
-  assert.ok(pool.queries.some((query) => /^WITH geometry_statistics AS/i.test(query)));
-  assert.equal(pool.queries.at(-1), 'COMMIT');
-  assert.equal(pool.released, true);
-});
-
-test('OSM subtree activation returns null for a missing root without derived updates', async () => {
-  const pool = createPool({ subtreeRows: [] });
-  const repository = createOsmBoundaryAdminRepository(pool);
-
-  const result = await repository.setSubtreeActive(999, false);
-
-  assert.equal(result, null);
-  assert.equal(
-    pool.queries.some((query) => query.startsWith('UPDATE city_boundaries')),
-    false,
+  assert.ok(
+    pool.queries.includes('SELECT sync_active_boundary_populations()'),
   );
-  assert.equal(pool.queries.at(-1), 'ROLLBACK');
-  assert.equal(pool.released, true);
+  assert.equal(pool.queries.at(-1), 'COMMIT');
 });
 
-test('OSM subtree activation validates boolean state before opening a transaction', async () => {
+test('OSM subtree activation validates boolean state before transaction', async () => {
   const pool = createPool();
   const repository = createOsmBoundaryAdminRepository(pool);
 

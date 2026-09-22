@@ -13,10 +13,15 @@ const LIST_LINE_TYPES_SQL = `
     line_type.color,
     line_type.line_style AS style,
     line_type.width::double precision AS width,
-    count(geometry.id)::integer AS "geometryCount"
+    count(geometry.id) FILTER (
+      WHERE active_boundary.id IS NOT NULL
+    )::integer AS "geometryCount"
   FROM line_types AS line_type
   LEFT JOIN city_geometries AS geometry
     ON geometry.line_type_id = line_type.id
+  LEFT JOIN city_boundaries AS active_boundary
+    ON active_boundary.id = geometry.boundary_id
+   AND active_boundary.is_active
   GROUP BY
     line_type.id,
     line_type.code,

@@ -1,3 +1,5 @@
+import { publishDerivedDataChange } from './derived-data-events.js';
+
 const section = document.querySelector('#admin-section-geometries');
 
 if (section) {
@@ -42,7 +44,6 @@ if (section) {
   const DRAW_SOURCE = 'geometry-editor-draw';
   const BOUNDARY_SOURCE = 'geometry-editor-boundary';
   const IMPORT_SOURCE = 'geometry-editor-import-conflict';
-  const PUBLISHED_DATA_REVISION_KEY = 'dtpstat:published-data-revision';
   const DELETE_VERTEX_CURSOR =
     'url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2228%22 height=%2228%22 viewBox=%220 0 28 28%22%3E%3Cpath d=%22M3 2l8.6 18.8 2.8-7.1 7.2-2.8L3 2z%22 fill=%22white%22 stroke=%22%2310181b%22 stroke-width=%221.5%22 stroke-linejoin=%22round%22/%3E%3Ccircle cx=%2220%22 cy=%2220%22 r=%226.5%22 fill=%22%23d84f57%22 stroke=%22white%22 stroke-width=%221.5%22/%3E%3Cpath d=%22M16.5 20h7%22 stroke=%22white%22 stroke-width=%222%22 stroke-linecap=%22round%22/%3E%3C/svg%3E") 3 2, pointer';
 
@@ -1745,14 +1746,7 @@ if (section) {
         method: 'POST',
       });
       await refresh({ keepSelection: Boolean(selectedId), fit: false });
-      try {
-        window.localStorage.setItem(
-          PUBLISHED_DATA_REVISION_KEY,
-          String(Date.now()),
-        );
-      } catch {
-        // Cross-tab refresh is a convenience; recalculation itself already succeeded.
-      }
+      publishDerivedDataChange('geometry-editor');
       setMessage(
         'Пересчёт завершён: обновлены города, основная карта, статистика, рейтинги и публичные данные.',
         'success',

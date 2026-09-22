@@ -9,11 +9,19 @@ export class StreamingJsonError extends Error {
 }
 
 class AsyncCharReader {
-  constructor(source, { maxBytes, signal }) {
+  constructor(source, {
+    maxBytes,
+    signal,
+    onReadProgress,
+    progressStepBytes = 4 * 1024 * 1024,
+  }) {
     this.iterator = source[Symbol.asyncIterator]();
     this.decoder = new TextDecoder('utf-8', { fatal: true });
     this.maxBytes = maxBytes;
     this.signal = signal;
+    this.onReadProgress = onReadProgress;
+    this.progressStepBytes = progressStepBytes;
+    this.lastProgressBytes = 0;
     this.buffer = '';
     this.offset = 0;
     this.done = false;
@@ -56,6 +64,14 @@ class AsyncCharReader {
       } catch {
         throw new StreamingJsonError('JSON input is not valid UTF-8');
       }
+
+      if (
+        this.onReadProgress &&
+        this.bytes - this.lastProgressBytes >= this.progressStepBytes
+      ) {
+        this.lastProgressBytes = this.bytes;
+        await this.onReadProgress(this.bytes);
+      }
     }
   }
 
@@ -81,9 +97,18 @@ class AsyncCharReader {
 
   async whitespace() {
     for (;;) {
-      const value = await this.peek();
-      if (value === null || !/\s/u.test(value)) return;
-      this.offset += 1;
+      await this.fill();
+      while (this.offset < this.buffer.length) {
+        const value = this.buffer[this.offset];
+        if (
+          value !== ' ' &&
+          value !== '\n' &&
+          value !== '\r' &&
+          value !== '\t'
+        ) return;
+        this.offset += 1;
+      }
+      if (this.done) return;
     }
   }
 }
@@ -101,33 +126,58 @@ async function readStringRaw(reader, limit) {
   if (await reader.next() !== '"') {
     throw new StreamingJsonError('Expected a JSON string');
   }
-  let raw = '"';
+
+  const parts = ['"'];
   let bytes = 1;
   let escaped = false;
-  for (;;) {
-    const value = await reader.next();
-    if (value === null) {
-      throw new StreamingJsonError('Unexpected end of JSON string');
-    }
-    raw += value;
-    bytes += Buffer.byteLength(value);
+
+  const append = (piece) => {
+    if (!piece) return;
+    parts.push(piece);
+    bytes += Buffer.byteLength(piece);
     if (bytes > limit) {
       throw new StreamingJsonError(
         `JSON string exceeds the configured item limit of ${limit} bytes`,
       );
     }
-    if (escaped) {
-      escaped = false;
-      continue;
+  };
+
+  for (;;) {
+    await reader.fill();
+    if (reader.offset >= reader.buffer.length) {
+      throw new StreamingJsonError('Unexpected end of JSON string');
     }
-    if (value === '\\') {
-      escaped = true;
-      continue;
+
+    const start = reader.offset;
+    let index = start;
+    while (index < reader.buffer.length) {
+      const value = reader.buffer[index];
+      if (escaped) {
+        escaped = false;
+        index += 1;
+        continue;
+      }
+      if (value === '\\') {
+        escaped = true;
+        index += 1;
+        continue;
+      }
+      if (value === '"') {
+        index += 1;
+        append(reader.buffer.slice(start, index));
+        reader.offset = index;
+        return parts.join('');
+      }
+      if (value.charCodeAt(0) < 0x20) {
+        throw new StreamingJsonError(
+          'JSON string contains an unescaped control character',
+        );
+      }
+      index += 1;
     }
-    if (value === '"') return raw;
-    if (value.charCodeAt(0) < 0x20) {
-      throw new StreamingJsonError('JSON string contains an unescaped control character');
-    }
+
+    append(reader.buffer.slice(start, index));
+    reader.offset = index;
   }
 }
 
@@ -140,83 +190,113 @@ async function readValueRaw(reader, limit, maxDepth) {
 
   if (first === '"') return readStringRaw(reader, limit);
 
-  let raw = '';
+  const parts = [];
   let bytes = 0;
-  if (first === '{' || first === '[') {
-    const stack = [];
-    let inString = false;
-    let escaped = false;
-    for (;;) {
-      const value = await reader.next();
-      if (value === null) {
-        throw new StreamingJsonError('Unexpected end of JSON value');
-      }
-      raw += value;
-      bytes += Buffer.byteLength(value);
-      if (bytes > limit) {
-        throw new StreamingJsonError(
-          `One JSON value exceeds the configured item limit of ${limit} bytes`,
-        );
-      }
-
-      if (inString) {
-        if (escaped) {
-          escaped = false;
-        } else if (value === '\\') {
-          escaped = true;
-        } else if (value === '"') {
-          inString = false;
-        } else if (value.charCodeAt(0) < 0x20) {
-          throw new StreamingJsonError(
-            'JSON string contains an unescaped control character',
-          );
-        }
-        continue;
-      }
-
-      if (value === '"') {
-        inString = true;
-        continue;
-      }
-      if (value === '{' || value === '[') {
-        stack.push(value);
-        if (stack.length > maxDepth) {
-          throw new StreamingJsonError(
-            `JSON nesting depth exceeds the configured limit of ${maxDepth}`,
-          );
-        }
-        continue;
-      }
-      if (value === '}' || value === ']') {
-        const expected = value === '}' ? '{' : '[';
-        if (stack.pop() !== expected) {
-          throw new StreamingJsonError('JSON value has mismatched brackets');
-        }
-        if (stack.length === 0) return raw;
-      }
-    }
-  }
-
-  for (;;) {
-    const value = await reader.peek();
-    if (
-      value === null ||
-      value === ',' ||
-      value === '}' ||
-      value === ']' ||
-      /\s/u.test(value)
-    ) {
-      break;
-    }
-    const consumed = await reader.next();
-    raw += consumed;
-    bytes += Buffer.byteLength(consumed);
+  const append = (piece) => {
+    if (!piece) return;
+    parts.push(piece);
+    bytes += Buffer.byteLength(piece);
     if (bytes > limit) {
       throw new StreamingJsonError(
         `One JSON value exceeds the configured item limit of ${limit} bytes`,
       );
     }
+  };
+
+  if (first === '{' || first === '[') {
+    const stack = [];
+    let inString = false;
+    let escaped = false;
+
+    for (;;) {
+      await reader.fill();
+      if (reader.offset >= reader.buffer.length) {
+        throw new StreamingJsonError('Unexpected end of JSON value');
+      }
+
+      const start = reader.offset;
+      let index = start;
+      while (index < reader.buffer.length) {
+        const value = reader.buffer[index];
+
+        if (inString) {
+          if (escaped) {
+            escaped = false;
+          } else if (value === '\\') {
+            escaped = true;
+          } else if (value === '"') {
+            inString = false;
+          } else if (value.charCodeAt(0) < 0x20) {
+            throw new StreamingJsonError(
+              'JSON string contains an unescaped control character',
+            );
+          }
+          index += 1;
+          continue;
+        }
+
+        if (value === '"') {
+          inString = true;
+          index += 1;
+          continue;
+        }
+        if (value === '{' || value === '[') {
+          stack.push(value);
+          if (stack.length > maxDepth) {
+            throw new StreamingJsonError(
+              `JSON nesting depth exceeds the configured limit of ${maxDepth}`,
+            );
+          }
+          index += 1;
+          continue;
+        }
+        if (value === '}' || value === ']') {
+          const expected = value === '}' ? '{' : '[';
+          if (stack.pop() !== expected) {
+            throw new StreamingJsonError('JSON value has mismatched brackets');
+          }
+          index += 1;
+          if (stack.length === 0) {
+            append(reader.buffer.slice(start, index));
+            reader.offset = index;
+            return parts.join('');
+          }
+          continue;
+        }
+        index += 1;
+      }
+
+      append(reader.buffer.slice(start, index));
+      reader.offset = index;
+    }
   }
+
+  for (;;) {
+    await reader.fill();
+    const start = reader.offset;
+    let index = start;
+    while (index < reader.buffer.length) {
+      const value = reader.buffer[index];
+      if (
+        value === ',' ||
+        value === '}' ||
+        value === ']' ||
+        value === ' ' ||
+        value === '\n' ||
+        value === '\r' ||
+        value === '\t'
+      ) {
+        break;
+      }
+      index += 1;
+    }
+
+    append(reader.buffer.slice(start, index));
+    reader.offset = index;
+    if (index < reader.buffer.length || reader.done) break;
+  }
+
+  const raw = parts.join('');
   if (!raw) throw new StreamingJsonError('Expected a JSON value');
   return raw;
 }
@@ -248,13 +328,23 @@ function parseRaw(raw, label) {
  * }} options
  */
 export async function parseStreamingJsonObject(source, options) {
-  const reader = new AsyncCharReader(source, options);
   const metadata = {};
   const seenKeys = new Set();
   const maxDepth = options.maxDepth ?? 128;
   const maxItems = options.maxItems ?? 5_000_000;
   let arraySeen = false;
   let itemCount = 0;
+  const reader = new AsyncCharReader(source, {
+    ...options,
+    onReadProgress: async (decodedBytes) => {
+      await options.onProgress?.({
+        phase: 'parse',
+        items: itemCount,
+        decodedBytes,
+        activity: 'read',
+      });
+    },
+  });
 
   if (!Number.isInteger(maxDepth) || maxDepth < 1) {
     throw new StreamingJsonError('maxDepth must be a positive integer');

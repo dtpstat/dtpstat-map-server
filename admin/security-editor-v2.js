@@ -151,6 +151,41 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       </section>
     ` : ''}
     <div id="security-secret-overlay" class="security-secret-overlay" hidden></div>
+    <div id="security-audit-detail-overlay" class="security-audit-detail-overlay" hidden>
+      <section class="security-audit-detail-dialog"
+               role="dialog"
+               aria-modal="true"
+               aria-labelledby="security-audit-detail-title">
+        <header class="security-audit-detail-header">
+          <div>
+            <p class="security-audit-detail-eyebrow">ДЕТАЛИ АУДИТА</p>
+            <h3 id="security-audit-detail-title">—</h3>
+            <p id="security-audit-detail-meta" class="security-muted"></p>
+          </div>
+          <button type="button"
+                  class="secondary security-audit-detail-close"
+                  aria-label="Закрыть">×</button>
+        </header>
+        <div class="security-audit-detail-toolbar">
+          <button type="button" class="secondary" data-audit-view="tree"
+                  aria-pressed="true">Tree</button>
+          <button type="button" class="secondary" data-audit-view="raw"
+                  aria-pressed="false">Raw</button>
+          <span class="security-audit-detail-toolbar-spacer"></span>
+          <button type="button" class="secondary" id="security-audit-expand-all">
+            Развернуть всё
+          </button>
+          <button type="button" class="secondary" id="security-audit-collapse-all">
+            Свернуть всё
+          </button>
+          <button type="button" id="security-audit-copy-json">Копировать JSON</button>
+        </div>
+        <div class="security-audit-detail-body">
+          <div id="security-audit-json-tree" class="security-json-tree"></div>
+          <pre id="security-audit-json-raw" class="security-json-raw" hidden></pre>
+        </div>
+      </section>
+    </div>
   `;
 
   const tabs = [...host.querySelectorAll('[data-security-tab]')];
@@ -160,6 +195,9 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   let auditOffset = 0;
   const auditLimit = 100;
   let secretTimer = null;
+  let auditDetailEntry = null;
+  let auditDetailMode = 'tree';
+  const jsonBranchRenderers = new WeakMap();
 
   function selectTab(key) {
     for (const tab of tabs) {
@@ -479,6 +517,233 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     return params;
   }
 
+  function auditAvatarFallback(value) {
+    return String(value || '?').trim().slice(0, 1).toLocaleUpperCase('ru-RU') || '?';
+  }
+
+  function auditUserCell(entry) {
+    const cell = document.createElement('td');
+    const identity = document.createElement('span');
+    identity.className = 'security-audit-user';
+
+    const avatar = document.createElement('span');
+    avatar.className = 'security-audit-avatar';
+
+    const fallback = document.createElement('span');
+    fallback.className = 'security-audit-avatar-fallback';
+    fallback.textContent = auditAvatarFallback(entry.username);
+    avatar.append(fallback);
+
+    if (entry.userId) {
+      const image = document.createElement('img');
+      image.alt = '';
+      image.decoding = 'async';
+      image.hidden = true;
+      image.addEventListener('load', () => {
+        image.hidden = false;
+        fallback.hidden = true;
+      }, { once: true });
+      image.addEventListener('error', () => {
+        image.remove();
+        fallback.hidden = false;
+      }, { once: true });
+      const currentUserRow =
+        String(entry.userId) === String(currentUser?.id ?? '');
+      image.src = currentUserRow
+        ? `/api/admin/profile/avatar?v=${Date.now()}`
+        : `/api/admin/security/users/${encodeURIComponent(entry.userId)}/avatar?v=${Date.now()}`;
+      avatar.append(image);
+    }
+
+    const name = document.createElement('span');
+    name.textContent = entry.username ?? '—';
+    identity.append(avatar, name);
+    cell.append(identity);
+    return cell;
+  }
+
+  function jsonPrimitive(value) {
+    const span = document.createElement('span');
+    if (value === null) {
+      span.className = 'security-json-null';
+      span.textContent = 'null';
+      return span;
+    }
+    if (typeof value === 'string') {
+      span.className = 'security-json-string';
+      span.textContent = JSON.stringify(value);
+      return span;
+    }
+    if (typeof value === 'number') {
+      span.className = 'security-json-number';
+      span.textContent = String(value);
+      return span;
+    }
+    if (typeof value === 'boolean') {
+      span.className = 'security-json-boolean';
+      span.textContent = String(value);
+      return span;
+    }
+    span.className = 'security-json-string';
+    span.textContent = JSON.stringify(String(value));
+    return span;
+  }
+
+  function appendJsonKey(hostElement, key) {
+    if (key === null || key === undefined) return;
+    const keyNode = document.createElement('span');
+    keyNode.className = 'security-json-key';
+    keyNode.textContent = JSON.stringify(String(key));
+    hostElement.append(keyNode, document.createTextNode(': '));
+  }
+
+  function ensureJsonBranch(details) {
+    const render = jsonBranchRenderers.get(details);
+    if (!render) return;
+    jsonBranchRenderers.delete(details);
+    render();
+  }
+
+  function jsonTreeNode(key, value) {
+    const complex = value !== null && typeof value === 'object';
+    if (!complex) {
+      const line = document.createElement('div');
+      line.className = 'security-json-line';
+      appendJsonKey(line, key);
+      line.append(jsonPrimitive(value));
+      return line;
+    }
+
+    const array = Array.isArray(value);
+    const keys = array ? value.map((_item, index) => index) : Object.keys(value);
+    const details = document.createElement('details');
+    details.className = 'security-json-branch';
+
+    const summary = document.createElement('summary');
+    appendJsonKey(summary, key);
+    const shape = document.createElement('span');
+    shape.className = 'security-json-shape';
+    shape.textContent = array
+      ? `Array [${keys.length}]`
+      : `Object {${keys.length}}`;
+    summary.append(shape);
+
+    const children = document.createElement('div');
+    children.className = 'security-json-children';
+    details.append(summary, children);
+
+    jsonBranchRenderers.set(details, () => {
+      const fragment = document.createDocumentFragment();
+      for (const childKey of keys) {
+        fragment.append(jsonTreeNode(childKey, value[childKey]));
+      }
+      children.append(fragment);
+    });
+    details.addEventListener('toggle', () => {
+      if (details.open) ensureJsonBranch(details);
+    });
+    return details;
+  }
+
+  function renderAuditJsonTree(value) {
+    const tree = host.querySelector('#security-audit-json-tree');
+    tree.replaceChildren();
+    const root = jsonTreeNode(null, value);
+    tree.append(root);
+    if (root instanceof HTMLDetailsElement) {
+      root.open = true;
+      ensureJsonBranch(root);
+    }
+  }
+
+  function setAuditDetailMode(mode) {
+    auditDetailMode = mode === 'raw' ? 'raw' : 'tree';
+    const tree = host.querySelector('#security-audit-json-tree');
+    const raw = host.querySelector('#security-audit-json-raw');
+    tree.hidden = auditDetailMode !== 'tree';
+    raw.hidden = auditDetailMode !== 'raw';
+    for (const button of host.querySelectorAll('[data-audit-view]')) {
+      button.setAttribute(
+        'aria-pressed',
+        String(button.dataset.auditView === auditDetailMode),
+      );
+    }
+    host.querySelector('#security-audit-expand-all').disabled =
+      auditDetailMode !== 'tree';
+    host.querySelector('#security-audit-collapse-all').disabled =
+      auditDetailMode !== 'tree';
+  }
+
+  function closeAuditDetails() {
+    const overlay = host.querySelector('#security-audit-detail-overlay');
+    overlay.hidden = true;
+    document.body.classList.remove('security-modal-open');
+    host.querySelector('#security-audit-json-tree').replaceChildren();
+    host.querySelector('#security-audit-json-raw').textContent = '';
+    auditDetailEntry = null;
+  }
+
+  function openAuditDetails(entry) {
+    auditDetailEntry = entry;
+    const overlay = host.querySelector('#security-audit-detail-overlay');
+    const title = host.querySelector('#security-audit-detail-title');
+    const meta = host.querySelector('#security-audit-detail-meta');
+    const raw = host.querySelector('#security-audit-json-raw');
+    const details = entry.details ?? {};
+
+    title.textContent = entry.operationType || entry.eventType || `Аудит #${entry.id}`;
+    meta.textContent = [
+      `#${entry.id}`,
+      formatDate(entry.createdAt),
+      entry.username ?? 'без пользователя',
+      entry.ipAddress ?? null,
+      entry.status ?? null,
+    ].filter(Boolean).join(' · ');
+    raw.textContent = JSON.stringify(details, null, 2);
+    renderAuditJsonTree(details);
+    setAuditDetailMode('tree');
+    overlay.hidden = false;
+    document.body.classList.add('security-modal-open');
+    overlay.querySelector('.security-audit-detail-close')?.focus();
+  }
+
+  function expandAuditJsonTree() {
+    const tree = host.querySelector('#security-audit-json-tree');
+    const queue = [...tree.querySelectorAll('details.security-json-branch')];
+    for (let index = 0; index < queue.length; index += 1) {
+      const details = queue[index];
+      ensureJsonBranch(details);
+      details.open = true;
+      const children = details.querySelector(':scope > .security-json-children');
+      if (children) {
+        queue.push(
+          ...children.querySelectorAll(':scope > details.security-json-branch'),
+        );
+      }
+    }
+  }
+
+  function collapseAuditJsonTree() {
+    for (const details of host.querySelectorAll(
+      '#security-audit-json-tree details.security-json-branch',
+    )) {
+      details.open = false;
+    }
+  }
+
+  async function copyAuditJson() {
+    if (!auditDetailEntry) return;
+    const button = host.querySelector('#security-audit-copy-json');
+    await navigator.clipboard.writeText(
+      JSON.stringify(auditDetailEntry.details ?? {}, null, 2),
+    );
+    const previous = button.textContent;
+    button.textContent = 'Скопировано';
+    setTimeout(() => {
+      button.textContent = previous;
+    }, 1200);
+  }
+
   async function quickBlockUser(entry) {
     if (!canManageUsers || !entry.userId) return;
     const target = userById.get(entry.userId);
@@ -515,14 +780,23 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
 
   function auditRow(entry) {
     const row = document.createElement('tr');
+
+    const time = document.createElement('td');
+    time.textContent = formatDate(entry.createdAt);
+    row.append(time, auditUserCell(entry));
+
     for (const value of [
-      formatDate(entry.createdAt), entry.username ?? '—', entry.ipAddress ?? '—',
-      entry.eventType, entry.operationType, entry.status, entry.durationMs ?? '—',
+      entry.ipAddress ?? '—',
+      entry.eventType,
+      entry.operationType,
+      entry.status,
+      entry.durationMs ?? '—',
     ]) {
       const cell = document.createElement('td');
       cell.textContent = String(value);
       row.append(cell);
     }
+
     const actions = document.createElement('td');
     actions.className = 'security-audit-actions';
     if (canManageUsers && entry.userId) {
@@ -530,7 +804,13 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       button.type = 'button';
       button.className = 'mini-button';
       button.textContent = 'Блок. учётку';
-      button.addEventListener('click', () => void quickBlockUser(entry).then(loadAudit).catch((error) => setMessage(host.querySelector('#security-audit-message'), error.message, 'error')));
+      button.addEventListener('click', () => void quickBlockUser(entry)
+        .then(loadAudit)
+        .catch((error) => setMessage(
+          host.querySelector('#security-audit-message'),
+          error.message,
+          'error',
+        )));
       actions.append(button);
     }
     if (canManageSecurity && entry.ipAddress) {
@@ -538,22 +818,34 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       button.type = 'button';
       button.className = 'mini-button';
       button.textContent = 'Блок. IP';
-      button.addEventListener('click', () => void quickBlockIp(entry).then(loadAudit).catch((error) => setMessage(host.querySelector('#security-audit-message'), error.message, 'error')));
+      button.addEventListener('click', () => void quickBlockIp(entry)
+        .then(loadAudit)
+        .catch((error) => setMessage(
+          host.querySelector('#security-audit-message'),
+          error.message,
+          'error',
+        )));
       actions.append(button);
     }
     if (!actions.childElementCount) actions.textContent = '—';
     row.append(actions);
+
     const detailsCell = document.createElement('td');
-    const details = document.createElement('details');
-    const summary = document.createElement('summary');
-    const pre = document.createElement('pre');
     const changeCount = Array.isArray(entry.details?.changes)
       ? entry.details.changes.length
       : 0;
-    summary.textContent = changeCount ? `Изменения (${changeCount})` : 'JSON';
-    pre.textContent = JSON.stringify(entry.details ?? {}, null, 2);
-    details.append(summary, pre);
-    detailsCell.append(details);
+    const taskLogCount = Array.isArray(entry.details?.taskLog)
+      ? entry.details.taskLog.length
+      : 0;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'secondary mini-button security-audit-details-open';
+    button.textContent = [
+      changeCount ? `Изменения (${changeCount})` : null,
+      taskLogCount ? `Журнал (${taskLogCount})` : null,
+    ].filter(Boolean).join(' · ') || 'Детали';
+    button.addEventListener('click', () => openAuditDetails(entry));
+    detailsCell.append(button);
     row.append(detailsCell);
     return row;
   }
@@ -613,6 +905,25 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   host.querySelector('#security-audit-next')?.addEventListener('click', () => {
     auditOffset += auditLimit;
     void loadAudit();
+  });
+
+  const auditOverlay = host.querySelector('#security-audit-detail-overlay');
+  auditOverlay?.querySelector('.security-audit-detail-close')
+    ?.addEventListener('click', closeAuditDetails);
+  auditOverlay?.addEventListener('click', (event) => {
+    if (event.target === auditOverlay) closeAuditDetails();
+  });
+  host.querySelector('#security-audit-expand-all')
+    ?.addEventListener('click', expandAuditJsonTree);
+  host.querySelector('#security-audit-collapse-all')
+    ?.addEventListener('click', collapseAuditJsonTree);
+  host.querySelector('#security-audit-copy-json')
+    ?.addEventListener('click', () => void copyAuditJson());
+  for (const button of host.querySelectorAll('[data-audit-view]')) {
+    button.addEventListener('click', () => setAuditDetailMode(button.dataset.auditView));
+  }
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !auditOverlay?.hidden) closeAuditDetails();
   });
 
   async function loadSettings() {

@@ -38,7 +38,6 @@ npm ci
 cp .env.example .env
 # заполнить .env
 npm run db:init
-npm run db:migrate
 npm start
 ```
 
@@ -47,7 +46,6 @@ npm start
 ```bash
 docker compose up -d database
 npm run db:init
-npm run db:migrate
 npm start
 ```
 
@@ -92,7 +90,7 @@ HTTP_PORT=3002
 
 ## Миграции
 
-Текущая последовательность: `V001…V030`.
+Текущая последовательность: `V001…V040`.
 
 Последние изменения:
 
@@ -111,14 +109,26 @@ HTTP_PORT=3002
 | `V028` | раздельные лимиты одного Overpass response / всей загрузки и база для adaptive geometry batching |
 | `V029` | durable checkpoint + persistent geometry staging для возобновления OSM update после ошибки/рестарта |
 | `V030` | накопительный счётчик фактически сохранённых geometry batches в checkpoint |
+| `V031` | диагностика OSM-объектов без построенной geometry в resumable checkpoint |
+| `V032` | population/asOf/source/attributes на `CITY_BOUNDARIES` и активная проекция в `CITY_POPULATIONS` |
+| `V033` | отдельные права редактора геометрий и OSM-дерева |
+| `V034` | универсальная модель `CITY_GEOMETRIES` для Point/Line/Polygon |
+| `V035` | staging/conflict model для geometry import |
+| `V036` | синхронизация городов редактора геометрий |
+| `V037` | invariants и derived normalization geometry model |
+| `V038` | identity/pending guards для city/boundary/geometry |
+| `V039` | effective geometry ownership для public/metrics |
+| `V040` | финальные ограничения geometry model |
 
-Следующая migration: **V031+**. Уже опубликованные migrations не редактируются задним числом.
+Следующая migration: **V041+**. Уже опубликованные migrations не редактируются задним числом.
 
 История хранится в:
 
 ```text
 <DATABASE_SCHEMA>.schema_versions
 ```
+
+`npm start` автоматически применяет все pending migrations из `db/migrations` **до** bootstrap и открытия HTTP/HTTPS listeners. Migration runner использует PostgreSQL advisory lock, поэтому параллельные старты одного schema не применяют одну migration дважды. Checksum/history по-прежнему проверяются; при modified/gapped/newer history или SQL-ошибке startup завершается и приложение не начинает обслуживать запросы. `npm run db:migrate` остаётся доступной ручной preflight-командой.
 
 ## Большие portable JSON / ZIP transfers
 

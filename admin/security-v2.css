@@ -121,10 +121,138 @@ button.danger { background: #51211f; border-color: #8e3a36; color: #ffd0cc; }
   border-radius: 10px;
 }
 .security-audit-table { width: 100%; min-width: 72rem; border-collapse: collapse; font-size: .72rem; white-space: nowrap; }
-.security-audit-table th,.security-audit-table td { padding: .5rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; }
+.security-audit-table th,.security-audit-table td { padding: .5rem .6rem; border-bottom: 1px solid var(--line); vertical-align: middle; text-align: left; }
 .security-audit-table th { position: sticky; top: 0; z-index: 2; background: #0d171a; color: var(--muted); }
-.security-audit-table pre { max-width: 28rem; white-space: pre-wrap; overflow: auto; }
 .security-audit-actions { display: flex; gap: .3rem; }
+.security-audit-user { display: inline-flex; align-items: center; gap: .45rem; }
+.security-audit-avatar {
+  width: 1.55rem;
+  height: 1.55rem;
+  flex: 0 0 1.55rem;
+  display: inline-grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #365158;
+  border-radius: 50%;
+  color: #b7cbcf;
+  background: #17252a;
+  font-size: .65rem;
+  font-weight: 800;
+}
+.security-audit-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.security-audit-details-open { white-space: nowrap; }
+
+body.security-modal-open { overflow: hidden; }
+.security-audit-detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  padding: clamp(.75rem, 2vw, 1.5rem);
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 76%);
+  backdrop-filter: blur(5px);
+}
+.security-audit-detail-overlay[hidden] { display: none; }
+.security-audit-detail-dialog {
+  width: min(96vw, 96rem);
+  height: min(92vh, 64rem);
+  min-height: 24rem;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid #365158;
+  border-radius: 16px;
+  background: #0c1519;
+  box-shadow: 0 2rem 7rem rgb(0 0 0 / 62%);
+}
+.security-audit-detail-header {
+  padding: 1rem 1.15rem .85rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.security-audit-detail-header h3 { margin-bottom: .25rem; }
+.security-audit-detail-eyebrow {
+  margin: 0 0 .3rem;
+  color: var(--accent);
+  font-size: .65rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+}
+.security-audit-detail-close {
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+.security-audit-detail-toolbar {
+  padding: .65rem 1.15rem;
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+  background: #101b20;
+}
+.security-audit-detail-toolbar button {
+  padding: .42rem .65rem;
+  font-size: .7rem;
+}
+.security-audit-detail-toolbar button[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--accent-dark);
+  outline: 1px solid #37756f;
+}
+.security-audit-detail-toolbar-spacer { flex: 1 1 auto; }
+.security-audit-detail-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 1rem 1.15rem 2rem;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+.security-json-tree,
+.security-json-raw {
+  margin: 0;
+  color: #d7e1e3;
+  font: .76rem/1.55 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  tab-size: 2;
+}
+.security-json-raw {
+  min-width: max-content;
+  white-space: pre;
+}
+.security-json-line,
+.security-json-branch > summary {
+  min-height: 1.45rem;
+}
+.security-json-branch { margin-left: .1rem; }
+.security-json-branch > summary {
+  width: max-content;
+  max-width: 100%;
+  cursor: pointer;
+  user-select: none;
+}
+.security-json-branch > summary:hover { background: rgb(53 198 180 / 8%); }
+.security-json-children {
+  margin-left: .7rem;
+  padding-left: .85rem;
+  border-left: 1px solid #294047;
+}
+.security-json-key { color: #72d7c9; }
+.security-json-shape { color: #91a5ab; }
+.security-json-string { color: #d9c98d; }
+.security-json-number { color: #8bcdf1; }
+.security-json-boolean { color: #f1a66f; }
+.security-json-null { color: #bc9cec; }
 .mini-button { padding: .25rem .4rem; font-size: .65rem; }
 .security-pagination { display: flex; align-items: center; justify-content: center; gap: .7rem; margin-top: .7rem; }
 
@@ -166,6 +294,8 @@ button.danger { background: #51211f; border-color: #8e3a36; color: #ffd0cc; }
 }
 
 @media (max-width: 650px) {
+  .security-audit-detail-dialog { width: 100%; height: 96vh; border-radius: 10px; }
+  .security-audit-detail-toolbar-spacer { display: none; }
   .security-detail-fields,.security-role-grid,.security-audit-filter { grid-template-columns: 1fr; }
   .security-inline-block-form { grid-template-columns: 1fr; }
   .security-user-detail-heading,.security-section-heading { flex-direction: column; }

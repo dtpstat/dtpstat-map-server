@@ -28,12 +28,18 @@ export function loadProjectSettings() {
 }
 
 export async function loadCities(options = {}) {
-  const payload = await getJson('/api/cities', options);
+  const payload = await getJson('/api/cities', {
+    cache: 'no-store',
+    ...options,
+  });
   return payload.cities;
 }
 
 export async function loadLineTypes(options = {}) {
-  const payload = await getJson('/api/line-types', options);
+  const payload = await getJson('/api/line-types', {
+    cache: 'no-store',
+    ...options,
+  });
   return payload.lineTypes;
 }
 

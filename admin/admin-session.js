@@ -26,11 +26,17 @@ export function createAdminSessionFetchGuard({
   location,
   setTimeoutImpl = setTimeout,
   clearTimeoutImpl = clearTimeout,
+  setIntervalImpl = setInterval,
+  clearIntervalImpl = clearInterval,
   now = () => Date.now(),
+  keepAliveIntervalMs = 30_000,
 }) {
   let timer = null;
+  let keepAliveTimer = null;
+  let keepAliveInFlight = false;
   let deadlineMs = null;
   let redirecting = false;
+  let activityHeld = false;
 
   const clearTimer = () => {
     if (timer !== null) {
@@ -39,10 +45,18 @@ export function createAdminSessionFetchGuard({
     }
   };
 
+  const clearKeepAlive = () => {
+    if (keepAliveTimer !== null) {
+      clearIntervalImpl(keepAliveTimer);
+      keepAliveTimer = null;
+    }
+  };
+
   const redirectToLogin = () => {
     if (redirecting) return;
     redirecting = true;
     clearTimer();
+    clearKeepAlive();
     if (!location.pathname.endsWith('/login.html')) {
       location.replace(LOGIN_URL);
     }
@@ -53,6 +67,7 @@ export function createAdminSessionFetchGuard({
     if (!Number.isFinite(nextDeadline)) return;
     deadlineMs = nextDeadline;
     clearTimer();
+    if (activityHeld) return;
 
     const schedule = () => {
       const remaining = deadlineMs - now();
@@ -82,12 +97,54 @@ export function createAdminSessionFetchGuard({
     return response;
   };
 
+  const keepAlive = async () => {
+    if (!activityHeld || keepAliveInFlight || redirecting) return;
+    keepAliveInFlight = true;
+    try {
+      await guardedFetch('/api/admin/me', {
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      // A transient network failure must not abort the running server task.
+      // The next keepalive interval or any successful admin request will retry.
+    } finally {
+      keepAliveInFlight = false;
+    }
+  };
+
+  const setActivityHold = (active) => {
+    const next = Boolean(active);
+    if (next === activityHeld) return activityHeld;
+    activityHeld = next;
+
+    if (activityHeld) {
+      clearTimer();
+      void keepAlive();
+      clearKeepAlive();
+      keepAliveTimer = setIntervalImpl(() => {
+        void keepAlive();
+      }, keepAliveIntervalMs);
+      return true;
+    }
+
+    clearKeepAlive();
+    if (deadlineMs !== null) {
+      scheduleExpiry(new Date(deadlineMs).toISOString());
+    }
+    return false;
+  };
+
   return {
     fetch: guardedFetch,
     redirectToLogin,
     scheduleExpiry,
+    setActivityHold,
+    isActivityHeld: () => activityHeld,
     stop() {
       clearTimer();
+      clearKeepAlive();
+      activityHeld = false;
       deadlineMs = null;
     },
   };

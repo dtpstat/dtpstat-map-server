@@ -107,3 +107,66 @@ test('protected admin request detection is same-origin and excludes login', () =
     false,
   );
 });
+
+
+test('admin session activity hold keeps idle session alive and resumes expiry timer', async () => {
+  const location = fakeLocation();
+  let now = Date.parse('2026-09-20T10:00:00.000Z');
+  let timeout = null;
+  let interval = null;
+  let fetchCalls = 0;
+
+  const guard = createAdminSessionFetchGuard({
+    fetchImpl: async (_input) => {
+      fetchCalls += 1;
+      return new Response('{}', {
+        status: 200,
+        headers: {
+          'X-DTPStat-Admin-Session-Expires-At':
+            new Date(now + 60_000).toISOString(),
+        },
+      });
+    },
+    location,
+    now: () => now,
+    setTimeoutImpl(callback, delay) {
+      timeout = { callback, delay };
+      return 1;
+    },
+    clearTimeoutImpl() {
+      timeout = null;
+    },
+    setIntervalImpl(callback, delay) {
+      interval = { callback, delay };
+      return 2;
+    },
+    clearIntervalImpl() {
+      interval = null;
+    },
+    keepAliveIntervalMs: 30_000,
+  });
+
+  guard.scheduleExpiry(new Date(now + 60_000).toISOString());
+  assert.equal(timeout.delay, 60_000);
+
+  guard.setActivityHold(true);
+  assert.equal(guard.isActivityHeld(), true);
+  assert.equal(timeout, null);
+  assert.equal(interval.delay, 30_000);
+
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(fetchCalls, 1);
+
+  now += 30_000;
+  interval.callback();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(fetchCalls, 2);
+  assert.deepEqual(location.replacements, []);
+
+  guard.setActivityHold(false);
+  assert.equal(guard.isActivityHeld(), false);
+  assert.equal(interval, null);
+  assert.equal(timeout.delay, 60_000);
+});

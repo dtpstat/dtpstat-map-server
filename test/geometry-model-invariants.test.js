@@ -26,10 +26,10 @@ test('effective geometry membership is owned by the exact active OSM boundary', 
   );
 });
 
-test('historical V036 keeps derived-value normalization and V038 defines final ownership', async () => {
+test('historical V037 keeps derived-value normalization and V039 defines final ownership', async () => {
   const [legacy, finalMigration] = await Promise.all([
-    read('db/migrations/V036__geometry_model_invariants.sql'),
-    read('db/migrations/V038__effective_geometry_ownership.sql'),
+    read('db/migrations/V037__geometry_model_invariants.sql'),
+    read('db/migrations/V039__effective_geometry_ownership.sql'),
   ]);
 
   assert.match(legacy, /NORMALIZE_CITY_GEOMETRY_DERIVED/);
