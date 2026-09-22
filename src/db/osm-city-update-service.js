@@ -154,7 +154,11 @@ const PRESERVE_LINKS_SQL = `
     city_id,
     is_active,
     display_name,
-    display_type
+    display_type,
+    population,
+    population_as_of,
+    population_source,
+    attributes
   FROM city_boundaries;
 
   CREATE TEMP TABLE old_geometry_boundary_links ON COMMIT DROP AS
@@ -247,6 +251,10 @@ const INSERT_BOUNDARIES_SQL = `
     is_active,
     display_name,
     display_type,
+    population,
+    population_as_of,
+    population_source,
+    attributes,
     area_m2
   )
   SELECT
@@ -271,6 +279,10 @@ const INSERT_BOUNDARIES_SQL = `
       stage.place_type,
       'administrative'
     ),
+    old_link.population,
+    old_link.population_as_of,
+    old_link.population_source,
+    COALESCE(old_link.attributes, '{}'::jsonb),
     ST_Area(stage.geom::geography)
   FROM osm_city_boundary_stage AS stage
   LEFT JOIN old_city_boundary_links AS old_link
@@ -1136,6 +1148,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         // city_id so renamed/reassigned active boundaries can realign existing
         // line rows as part of the same transaction.
         await client.query('SELECT sync_active_boundary_cities()');
+        await client.query('SELECT sync_active_boundary_populations()');
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         throwIfAdminTaskCancelled(operation.signal);
 
