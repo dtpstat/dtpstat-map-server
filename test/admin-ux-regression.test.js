@@ -26,7 +26,8 @@ test('admin data and project settings are split into meaningful visual groups', 
   assert.match(project, /data-project-settings-tab="map"/);
   assert.match(project, /data-project-settings-tab="metadata"/);
   assert.match(project, /data-project-settings-tab="footer"/);
-  assert.match(project, /selectProjectPanel\('general'\)/);
+  assert.match(project, /readTabState\([\s\S]*'project-settings'/);
+  assert.match(project, /trackDirtyForm\(form, \{ label: 'Настройки проекта' \}\)/);
 
   assert.match(reportCss, /\.report-interface-panel[\s\S]*padding:\s*0/);
   assert.match(reportCss, /\.report-interface-panel[\s\S]*border:\s*0/);
@@ -63,9 +64,10 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
 
   assert.match(profile, /\/api\/admin\/profile\/password-policy/);
   assert.match(profile, /id="profile-password-policy"/);
-  assert.match(profile, /id="profile-confirm-overlay"/);
+  assert.match(profile, /adminConfirm\(/);
   assert.doesNotMatch(profile, /window\.confirm\(/);
+  assert.doesNotMatch(profile, /id="profile-confirm-overlay"/);
   assert.match(profile, /class="danger" id="profile-revoke-others"/);
   assert.match(profileCss, /\.profile-session \.danger/);
-  assert.match(profileCss, /\.profile-confirm-overlay/);
+  assert.doesNotMatch(profileCss, /\.profile-confirm-overlay/);
 });
