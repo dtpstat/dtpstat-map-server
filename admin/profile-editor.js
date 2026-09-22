@@ -1,3 +1,6 @@
+import { adminConfirm } from './admin-dialog.js';
+import { trackDirtyForm } from './admin-dirty-state.js';
+
 const host = document.querySelector('#profile-editor-host');
 
 async function api(path, options = {}) {
@@ -110,17 +113,6 @@ if (host) {
         <p id="profile-sessions-message" class="profile-message" role="status"></p>
       </section>
     </div>
-    <div id="profile-confirm-overlay" class="profile-confirm-overlay" hidden>
-      <section class="profile-confirm-dialog" role="dialog" aria-modal="true"
-               aria-labelledby="profile-confirm-title">
-        <h3 id="profile-confirm-title">Подтверждение</h3>
-        <p id="profile-confirm-message"></p>
-        <div class="profile-confirm-actions">
-          <button type="button" class="secondary" data-profile-confirm-cancel>Отмена</button>
-          <button type="button" class="danger" data-profile-confirm-accept>Завершить</button>
-        </div>
-      </section>
-    </div>
   `;
 
   const accountForm = host.querySelector('#profile-account-form');
@@ -129,44 +121,10 @@ if (host) {
   const passwordMessage = host.querySelector('#profile-password-message');
   const sessionsMessage = host.querySelector('#profile-sessions-message');
   const sessionsHost = host.querySelector('#profile-sessions');
-  const confirmOverlay = host.querySelector('#profile-confirm-overlay');
-  const confirmTitle = host.querySelector('#profile-confirm-title');
-  const confirmMessage = host.querySelector('#profile-confirm-message');
-  const confirmAccept = host.querySelector('[data-profile-confirm-accept]');
+  const accountDirty = trackDirtyForm(accountForm, { label: 'Профиль' });
   let currentSessionId = null;
   let currentUser = null;
   let passwordPolicy = null;
-  let confirmResolver = null;
-
-  function closeConfirm(result = false) {
-    if (confirmOverlay.hidden) return;
-    confirmOverlay.hidden = true;
-    const resolve = confirmResolver;
-    confirmResolver = null;
-    resolve?.(result);
-  }
-
-  function confirmDestructive({ title, text, action = 'Завершить' }) {
-    if (confirmResolver) closeConfirm(false);
-    confirmTitle.textContent = title;
-    confirmMessage.textContent = text;
-    confirmAccept.textContent = action;
-    confirmOverlay.hidden = false;
-    confirmAccept.focus();
-    return new Promise((resolve) => {
-      confirmResolver = resolve;
-    });
-  }
-
-  confirmOverlay.querySelector('[data-profile-confirm-cancel]')
-    .addEventListener('click', () => closeConfirm(false));
-  confirmAccept.addEventListener('click', () => closeConfirm(true));
-  confirmOverlay.addEventListener('click', (event) => {
-    if (event.target === confirmOverlay) closeConfirm(false);
-  });
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !confirmOverlay.hidden) closeConfirm(false);
-  });
 
   function passwordPolicyError(value) {
     if (!passwordPolicy) return null;
@@ -257,6 +215,7 @@ if (host) {
     host.querySelector('#profile-avatar-upload-label').textContent =
       user.hasAvatar ? 'Заменить аватар' : 'Загрузить аватар';
     updateAvatar(user);
+    accountDirty?.markClean();
   }
 
   async function loadSession() {
@@ -285,12 +244,14 @@ if (host) {
     ].filter(Boolean).join(' · ');
     const button = card.querySelector('button');
     button.addEventListener('click', async () => {
-      const confirmed = await confirmDestructive({
+      const confirmed = await adminConfirm({
         title: current ? 'Завершить текущую сессию?' : 'Завершить сессию?',
-        text: current
+        message: current
           ? 'Текущая сессия будет завершена, после чего потребуется войти снова.'
           : 'Выбранная сессия будет немедленно отозвана.',
-        action: current ? 'Завершить и выйти' : 'Завершить',
+        confirmLabel: current ? 'Завершить и выйти' : 'Завершить',
+        cancelLabel: 'Отмена',
+        destructive: true,
       });
       if (!confirmed) return;
       try {
@@ -404,10 +365,12 @@ if (host) {
   });
 
   host.querySelector('#profile-revoke-others').addEventListener('click', async () => {
-    const confirmed = await confirmDestructive({
+    const confirmed = await adminConfirm({
       title: 'Завершить остальные сессии?',
-      text: 'Все активные сессии этой учётной записи, кроме текущей, будут отозваны.',
-      action: 'Завершить остальные',
+      message: 'Все активные сессии этой учётной записи, кроме текущей, будут отозваны.',
+      confirmLabel: 'Завершить остальные',
+      cancelLabel: 'Отмена',
+      destructive: true,
     });
     if (!confirmed) return;
     try {
