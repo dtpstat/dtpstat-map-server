@@ -29,14 +29,9 @@ const INSERT_STREAM_RAW_SQL = `
 const CREATE_STREAM_STAGE_SQL = `
   CREATE TEMP TABLE population_transfer_stage (
     seq bigint PRIMARY KEY,
-    osm_type text NOT NULL,
-    osm_id bigint NOT NULL,
-    parent_osm_type text,
-    parent_osm_id bigint,
-    name text NOT NULL,
-    type text NOT NULL,
-    place_type text,
-    admin_level smallint,
+    region_name text NOT NULL,
+    region_attributes jsonb NOT NULL,
+    city_name text NOT NULL,
     population integer,
     as_of text,
     source text,
@@ -47,14 +42,9 @@ const CREATE_STREAM_STAGE_SQL = `
 const INSERT_STREAM_STAGE_SQL = `
   INSERT INTO population_transfer_stage (
     seq,
-    osm_type,
-    osm_id,
-    parent_osm_type,
-    parent_osm_id,
-    name,
-    type,
-    place_type,
-    admin_level,
+    region_name,
+    region_attributes,
+    city_name,
     population,
     as_of,
     source,
@@ -62,28 +52,18 @@ const INSERT_STREAM_STAGE_SQL = `
   )
   SELECT
     payload.seq,
-    payload."osmType",
-    payload."osmId"::bigint,
-    payload."parentOsmType",
-    NULLIF(payload."parentOsmId", '')::bigint,
-    payload.name,
-    payload.type,
-    payload."placeType",
-    payload."adminLevel",
+    payload."regionName",
+    payload."regionAttributes",
+    payload."cityName",
     payload.population,
     payload."asOf",
     payload.source,
     payload.attributes
   FROM jsonb_to_recordset($1::jsonb) AS payload(
     seq bigint,
-    "osmType" text,
-    "osmId" text,
-    "parentOsmType" text,
-    "parentOsmId" text,
-    name text,
-    type text,
-    "placeType" text,
-    "adminLevel" smallint,
+    "regionName" text,
+    "regionAttributes" jsonb,
+    "cityName" text,
     population integer,
     "asOf" text,
     source text,
@@ -91,35 +71,140 @@ const INSERT_STREAM_STAGE_SQL = `
   )
 `;
 
-const TRANSFER_STATUS_SQL = `
+const NORMALIZE_NAME_SQL = (expression) => `
+  regexp_replace(
+    lower(translate(trim(COALESCE(${expression}, '')), 'Ёё', 'Ее')),
+    '[^0-9a-zа-я]+',
+    '',
+    'g'
+  )
+`;
+
+const RESOLVE_STAGE_SQL = `
+  CREATE TEMP TABLE population_transfer_resolved
+  ON COMMIT DROP
+  AS
+  WITH RECURSIVE
+  stage_regions AS (
+    SELECT DISTINCT
+      stage.region_name,
+      ${NORMALIZE_NAME_SQL('stage.region_name')} AS region_key
+    FROM population_transfer_stage AS stage
+  ),
+  region_candidates AS (
+    SELECT
+      stage_region.region_name,
+      boundary.id AS region_id
+    FROM stage_regions AS stage_region
+    JOIN city_boundaries AS boundary
+      ON boundary.admin_level = 4
+     AND ${NORMALIZE_NAME_SQL('boundary.display_name')} =
+         stage_region.region_key
+  ),
+  region_counts AS (
+    SELECT
+      stage_region.region_name,
+      COUNT(region_candidate.region_id)::integer AS match_count,
+      MIN(region_candidate.region_id) AS region_id
+    FROM stage_regions AS stage_region
+    LEFT JOIN region_candidates AS region_candidate
+      ON region_candidate.region_name = stage_region.region_name
+    GROUP BY stage_region.region_name
+  ),
+  descendants AS (
+    SELECT
+      region_candidate.region_name,
+      region_candidate.region_id,
+      region_candidate.region_id AS boundary_id
+    FROM region_candidates AS region_candidate
+
+    UNION ALL
+
+    SELECT
+      parent.region_name,
+      parent.region_id,
+      child.id
+    FROM descendants AS parent
+    JOIN city_boundaries AS child
+      ON child.parent_id = parent.boundary_id
+  ),
+  city_candidates AS (
+    SELECT
+      stage.seq,
+      boundary.id AS boundary_id
+    FROM population_transfer_stage AS stage
+    JOIN region_counts AS region_count
+      ON region_count.region_name = stage.region_name
+     AND region_count.match_count = 1
+    JOIN descendants AS descendant
+      ON descendant.region_name = stage.region_name
+     AND descendant.region_id = region_count.region_id
+    JOIN city_boundaries AS boundary
+      ON boundary.id = descendant.boundary_id
+     AND boundary.place_type IN ('city', 'town')
+     AND ${NORMALIZE_NAME_SQL('boundary.display_name')} =
+         ${NORMALIZE_NAME_SQL('stage.city_name')}
+  ),
+  city_counts AS (
+    SELECT
+      stage.seq,
+      COUNT(candidate.boundary_id)::integer AS match_count,
+      MIN(candidate.boundary_id) AS boundary_id
+    FROM population_transfer_stage AS stage
+    LEFT JOIN city_candidates AS candidate
+      ON candidate.seq = stage.seq
+    GROUP BY stage.seq
+  )
   SELECT
     stage.seq,
-    stage.osm_type AS "osmType",
-    stage.osm_id::text AS "osmId",
-    stage.name,
+    stage.region_name,
+    stage.city_name,
+    region_count.region_id,
+    city_count.boundary_id,
     CASE
-      WHEN boundary.id IS NULL THEN 'missing'
-      WHEN stage.parent_osm_id IS NULL AND boundary.parent_id IS NOT NULL
-        THEN 'hierarchy'
-      WHEN stage.parent_osm_id IS NOT NULL
-       AND (
-         expected_parent.id IS NULL
-         OR boundary.parent_id IS DISTINCT FROM expected_parent.id
-       )
-        THEN 'hierarchy'
+      WHEN region_count.match_count = 0 THEN 'region-missing'
+      WHEN region_count.match_count > 1 THEN 'region-ambiguous'
+      WHEN city_count.match_count = 0 THEN 'city-missing'
+      WHEN city_count.match_count > 1 THEN 'city-ambiguous'
       ELSE 'matched'
     END AS status
   FROM population_transfer_stage AS stage
-  LEFT JOIN city_boundaries AS boundary
-    ON boundary.osm_type = stage.osm_type
-   AND boundary.osm_id = stage.osm_id
-  LEFT JOIN city_boundaries AS expected_parent
-    ON expected_parent.osm_type = stage.parent_osm_type
-   AND expected_parent.osm_id = stage.parent_osm_id
-  ORDER BY stage.seq
+  JOIN region_counts AS region_count
+    ON region_count.region_name = stage.region_name
+  JOIN city_counts AS city_count
+    ON city_count.seq = stage.seq
 `;
 
-const UPDATE_TERRITORY_DATA_SQL = `
+const RESOLUTION_STATUS_SQL = `
+  SELECT
+    resolved.seq,
+    resolved.region_name AS "regionName",
+    resolved.city_name AS "cityName",
+    resolved.status
+  FROM population_transfer_resolved AS resolved
+  ORDER BY resolved.seq
+`;
+
+const UPDATE_REGIONS_SQL = `
+  UPDATE city_boundaries AS boundary
+  SET attributes = source.region_attributes,
+      updated_at = now()
+  FROM (
+    SELECT DISTINCT ON (stage.region_name)
+      resolved.region_id,
+      stage.region_attributes
+    FROM population_transfer_stage AS stage
+    JOIN population_transfer_resolved AS resolved
+      ON resolved.seq = stage.seq
+    WHERE resolved.region_id IS NOT NULL
+      AND resolved.status NOT IN ('region-missing', 'region-ambiguous')
+    ORDER BY stage.region_name, stage.seq
+  ) AS source
+  WHERE boundary.id = source.region_id
+  RETURNING boundary.id
+`;
+
+const UPDATE_CITIES_SQL = `
   UPDATE city_boundaries AS boundary
   SET population = stage.population,
       population_as_of = stage.as_of::date,
@@ -127,8 +212,10 @@ const UPDATE_TERRITORY_DATA_SQL = `
       attributes = stage.attributes,
       updated_at = now()
   FROM population_transfer_stage AS stage
-  WHERE boundary.osm_type = stage.osm_type
-    AND boundary.osm_id = stage.osm_id
+  JOIN population_transfer_resolved AS resolved
+    ON resolved.seq = stage.seq
+   AND resolved.status = 'matched'
+  WHERE boundary.id = resolved.boundary_id
   RETURNING boundary.id
 `;
 
@@ -143,39 +230,45 @@ async function insertStageBatch(client, rows, startSeq = 0) {
     [JSON.stringify(payload)],
   );
   if (inserted.rowCount !== payload.length) {
-    throw new Error('Not every normalized territory record was staged');
+    throw new Error('Not every normalized population city was staged');
   }
   return inserted.rowCount;
 }
 
-function transferStatus(rows) {
+function resolutionSummary(rows) {
   const skipped = rows
-    .filter((row) => row.status === 'missing')
-    .map((row) => `${row.osmType}/${row.osmId} ${row.name}`);
-  const hierarchy = rows
-    .filter((row) => row.status === 'hierarchy')
-    .map((row) => `${row.osmType}/${row.osmId} ${row.name}`);
-  return { skipped, hierarchy };
+    .filter((row) =>
+      row.status === 'region-missing' || row.status === 'city-missing')
+    .map((row) => `${row.regionName} / ${row.cityName}`);
+  const ambiguous = rows
+    .filter((row) =>
+      row.status === 'region-ambiguous' || row.status === 'city-ambiguous')
+    .map((row) =>
+      `${row.regionName} / ${row.cityName} (${row.status})`);
+  return { skipped, ambiguous };
 }
 
-function assertHierarchyMatches(hierarchy) {
-  if (hierarchy.length === 0) return;
-  const preview = hierarchy.slice(0, 20).join(', ');
+function assertNoAmbiguity(ambiguous) {
+  if (ambiguous.length === 0) return;
+  const preview = ambiguous.slice(0, 20).join(', ');
   throw new PopulationValidationError(
-    `Population hierarchy does not match the current OSM boundary tree: ${preview}`,
+    `Population names are ambiguous in the current boundary tree: ${preview}`,
   );
 }
 
-async function applyStagedTerritories(client, plan, operation) {
-  const statusResult = await client.query(TRANSFER_STATUS_SQL);
-  const { skipped, hierarchy } = transferStatus(statusResult.rows);
-  assertHierarchyMatches(hierarchy);
+async function applyStagedPopulation(client, plan, operation) {
+  await client.query(RESOLVE_STAGE_SQL);
+  const statusResult = await client.query(RESOLUTION_STATUS_SQL);
+  const { skipped, ambiguous } = resolutionSummary(statusResult.rows);
+  assertNoAmbiguity(ambiguous);
 
-  const updated = await client.query(UPDATE_TERRITORY_DATA_SQL);
-  const updatedTerritories = updated.rowCount ?? 0;
-  if (updatedTerritories + skipped.length !== plan.territoryCount) {
+  const regionsUpdated = await client.query(UPDATE_REGIONS_SQL);
+  const citiesUpdated = await client.query(UPDATE_CITIES_SQL);
+  const updatedCities = citiesUpdated.rowCount ?? 0;
+
+  if (updatedCities + skipped.length !== plan.cityCount) {
     throw new Error(
-      'Population hierarchy import did not account for every territory',
+      'Population hierarchy import did not account for every city',
     );
   }
 
@@ -183,26 +276,32 @@ async function applyStagedTerritories(client, plan, operation) {
   await client.query(RECALCULATE_CITY_STATISTICS_SQL);
   operation.onProgress?.({
     phase: 'database',
-    territories: updatedTerritories,
-    skippedTerritories: skipped.length,
+    regions: regionsUpdated.rowCount ?? 0,
+    cities: updatedCities,
+    skippedCities: skipped.length,
   });
 
   return {
-    territories: updatedTerritories,
-    requestedTerritories: plan.territoryCount,
-    roots: plan.rootCount,
+    regions: regionsUpdated.rowCount ?? 0,
+    requestedRegions: plan.regionCount,
+    cities: updatedCities,
+    requestedCities: plan.cityCount,
     skippedCount: skipped.length,
-    skippedTerritories: skipped,
+    skippedCities: skipped,
     asOf: plan.asOf,
     source: plan.source,
   };
 }
 
 /**
- * Population/attributes belong to exact OSM territories, not to active state.
- * Import identity is (osm_type, osm_id); display names and hierarchy remain
- * human-readable validation context only. Active boundaries are projected into
- * CITY_POPULATIONS after the territory data transaction is staged.
+ * Population import is deliberately independent from OSM identity and active
+ * state. The portable contract names regions and cities only. A region is
+ * resolved by normalized display name among admin-level 4 boundaries; a city
+ * is then resolved by normalized display name inside that region subtree.
+ *
+ * Population metadata is written to the exact matched city boundary. Region
+ * attributes are written to the matched region boundary. IS_ACTIVE is never
+ * modified here.
  *
  * @param {{ connect: () => Promise<any>, databaseSchema?: string }} pool
  */
@@ -226,13 +325,13 @@ export function createPopulationImportService(pool) {
             [JSON.stringify(rawBatch)],
           );
           if (inserted.rowCount !== rawBatch.length) {
-            throw new Error('Not every population hierarchy root was staged');
+            throw new Error('Not every population region was staged');
           }
           rawBatch = [];
         };
 
         const parsed = await parseStreamingJsonObject(source, {
-          arrayKey: 'territories',
+          arrayKey: 'regions',
           metadataKeys: new Set([
             'schemaVersion',
             'exportedAt',
@@ -254,7 +353,7 @@ export function createPopulationImportService(pool) {
           onProgress(progress) {
             operation.onProgress?.({
               ...progress,
-              dataSet: 'territories',
+              dataSet: 'regions',
             });
           },
         });
@@ -267,65 +366,68 @@ export function createPopulationImportService(pool) {
         });
         await client.query(CREATE_STREAM_STAGE_SQL);
 
-        let lastRootSeq = -1;
-        let territorySeq = 0;
+        let lastRegionSeq = -1;
+        let citySeq = 0;
         let staged = 0;
         for (;;) {
           throwIfAdminTaskCancelled(operation.signal);
-          const roots = await client.query(
+          const regions = await client.query(
             `SELECT seq::bigint::text AS seq, item
              FROM population_transfer_raw
              WHERE seq > $1
              ORDER BY seq
              LIMIT $2`,
-            [lastRootSeq, STREAM_STAGE_BATCH_SIZE],
+            [lastRegionSeq, STREAM_STAGE_BATCH_SIZE],
           );
-          if (roots.rowCount === 0) break;
+          if (regions.rowCount === 0) break;
 
-          for (const root of roots.rows) {
-            const rootSeq = Number(root.seq);
-            const rows = accumulator.addRoot(root.item, rootSeq);
+          for (const region of regions.rows) {
+            const regionSeq = Number(region.seq);
+            const normalized = accumulator.addRegion(
+              region.item,
+              regionSeq,
+            );
             for (
               let offset = 0;
-              offset < rows.length;
+              offset < normalized.rows.length;
               offset += STREAM_STAGE_BATCH_SIZE
             ) {
-              const batch = rows.slice(
+              const batch = normalized.rows.slice(
                 offset,
                 offset + STREAM_STAGE_BATCH_SIZE,
               );
               staged += await insertStageBatch(
                 client,
                 batch,
-                territorySeq,
+                citySeq,
               );
-              territorySeq += batch.length;
+              citySeq += batch.length;
             }
-            lastRootSeq = rootSeq;
+            lastRegionSeq = regionSeq;
             operation.onProgress?.({
               phase: 'normalize-stage',
               staged,
-              parsedRoots: parsed.itemCount,
-              processedRoots: rootSeq + 1,
+              parsedRegions: parsed.itemCount,
+              processedRegions: regionSeq + 1,
             });
           }
         }
 
         const plan = accumulator.finish(parsed.metadata);
-        if (plan.territoryCount !== staged) {
-          throw new Error('Not every normalized territory record was staged');
+        if (plan.cityCount !== staged) {
+          throw new Error('Not every normalized population city was staged');
         }
 
         operation.onProgress?.({
           phase: 'validated',
-          territories: plan.territoryCount,
-          roots: plan.rootCount,
+          regions: plan.regionCount,
+          cities: plan.cityCount,
           asOf: plan.asOf,
           source: plan.source,
           decodedBytes: parsed.decodedBytes,
         });
 
-        const result = await applyStagedTerritories(
+        const result = await applyStagedPopulation(
           client,
           plan,
           operation,
@@ -355,8 +457,8 @@ export function createPopulationImportService(pool) {
       });
       operation.onProgress?.({
         phase: 'validated',
-        territories: plan.territoryCount,
-        roots: plan.rootCount,
+        regions: plan.regionCount,
+        cities: plan.cityCount,
         asOf: plan.asOf,
         source: plan.source,
       });
@@ -371,20 +473,20 @@ export function createPopulationImportService(pool) {
         let staged = 0;
         for (
           let offset = 0;
-          offset < plan.territories.length;
+          offset < plan.cities.length;
           offset += STREAM_STAGE_BATCH_SIZE
         ) {
-          const batch = plan.territories.slice(
+          const batch = plan.cities.slice(
             offset,
             offset + STREAM_STAGE_BATCH_SIZE,
           );
           staged += await insertStageBatch(client, batch, offset);
         }
-        if (staged !== plan.territoryCount) {
-          throw new Error('Not every normalized territory record was staged');
+        if (staged !== plan.cityCount) {
+          throw new Error('Not every normalized population city was staged');
         }
 
-        const result = await applyStagedTerritories(
+        const result = await applyStagedPopulation(
           client,
           plan,
           operation,
