@@ -542,7 +542,13 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     const changeCount = Array.isArray(entry.details?.changes)
       ? entry.details.changes.length
       : 0;
-    summary.textContent = changeCount ? `Изменения (${changeCount})` : 'JSON';
+    const taskLogCount = Array.isArray(entry.details?.taskLog)
+      ? entry.details.taskLog.length
+      : 0;
+    summary.textContent = [
+      changeCount ? `Изменения (${changeCount})` : null,
+      taskLogCount ? `Журнал (${taskLogCount})` : null,
+    ].filter(Boolean).join(' · ') || 'JSON';
     pre.textContent = JSON.stringify(entry.details ?? {}, null, 2);
     details.append(summary, pre);
     detailsCell.append(details);
