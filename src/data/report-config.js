@@ -518,6 +518,9 @@ function normalizeColumn(value, index, metricKeys, allowedKinds, label) {
     title: text(column.title, `${label}[${index}].title`, 100),
   };
   if (label === 'tableColumns') {
+    if (column.headerBold !== undefined && typeof column.headerBold !== 'boolean') {
+      throw new ReportConfigValidationError(`${label}[${index}].headerBold must be a boolean`);
+    }
     normalized.headerBold = column.headerBold !== false;
     normalized.headerTooltip = optionalText(
       column.headerTooltip,
