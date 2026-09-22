@@ -95,108 +95,17 @@ function nameKey(value) {
     .replace(/[^\p{L}\p{N}]+/gu, '');
 }
 
-function normalizeRegion(raw, regionIndex, defaults, seenRegions, seenCities) {
-  const region = object(raw, `Region regions[${regionIndex}]`);
-  const allowedRegion = new Set(['name', 'attributes', 'cities']);
-  const unknownRegion = Object.keys(region)
-    .filter((key) => !allowedRegion.has(key));
-  if (unknownRegion.length > 0) {
-    throw new PopulationValidationError(
-      `Region regions[${regionIndex}] contains unsupported properties: ` +
-      unknownRegion.join(', '),
-    );
-  }
+function warning(code, message, details = {}) {
+  return {
+    code,
+    message,
+    skipped: Boolean(details.skipped),
+    ...details,
+  };
+}
 
-  const regionName = normalizeText(
-    region.name,
-    `Region regions[${regionIndex}] name`,
-  );
-  const regionKey = nameKey(regionName);
-  if (seenRegions.has(regionKey)) {
-    throw new PopulationValidationError(
-      `Duplicate region name: ${regionName}`,
-    );
-  }
-  seenRegions.add(regionKey);
-
-  const regionAttributes = normalizeAttributes(
-    region.attributes,
-    `Region regions[${regionIndex}] attributes`,
-  );
-
-  if (!Array.isArray(region.cities) || region.cities.length === 0) {
-    throw new PopulationValidationError(
-      `Region regions[${regionIndex}] must contain a non-empty cities array`,
-    );
-  }
-
-  const rows = [];
-  for (const [cityIndex, rawCity] of region.cities.entries()) {
-    const city = object(
-      rawCity,
-      `City regions[${regionIndex}].cities[${cityIndex}]`,
-    );
-    const allowedCity = new Set([
-      'name',
-      'population',
-      'asOf',
-      'source',
-      'attributes',
-    ]);
-    const unknownCity = Object.keys(city)
-      .filter((key) => !allowedCity.has(key));
-    if (unknownCity.length > 0) {
-      throw new PopulationValidationError(
-        `City regions[${regionIndex}].cities[${cityIndex}] contains unsupported properties: ` +
-        unknownCity.join(', '),
-      );
-    }
-    if (!Object.hasOwn(city, 'population')) {
-      throw new PopulationValidationError(
-        `City regions[${regionIndex}].cities[${cityIndex}] must contain population`,
-      );
-    }
-
-    const cityName = normalizeText(
-      city.name,
-      `City regions[${regionIndex}].cities[${cityIndex}] name`,
-    );
-    const cityIdentity = `${regionKey}/${nameKey(cityName)}`;
-    if (seenCities.has(cityIdentity)) {
-      throw new PopulationValidationError(
-        `Duplicate city name inside region ${regionName}: ${cityName}`,
-      );
-    }
-    seenCities.add(cityIdentity);
-
-    rows.push({
-      regionName,
-      regionAttributes,
-      cityName,
-      population: normalizePopulation(
-        city.population,
-        `City regions[${regionIndex}].cities[${cityIndex}] population`,
-      ),
-      asOf: city.asOf === undefined
-        ? defaults.asOf
-        : normalizeDate(
-          city.asOf,
-          `City regions[${regionIndex}].cities[${cityIndex}] asOf`,
-        ),
-      source: city.source === undefined
-        ? defaults.source
-        : normalizeSource(
-          city.source,
-          `City regions[${regionIndex}].cities[${cityIndex}] source`,
-        ),
-      attributes: normalizeAttributes(
-        city.attributes,
-        `City regions[${regionIndex}].cities[${cityIndex}] attributes`,
-      ),
-    });
-  }
-
-  return { regionName, regionAttributes, rows };
+function cityLabel(regionName, cityIndex) {
+  return `City ${regionName} cities[${cityIndex}]`;
 }
 
 export function createPopulationHierarchyAccumulator({
@@ -205,49 +114,314 @@ export function createPopulationHierarchyAccumulator({
   maxItems = 5_000_000,
   collectCities = false,
 } = {}) {
+  // Top-level metadata is part of the document contract and remains fatal.
   const defaults = {
     asOf: normalizeDate(rawAsOf, 'asOf'),
     source: normalizeSource(rawSource, 'source'),
   };
-  const seenRegions = new Set();
+  const seenRegions = new Map();
   const seenCities = new Set();
   const collected = collectCities ? [] : null;
+  const warnings = [];
   let regionCount = 0;
+  let uniqueRegionCount = 0;
   let cityCount = 0;
+  let encounteredCityCount = 0;
+  let skippedCityCount = 0;
+  let skippedRegionCount = 0;
+
+  function addWarning(value) {
+    warnings.push(value);
+  }
 
   return {
-    addRegion(region, regionIndex = regionCount) {
-      const normalized = normalizeRegion(
-        region,
-        regionIndex,
-        defaults,
-        seenRegions,
-        seenCities,
-      );
-      if (cityCount + normalized.rows.length > maxItems) {
+    addRegion(rawRegion, regionIndex = regionCount) {
+      regionCount += 1;
+
+      let region;
+      try {
+        region = object(rawRegion, `Region regions[${regionIndex}]`);
+      } catch (error) {
+        skippedRegionCount += 1;
+        addWarning(warning(
+          'invalid-region',
+          error.message,
+          {
+            scope: 'region',
+            regionIndex,
+            skipped: true,
+          },
+        ));
+        return { regionName: null, regionAttributes: {}, rows: [] };
+      }
+
+      const allowedRegion = new Set(['name', 'attributes', 'cities']);
+      const unknownRegion = Object.keys(region)
+        .filter((key) => !allowedRegion.has(key));
+      if (unknownRegion.length > 0) {
+        addWarning(warning(
+          'unsupported-region-properties',
+          `Region regions[${regionIndex}] contains unsupported properties: ${unknownRegion.join(', ')}`,
+          {
+            scope: 'region',
+            regionIndex,
+            properties: unknownRegion,
+            skipped: false,
+          },
+        ));
+      }
+
+      let regionName;
+      try {
+        regionName = normalizeText(
+          region.name,
+          `Region regions[${regionIndex}] name`,
+        );
+      } catch (error) {
+        const skippedCities = Array.isArray(region.cities)
+          ? region.cities.length
+          : 0;
+        encounteredCityCount += skippedCities;
+        skippedCityCount += skippedCities;
+        skippedRegionCount += 1;
+        addWarning(warning(
+          'invalid-region-name',
+          error.message,
+          {
+            scope: 'region',
+            regionIndex,
+            skippedCities,
+            skipped: true,
+          },
+        ));
+        return { regionName: null, regionAttributes: {}, rows: [] };
+      }
+
+      const regionKey = nameKey(regionName);
+      const existingRegionName = seenRegions.get(regionKey);
+      const canonicalRegionName = existingRegionName ?? regionName;
+      if (existingRegionName) {
+        addWarning(warning(
+          'duplicate-region-merged',
+          `Duplicate region name merged with previous block: ${regionName}`,
+          {
+            scope: 'region',
+            regionIndex,
+            regionName,
+            skipped: false,
+          },
+        ));
+      } else {
+        seenRegions.set(regionKey, regionName);
+        uniqueRegionCount += 1;
+      }
+
+      let regionAttributes = {};
+      try {
+        regionAttributes = normalizeAttributes(
+          region.attributes,
+          `Region regions[${regionIndex}] attributes`,
+        );
+      } catch (error) {
+        addWarning(warning(
+          'invalid-region-attributes',
+          `${error.message}; empty attributes used`,
+          {
+            scope: 'region',
+            regionIndex,
+            regionName: canonicalRegionName,
+            skipped: false,
+          },
+        ));
+      }
+
+      if (!Array.isArray(region.cities) || region.cities.length === 0) {
+        skippedRegionCount += 1;
+        addWarning(warning(
+          'invalid-region-cities',
+          `Region regions[${regionIndex}] must contain a non-empty cities array`,
+          {
+            scope: 'region',
+            regionIndex,
+            regionName: canonicalRegionName,
+            skipped: true,
+          },
+        ));
+        return {
+          regionName: canonicalRegionName,
+          regionAttributes,
+          rows: [],
+        };
+      }
+
+      // A huge invalid document must not bypass resource limits by being
+      // rejected item-by-item.
+      if (encounteredCityCount + region.cities.length > maxItems) {
         throw new PopulationValidationError(
           `Population hierarchy contains more than ${maxItems} cities`,
         );
       }
-      regionCount += 1;
-      cityCount += normalized.rows.length;
-      collected?.push(...normalized.rows);
-      return normalized;
+
+      const rows = [];
+      for (const [cityIndex, rawCity] of region.cities.entries()) {
+        encounteredCityCount += 1;
+        const label = cityLabel(canonicalRegionName, cityIndex);
+
+        let city;
+        try {
+          city = object(rawCity, label);
+        } catch (error) {
+          skippedCityCount += 1;
+          addWarning(warning(
+            'invalid-city',
+            error.message,
+            {
+              scope: 'city',
+              regionIndex,
+              cityIndex,
+              regionName: canonicalRegionName,
+              skipped: true,
+            },
+          ));
+          continue;
+        }
+
+        const allowedCity = new Set([
+          'name',
+          'population',
+          'asOf',
+          'source',
+          'attributes',
+        ]);
+        const unknownCity = Object.keys(city)
+          .filter((key) => !allowedCity.has(key));
+        if (unknownCity.length > 0) {
+          addWarning(warning(
+            'unsupported-city-properties',
+            `${label} contains unsupported properties: ${unknownCity.join(', ')}`,
+            {
+              scope: 'city',
+              regionIndex,
+              cityIndex,
+              regionName: canonicalRegionName,
+              properties: unknownCity,
+              skipped: false,
+            },
+          ));
+        }
+
+        if (!Object.hasOwn(city, 'population')) {
+          skippedCityCount += 1;
+          addWarning(warning(
+            'missing-population',
+            `${label} must contain population`,
+            {
+              scope: 'city',
+              regionIndex,
+              cityIndex,
+              regionName: canonicalRegionName,
+              cityName: typeof city.name === 'string' ? city.name : null,
+              skipped: true,
+            },
+          ));
+          continue;
+        }
+
+        let cityName;
+        try {
+          cityName = normalizeText(city.name, `${label} name`);
+        } catch (error) {
+          skippedCityCount += 1;
+          addWarning(warning(
+            'invalid-city-name',
+            error.message,
+            {
+              scope: 'city',
+              regionIndex,
+              cityIndex,
+              regionName: canonicalRegionName,
+              skipped: true,
+            },
+          ));
+          continue;
+        }
+
+        const cityIdentity = `${regionKey}/${nameKey(cityName)}`;
+        if (seenCities.has(cityIdentity)) {
+          skippedCityCount += 1;
+          addWarning(warning(
+            'duplicate-city',
+            `Duplicate city name inside region ${canonicalRegionName}: ${cityName}`,
+            {
+              scope: 'city',
+              regionIndex,
+              cityIndex,
+              regionName: canonicalRegionName,
+              cityName,
+              skipped: true,
+            },
+          ));
+          continue;
+        }
+
+        try {
+          const row = {
+            regionName: canonicalRegionName,
+            regionAttributes,
+            cityName,
+            population: normalizePopulation(
+              city.population,
+              `${label} population`,
+            ),
+            asOf: city.asOf === undefined
+              ? defaults.asOf
+              : normalizeDate(city.asOf, `${label} asOf`),
+            source: city.source === undefined
+              ? defaults.source
+              : normalizeSource(city.source, `${label} source`),
+            attributes: normalizeAttributes(
+              city.attributes,
+              `${label} attributes`,
+            ),
+          };
+          seenCities.add(cityIdentity);
+          rows.push(row);
+          cityCount += 1;
+          collected?.push(row);
+        } catch (error) {
+          skippedCityCount += 1;
+          addWarning(warning(
+            'invalid-city-data',
+            error.message,
+            {
+              scope: 'city',
+              regionIndex,
+              cityIndex,
+              regionName: canonicalRegionName,
+              cityName,
+              skipped: true,
+            },
+          ));
+        }
+      }
+
+      return { regionName: canonicalRegionName, regionAttributes, rows };
     },
 
     finish(metadata = {}) {
+      // Schema mismatch is a document-level incompatibility and remains fatal.
       normalizeSchemaVersion(metadata.schemaVersion);
-      if (regionCount === 0 || cityCount === 0) {
-        throw new PopulationValidationError(
-          'Request body must contain a non-empty regions array',
-        );
-      }
       return {
         schemaVersion: 2,
         asOf: defaults.asOf,
         source: defaults.source,
         regionCount,
+        uniqueRegionCount,
         cityCount,
+        encounteredCityCount,
+        skippedCityCount,
+        skippedRegionCount,
+        warnings: [...warnings],
         cities: collected ?? [],
       };
     },
@@ -262,7 +436,7 @@ export function buildPopulationPlan(payload, options = {}) {
   }
   if (!Array.isArray(payload.regions)) {
     throw new PopulationValidationError(
-      'Request body must contain a non-empty regions array',
+      'Request body must contain a regions array',
     );
   }
 
