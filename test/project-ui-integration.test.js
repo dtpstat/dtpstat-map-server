@@ -75,6 +75,14 @@ test('admin interface loads editors and helpers explicitly without transitive si
 
   assert.match(editor, /dataset\.interfaceTab = 'project'/);
   assert.match(editor, /dataset\.interfacePanel = 'project'/);
+  assert.match(editor, /data-project-settings-tab="general"/);
+  assert.match(editor, /data-project-settings-tab="map"/);
+  assert.match(editor, /data-project-settings-tab="metadata"/);
+  assert.match(editor, /data-project-settings-tab="footer"/);
+  assert.match(editor, /data-project-settings-panel="general"/);
+  assert.match(editor, /data-project-settings-panel="map"/);
+  assert.match(editor, /data-project-settings-panel="metadata"/);
+  assert.match(editor, /data-project-settings-panel="footer"/);
   assert.match(editor, /name="projectName"/);
   assert.match(editor, /name="themePreset" type="radio" value="retro"/);
   assert.match(editor, /name="themePreset" type="radio" value="classic"/);
@@ -92,7 +100,10 @@ test('admin interface loads editors and helpers explicitly without transitive si
   assert.match(editor, /data-project-snippet="columns"/);
   assert.match(editor, /\/api\/admin\/project-settings/);
   assert.match(css, /\.project-theme-grid/);
+  assert.match(css, /\.project-settings-tabs/);
+  assert.match(css, /\.project-settings-page\[hidden\]/);
   assert.match(css, /data-theme-preview/);
+  assert.match(shell, /classList\.remove\('transfer-mode'\)/);
 
   assert.match(downloadEditor, /name="publicDownloadName"/);
   assert.match(downloadEditor, /публичных URL и для файлов на диске/);
