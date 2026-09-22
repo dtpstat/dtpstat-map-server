@@ -90,7 +90,7 @@ HTTP_PORT=3002
 
 ## Миграции
 
-Текущая последовательность: `V001…V041`.
+Текущая последовательность: `V001…V042`.
 
 Последние изменения:
 
@@ -112,16 +112,17 @@ HTTP_PORT=3002
 | `V031` | диагностика OSM-объектов без построенной geometry в resumable checkpoint |
 | `V032` | population/asOf/source/attributes на `CITY_BOUNDARIES` и активная проекция в `CITY_POPULATIONS` |
 | `V033` | вертикальное key/value-хранилище `REPORT_CONFIG` вместо растущей singleton-строки |
-| `V034` | отдельные права редактора геометрий и OSM-дерева |
-| `V035` | универсальная модель `CITY_GEOMETRIES` для Point/Line/Polygon |
-| `V036` | staging/conflict model для geometry import |
-| `V037` | синхронизация городов редактора геометрий |
-| `V038` | invariants и derived normalization geometry model |
-| `V039` | identity/pending guards для city/boundary/geometry |
-| `V040` | effective geometry ownership для public/metrics |
-| `V041` | финальные ограничения geometry model |
+| `V034` | настраиваемая политика паролей администраторов |
+| `V035` | отдельные права редактора геометрий и OSM-дерева |
+| `V036` | универсальная модель `CITY_GEOMETRIES` для Point/Line/Polygon |
+| `V037` | staging/conflict model для geometry import |
+| `V038` | синхронизация городов редактора геометрий |
+| `V039` | invariants и derived normalization geometry model |
+| `V040` | identity/pending guards для city/boundary/geometry |
+| `V041` | effective geometry ownership для public/metrics |
+| `V042` | финальные ограничения geometry model |
 
-Следующая migration: **V042+**. Уже опубликованные migrations не редактируются задним числом.
+Следующая migration: **V043+**. Уже опубликованные migrations не редактируются задним числом.
 
 История хранится в:
 
