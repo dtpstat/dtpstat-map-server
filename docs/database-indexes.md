@@ -112,25 +112,28 @@ CHECK (ID = 1)
 
 ## REPORT_CONFIG
 
-Singleton:
+Начиная с `V033` — вертикальное key/value-хранилище:
 
 ```text
-PRIMARY KEY (ID)
-CHECK (ID = 1)
+PRIMARY KEY (CONFIG_KEY)
+CONFIG_VALUE JSONB
+UPDATED_AT
 ```
 
-JSONB fields:
+Текущие ключи:
 
 ```text
-METRICS
-TABLE_COLUMNS
-CSV_COLUMNS
-RANK_SORT
+metrics
+table_columns
+csv_columns
+rank
 ```
 
-Runtime не ищет rows по содержимому этих JSONB, поэтому GIN не нужен.
+Runtime читает значения по `CONFIG_KEY` и не выполняет predicates по содержимому
+`CONFIG_VALUE`, поэтому GIN не нужен. PK по `CONFIG_KEY` полностью покрывает
+текущий access path.
 
-`RANK_SORT` из `V024` читается из singleton row и используется только при materialization.
+Новые независимые report settings добавляются строками, а не новыми колонками.
 
 ## CITY_REPORT_VALUES
 
