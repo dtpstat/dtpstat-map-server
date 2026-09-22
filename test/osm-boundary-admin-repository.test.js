@@ -8,7 +8,13 @@ import {
 function createPool({
   currentActive = true,
   currentPopulation = 120000,
+  currentPopulationAsOf = '2026-01-01',
+  currentPopulationSource = 'test',
+  currentAttributes = { note: 'x' },
   finalPopulation = currentPopulation,
+  finalPopulationAsOf = currentPopulationAsOf,
+  finalPopulationSource = currentPopulationSource,
+  finalAttributes = currentAttributes,
   finalActive = currentActive,
   subtreeRows = null,
 } = {}) {
@@ -30,9 +36,9 @@ function createPool({
     areaKm2: 100,
     cityId: finalActive ? 17 : null,
     population: finalPopulation,
-    populationAsOf: '2026-01-01',
-    populationSource: 'test',
-    attributes: { note: 'x' },
+    populationAsOf: finalPopulationAsOf,
+    populationSource: finalPopulationSource,
+    attributes: finalAttributes,
     tags: {},
     updatedAt: '2026-09-20T00:00:00.000Z',
   });
@@ -56,9 +62,9 @@ function createPool({
             displayName: 'Тестоград',
             displayType: 'city',
             population: currentPopulation,
-            populationAsOf: '2026-01-01',
-            populationSource: 'test',
-            attributes: { note: 'x' },
+            populationAsOf: currentPopulationAsOf,
+            populationSource: currentPopulationSource,
+            attributes: currentAttributes,
           }],
           rowCount: 1,
         };
@@ -107,18 +113,29 @@ test('OSM boundary list reads population metadata from the boundary itself', asy
   assert.doesNotMatch(pool.queries[0], /JOIN city_populations/i);
 });
 
-test('population can be edited on an inactive OSM boundary without activating it', async () => {
+test('territory data can be edited on an inactive OSM boundary without activating it', async () => {
   const pool = createPool({
     currentActive: false,
     currentPopulation: null,
     finalPopulation: 125000,
+    finalPopulationAsOf: '2026-02-01',
+    finalPopulationSource: 'Регионстат',
+    finalAttributes: { census: true },
     finalActive: false,
   });
   const repository = createOsmBoundaryAdminRepository(pool);
 
-  const result = await repository.update(5, { population: 125000 });
+  const result = await repository.update(5, {
+    population: 125000,
+    populationAsOf: '2026-02-01',
+    populationSource: 'Регионстат',
+    attributes: { census: true },
+  });
 
   assert.equal(result.population, 125000);
+  assert.equal(result.populationAsOf, '2026-02-01');
+  assert.equal(result.populationSource, 'Регионстат');
+  assert.deepEqual(result.attributes, { census: true });
   assert.equal(result.active, false);
 
   const updateIndex = pool.queries.findIndex((query) =>
@@ -127,6 +144,9 @@ test('population can be edited on an inactive OSM boundary without activating it
   assert.ok(updateIndex >= 0);
   assert.equal(pool.parameters[updateIndex][1], false);
   assert.equal(pool.parameters[updateIndex][4], 125000);
+  assert.equal(pool.parameters[updateIndex][5], '2026-02-01');
+  assert.equal(pool.parameters[updateIndex][6], 'Регионстат');
+  assert.equal(pool.parameters[updateIndex][7], '{"census":true}');
   assert.ok(
     pool.queries.includes('SELECT sync_active_boundary_populations()'),
   );
