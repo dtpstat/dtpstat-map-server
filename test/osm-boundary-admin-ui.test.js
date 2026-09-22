@@ -216,6 +216,13 @@ test('admin clears previous task status immediately when a new operation starts'
   assert.match(security, /Журнал \(\$\{taskLogCount\}\)/);
   assert.match(admin, /phase === 'stage-write'/);
   assert.match(admin, /Ожидаем PostgreSQL\/PostGIS/);
+  assert.match(admin, /function stableProcessingView\(/);
+  assert.match(admin, /Чтение и подготовка входного JSON/);
+  assert.match(admin, /PostgreSQL\/PostGIS:/);
+  assert.match(admin, /processingStatus\.hidden = !progress\.stableInputProgress/);
+  assert.match(admin, /for \(const entry of parseEntries\)/);
+  assert.match(admin, /decodedBytes = Math\.max\(/);
+  assert.match(admin, /itemCount = Math\.max\(/);
   assert.match(admin, /function syncSessionActivityHold\(/);
   assert.match(admin, /dtpstatAdminSessionGuard\?\.setActivityHold/);
   assert.match(
