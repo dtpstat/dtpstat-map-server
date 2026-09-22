@@ -49,6 +49,10 @@ test('portable transfer UI offers ZIP and uploads selected files without file.te
   assert.match(admin, /admin-transfer-overlay/);
   assert.match(admin, /beforeunload/);
   assert.match(admin, /fileImportTaskTypes/);
+  assert.match(
+    admin,
+    /applyTask\(payload\.task\);[\s\S]*syncTransferOverlay\(/,
+  );
   assert.match(styles, /\.transfer-links\s*\{/);
   assert.match(styles, /\.admin-transfer-overlay\s*\{/);
   assert.match(styles, /body\.admin-transfer-locked/);
