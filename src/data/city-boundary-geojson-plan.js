@@ -235,6 +235,48 @@ function normalizeFeature(feature, featureIndex) {
     );
   }
 
+  const rawPopulation = properties.population ?? null;
+  const population = rawPopulation === null || rawPopulation === ''
+    ? null
+    : Number(rawPopulation);
+  if (
+    population !== null &&
+    (!Number.isSafeInteger(population) ||
+      population <= 0 ||
+      population > 2147483647)
+  ) {
+    throw new CityBoundaryGeoJsonValidationError(
+      `City GeoJSON feature ${featureIndex} has invalid population`,
+    );
+  }
+  const populationAsOfRaw =
+    properties.populationAsOf ?? properties.population_as_of ?? null;
+  const populationAsOf = populationAsOfRaw === null || populationAsOfRaw === ''
+    ? null
+    : populationAsOfRaw;
+  if (
+    populationAsOf !== null &&
+    (
+      typeof populationAsOf !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(populationAsOf)
+    )
+  ) {
+    throw new CityBoundaryGeoJsonValidationError(
+      `City GeoJSON feature ${featureIndex} has invalid populationAsOf`,
+    );
+  }
+  const populationSource = optionalString(
+    properties.populationSource ?? properties.population_source,
+    'populationSource',
+    featureIndex,
+  );
+  const attributes = properties.attributes ?? {};
+  if (!attributes || typeof attributes !== 'object' || Array.isArray(attributes)) {
+    throw new CityBoundaryGeoJsonValidationError(
+      `City GeoJSON feature ${featureIndex} has invalid attributes`,
+    );
+  }
+
   const city = linkedCity(properties, featureIndex);
   return {
     boundary: {
@@ -249,6 +291,10 @@ function normalizeFeature(feature, featureIndex) {
       tags,
       osmTimestamp,
       updatedAt,
+      population,
+      populationAsOf,
+      populationSource,
+      attributes,
       citySlug: city?.slug ?? null,
       cityName: city?.name ?? null,
       geometry: feature.geometry,
