@@ -164,10 +164,19 @@ export function createApiRouter({
       message = `KML: обработан источник ${progress.source}/${progress.sourceCount}`;
     } else if (progress.phase === 'validated') {
       message = 'Входные данные проверены';
+    } else if (progress.phase === 'warnings') {
+      message =
+        `Импорт продолжен с предупреждениями: ` +
+        `${progress.warningCount ?? 0}; пропущено записей: ` +
+        `${progress.skippedCount ?? 0}`;
     } else if (progress.phase === 'database') {
       message = 'Изменения базы данных подготовлены';
     }
-    context.log(message, progress);
+    context.log(
+      message,
+      progress,
+      progress.phase === 'warnings' ? 'warning' : 'info',
+    );
   };
 
   const parseCoordinates = (value, count) => {
