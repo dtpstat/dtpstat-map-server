@@ -1,3 +1,5 @@
+import { trackDirtyForm } from './admin-dirty-state.js';
+
 if (typeof document !== 'undefined') {
   const host = document.querySelector('#line-types-editor-host');
   if (host) {
@@ -20,6 +22,7 @@ if (typeof document !== 'undefined') {
     const table = host.querySelector('#line-types-table');
     const form = host.querySelector('#line-types-form');
     const message = host.querySelector('#line-types-message');
+    const dirtyState = trackDirtyForm(form, { label: 'Типы линий' });
 
     function setMessage(text, tone = '') {
       message.textContent = text;
@@ -116,6 +119,7 @@ if (typeof document !== 'undefined') {
         if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
         table.replaceChildren();
         for (const lineType of payload.lineTypes) addRow(lineType);
+        dirtyState?.markClean();
         setMessage(
           changed
             ? `Справочник обновлён. Типов: ${payload.lineTypes.length}`
@@ -145,6 +149,7 @@ if (typeof document !== 'undefined') {
         if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
         table.replaceChildren();
         for (const lineType of payload.lineTypes) addRow(lineType);
+        dirtyState?.markClean();
         setMessage('Подписи и стили сохранены.', 'success');
         window.dispatchEvent(new CustomEvent('dtpstat:line-types-changed'));
       } catch (error) {
