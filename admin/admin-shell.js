@@ -132,6 +132,7 @@ function normalizeInterfaceEditorNodes() {
     // only by the interface role and by the outer interface panel scroller.
     reportPanel.querySelector('#report-config-form')?.removeAttribute('data-task-form');
     reportPanel.querySelector('.report-config-sections')?.classList.remove('form-fields');
+    reportPanel.querySelector('.report-config-editor')?.classList.remove('transfer-mode');
     document.querySelector('#interface-panels')?.append(reportPanel);
   }
 
