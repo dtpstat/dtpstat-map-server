@@ -36,7 +36,7 @@ const lineSnapshot = {
 const populationSnapshot = {
   schemaVersion: 2,
   exportedAt: '2026-09-05T12:00:00.000Z',
-  territories: [],
+  regions: [],
 };
 
 function config() {
@@ -607,16 +607,14 @@ test('line and population imports accept gzip request bodies', async () => {
   };
   const populations = {
     schemaVersion: 2,
-    territories: [{
-      osmType: 'relation',
-      osmId: '123',
-      name: 'Казань',
-      type: 'city',
-      placeType: 'city',
-      adminLevel: 6,
-      population: 1300000,
+    regions: [{
+      name: 'Республика Татарстан',
       attributes: {},
-      children: [],
+      cities: [{
+        name: 'Казань',
+        population: 1300000,
+        attributes: {},
+      }],
     }],
   };
 
