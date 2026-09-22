@@ -3,6 +3,14 @@ import { CITY_MARKER_ICON_URL } from './city-marker-icon.js';
 const SOURCE_ID = 'bus-lanes';
 const LAYER_PREFIX = 'bus-lanes-lines-';
 const LABEL_LAYER_PREFIX = 'bus-lanes-labels-';
+const POLYGON_FILL_LAYER_ID = 'project-geometries-polygons-fill';
+const POLYGON_LINE_LAYER_ID = 'project-geometries-polygons-line';
+const POINT_LAYER_ID = 'project-geometries-points';
+const GENERIC_GEOMETRY_LAYER_IDS = [
+  POLYGON_FILL_LAYER_ID,
+  POLYGON_LINE_LAYER_ID,
+  POINT_LAYER_ID,
+];
 const CITY_SOURCE_ID = 'ranked-cities';
 const CITY_LAYER_ID = 'ranked-cities-markers';
 const CITY_IMAGE_ID = 'ranked-city-bus';
@@ -22,7 +30,11 @@ const DEFAULT_LINE_TYPE = {
 export const ROAD_DATA_MIN_ZOOM = 8;
 
 function isApplicationLineLayer(layer) {
-  return layer.id.startsWith(LAYER_PREFIX) || layer.id.startsWith(LABEL_LAYER_PREFIX);
+  return (
+    layer.id.startsWith(LAYER_PREFIX) ||
+    layer.id.startsWith(LABEL_LAYER_PREFIX) ||
+    GENERIC_GEOMETRY_LAYER_IDS.includes(layer.id)
+  );
 }
 
 /** @param {Array<{ id: string, type: string }>} layers */
@@ -46,10 +58,23 @@ export function findTopLabelLayerId(layers = []) {
  * @param {any} feature
  */
 export function lineFeatureName(feature) {
-  const value = feature?.properties?.placemarkName;
-  if (typeof value !== 'string') return null;
-  const normalized = value.trim();
-  return normalized || null;
+  for (const key of ['displayName', 'placemarkName']) {
+    const value = feature?.properties?.[key];
+    if (typeof value !== 'string') continue;
+    const normalized = value.trim();
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
+export function geometryFeatureTooltip(feature) {
+  for (const key of ['tooltip', 'displayName', 'placemarkName']) {
+    const value = feature?.properties?.[key];
+    if (typeof value !== 'string') continue;
+    const normalized = value.trim();
+    if (normalized) return normalized;
+  }
+  return null;
 }
 
 /** @param {string} style */
@@ -236,6 +261,55 @@ export async function createMapController(config) {
     lineLabelLayerIds = new Map();
   }
 
+  function ensureGenericGeometryLayers() {
+    const labelLayerId = findTopLabelLayerId(map.getStyle().layers);
+    if (!map.getSource(SOURCE_ID)) {
+      map.addSource(SOURCE_ID, { type: 'geojson', data: currentGeoJson });
+    }
+    if (!map.getLayer(POLYGON_FILL_LAYER_ID)) {
+      map.addLayer({
+        id: POLYGON_FILL_LAYER_ID,
+        type: 'fill',
+        source: SOURCE_ID,
+        minzoom: ROAD_DATA_MIN_ZOOM,
+        filter: ['==', ['geometry-type'], 'Polygon'],
+        paint: {
+          'fill-color': '#3388ff',
+          'fill-opacity': 0.16,
+        },
+      }, labelLayerId);
+    }
+    if (!map.getLayer(POLYGON_LINE_LAYER_ID)) {
+      map.addLayer({
+        id: POLYGON_LINE_LAYER_ID,
+        type: 'line',
+        source: SOURCE_ID,
+        minzoom: ROAD_DATA_MIN_ZOOM,
+        filter: ['==', ['geometry-type'], 'Polygon'],
+        paint: {
+          'line-color': '#3388ff',
+          'line-width': 2,
+          'line-opacity': 0.8,
+        },
+      }, labelLayerId);
+    }
+    if (!map.getLayer(POINT_LAYER_ID)) {
+      map.addLayer({
+        id: POINT_LAYER_ID,
+        type: 'circle',
+        source: SOURCE_ID,
+        minzoom: ROAD_DATA_MIN_ZOOM,
+        filter: ['==', ['geometry-type'], 'Point'],
+        paint: {
+          'circle-radius': 6,
+          'circle-color': '#3388ff',
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 1.5,
+        },
+      }, labelLayerId);
+    }
+  }
+
   function ensureBusLaneLayers() {
     const labelLayerId = findTopLabelLayerId(map.getStyle().layers);
     if (!map.getSource(SOURCE_ID)) map.addSource(SOURCE_ID, { type: 'geojson', data: currentGeoJson });
@@ -279,11 +353,11 @@ export async function createMapController(config) {
             filter: [
               'all',
               ['==', ['get', 'businessTypeCode'], lineType.code],
-              ['has', 'placemarkName'],
+              ['any', ['has', 'displayName'], ['has', 'placemarkName']],
             ],
             layout: {
               'symbol-placement': 'line',
-              'text-field': ['get', 'placemarkName'],
+              'text-field': ['coalesce', ['get', 'displayName'], ['get', 'placemarkName']],
               'text-size': 11,
               'text-max-angle': 35,
               'text-padding': 4,
@@ -305,6 +379,7 @@ export async function createMapController(config) {
 
   async function ensureMapLayers() {
     await ensureCityMarkerLayer();
+    ensureGenericGeometryLayers();
     ensureBusLaneLayers();
   }
 
@@ -328,15 +403,19 @@ export async function createMapController(config) {
       lineNamePopup.remove();
       return;
     }
-    const layers = [...lineLayerIds.values()].filter((layerId) => map.getLayer(layerId));
+    const layers = [
+      ...lineLayerIds.values(),
+      POINT_LAYER_ID,
+      POLYGON_FILL_LAYER_ID,
+    ].filter((layerId) => map.getLayer(layerId));
     if (layers.length === 0) {
       lineNamePopup.remove();
       return;
     }
     const feature = map
       .queryRenderedFeatures(event.point, { layers })
-      .find((candidate) => lineFeatureName(candidate));
-    const name = lineFeatureName(feature);
+      .find((candidate) => geometryFeatureTooltip(candidate));
+    const name = geometryFeatureTooltip(feature);
     if (!name) {
       lineNamePopup.remove();
       return;

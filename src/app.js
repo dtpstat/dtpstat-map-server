@@ -17,6 +17,7 @@ import { createBasicAuth } from './http/basic-auth.js';
 import { projectManifest, renderProjectPage } from './http/project-page.js';
 import { createAdminSecurityRouter } from './routes/admin-security-api.js';
 import { createApiRouter } from './routes/api.js';
+import { createGeometryEditorRouter } from './routes/geometry-editor-api.js';
 import { createKmlTransferRouter } from './routes/kml-transfer-api.js';
 import { createLineTypesRouter } from './routes/line-types-api.js';
 import { createOsmBoundariesRouter } from './routes/osm-boundaries-api.js';
@@ -226,6 +227,8 @@ function testSecurity(config) {
     email: null,
     canManageData: true,
     canManageInterface: true,
+    canEditGeometries: true,
+    canEditOsm: true,
     canManageUsers: true,
     canViewAudit: true,
     canManageSecurity: true,
@@ -247,6 +250,8 @@ function testSecurity(config) {
     requireProfile: requireAuth,
     requireData: requireAuth,
     requireInterface: requireAuth,
+    requireGeometryEditor: requireAuth,
+    requireOsmEditor: requireAuth,
     requireUsers: requireAuth,
     requireAudit: requireAuth,
     requireSecurity: requireAuth,
@@ -304,7 +309,10 @@ function testSecurity(config) {
  *   refreshPublicDownloadsAfterSettingsImport?: () => Promise<any>,
  *   refreshProjectDerived?: () => Promise<any>,
  *   refreshOsmBoundaryDerived?: () => Promise<any>,
+ *   recalculateGeometryDerived?: (details?: object) => Promise<any>,
  *   osmImportSettingsRepository?: { get: Function, save: Function },
+ *   geometryEditorRepository?: { listCities: Function, listCityGeometries: Function, get: Function },
+ *   geometryImportRepository?: { pending: Function, discard: Function, apply: Function },
  *   osmBoundaryAdminRepository?: { list: Function, getGeometry: Function, update: Function },
  *   exportRepository: import('./routes/api.js').DataExportRepository,
  *   importService: import('./routes/api.js').DataImportService,
@@ -328,8 +336,11 @@ export function createApp({
   refreshPublicDownloadsAfterSettingsImport,
   refreshProjectDerived,
   refreshOsmBoundaryDerived,
+  recalculateGeometryDerived,
   osmImportSettingsRepository,
   osmBoundaryAdminRepository,
+  geometryEditorRepository,
+  geometryImportRepository,
   exportRepository,
   importService,
   cityBoundaryTransferService,
@@ -469,6 +480,15 @@ export function createApp({
     afterPublicDownloadNameSave: async () => refreshPublicDownloads?.(),
     afterSettingsSave: async () => refreshProjectDerived?.(),
   }));
+  if (geometryEditorRepository) {
+    app.use('/api', createGeometryEditorRouter({
+      geometryEditorRepository,
+      adminAuth: effectiveAdminAuth,
+      securityService: effectiveSecurityService,
+      maxBodyBytes: config.importApi.maxBodyBytes,
+      afterRecalculate: async (details) => recalculateGeometryDerived?.(details),
+    }));
+  }
   if (osmImportSettingsRepository && osmBoundaryAdminRepository) {
     app.use('/api', createOsmBoundariesRouter({
       settingsRepository: osmImportSettingsRepository,
@@ -498,6 +518,7 @@ export function createApp({
     cityBoundaryTransferService,
     populationService,
     kmlUpdateService,
+    geometryImportRepository,
     osmCityUpdateService,
     adminTasks,
     adminAuth: effectiveAdminAuth,

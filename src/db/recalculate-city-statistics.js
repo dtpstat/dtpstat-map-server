@@ -5,17 +5,15 @@ export const RECALCULATE_CITY_STATISTICS_SQL = `
       COALESCE(
         SUM(
           CASE
-            WHEN boundary.is_active
-              THEN ST_Length(geometry.geom::geography) * geometry.lanes
+            WHEN GeometryType(geometry.geom) IN ('LINESTRING', 'MULTILINESTRING')
+              THEN geometry.lane_length_m
             ELSE 0
           END
         ),
         0
       )::double precision AS lane_length_m
     FROM cities AS city
-    LEFT JOIN city_geometries AS geometry ON geometry.city_id = city.id
-    LEFT JOIN city_boundaries AS boundary
-      ON boundary.id = geometry.boundary_id
+    LEFT JOIN effective_city_geometries AS geometry ON geometry.city_id = city.id
     GROUP BY city.id
   ),
   boundary_statistics AS (

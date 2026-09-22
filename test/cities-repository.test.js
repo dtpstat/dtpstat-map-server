@@ -6,7 +6,7 @@ import {
   VIEWPORT_EXPANSION_RATIO,
 } from '../src/db/cities-repository.js';
 
-test('city list does not require population but does require line geometries', async () => {
+test('city list does not require population but does require project geometries', async () => {
   let sql;
   const repository = createCitiesRepository({
     async query(text) {
@@ -28,8 +28,9 @@ test('city list does not require population but does require line geometries', a
   );
   assert.match(
     sql,
-    /EXISTS \(\s*SELECT 1\s*FROM city_geometries AS geometry_presence\s*JOIN city_boundaries AS geometry_boundary[\s\S]*geometry_boundary\.is_active[\s\S]*geometry_presence\.city_id = city\.id\s*\)/s,
+    /EXISTS \(\s*SELECT 1\s*FROM effective_city_geometries AS geometry_presence\s*WHERE geometry_presence\.city_id = city\.id\s*\)/s,
   );
+  assert.doesNotMatch(sql, /geometry_boundary\.id = geometry_presence\.boundary_id/);
   assert.match(
     sql,
     /CASE WHEN city\.is_large IS TRUE THEN 'large' ELSE 'small' END AS category/,
@@ -103,10 +104,24 @@ test('viewport query uses padded selector, returns complete intersecting lines a
   assert.match(sql, /geometry\.geom\s+FROM viewport/);
   assert.doesNotMatch(sql, /ST_Intersection\(geometry\.geom, viewport\.geom\)/);
   assert.match(sql, /line_type\.code AS business_type_code/);
+  assert.match(sql, /LEFT JOIN line_types AS line_type/);
+  assert.match(sql, /geometry\.is_visible/);
+  assert.match(sql, /'geometryFamily'/);
+  assert.match(sql, /'displayName'/);
+  assert.match(sql, /'tooltip'/);
+  assert.match(sql, /'tags'/);
   assert.match(sql, /'businessTypeCode', visible_geometries\.business_type_code/);
   assert.match(sql, /ST_Covers\(boundary\.geom, viewport\.center\)/);
   assert.match(
     sql,
-    /geometry_boundary\.id = geometry_presence\.boundary_id[\s\S]*geometry_boundary\.is_active[\s\S]*geometry_presence\.city_id = boundary\.city_id/,
+    /JOIN effective_city_geometries AS geometry/,
+  );
+  assert.doesNotMatch(
+    sql,
+    /active_boundary\.city_id = geometry\.city_id/,
+  );
+  assert.match(
+    sql,
+    /FROM effective_city_geometries AS geometry_presence\s+WHERE geometry_presence\.city_id = boundary\.city_id/,
   );
 });

@@ -56,10 +56,7 @@ const LIST_CITIES_SQL = `
   LEFT JOIN city_report_values AS report ON report.city_id = city.id
   WHERE EXISTS (
     SELECT 1
-    FROM city_geometries AS geometry_presence
-    JOIN city_boundaries AS geometry_boundary
-      ON geometry_boundary.id = geometry_presence.boundary_id
-     AND geometry_boundary.is_active
+    FROM effective_city_geometries AS geometry_presence
     WHERE geometry_presence.city_id = city.id
   )
   ORDER BY city.is_large DESC NULLS LAST, report.rank NULLS LAST, city.name ASC
@@ -74,11 +71,21 @@ const CITY_GEOMETRIES_SQL = `
           'type', 'Feature',
           'id', city_geometries.id,
           'geometry', ST_AsGeoJSON(city_geometries.geom)::json,
-          'properties', city_geometries.properties || jsonb_build_object(
-            'businessTypeCode', line_type.code,
-            'lanes', city_geometries.lanes,
-            'length', city_geometries.length_m,
-            'lanes_length', city_geometries.lane_length_m
+          'properties', city_geometries.properties || jsonb_strip_nulls(
+            jsonb_build_object(
+              'geometryFamily', CASE
+                WHEN GeometryType(city_geometries.geom) = 'POINT' THEN 'point'
+                WHEN GeometryType(city_geometries.geom) IN ('LINESTRING', 'MULTILINESTRING') THEN 'line'
+                WHEN GeometryType(city_geometries.geom) IN ('POLYGON', 'MULTIPOLYGON') THEN 'polygon'
+              END,
+              'businessTypeCode', line_type.code,
+              'lanes', city_geometries.lanes,
+              'length', city_geometries.length_m,
+              'lanes_length', city_geometries.lane_length_m,
+              'displayName', city_geometries.display_name,
+              'tooltip', city_geometries.tooltip,
+              'tags', city_geometries.tags
+            )
           )
         ) ORDER BY city_geometries.id
       ) FILTER (WHERE city_geometries.id IS NOT NULL),
@@ -86,14 +93,9 @@ const CITY_GEOMETRIES_SQL = `
     )
   ) AS geojson
   FROM cities
-  LEFT JOIN city_geometries
+  LEFT JOIN effective_city_geometries AS city_geometries
     ON city_geometries.city_id = cities.id
-   AND EXISTS (
-     SELECT 1
-     FROM city_boundaries AS active_boundary
-     WHERE active_boundary.id = city_geometries.boundary_id
-       AND active_boundary.is_active
-   )
+   AND city_geometries.is_visible
   LEFT JOIN line_types AS line_type ON line_type.id = city_geometries.line_type_id
   WHERE cities.id = $1
   GROUP BY cities.id
@@ -113,16 +115,17 @@ const VIEWPORT_GEOMETRIES_SQL = `
       geometry.lanes,
       geometry.length_m,
       geometry.lane_length_m,
+      geometry.display_name,
+      geometry.tooltip,
+      geometry.tags,
       geometry.properties,
       geometry.geom
     FROM viewport
-    JOIN city_geometries AS geometry
-      ON geometry.geom && viewport.geom
+    JOIN effective_city_geometries AS geometry
+      ON geometry.is_visible
+     AND geometry.geom && viewport.geom
      AND ST_Intersects(geometry.geom, viewport.geom)
-    JOIN city_boundaries AS active_boundary
-      ON active_boundary.id = geometry.boundary_id
-     AND active_boundary.is_active
-    JOIN line_types AS line_type ON line_type.id = geometry.line_type_id
+    LEFT JOIN line_types AS line_type ON line_type.id = geometry.line_type_id
   ),
   center_city AS (
     SELECT boundary.city_id::integer AS id
@@ -134,10 +137,7 @@ const VIEWPORT_GEOMETRIES_SQL = `
      AND ST_Covers(boundary.geom, viewport.center)
      AND EXISTS (
        SELECT 1
-       FROM city_geometries AS geometry_presence
-       JOIN city_boundaries AS geometry_boundary
-         ON geometry_boundary.id = geometry_presence.boundary_id
-        AND geometry_boundary.is_active
+       FROM effective_city_geometries AS geometry_presence
        WHERE geometry_presence.city_id = boundary.city_id
      )
     ORDER BY ST_Area(boundary.geom::geography), boundary.city_id
@@ -153,12 +153,22 @@ const VIEWPORT_GEOMETRIES_SQL = `
           'type', 'Feature',
           'id', visible_geometries.id,
           'geometry', ST_AsGeoJSON(visible_geometries.geom)::json,
-          'properties', visible_geometries.properties || jsonb_build_object(
-            'cityId', visible_geometries.city_id,
-            'businessTypeCode', visible_geometries.business_type_code,
-            'lanes', visible_geometries.lanes,
-            'length', visible_geometries.length_m,
-            'lanes_length', visible_geometries.lane_length_m
+          'properties', visible_geometries.properties || jsonb_strip_nulls(
+            jsonb_build_object(
+              'cityId', visible_geometries.city_id,
+              'geometryFamily', CASE
+                WHEN GeometryType(visible_geometries.geom) = 'POINT' THEN 'point'
+                WHEN GeometryType(visible_geometries.geom) IN ('LINESTRING', 'MULTILINESTRING') THEN 'line'
+                WHEN GeometryType(visible_geometries.geom) IN ('POLYGON', 'MULTIPOLYGON') THEN 'polygon'
+              END,
+              'businessTypeCode', visible_geometries.business_type_code,
+              'lanes', visible_geometries.lanes,
+              'length', visible_geometries.length_m,
+              'lanes_length', visible_geometries.lane_length_m,
+              'displayName', visible_geometries.display_name,
+              'tooltip', visible_geometries.tooltip,
+              'tags', visible_geometries.tags
+            )
           )
         ) ORDER BY visible_geometries.id
       ) FILTER (

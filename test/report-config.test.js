@@ -33,7 +33,13 @@ test('city area and median geometry aggregation are available in the catalog', (
   assert.ok(REPORT_CONFIG_CATALOG.operandKinds.some((kind) => kind.key === 'metric'));
   assert.ok(REPORT_CONFIG_CATALOG.aggregates.some((aggregate) => aggregate.key === 'median'));
 
-  for (const key of ['geometry.length_m', 'geometry.lane_length_m', 'geometry.lanes']) {
+  for (const key of [
+    'geometry.length_m',
+    'geometry.lane_length_m',
+    'geometry.lanes',
+    'geometry.perimeter_m',
+    'geometry.area_m2',
+  ]) {
     assert.ok(REPORT_CONFIG_CATALOG.fields.find((field) => field.key === key)?.aggregates.includes('median'));
   }
   assert.equal(
@@ -361,4 +367,49 @@ test('table, CSV and rank cannot reference unknown metrics', () => {
   const duplicateHeader = structuredClone(DEFAULT_REPORT_CONFIG);
   duplicateHeader.csvColumns[1].title = duplicateHeader.csvColumns[0].title.toUpperCase();
   assert.throws(() => validateReportConfig(duplicateHeader), /Duplicate CSV header/);
+});
+
+
+test('geometry aggregates normalize family and business-tag filters', () => {
+  const config = structuredClone(DEFAULT_REPORT_CONFIG);
+  config.metrics[0].source = {
+    kind: 'aggregate',
+    field: 'geometry.id',
+    aggregate: 'count',
+    geometryType: 'polygon',
+    groupBy: 'none',
+    tagFilter: {
+      mode: 'all',
+      tags: ['Центр', 'центр', 'Эксперимент'],
+    },
+  };
+  const normalized = validateReportConfig(config);
+  assert.equal(normalized.metrics[0].source.geometryType, 'polygon');
+  assert.deepEqual(normalized.metrics[0].source.tagFilter, {
+    mode: 'all',
+    tags: ['Центр', 'Эксперимент'],
+  });
+});
+
+test('line length is always filtered to line geometry and polygon measurements to polygons', () => {
+  const config = structuredClone(DEFAULT_REPORT_CONFIG);
+  const normalized = validateReportConfig(config);
+  assert.equal(normalized.metrics[0].source.geometryType, 'line');
+  assert.equal(normalized.metrics[2].source.geometryType, 'line');
+
+  const invalid = structuredClone(DEFAULT_REPORT_CONFIG);
+  invalid.metrics[0].source.geometryType = 'polygon';
+  assert.throws(() => validateReportConfig(invalid), /geometryType is not allowed/);
+});
+
+
+test('report tag catalog uses the PostgreSQL-safe normalized tag query', async () => {
+  const fs = await import('node:fs/promises');
+  const source = await fs.readFile(
+    new URL('../src/db/report-config-service.js', import.meta.url),
+    'utf8',
+  );
+  assert.doesNotMatch(source, /SELECT DISTINCT tag[\s\S]*ORDER BY LOWER\(tag\), tag/);
+  assert.match(source, /WITH tag_values AS/);
+  assert.match(source, /GROUP BY tag_key/);
 });

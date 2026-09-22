@@ -53,6 +53,16 @@ const FIELD_SQL = Object.freeze({
   'geometry.length_m': 'geometry.length_m::double precision',
   'geometry.lane_length_m': 'geometry.lane_length_m::double precision',
   'geometry.lanes': 'geometry.lanes::double precision',
+  'geometry.perimeter_m': `CASE
+    WHEN GeometryType(geometry.geom) IN ('POLYGON', 'MULTIPOLYGON')
+      THEN ST_Perimeter(geometry.geom::geography)
+    ELSE NULL
+  END::double precision`,
+  'geometry.area_m2': `CASE
+    WHEN GeometryType(geometry.geom) IN ('POLYGON', 'MULTIPOLYGON')
+      THEN ST_Area(geometry.geom::geography)
+    ELSE NULL
+  END::double precision`,
   'geometry.id': 'geometry.id',
 });
 
@@ -112,11 +122,40 @@ function compileOperand(operand, parameters) {
     const aggregate = AGGREGATE_SQL[operand.aggregate];
     expression = `${aggregate}(${field})`;
   }
+
+  const filters = [];
+  if (operand.geometryType === 'point') {
+    filters.push("GeometryType(geometry.geom) = 'POINT'");
+  } else if (operand.geometryType === 'line') {
+    filters.push("GeometryType(geometry.geom) IN ('LINESTRING', 'MULTILINESTRING')");
+  } else if (operand.geometryType === 'polygon') {
+    filters.push("GeometryType(geometry.geom) IN ('POLYGON', 'MULTIPOLYGON')");
+  }
+
   if (operand.groupBy === 'line_type.name') {
     const value = parameter(parameters, operand.groupValue);
-    expression += ` FILTER (
-      WHERE LOWER(BTRIM(line_type.name)) = LOWER(BTRIM(${value}::text))
+    filters.push(`LOWER(BTRIM(line_type.name)) = LOWER(BTRIM(${value}::text))`);
+  }
+
+  if (operand.tagFilter) {
+    const tags = operand.tagFilter.tags.map((tag) =>
+      tag.trim().toLocaleLowerCase('ru-RU'));
+    const value = parameter(parameters, tags);
+    const normalizedTags = `ARRAY(
+      SELECT LOWER(BTRIM(tag))
+      FROM unnest(geometry.tags) AS tag
     )`;
+    if (operand.tagFilter.mode === 'all') {
+      filters.push(`${normalizedTags} @> ${value}::text[]`);
+    } else if (operand.tagFilter.mode === 'none') {
+      filters.push(`NOT (${normalizedTags} && ${value}::text[])`);
+    } else {
+      filters.push(`${normalizedTags} && ${value}::text[]`);
+    }
+  }
+
+  if (filters.length > 0) {
+    expression += ` FILTER (WHERE ${filters.join(' AND ')})`;
   }
   if (operand.aggregate === 'sum' || operand.aggregate === 'count') {
     expression = `COALESCE(${expression}, 0)`;
@@ -178,14 +217,8 @@ export function compileReportMetricQuery(metric) {
         FROM cities AS city
         LEFT JOIN city_populations AS population
           ON population.city_id = city.id
-        LEFT JOIN city_geometries AS geometry
+        LEFT JOIN effective_city_geometries AS geometry
           ON geometry.city_id = city.id
-         AND EXISTS (
-           SELECT 1
-           FROM city_boundaries AS metric_boundary
-           WHERE metric_boundary.id = geometry.boundary_id
-             AND metric_boundary.is_active
-         )
         LEFT JOIN line_types AS line_type
           ON line_type.id = geometry.line_type_id
         GROUP BY city.id, population.population
@@ -272,10 +305,7 @@ async function materialize(queryable, config) {
     )
       AND EXISTS (
         SELECT 1
-        FROM city_geometries AS geometry_presence
-        JOIN city_boundaries AS geometry_boundary
-          ON geometry_boundary.id = geometry_presence.boundary_id
-         AND geometry_boundary.is_active
+        FROM effective_city_geometries AS geometry_presence
         WHERE geometry_presence.city_id = city.id
       )
     ORDER BY city.id
@@ -325,6 +355,28 @@ async function rollbackQuietly(client) {
 /** @param {{ connect: () => Promise<any>, databaseSchema?: string }} pool */
 export function createReportConfigService(pool) {
   return {
+    async listGeometryTags() {
+      const result = await pool.query(`
+        WITH tag_values AS (
+          SELECT
+            BTRIM(expanded.tag) AS tag,
+            LOWER(BTRIM(expanded.tag)) AS tag_key
+          FROM city_geometries AS geometry
+          CROSS JOIN LATERAL unnest(geometry.tags) AS expanded(tag)
+          WHERE BTRIM(expanded.tag) <> ''
+        ),
+        unique_tags AS (
+          SELECT tag_key, MIN(tag) AS tag
+          FROM tag_values
+          GROUP BY tag_key
+        )
+        SELECT tag
+        FROM unique_tags
+        ORDER BY tag_key, tag
+      `);
+      return result.rows.map((row) => row.tag);
+    },
+
     async get() {
       return loadConfig(pool);
     },

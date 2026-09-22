@@ -57,6 +57,8 @@ test('first environment user is marked as the protected bootstrap superuser', as
   assert.equal(result.user.isBootstrap, true);
   assert.equal(result.user.canManageData, true);
   assert.equal(result.user.canManageInterface, true);
+  assert.equal(result.user.canEditGeometries, true);
+  assert.equal(result.user.canEditOsm, true);
   assert.equal(result.user.isBlocked, false);
 });
 
@@ -73,12 +75,16 @@ test('bootstrap user cannot be manually blocked or stripped of permissions', asy
     email: null,
     canManageData: false,
     canManageInterface: false,
+    canEditGeometries: false,
+    canEditOsm: false,
     canManageUsers: false,
     canViewAudit: false,
     canManageSecurity: false,
   });
   assert.equal(updated.canManageData, true);
   assert.equal(updated.canManageInterface, true);
+  assert.equal(updated.canEditGeometries, true);
+  assert.equal(updated.canEditOsm, true);
   assert.equal(updated.canManageUsers, true);
   assert.equal(updated.canViewAudit, true);
   assert.equal(updated.canManageSecurity, true);

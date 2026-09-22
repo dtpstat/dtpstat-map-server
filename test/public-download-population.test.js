@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createPublicDownloadRepository } from '../src/db/public-download-repository.js';
 
-test('public CSV keeps cities without population but requires line geometries', async () => {
+test('public CSV keeps cities without population but requires effective project geometries', async () => {
   let sql = '';
   const repository = createPublicDownloadRepository({
     async query(text) {
@@ -18,7 +18,7 @@ test('public CSV keeps cities without population but requires line geometries', 
   assert.doesNotMatch(sql, /JOIN city_populations AS population/);
   assert.match(
     sql,
-    /EXISTS \(\s*SELECT 1\s*FROM city_geometries AS geometry_presence\s*JOIN city_boundaries AS geometry_boundary\s*ON geometry_boundary\.id = geometry_presence\.boundary_id\s*AND geometry_boundary\.is_active\s*WHERE geometry_presence\.city_id = city\.id\s*\)/s,
+    /EXISTS \(\s*SELECT 1\s*FROM effective_city_geometries AS geometry_presence\s*WHERE geometry_presence\.city_id = city\.id\s*\)/s,
   );
   assert.match(
     sql,

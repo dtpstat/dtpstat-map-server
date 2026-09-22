@@ -109,3 +109,55 @@ test('admin authorization does not convert permission 403 into session expiry', 
     false,
   );
 });
+
+
+test('geometry and OSM editor permissions are independent from data management', async () => {
+  const permissions = {
+    canManageData: false,
+    canEditGeometries: true,
+    canEditOsm: false,
+  };
+  const adminAuth = createAdminAuthorization({
+    async authenticateRequest() {
+      return {
+        status: 'success',
+        authMethod: 'session',
+        sessionId: 22,
+        sessionEffectiveExpiresAt: '2026-09-20T10:30:00.000Z',
+        user: {
+          id: 7,
+          username: 'geometry-editor',
+          isSuperuser: false,
+          mustChangePassword: false,
+          ...permissions,
+        },
+      };
+    },
+  });
+
+  const geometryRequest = request();
+  const geometryResponse = response();
+  let geometryAllowed = false;
+  await adminAuth.requireGeometryEditor(geometryRequest, geometryResponse, () => {
+    geometryAllowed = true;
+  });
+  assert.equal(geometryAllowed, true);
+
+  const osmRequest = request();
+  const osmResponse = response();
+  let osmAllowed = false;
+  await adminAuth.requireOsmEditor(osmRequest, osmResponse, () => {
+    osmAllowed = true;
+  });
+  assert.equal(osmAllowed, false);
+  assert.equal(osmResponse.statusCode, 403);
+
+  const dataRequest = request();
+  const dataResponse = response();
+  let dataAllowed = false;
+  await adminAuth.requireData(dataRequest, dataResponse, () => {
+    dataAllowed = true;
+  });
+  assert.equal(dataAllowed, false);
+  assert.equal(dataResponse.statusCode, 403);
+});

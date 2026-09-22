@@ -81,6 +81,24 @@ const DELETE_OMITTED_LINE_TYPES_SQL = `
       FROM payload
       WHERE LOWER(BTRIM(payload.name)) = LOWER(BTRIM(line_type.name))
     )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM city_geometries AS geometry
+      WHERE geometry.line_type_id = line_type.id
+    )
+`;
+
+const ASSERT_LEGACY_LINE_REPLACE_SAFE_SQL = `
+  SELECT COUNT(*)::integer AS count
+  FROM city_geometries
+  WHERE GeometryType(geom) IN ('LINESTRING', 'MULTILINESTRING')
+    AND was_edited
+`;
+
+const DELETE_REPLACEABLE_LINES_SQL = `
+  DELETE FROM city_geometries
+  WHERE GeometryType(geom) IN ('LINESTRING', 'MULTILINESTRING')
+    AND NOT was_edited
 `;
 
 const FIND_UNKNOWN_BOUNDARIES_SQL = `
@@ -296,17 +314,25 @@ const INSERT_STREAM_GEOMETRIES_SQL = `
     length_m,
     lane_length_m,
     properties,
-    geom
+    geom,
+    display_name,
+    source_tags
   )
   SELECT
-    city.id,
+    COALESCE(city.id, boundary.city_id),
     boundary.id,
     line_type.id,
     stage.lanes,
     ST_Length(stage.geom::geography),
     ST_Length(stage.geom::geography) * stage.lanes,
     stage.properties,
-    stage.geom
+    stage.geom,
+    NULLIF(BTRIM(stage.properties ->> 'placemarkName'), ''),
+    CASE
+      WHEN stage.properties ->> 'source' = 'kml'
+        THEN stage.properties - 'fingerprint'
+      ELSE '{}'::jsonb
+    END
   FROM line_transfer_stage AS stage
   JOIN line_types AS line_type
     ON LOWER(BTRIM(line_type.name)) = LOWER(BTRIM(stage.line_type_name))
@@ -346,17 +372,25 @@ const INSERT_GEOMETRIES_SQL = `
     length_m,
     lane_length_m,
     properties,
-    geom
+    geom,
+    display_name,
+    source_tags
   )
   SELECT
-    city.id,
+    COALESCE(city.id, boundary.city_id),
     boundary.id,
     line_type.id,
     prepared.lanes,
     ST_Length(prepared.geom::geography),
     ST_Length(prepared.geom::geography) * prepared.lanes,
     prepared.properties,
-    prepared.geom
+    prepared.geom,
+    NULLIF(BTRIM(prepared.properties ->> 'placemarkName'), ''),
+    CASE
+      WHEN prepared.properties ->> 'source' = 'kml'
+        THEN prepared.properties - 'fingerprint'
+      ELSE '{}'::jsonb
+    END
   FROM prepared
   JOIN line_types AS line_type
     ON LOWER(BTRIM(line_type.name)) = LOWER(BTRIM(prepared."lineTypeName"))
@@ -377,6 +411,7 @@ export function createDataImportService(pool) {
       try {
         await client.query('BEGIN');
         await acquireDataImportLock(client, pool);
+        await client.query('SELECT assert_no_pending_geometry_import()');
         throwIfAdminTaskCancelled(operation.signal);
         await client.query(CREATE_STREAM_RAW_SQL);
 
@@ -521,7 +556,13 @@ export function createDataImportService(pool) {
         }
         await client.query(LINK_STREAM_BOUNDARIES_SQL);
 
-        await client.query('DELETE FROM city_geometries');
+        const editedLines = await client.query(ASSERT_LEGACY_LINE_REPLACE_SAFE_SQL);
+        if (Number(editedLines.rows[0]?.count ?? 0) > 0) {
+          throw new GeoJsonValidationError(
+            'Legacy line replacement import is blocked because manually edited lines exist. Resolve/import them through the geometry conflict workflow instead.',
+          );
+        }
+        await client.query(DELETE_REPLACEABLE_LINES_SQL);
         if (plan.lineTypes.length > 0) {
           const dictionary = JSON.stringify(plan.lineTypes);
           await client.query(DELETE_OMITTED_LINE_TYPES_SQL, [dictionary]);
@@ -541,6 +582,7 @@ export function createDataImportService(pool) {
         const geometryResult = await client.query(
           INSERT_STREAM_GEOMETRIES_SQL,
         );
+        await client.query('SELECT assert_city_geometry_invariants()');
         const statisticsResult = await client.query(
           RECALCULATE_CITY_STATISTICS_SQL,
         );
@@ -594,6 +636,7 @@ export function createDataImportService(pool) {
       try {
         await client.query('BEGIN');
         await acquireDataImportLock(client, pool);
+        await client.query('SELECT assert_no_pending_geometry_import()');
         throwIfAdminTaskCancelled(operation.signal);
 
         await client.query(UPSERT_CITIES_SQL, [JSON.stringify(plan.cities)]);
@@ -627,7 +670,13 @@ export function createDataImportService(pool) {
         }
         await client.query(LINK_BOUNDARIES_SQL, [serializedGeometries]);
 
-        await client.query('DELETE FROM city_geometries');
+        const editedLines = await client.query(ASSERT_LEGACY_LINE_REPLACE_SAFE_SQL);
+        if (Number(editedLines.rows[0]?.count ?? 0) > 0) {
+          throw new GeoJsonValidationError(
+            'Legacy line replacement import is blocked because manually edited lines exist. Resolve/import them through the geometry conflict workflow instead.',
+          );
+        }
+        await client.query(DELETE_REPLACEABLE_LINES_SQL);
         if (plan.lineTypes.length > 0) {
           const dictionary = JSON.stringify(plan.lineTypes);
           await client.query(DELETE_OMITTED_LINE_TYPES_SQL, [dictionary]);
@@ -646,6 +695,7 @@ export function createDataImportService(pool) {
         }
 
         const geometryResult = await client.query(INSERT_GEOMETRIES_SQL, [serializedGeometries]);
+        await client.query('SELECT assert_city_geometry_invariants()');
         const statisticsResult = await client.query(RECALCULATE_CITY_STATISTICS_SQL);
 
         if (geometryResult.rowCount !== plan.geometries.length) {

@@ -27,27 +27,45 @@ export const REPORT_FIELDS = Object.freeze([
   }),
   Object.freeze({
     key: 'geometry.length_m',
-    label: 'Длина геометрии, м',
+    label: 'Длина линии, м',
     sourceKinds: ['aggregate'],
     aggregates: ['sum', 'avg', 'median', 'min', 'max'],
+    geometryTypes: ['line'],
   }),
   Object.freeze({
     key: 'geometry.lane_length_m',
-    label: 'Длина × коэффициент/полосы, м',
+    label: 'Длина линии × коэффициент/полосы, м',
     sourceKinds: ['aggregate'],
     aggregates: ['sum', 'avg', 'median', 'min', 'max'],
+    geometryTypes: ['line'],
   }),
   Object.freeze({
     key: 'geometry.lanes',
     label: 'Коэффициент / количество полос',
     sourceKinds: ['aggregate'],
     aggregates: ['sum', 'avg', 'median', 'min', 'max'],
+    geometryTypes: ['line'],
+  }),
+  Object.freeze({
+    key: 'geometry.perimeter_m',
+    label: 'Периметр полигона, м (включая внутренние кольца)',
+    sourceKinds: ['aggregate'],
+    aggregates: ['sum', 'avg', 'median', 'min', 'max'],
+    geometryTypes: ['polygon'],
+  }),
+  Object.freeze({
+    key: 'geometry.area_m2',
+    label: 'Площадь полигона, м²',
+    sourceKinds: ['aggregate'],
+    aggregates: ['sum', 'avg', 'median', 'min', 'max'],
+    geometryTypes: ['polygon'],
   }),
   Object.freeze({
     key: 'geometry.id',
     label: 'Количество геометрий',
     sourceKinds: ['aggregate'],
     aggregates: ['count'],
+    geometryTypes: ['any', 'point', 'line', 'polygon'],
   }),
 ]);
 
@@ -88,6 +106,19 @@ export const REPORT_PRECEDENCE_LEVELS = Object.freeze(
 export const REPORT_GROUPINGS = Object.freeze([
   Object.freeze({ key: 'none', label: 'Без группировки' }),
   Object.freeze({ key: 'line_type.name', label: 'По бизнес-типу линии' }),
+]);
+
+export const REPORT_GEOMETRY_TYPES = Object.freeze([
+  Object.freeze({ key: 'any', label: 'Все геометрии' }),
+  Object.freeze({ key: 'point', label: 'Точки' }),
+  Object.freeze({ key: 'line', label: 'Линии / мультилинии' }),
+  Object.freeze({ key: 'polygon', label: 'Полигоны / мультиполигоны' }),
+]);
+
+export const REPORT_TAG_FILTER_MODES = Object.freeze([
+  Object.freeze({ key: 'any', label: 'содержит любой тег' }),
+  Object.freeze({ key: 'all', label: 'содержит все теги' }),
+  Object.freeze({ key: 'none', label: 'не содержит ни одного' }),
 ]);
 
 export const REPORT_CONSTANTS = Object.freeze([
@@ -230,6 +261,8 @@ const FIELD_MAP = new Map(REPORT_FIELDS.map((field) => [field.key, field]));
 const OPERATOR_KEYS = new Set(REPORT_OPERATORS.map((operator) => operator.key));
 const PRECEDENCE_KEYS = new Set(REPORT_PRECEDENCE_LEVELS.map((level) => String(level.value)));
 const GROUPING_KEYS = new Set(REPORT_GROUPINGS.map((grouping) => grouping.key));
+const GEOMETRY_TYPE_KEYS = new Set(REPORT_GEOMETRY_TYPES.map((item) => item.key));
+const TAG_FILTER_MODE_KEYS = new Set(REPORT_TAG_FILTER_MODES.map((item) => item.key));
 const TABLE_KIND_KEYS = new Set(REPORT_TABLE_COLUMN_KINDS.map((kind) => kind.key));
 const CSV_KIND_KEYS = new Set(REPORT_CSV_COLUMN_KINDS.map((kind) => kind.key));
 const CONSTANT_KEYS = new Set(REPORT_CONSTANTS.map(String));
@@ -279,6 +312,31 @@ function normalizePriority(value, label) {
   return priority;
 }
 
+function normalizeTagFilter(value, label) {
+  if (value === undefined || value === null) return null;
+  const source = object(value, label);
+  const mode = text(source.mode, `${label}.mode`, 10);
+  if (!TAG_FILTER_MODE_KEYS.has(mode)) {
+    throw new ReportConfigValidationError(`${label}.mode is not allowed`);
+  }
+  if (!Array.isArray(source.tags) || source.tags.length < 1 || source.tags.length > 32) {
+    throw new ReportConfigValidationError(`${label}.tags must contain 1-32 values`);
+  }
+  const tags = [];
+  const seen = new Set();
+  for (const [index, raw] of source.tags.entries()) {
+    const tag = text(raw, `${label}.tags[${index}]`, 64);
+    const key = tag.toLocaleLowerCase('ru-RU');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tags.push(tag);
+  }
+  if (tags.length === 0) {
+    throw new ReportConfigValidationError(`${label}.tags must not be empty`);
+  }
+  return { mode, tags };
+}
+
 function normalizeOperand(value, label, { allowConstant = true, allowedLineTypeNames } = {}) {
   const source = object(value, label);
   const kind = text(source.kind, `${label}.kind`, 20);
@@ -314,14 +372,31 @@ function normalizeOperand(value, label, { allowConstant = true, allowedLineTypeN
     throw new ReportConfigValidationError(`${label}.groupBy is not allowed`);
   }
 
-  const normalized = { kind, field, aggregate, groupBy };
+  const allowedGeometryTypes = fieldDefinition.geometryTypes ?? ['any'];
+  const geometryType = source.geometryType === undefined
+    ? allowedGeometryTypes[0]
+    : text(source.geometryType, `${label}.geometryType`, 20);
+  if (!GEOMETRY_TYPE_KEYS.has(geometryType) || !allowedGeometryTypes.includes(geometryType)) {
+    throw new ReportConfigValidationError(
+      `${label}.geometryType is not allowed for ${field}`,
+    );
+  }
+
+  const normalized = { kind, field, aggregate, groupBy, geometryType };
   if (groupBy === 'line_type.name') {
+    if (geometryType !== 'line') {
+      throw new ReportConfigValidationError(
+        `${label}.groupBy=line_type.name requires line geometry`,
+      );
+    }
     const groupValue = text(source.groupValue, `${label}.groupValue`, 160);
     if (allowedLineTypeNames && !allowedLineTypeNames.has(groupValue.toLocaleLowerCase('ru-RU'))) {
       throw new ReportConfigValidationError(`${label}.groupValue must be selected from current line types`);
     }
     normalized.groupValue = groupValue;
   }
+  const tagFilter = normalizeTagFilter(source.tagFilter, `${label}.tagFilter`);
+  if (tagFilter) normalized.tagFilter = tagFilter;
   return normalized;
 }
 
@@ -604,6 +679,8 @@ export const REPORT_CONFIG_CATALOG = Object.freeze({
   operandKinds: REPORT_OPERAND_KINDS,
   precedenceLevels: REPORT_PRECEDENCE_LEVELS,
   groupings: REPORT_GROUPINGS,
+  geometryTypes: REPORT_GEOMETRY_TYPES,
+  tagFilterModes: REPORT_TAG_FILTER_MODES,
   constants: REPORT_CONSTANTS,
   scales: REPORT_SCALES,
   decimals: REPORT_DECIMALS,

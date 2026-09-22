@@ -186,7 +186,33 @@ function createPool({
   };
 }
 
+const geometryImportRepository = {
+  async stageKml(_client, rows) {
+    return {
+      id: 41,
+      kind: 'kml',
+      status: 'pending',
+      stagedGeometries: rows.length,
+      conflictCount: 0,
+      conflictGeometries: 0,
+      createdAt: '2026-08-31T11:59:00.000Z',
+    };
+  },
+  async applyInTransaction() {
+    return {
+      sessionId: 41,
+      status: 'applied',
+      updateRunId: 7,
+      completedAt: '2026-08-31T12:00:00.000Z',
+      createdLineTypes: [],
+      insertedGeometries: 2,
+      replacedExistingGeometries: 0,
+    };
+  },
+};
+
 const dependencies = {
+  geometryImportRepository,
   async download() {
     return { xml: '<kml/>', bytes: 6, finalURL: source.fetchURL };
   },
@@ -228,20 +254,10 @@ test('KML matches every imported OSM place and materializes missing city records
   assert.equal(result.lineTypes[0].name, 'default');
   assert.deepEqual(result.createdLineTypes, []);
   assert.equal(result.updateRunId, 7);
-  assert.equal(pool.queries.some((query) => query === 'DELETE FROM city_geometries'), true);
-  assert.equal(pool.queries.some((query) => query.includes('"lineTypeId" bigint')), true);
-  assert.deepEqual(
-    pool.insertedGeometryPayload.map((row) => row.properties.placemarkName),
-    ['Первая', 'Вторая'],
-  );
-  assert.deepEqual(
-    pool.insertedGeometryPayload.map((row) => row.cityId),
-    [1, 2],
-  );
-  assert.deepEqual(pool.matchedCityPayload, [
-    { cityName: 'Первый', boundaryId: '11' },
-    { cityName: 'Второй', boundaryId: '12' },
-  ]);
+  assert.equal(result.pendingResolution, false);
+  assert.equal(result.importSession.id, 41);
+  assert.equal(result.reconciliation.insertedGeometries, 2);
+  assert.equal(pool.queries.some((query) => query === 'DELETE FROM city_geometries'), false);
 
   const matchStageQuery = pool.queries.find((query) =>
     query.startsWith('CREATE TEMP TABLE kml_place_match_geometries'));
@@ -290,14 +306,11 @@ test('KML imports lines when all matching OSM boundaries initially have city_id 
   const result = await service.update(undefined, {});
 
   assert.equal(result.importedGeometries, 2);
-  assert.deepEqual(pool.insertedGeometryPayload.map((row) => row.cityId), [1, 2]);
+  assert.equal(result.pendingResolution, false);
+  assert.equal(result.importSession.id, 41);
   assert.equal(
     pool.queries.some((query) => query.includes('INSERT INTO cities (')),
-    true,
-  );
-  assert.equal(
-    pool.queries.some((query) => query.includes('UPDATE city_boundaries AS boundary')),
-    true,
+    false,
   );
   assert.equal(pool.queries.at(-1), 'COMMIT');
 });
@@ -357,9 +370,9 @@ test('KML automatically creates missing NAME and database supplies numeric CODE'
 
   const result = await service.update(undefined, {});
 
-  assert.deepEqual(result.createdLineTypes, createdLineTypes);
+  assert.deepEqual(result.createdLineTypes, []);
   assert.deepEqual(result.lineTypes.map((lineType) => lineType.code), [1, 2]);
-  assert.equal(pool.insertCount, 1);
+  assert.equal(pool.insertCount, 0);
   assert.equal(
     pool.queries.some((query) => query.includes('INSERT INTO line_types (code')),
     false,
@@ -439,4 +452,38 @@ test('KML download failure happens before a database connection is opened', asyn
 
   await assert.rejects(service.update(undefined, {}), /network failed/);
   assert.equal(pool.connections, 0);
+});
+
+
+test('KML conflict staging returns pending resolution without production apply', async () => {
+  const pool = createPool();
+  let applied = false;
+  const service = createKmlUpdateService(pool, config, {
+    ...dependencies,
+    geometryImportRepository: {
+      async stageKml(_client, rows) {
+        return {
+          id: 99,
+          kind: 'kml',
+          status: 'pending',
+          stagedGeometries: rows.length,
+          conflictCount: 3,
+          conflictGeometries: 2,
+          createdAt: '2026-08-31T12:00:00.000Z',
+        };
+      },
+      async applyInTransaction() {
+        applied = true;
+        throw new Error('must not apply');
+      },
+    },
+  });
+
+  const result = await service.update(undefined, {});
+  assert.equal(result.pendingResolution, true);
+  assert.equal(result.importSession.id, 99);
+  assert.equal(result.importSession.conflictCount, 3);
+  assert.equal(applied, false);
+  assert.equal(pool.queries.some((query) => query === 'DELETE FROM city_geometries'), false);
+  assert.equal(pool.queries.at(-1), 'COMMIT');
 });
