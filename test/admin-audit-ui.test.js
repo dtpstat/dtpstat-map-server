@@ -55,7 +55,10 @@ test('current user and audit rows render profile avatars with fallback initials'
   assert.match(shell, /tag\.className = 'admin-user-role'/);
 
   assert.match(editor, /function auditUserCell\(entry\)/);
-  assert.match(editor, /entry\.hasAvatar/);
+  assert.match(editor, /if \(entry\.userId\)/);
+  assert.match(editor, /security-audit-avatar-fallback/);
+  assert.match(editor, /image\.hidden = false/);
+  assert.match(editor, /fallback\.hidden = true/);
   assert.match(
     editor,
     /\/api\/admin\/security\/users\/\$\{encodeURIComponent\(entry\.userId\)\}\/avatar/,
