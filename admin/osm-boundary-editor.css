@@ -23,9 +23,9 @@
   min-height: 30rem;
   display: grid;
   grid-template-columns:
-    minmax(19rem, .72fr)
-    minmax(30rem, 1.8fr)
-    minmax(20rem, .82fr);
+    minmax(18rem, .68fr)
+    minmax(28rem, 1.65fr)
+    minmax(24rem, 1fr);
   gap: .85rem;
 }
 .osm-boundary-section-card .osm-boundary-layout {
@@ -165,30 +165,34 @@
   overflow: hidden;
 }
 .osm-boundary-details-header {
-  padding: .55rem .65rem;
+  padding: .5rem .6rem;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  gap: .55rem;
+  gap: .4rem;
   border-bottom: 1px solid var(--line);
   background: #101b1f;
 }
 .osm-boundary-primary-actions {
+  min-width: 0;
   display: flex;
-  justify-content: flex-end;
-  gap: .35rem;
+  justify-content: stretch;
+  gap: .3rem;
   white-space: nowrap;
+}
+.osm-boundary-primary-actions button {
+  flex: 1 1 0;
 }
 .osm-boundary-primary-actions button {
   width: auto;
   min-width: 0;
-  padding: .42rem .5rem;
+  padding: .38rem .42rem;
   border-radius: 7px;
-  font-size: .66rem;
+  font-size: .62rem;
 }
 .osm-boundary-details-scroll {
   min-height: 0;
-  padding: .7rem;
+  padding: .58rem;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -203,9 +207,9 @@
 }
 .osm-boundary-edit-group {
   min-width: 0;
-  padding: .7rem;
+  padding: .58rem;
   display: grid;
-  gap: .65rem;
+  gap: .52rem;
   border: 1px solid #233840;
   border-radius: 8px;
   background: rgb(12 20 23 / 62%);
