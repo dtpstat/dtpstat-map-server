@@ -207,11 +207,10 @@ Portable KML использует тот же NAME-based business-type matching,
 
 Подробнее: [kml-transfer.md](kml-transfer.md).
 
-# Население и атрибуты территорий
+# Население
 
-Население и произвольные attributes принадлежат точному OSM boundary и
-хранятся независимо от флага `active`. Изменение этих данных никогда не
-активирует и не деактивирует объект.
+Население и связанные с ним attributes хранятся независимо от флага
+`active`. Импорт населения никогда не активирует и не деактивирует OSM-объекты.
 
 Для активных boundaries сервер отдельно синхронизирует рабочую проекцию
 `CITY_POPULATIONS`, которую используют отчёты и public API.
@@ -227,8 +226,9 @@ GET /api/admin/export/populations
 - `GET /api/admin/export/populations` → `populations.json`;
 - `GET /api/admin/export/populations.zip` → `populations.zip`, внутри ровно один `populations.json`.
 
-Canonical format — `schemaVersion: 2`. Он повторяет hierarchy
-`CITY_BOUNDARIES.PARENT_ID`:
+Canonical format — `schemaVersion: 2`. Population snapshot содержит только
+человекочитаемую hierarchy `регион → города`; OSM type/id в этом формате
+отсутствуют намеренно.
 
 ```json
 {
@@ -236,31 +236,24 @@ Canonical format — `schemaVersion: 2`. Он повторяет hierarchy
   "exportedAt": "2026-09-22T12:00:00.000Z",
   "asOf": "2026-01-01",
   "source": "Росстат",
-  "territories": [
+  "regions": [
     {
-      "osmType": "relation",
-      "osmId": "253256",
       "name": "Республика Татарстан",
-      "type": "administrative",
-      "placeType": null,
-      "adminLevel": 4,
-      "population": 4004212,
-      "asOf": "2026-01-01",
-      "source": "Росстат",
-      "attributes": {},
-      "children": [
+      "attributes": {
+        "federalDistrict": "Приволжский федеральный округ"
+      },
+      "cities": [
         {
-          "osmType": "relation",
-          "osmId": "79379",
           "name": "Казань",
-          "type": "city",
-          "placeType": "city",
-          "adminLevel": 6,
           "population": 1320000,
+          "attributes": {}
+        },
+        {
+          "name": "Набережные Челны",
+          "population": 544000,
           "asOf": "2025-01-01",
           "source": "Татарстанстат",
-          "attributes": {},
-          "children": []
+          "attributes": {}
         }
       ]
     }
@@ -268,13 +261,13 @@ Canonical format — `schemaVersion: 2`. Он повторяет hierarchy
 }
 ```
 
-`name/type/placeType/adminLevel` делают snapshot читаемым человеком.
-Import identity — строго `osmType + osmId`; имена не используются как ключи.
+На уровне региона обязательны `name` и непустой `cities[]`; `attributes`
+необязателен и по умолчанию равен `{}`.
 
-`population` обязателен для каждого узла и может быть `null`, что очищает
-население этой территории. `attributes` также обязателен и является JSON
-object. `asOf/source` могут наследоваться от top-level значений или
-переопределяться на конкретном узле.
+У города обязательны `name` и `population`. `population` может быть
+`null`, что очищает население найденного города. `asOf/source` могут
+наследоваться от top-level значений или переопределяться для конкретного
+города. `attributes` необязателен и по умолчанию равен `{}`.
 
 Поле `active` в population format отсутствует намеренно.
 
@@ -291,31 +284,29 @@ Content-Type: application/zip
 
 Import:
 
-1. потоково читает top-level `territories[]`;
-2. разворачивает каждый hierarchy root в bounded staging batches;
-3. проверяет уникальность `osmType/osmId` и структуру children;
-4. сопоставляет target boundaries по точной OSM identity;
-5. проверяет hierarchy известных target-узлов;
-6. обновляет `population/asOf/source/attributes` непосредственно в
-   `CITY_BOUNDARIES`;
-7. не изменяет `IS_ACTIVE`;
-8. после staging синхронизирует данные активных объектов в
-   `CITY_POPULATIONS` и пересчитывает статистику;
-9. фиксирует всё одной транзакцией.
-
-OSM identities, которых нет на target, пропускаются и возвращаются в
-`skippedTerritories`. Известный объект с несовместимой hierarchy считается
-ошибкой snapshot и приводит к rollback.
+1. потоково читает top-level `regions[]`;
+2. валидирует уникальность имён регионов и городов внутри каждого региона;
+3. нормализует имена без учёта регистра, `ё/е`, пробелов и пунктуации;
+4. находит регион по имени среди региональных boundaries;
+5. ищет город по имени только внутри поддерева найденного региона;
+6. отсутствующие регионы/города пропускает и возвращает в `skippedCities`;
+7. неоднозначное сопоставление считается ошибкой и приводит к rollback;
+8. обновляет `population/asOf/source/attributes` найденного города и
+   `attributes` найденного региона;
+9. не изменяет `IS_ACTIVE`;
+10. синхронизирует активную проекцию `CITY_POPULATIONS`, пересчитывает
+    статистику и фиксирует всё одной транзакцией.
 
 Пример result:
 
 ```json
 {
-  "territories": 71,
-  "requestedTerritories": 72,
-  "roots": 5,
+  "regions": 84,
+  "requestedRegions": 85,
+  "cities": 1118,
+  "requestedCities": 1119,
   "skippedCount": 1,
-  "skippedTerritories": ["relation/123456 Нет на target"]
+  "skippedCities": ["Примерная область / Город не найден"]
 }
 ```
 
