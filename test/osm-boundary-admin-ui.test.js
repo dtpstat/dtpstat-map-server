@@ -64,14 +64,11 @@ test('OSM object editor is a top-level admin section with population editing', a
     editor,
     /population\.disabled\s*=\s*!active\.checked/,
   );
-  assert.match(editor, /population\.addEventListener\('input'/);
-  assert.match(
-    editor,
-    /if \(changed && !active\.checked\)[\s\S]*active\.checked = true/,
-  );
+  assert.doesNotMatch(editor, /population\.addEventListener\('input'/);
+  assert.doesNotMatch(editor, /active\.checked = true[\s\S]*population/);
   assert.match(
     html,
-    /Если объект выключен, изменение населения включит его при сохранении/,
+    /Данные территории хранятся независимо от флага «Активен»/,
   );
   assert.match(editor, /function normalizeSearchText\(value\)/);
   assert.match(editor, /\.toLocaleLowerCase\('ru-RU'\)[\s\S]*\.replace\(\/\\s\+\/gu, ''\)/);
