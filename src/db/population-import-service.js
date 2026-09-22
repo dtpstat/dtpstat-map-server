@@ -1,7 +1,6 @@
 import {
   buildPopulationPlan,
   createPopulationHierarchyAccumulator,
-  PopulationValidationError,
 } from '../data/population-plan.js';
 import { parseStreamingJsonObject } from '../data/streaming-json.js';
 import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
@@ -9,6 +8,7 @@ import { acquireDataImportLock } from './database-locks.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 const STREAM_STAGE_BATCH_SIZE = 100;
+const WARNING_LOG_PREVIEW = 100;
 
 const CREATE_STREAM_RAW_SQL = `
   CREATE TEMP TABLE population_transfer_raw (
@@ -235,42 +235,69 @@ async function insertStageBatch(client, rows, startSeq = 0) {
   return inserted.rowCount;
 }
 
-function resolutionSummary(rows) {
-  const skipped = rows
-    .filter((row) =>
-      row.status === 'region-missing' || row.status === 'city-missing')
-    .map((row) => `${row.regionName} / ${row.cityName}`);
-  const ambiguous = rows
-    .filter((row) =>
-      row.status === 'region-ambiguous' || row.status === 'city-ambiguous')
-    .map((row) =>
-      `${row.regionName} / ${row.cityName} (${row.status})`);
-  return { skipped, ambiguous };
+function resolutionWarning(row) {
+  const reason = {
+    'region-missing': 'region not found',
+    'region-ambiguous': 'region name is ambiguous',
+    'city-missing': 'city not found inside region',
+    'city-ambiguous': 'city name is ambiguous inside region',
+  }[row.status] ?? row.status;
+
+  return {
+    code: row.status,
+    scope: 'city',
+    regionName: row.regionName,
+    cityName: row.cityName,
+    skipped: true,
+    message: `${row.regionName} / ${row.cityName}: ${reason}`,
+  };
 }
 
-function assertNoAmbiguity(ambiguous) {
-  if (ambiguous.length === 0) return;
-  const preview = ambiguous.slice(0, 20).join(', ');
-  throw new PopulationValidationError(
-    `Population names are ambiguous in the current boundary tree: ${preview}`,
-  );
+function resolutionWarnings(rows) {
+  return rows
+    .filter((row) => row.status !== 'matched')
+    .map(resolutionWarning);
+}
+
+function skippedCityLabels(warnings) {
+  return warnings
+    .filter((item) => item.scope === 'city' && item.skipped)
+    .map((item) => [
+      item.regionName,
+      item.cityName,
+    ].filter(Boolean).join(' / ') || item.message);
+}
+
+function reportWarnings(operation, warnings, skippedCount) {
+  if (warnings.length === 0) return;
+  operation.onProgress?.({
+    phase: 'warnings',
+    warningCount: warnings.length,
+    skippedCount,
+    warnings: warnings.slice(0, WARNING_LOG_PREVIEW),
+    truncated: warnings.length > WARNING_LOG_PREVIEW,
+  });
 }
 
 async function applyStagedPopulation(client, plan, operation) {
   await client.query(RESOLVE_STAGE_SQL);
   const statusResult = await client.query(RESOLUTION_STATUS_SQL);
-  const { skipped, ambiguous } = resolutionSummary(statusResult.rows);
-  assertNoAmbiguity(ambiguous);
+  const databaseWarnings = resolutionWarnings(statusResult.rows);
 
   const regionsUpdated = await client.query(UPDATE_REGIONS_SQL);
   const citiesUpdated = await client.query(UPDATE_CITIES_SQL);
   const updatedCities = citiesUpdated.rowCount ?? 0;
 
-  if (updatedCities + skipped.length !== plan.cityCount) {
+  if (updatedCities + databaseWarnings.length !== plan.cityCount) {
     throw new Error(
-      'Population hierarchy import did not account for every city',
+      'Population hierarchy import did not account for every staged city',
     );
   }
+
+  const warnings = [...plan.warnings, ...databaseWarnings];
+  const skippedCount = plan.skippedCityCount + databaseWarnings.length;
+  const skippedRegions = plan.skippedRegionCount;
+  reportWarnings(operation, warnings, skippedCount);
 
   await client.query('SELECT sync_active_boundary_populations()');
   await client.query(RECALCULATE_CITY_STATISTICS_SQL);
@@ -278,16 +305,24 @@ async function applyStagedPopulation(client, plan, operation) {
     phase: 'database',
     regions: regionsUpdated.rowCount ?? 0,
     cities: updatedCities,
-    skippedCities: skipped.length,
+    skippedCities: skippedCount,
+    skippedRegions,
+    warnings: warnings.length,
   });
 
   return {
     regions: regionsUpdated.rowCount ?? 0,
     requestedRegions: plan.regionCount,
+    uniqueRegions: plan.uniqueRegionCount,
     cities: updatedCities,
-    requestedCities: plan.cityCount,
-    skippedCount: skipped.length,
-    skippedCities: skipped,
+    requestedCities: plan.encounteredCityCount,
+    normalizedCities: plan.cityCount,
+    skippedCount,
+    skippedRegionCount: skippedRegions,
+    skippedCities: skippedCityLabels(warnings),
+    warningCount: warnings.length,
+    warnings,
+    partial: skippedCount > 0 || skippedRegions > 0,
     asOf: plan.asOf,
     source: plan.source,
   };
@@ -299,9 +334,10 @@ async function applyStagedPopulation(client, plan, operation) {
  * resolved by normalized display name among admin-level 4 boundaries; a city
  * is then resolved by normalized display name inside that region subtree.
  *
- * Population metadata is written to the exact matched city boundary. Region
- * attributes are written to the matched region boundary. IS_ACTIVE is never
- * modified here.
+ * Invalid individual regions/cities and unresolved/ambiguous names are
+ * best-effort warnings: valid staged cities are still committed. Transport,
+ * document-contract, resource-limit and unexpected database errors remain
+ * fatal and roll back the transaction.
  *
  * @param {{ connect: () => Promise<any>, databaseSchema?: string }} pool
  */
@@ -367,15 +403,16 @@ export function createPopulationImportService(pool) {
         await client.query(CREATE_STREAM_STAGE_SQL);
 
         let lastRegionSeq = -1;
+        let processedRegions = 0;
         let citySeq = 0;
         let staged = 0;
         for (;;) {
           throwIfAdminTaskCancelled(operation.signal);
           const regions = await client.query(
-            `SELECT seq::bigint::text AS seq, item
+            `SELECT seq::text AS seq, item
              FROM population_transfer_raw
-             WHERE seq > $1
-             ORDER BY seq
+             WHERE seq > $1::bigint
+             ORDER BY population_transfer_raw.seq
              LIMIT $2`,
             [lastRegionSeq, STREAM_STAGE_BATCH_SIZE],
           );
@@ -404,11 +441,12 @@ export function createPopulationImportService(pool) {
               citySeq += batch.length;
             }
             lastRegionSeq = regionSeq;
+            processedRegions += 1;
             operation.onProgress?.({
               phase: 'normalize-stage',
               staged,
               parsedRegions: parsed.itemCount,
-              processedRegions: regionSeq + 1,
+              processedRegions,
             });
           }
         }
@@ -421,7 +459,12 @@ export function createPopulationImportService(pool) {
         operation.onProgress?.({
           phase: 'validated',
           regions: plan.regionCount,
+          uniqueRegions: plan.uniqueRegionCount,
           cities: plan.cityCount,
+          requestedCities: plan.encounteredCityCount,
+          warnings: plan.warnings.length,
+          skippedCities: plan.skippedCityCount,
+          skippedRegions: plan.skippedRegionCount,
           asOf: plan.asOf,
           source: plan.source,
           decodedBytes: parsed.decodedBytes,
@@ -458,7 +501,12 @@ export function createPopulationImportService(pool) {
       operation.onProgress?.({
         phase: 'validated',
         regions: plan.regionCount,
+        uniqueRegions: plan.uniqueRegionCount,
         cities: plan.cityCount,
+        requestedCities: plan.encounteredCityCount,
+        warnings: plan.warnings.length,
+        skippedCities: plan.skippedCityCount,
+        skippedRegions: plan.skippedRegionCount,
         asOf: plan.asOf,
         source: plan.source,
       });
