@@ -409,8 +409,13 @@ export function createPopulationHierarchyAccumulator({
     },
 
     finish(metadata = {}) {
-      // Schema mismatch is a document-level incompatibility and remains fatal.
+      // Schema mismatch and an empty document are document-level failures.
       normalizeSchemaVersion(metadata.schemaVersion);
+      if (regionCount === 0) {
+        throw new PopulationValidationError(
+          'Request body must contain a non-empty regions array',
+        );
+      }
       return {
         schemaVersion: 2,
         asOf: defaults.asOf,
