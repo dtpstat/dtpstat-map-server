@@ -350,7 +350,7 @@ export function createReportConfigService(pool) {
           JSON.stringify(config.metrics),
           JSON.stringify(config.tableColumns),
           JSON.stringify(config.csvColumns),
-          JSON.stringify(config.rank),
+          JSON.stringify({ sort: config.rank.sort }),
         ]);
         const updatedAt = saved.rows[0]?.updatedAt;
         const normalized = {
