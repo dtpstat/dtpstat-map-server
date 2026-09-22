@@ -1,4 +1,4 @@
-import { publishDerivedDataChange } from '/js/derived-data-events.js';
+import { publishDerivedDataChange } from './derived-data-events.js';
 
 export function buildBoundaryTreeIndex(items) {
   const byId = new Map();
