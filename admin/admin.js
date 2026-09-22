@@ -269,6 +269,28 @@ function processingProgress(task) {
         `Геометрий подготовлено: ` +
         Number(details.stagedGeometries).toLocaleString('ru-RU');
     }
+  } else if (phase === 'stage-write') {
+    label = 'Запись пакета в PostgreSQL/PostGIS';
+    const batch = Number(details.batch);
+    const batchPlaces = Number(details.batchPlaces);
+    const stagedPlaces = Number(details.stagedPlaces);
+    if (Number.isFinite(batch)) {
+      amount = `Пакет ${batch.toLocaleString('ru-RU')}`;
+    }
+    const parts = [];
+    if (Number.isFinite(batchPlaces)) {
+      parts.push(
+        `объектов в пакете: ${batchPlaces.toLocaleString('ru-RU')}`,
+      );
+    }
+    if (Number.isFinite(stagedPlaces)) {
+      parts.push(
+        `уже записано: ${stagedPlaces.toLocaleString('ru-RU')}`,
+      );
+    }
+    detail = parts.length > 0
+      ? `Ожидаем PostgreSQL/PostGIS · ${parts.join(' · ')}`
+      : 'Ожидаем завершения PostgreSQL/PostGIS.';
   } else if (phase === 'stage') {
     label = 'Подготовка данных в БД';
     const batch = Number(details.batch);
@@ -341,11 +363,13 @@ function showTransferOverlay({ file, taskKey, taskType }) {
     xhr: null,
     cancelRequested: false,
   };
+  syncSessionActivityHold();
   renderTransferOverlay();
 }
 
 function hideTransferOverlay() {
   state.transfer = null;
+  syncSessionActivityHold();
   transferOverlay.root.hidden = true;
   document.body.classList.remove('admin-transfer-locked');
 }
@@ -466,6 +490,12 @@ function syncTransferOverlay(task) {
 
   transfer.mode = 'processing';
   renderTransferOverlay();
+}
+
+function syncSessionActivityHold() {
+  window.dtpstatAdminSessionGuard?.setActivityHold?.(
+    Boolean(state.transfer) || Boolean(active(state.task)),
+  );
 }
 
 function active(task) {
@@ -757,6 +787,7 @@ function render() {
   renderSuccessfulUpdates();
   renderOsmCheckpoint();
   syncTransferOverlay(task);
+  syncSessionActivityHold();
 }
 
 function applyTask(task, announce = false) {
