@@ -48,6 +48,11 @@ test('admin report builder is catalog-driven, four-tabbed and has no free-form e
   assert.match(editor, /Поднять операцию/);
   assert.match(editor, /Опустить операцию/);
   assert.match(editor, /Условное форматирование/);
+  assert.match(editor, /Отображаемое название/);
+  assert.match(editor, /Подсказка при наведении/);
+  assert.match(editor, /Жирный заголовок/);
+  assert.match(editor, /column\.headerTooltip/);
+  assert.match(editor, /column\.headerBold/);
   assert.match(editor, /input.*type = 'color'|color\.type = 'color'/s);
   assert.match(editor, /fontSizeStep/);
   assert.match(editor, /column\.formatRules/);
@@ -83,10 +88,15 @@ test('public ranking headers, metric cells and conditional formats are generated
   assert.match(list, /valueMatchesRule/);
   assert.match(list, /value >= Number\(rule\.max\)/);
   assert.match(list, /column\.formatRules/);
+  assert.match(list, /column\.headerBold/);
+  assert.match(list, /column\.headerTooltip/);
+  assert.match(list, /dataset\.headerTooltip/);
   assert.match(list, /fontSizeStep/);
   assert.match(list, /textDecoration/);
   assert.match(list, /dataLabel|dataset\.label/);
   assert.match(css, /content: attr\(data-label\)/);
+  assert.match(css, /city-table th\.is-header-bold/);
+  assert.match(css, /font-weight: inherit/);
   assert.doesNotMatch(css, /content: "ВП /);
   assert.doesNotMatch(css, /content: "население /);
 });
