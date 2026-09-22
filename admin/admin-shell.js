@@ -341,7 +341,8 @@ function updateUserBadge(user) {
     image.hidden = true;
     fallback.hidden = false;
   };
-  image.src = `/api/admin/profile/avatar?v=${Date.now()}`;
+  const avatarVersion = encodeURIComponent(user.updatedAt ?? '1');
+  image.src = `/api/admin/profile/avatar?v=${avatarVersion}`;
 }
 
 
