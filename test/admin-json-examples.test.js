@@ -35,19 +35,18 @@ test('admin KML hint is accepted by the real KML schema', () => {
 test('admin population hint shows and validates the complete item structure', () => {
   const plan = buildPopulationPlan(POPULATION_JSON_EXAMPLE);
 
+  assert.equal(plan.schemaVersion, 2);
   assert.equal(plan.asOf, '2026-01-01');
   assert.equal(plan.source, 'Росстат');
-  assert.equal(plan.populations.length, 2);
-  assert.deepEqual(plan.populations[0], {
-    name: 'Москва',
-    population: 13274285,
-    asOf: '2026-01-01',
-    source: 'Росстат',
-    attributes: {},
-  });
-  assert.equal(plan.populations[1].asOf, '2025-01-01');
-  assert.equal(plan.populations[1].source, 'Петростат');
-  assert.equal(typeof plan.populations[1].attributes, 'object');
+  assert.equal(plan.rootCount, 1);
+  assert.equal(plan.territoryCount, 2);
+  assert.equal(plan.territories[0].name, 'Республика Татарстан');
+  assert.equal(plan.territories[0].population, 4004212);
+  assert.equal(plan.territories[1].name, 'Казань');
+  assert.equal(plan.territories[1].parentOsmId, '253256');
+  assert.equal(plan.territories[1].asOf, '2025-01-01');
+  assert.equal(plan.territories[1].source, 'Татарстанстат');
+  assert.equal(typeof plan.territories[1].attributes, 'object');
 });
 
 test('admin loads schema-backed examples explicitly and explains NAME/CODE/TITLE ownership', async () => {
@@ -64,6 +63,7 @@ test('admin loads schema-backed examples explicitly and explains NAME/CODE/TITLE
   assert.match(examples, /type — NAME бизнес-типа из источника/);
   assert.match(examples, /CODE назначает БД/);
   assert.match(examples, /TITLE сначала равен NAME/);
-  assert.match(html, /populations\[\]\.name/);
-  assert.match(html, /populations\[\]\.population/);
+  assert.match(examples, /schemaVersion:\s*2/);
+  assert.match(examples, /territories:/);
+  assert.match(examples, /children:/);
 });
