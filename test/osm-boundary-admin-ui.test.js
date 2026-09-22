@@ -88,9 +88,13 @@ test('OSM object editor is a top-level admin section with population editing', a
   assert.match(editor, /changes\.populationAsOf/);
   assert.match(editor, /changes\.populationSource/);
   assert.match(editor, /changes\.attributes/);
+  assert.match(html, /Отображение и активность/);
+  assert.match(html, /Источник OSM/);
+  assert.match(html, /Данные территории/);
+  assert.match(html, /Статистика геометрии/);
   assert.match(
     html,
-    /Данные территории хранятся независимо от флага «Активен»/,
+    /Хранится независимо от флага «Активная геометрия»/,
   );
   assert.match(editor, /function normalizeSearchText\(value\)/);
   assert.match(editor, /\.toLocaleLowerCase\('ru-RU'\)[\s\S]*\.replace\(\/\\s\+\/gu, ''\)/);
@@ -119,9 +123,10 @@ test('OSM object editor is a top-level admin section with population editing', a
     /\/api\/admin\/osm-boundaries\/\$\{encodeURIComponent\(item\.id\)\}\/subtree/,
   );
   assert.doesNotMatch(editor, /window\.confirm\(/);
-  assert.match(editor, /function confirmBranchChange\(/);
-  assert.match(html, /id="osm-boundary-confirm-overlay"/);
-  assert.match(styles, /\.osm-boundary-confirm-overlay/);
+  assert.match(editor, /adminConfirm\(/);
+  assert.doesNotMatch(editor, /function confirmBranchChange\(/);
+  assert.doesNotMatch(html, /id="osm-boundary-confirm-overlay"/);
+  assert.doesNotMatch(styles, /\.osm-boundary-confirm-overlay/);
   assert.match(editor, /publishDerivedDataChange\('osm-boundary'\)/);
   assert.match(editor, /publishDerivedDataChange\('osm-boundary-subtree'\)/);
   assert.match(
@@ -195,7 +200,8 @@ test('OSM update UI exposes explicit resume restart and discard controls', async
   assert.match(admin, /resume:\s*'true'/);
   assert.match(admin, /restart:\s*String\(restart\)/);
   assert.match(admin, /Запустить OSM заново/);
-  assert.match(admin, /window\.confirm\([\s\S]*сохранённый прогресс OSM/i);
+  assert.doesNotMatch(admin, /window\.confirm\(/);
+  assert.match(admin, /adminConfirm\([\s\S]*сохранённый прогресс/i);
   assert.match(admin, /method:\s*'DELETE'/);
 
   assert.match(styles, /\.osm-checkpoint\s*\{/);
