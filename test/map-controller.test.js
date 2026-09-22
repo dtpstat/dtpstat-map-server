@@ -380,11 +380,15 @@ test('public app refreshes cities statistics and viewport only after published-d
     new URL('../public/js/app.js', import.meta.url),
     'utf8',
   );
-  assert.match(source, /PUBLISHED_DATA_REVISION_KEY/);
-  assert.match(source, /async function refreshPublishedData\(\)/);
-  assert.match(source, /loadCities\(\{ cache: 'no-store' \}\)/);
-  assert.match(source, /loadReportConfig\(\{ cache: 'no-store' \}\)/);
+  assert.match(
+    source,
+    /import \{ subscribeDerivedDataChanges \} from '\.\.\/\.\.\/admin\/derived-data-events\.js';/,
+  );
+  assert.match(source, /async function refreshDerivedData\(\)/);
+  assert.match(source, /loadCities\(\)/);
+  assert.match(source, /loadLineTypes\(\)/);
   assert.match(source, /mapController\.setCities\(cities\)/);
   assert.match(source, /mapController\.refreshViewport\(\)/);
-  assert.match(source, /window\.addEventListener\('storage'/);
+  assert.match(source, /subscribeDerivedDataChanges\(\(\) =>/);
+  assert.doesNotMatch(source, /window\.addEventListener\('storage'/);
 });
