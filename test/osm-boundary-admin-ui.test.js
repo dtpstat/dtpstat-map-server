@@ -17,7 +17,7 @@ test('OSM object editor is a top-level admin section with population editing', a
     read('admin/osm-boundary-editor.js'),
     read('admin/osm-boundary-editor.css'),
     read('public/js/app.js'),
-    read('public/js/derived-data-events.js'),
+    read('admin/derived-data-events.js'),
   ]);
 
   assert.match(
