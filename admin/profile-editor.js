@@ -64,10 +64,12 @@ if (host) {
           <button type="submit">Сохранить профиль</button>
         </form>
         <div class="profile-avatar-actions">
-          <label class="secondary profile-file-button">Загрузить аватар
+          <label class="secondary profile-avatar-action profile-file-button">
+            <span id="profile-avatar-upload-label">Загрузить аватар</span>
             <input id="profile-avatar-file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
           </label>
-          <button type="button" class="secondary" id="profile-avatar-delete">Удалить аватар</button>
+          <button type="button" class="secondary profile-avatar-action"
+                  id="profile-avatar-delete" disabled>Удалить аватар</button>
         </div>
         <small class="profile-muted">PNG/JPEG/WebP, до 256 КиБ. SVG не принимается.</small>
         <p id="profile-account-message" class="profile-message" role="status"></p>
@@ -77,6 +79,9 @@ if (host) {
         <h3>Пароль</h3>
         <div id="profile-password-required" class="profile-warning" hidden>
           Используется временный пароль. До его смены остальные разделы админки недоступны.
+        </div>
+        <div id="profile-password-policy" class="profile-password-policy" aria-live="polite">
+          Загружаем требования к паролю…
         </div>
         <form id="profile-password-form" class="profile-form">
           <label>Текущий пароль
@@ -99,10 +104,21 @@ if (host) {
             <h3>Активные сессии</h3>
             <p class="profile-muted">IP, браузер и время последней активности.</p>
           </div>
-          <button type="button" class="secondary" id="profile-revoke-others">Завершить остальные</button>
+          <button type="button" class="danger" id="profile-revoke-others">Завершить остальные</button>
         </div>
         <div id="profile-sessions"></div>
         <p id="profile-sessions-message" class="profile-message" role="status"></p>
+      </section>
+    </div>
+    <div id="profile-confirm-overlay" class="profile-confirm-overlay" hidden>
+      <section class="profile-confirm-dialog" role="dialog" aria-modal="true"
+               aria-labelledby="profile-confirm-title">
+        <h3 id="profile-confirm-title">Подтверждение</h3>
+        <p id="profile-confirm-message"></p>
+        <div class="profile-confirm-actions">
+          <button type="button" class="secondary" data-profile-confirm-cancel>Отмена</button>
+          <button type="button" class="danger" data-profile-confirm-accept>Завершить</button>
+        </div>
       </section>
     </div>
   `;
@@ -113,8 +129,94 @@ if (host) {
   const passwordMessage = host.querySelector('#profile-password-message');
   const sessionsMessage = host.querySelector('#profile-sessions-message');
   const sessionsHost = host.querySelector('#profile-sessions');
+  const confirmOverlay = host.querySelector('#profile-confirm-overlay');
+  const confirmTitle = host.querySelector('#profile-confirm-title');
+  const confirmMessage = host.querySelector('#profile-confirm-message');
+  const confirmAccept = host.querySelector('[data-profile-confirm-accept]');
   let currentSessionId = null;
   let currentUser = null;
+  let passwordPolicy = null;
+  let confirmResolver = null;
+
+  function closeConfirm(result = false) {
+    if (confirmOverlay.hidden) return;
+    confirmOverlay.hidden = true;
+    const resolve = confirmResolver;
+    confirmResolver = null;
+    resolve?.(result);
+  }
+
+  function confirmDestructive({ title, text, action = 'Завершить' }) {
+    if (confirmResolver) closeConfirm(false);
+    confirmTitle.textContent = title;
+    confirmMessage.textContent = text;
+    confirmAccept.textContent = action;
+    confirmOverlay.hidden = false;
+    confirmAccept.focus();
+    return new Promise((resolve) => {
+      confirmResolver = resolve;
+    });
+  }
+
+  confirmOverlay.querySelector('[data-profile-confirm-cancel]')
+    .addEventListener('click', () => closeConfirm(false));
+  confirmAccept.addEventListener('click', () => closeConfirm(true));
+  confirmOverlay.addEventListener('click', (event) => {
+    if (event.target === confirmOverlay) closeConfirm(false);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !confirmOverlay.hidden) closeConfirm(false);
+  });
+
+  function passwordPolicyError(value) {
+    if (!passwordPolicy) return null;
+    if (
+      value.length < passwordPolicy.passwordMinLength
+      || value.length > passwordPolicy.passwordMaxLength
+    ) {
+      return `Пароль должен содержать от ${passwordPolicy.passwordMinLength} до ${passwordPolicy.passwordMaxLength} символов.`;
+    }
+    if (passwordPolicy.passwordRequireLowercase && !/\p{Ll}/u.test(value)) {
+      return 'Добавьте хотя бы одну строчную букву.';
+    }
+    if (passwordPolicy.passwordRequireUppercase && !/\p{Lu}/u.test(value)) {
+      return 'Добавьте хотя бы одну прописную букву.';
+    }
+    if (passwordPolicy.passwordRequireDigit && !/\p{N}/u.test(value)) {
+      return 'Добавьте хотя бы одну цифру.';
+    }
+    if (passwordPolicy.passwordRequireSpecial && !/[^\p{L}\p{N}]/u.test(value)) {
+      return 'Добавьте хотя бы один спецсимвол.';
+    }
+    return null;
+  }
+
+  function renderPasswordPolicy(policy) {
+    passwordPolicy = policy;
+    for (const input of [
+      passwordForm.elements.newPassword,
+      passwordForm.elements.repeatPassword,
+    ]) {
+      input.minLength = policy.passwordMinLength;
+      input.maxLength = policy.passwordMaxLength;
+    }
+    const requirements = [
+      `От ${policy.passwordMinLength} до ${policy.passwordMaxLength} символов`,
+      policy.passwordRequireLowercase ? 'минимум одна строчная буква' : null,
+      policy.passwordRequireUppercase ? 'минимум одна прописная буква' : null,
+      policy.passwordRequireDigit ? 'минимум одна цифра' : null,
+      policy.passwordRequireSpecial ? 'минимум один спецсимвол' : null,
+    ].filter(Boolean);
+    host.querySelector('#profile-password-policy').innerHTML =
+      `<strong>Требования к новому паролю</strong><ul>${
+        requirements.map((item) => `<li>${item}</li>`).join('')
+      }</ul>`;
+  }
+
+  async function loadPasswordPolicy() {
+    const payload = await api('/api/admin/profile/password-policy');
+    renderPasswordPolicy(payload.policy);
+  }
 
   function updateAvatar(user) {
     const image = host.querySelector('#profile-avatar');
@@ -151,6 +253,9 @@ if (host) {
     host.querySelector('#profile-display-heading').textContent = user.displayName ?? user.username;
     host.querySelector('#profile-login-heading').textContent = `@${user.username}`;
     host.querySelector('#profile-password-required').hidden = !user.mustChangePassword;
+    host.querySelector('#profile-avatar-delete').disabled = !user.hasAvatar;
+    host.querySelector('#profile-avatar-upload-label').textContent =
+      user.hasAvatar ? 'Заменить аватар' : 'Загрузить аватар';
     updateAvatar(user);
   }
 
@@ -170,7 +275,7 @@ if (host) {
         <strong>${current ? 'Текущая сессия' : 'Сессия'}</strong>
         <div class="profile-muted"></div>
       </div>
-      <button type="button" class="secondary">Завершить</button>
+      <button type="button" class="danger">Завершить</button>
     `;
     card.querySelector('.profile-muted').textContent = [
       session.ipAddress ?? 'IP неизвестен',
@@ -180,7 +285,14 @@ if (host) {
     ].filter(Boolean).join(' · ');
     const button = card.querySelector('button');
     button.addEventListener('click', async () => {
-      if (!window.confirm(current ? 'Завершить текущую сессию и выйти?' : 'Завершить эту сессию?')) return;
+      const confirmed = await confirmDestructive({
+        title: current ? 'Завершить текущую сессию?' : 'Завершить сессию?',
+        text: current
+          ? 'Текущая сессия будет завершена, после чего потребуется войти снова.'
+          : 'Выбранная сессия будет немедленно отозвана.',
+        action: current ? 'Завершить и выйти' : 'Завершить',
+      });
+      if (!confirmed) return;
       try {
         const result = await api(`/api/admin/profile/sessions/${session.id}`, { method: 'DELETE' });
         if (result.loggedOut) {
@@ -229,6 +341,11 @@ if (host) {
   passwordForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!passwordForm.reportValidity()) return;
+    const policyError = passwordPolicyError(passwordForm.elements.newPassword.value);
+    if (policyError) {
+      message(passwordMessage, policyError, 'error');
+      return;
+    }
     if (passwordForm.elements.newPassword.value !== passwordForm.elements.repeatPassword.value) {
       message(passwordMessage, 'Новый пароль и повтор не совпадают.', 'error');
       return;
@@ -287,7 +404,12 @@ if (host) {
   });
 
   host.querySelector('#profile-revoke-others').addEventListener('click', async () => {
-    if (!window.confirm('Завершить все остальные активные сессии этой учётной записи?')) return;
+    const confirmed = await confirmDestructive({
+      title: 'Завершить остальные сессии?',
+      text: 'Все активные сессии этой учётной записи, кроме текущей, будут отозваны.',
+      action: 'Завершить остальные',
+    });
+    if (!confirmed) return;
     try {
       const result = await api('/api/admin/profile/sessions/others', { method: 'DELETE' });
       message(sessionsMessage, `Завершено сессий: ${result.revoked}.`, 'success');
@@ -299,5 +421,5 @@ if (host) {
 
   window.addEventListener('dtpstat:admin-session-changed', (event) => renderUser(event.detail.user));
   await loadSession();
-  await loadSessions();
+  await Promise.all([loadSessions(), loadPasswordPolicy()]);
 }
