@@ -48,8 +48,11 @@ test('current user and audit rows render profile avatars with fallback initials'
   assert.match(html, /id="admin-user-avatar-image"/);
   assert.match(html, /id="admin-user-avatar-fallback"/);
   assert.match(html, /id="admin-user-label"/);
+  assert.match(html, /id="admin-user-roles"/);
   assert.match(shell, /\/api\/admin\/profile\/avatar\?v=\$\{Date\.now\(\)\}/);
   assert.match(shell, /user\.hasAvatar/);
+  assert.match(shell, /rolesHost\.replaceChildren/);
+  assert.match(shell, /tag\.className = 'admin-user-role'/);
 
   assert.match(editor, /function auditUserCell\(entry\)/);
   assert.match(editor, /entry\.hasAvatar/);
