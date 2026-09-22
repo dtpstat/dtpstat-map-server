@@ -59,6 +59,35 @@ function createPool() {
       if (normalized.startsWith('INSERT INTO city_boundaries')) {
         return { rows: [], rowCount: stagedRows };
       }
+      if (
+        normalized.startsWith('SELECT count(*)::integer AS count') &&
+        normalized.includes('FROM city_boundaries') &&
+        !normalized.includes('WHERE city_id IS NOT NULL')
+      ) {
+        return {
+          rows: [{ count: stagedRows }],
+          rowCount: 1,
+        };
+      }
+      if (
+        normalized.startsWith('WITH batch AS') &&
+        normalized.includes('UPDATE city_boundaries AS child') &&
+        normalized.includes('max(id)::text AS "lastId"')
+      ) {
+        const afterId = Number(values[0]);
+        const batchSize = Number(values[1]);
+        const count = Math.max(
+          0,
+          Math.min(batchSize, stagedRows - afterId),
+        );
+        return {
+          rows: [{
+            count,
+            lastId: count > 0 ? String(afterId + count) : null,
+          }],
+          rowCount: 1,
+        };
+      }
       if (normalized.startsWith('UPDATE city_geometries')) {
         return { rows: [], rowCount: 1 };
       }
@@ -102,6 +131,12 @@ test('city transfer restores city attributes, boundaries, and geometry links ato
   assert.equal(progress[0].phase, 'validated');
   assert.equal(progress.at(-1).phase, 'database');
   assert.equal(progress.find((value) => value.phase === 'stage').batchCount, 1);
+  const hierarchyProgress = progress.filter(
+    (value) => value.phase === 'hierarchy',
+  );
+  assert.equal(hierarchyProgress[0].processed, 0);
+  assert.equal(hierarchyProgress.at(-1).processed, 1);
+  assert.equal(hierarchyProgress.at(-1).total, 1);
 
   const cityInsertIndex = pool.queries.findIndex((query) => query.startsWith('INSERT INTO cities'));
   const boundaryDeleteIndex = pool.queries.indexOf('DELETE FROM city_boundaries');
@@ -223,4 +258,30 @@ test('streamed city transfer rolls back staged batches when trailing JSON is mal
   assert.equal(pool.queries.includes('COMMIT'), false);
   assert.equal(pool.queries.includes('DELETE FROM city_boundaries'), false);
   assert.equal(pool.released, true);
+});
+
+test('city transfer measures area once in staging and does not call legacy hierarchy function', async () => {
+  const pool = createPool();
+  const service = createCityBoundaryTransferService(pool);
+  await service.replaceFromGeoJson(snapshot);
+
+  const stageQuery = pool.queries.find((query) =>
+    query.startsWith('WITH payload_rows AS'));
+  assert.match(stageQuery, /ST_Area\(prepared\.geom::geography\) AS area_m2/);
+  assert.match(stageQuery, /area_m2\s*\)\s*SELECT[\s\S]*area_m2\s*FROM measured/);
+
+  const boundaryInsert = pool.queries.find((query) =>
+    query.startsWith('INSERT INTO city_boundaries'));
+  assert.match(boundaryInsert, /stage\.area_m2/);
+  assert.doesNotMatch(boundaryInsert, /ST_Area/);
+  assert.equal(
+    pool.queries.some((query) =>
+      query.includes('rebuild_city_boundary_hierarchy()')),
+    false,
+  );
+  assert.ok(
+    pool.queries.some((query) =>
+      query.startsWith('WITH batch AS') &&
+      query.includes('ST_Covers(parent.geom, child.geom)')),
+  );
 });
