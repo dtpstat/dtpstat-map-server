@@ -473,7 +473,10 @@ if (typeof document !== 'undefined') {
           const payload = await response.json();
           if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
           applySettings(payload.settings);
-          setMessage('Настройки проекта сохранены.', 'success');
+          setMessage(
+            'Настройки проекта сохранены. Таблицы рейтинга пересчитаны.',
+            'success',
+          );
           window.dispatchEvent(new CustomEvent('dtpstat:project-settings-changed'));
         } catch (error) {
           setMessage(error.message, 'error');
