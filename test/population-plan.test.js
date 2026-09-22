@@ -5,79 +5,78 @@ import {
   PopulationValidationError,
 } from '../src/data/population-plan.js';
 
-function territory(overrides = {}) {
+function region(overrides = {}) {
   return {
-    osmType: 'relation',
-    osmId: '123',
     name: 'Тестовая область',
-    type: 'administrative',
-    placeType: null,
-    adminLevel: 4,
-    population: 2000000,
-    attributes: {},
-    children: [],
+    attributes: { federalDistrict: 'Тестовый округ' },
+    cities: [
+      {
+        name: 'Тестоград',
+        population: 1300000,
+        attributes: {},
+      },
+    ],
     ...overrides,
   };
 }
 
-test('population plan flattens a hierarchical territory snapshot', () => {
+test('population plan flattens region and city hierarchy', () => {
   const plan = buildPopulationPlan({
     schemaVersion: 2,
     asOf: '2026-01-01',
     source: '  Росстат  ',
-    territories: [
-      territory({
-        children: [
-          territory({
-            osmId: '456',
+    regions: [
+      region({
+        cities: [
+          {
             name: 'Тестоград',
-            type: 'city',
-            placeType: 'city',
-            adminLevel: 6,
             population: '1300000',
             attributes: { year: 2026 },
-          }),
+          },
+          {
+            name: 'Второй город',
+            population: null,
+            asOf: '2025-01-01',
+            source: 'Регионстат',
+          },
         ],
       }),
     ],
   });
 
   assert.equal(plan.schemaVersion, 2);
-  assert.equal(plan.rootCount, 1);
-  assert.equal(plan.territoryCount, 2);
-  assert.equal(plan.territories[0].osmId, '123');
-  assert.equal(plan.territories[0].parentOsmId, null);
-  assert.equal(plan.territories[1].osmId, '456');
-  assert.equal(plan.territories[1].parentOsmType, 'relation');
-  assert.equal(plan.territories[1].parentOsmId, '123');
-  assert.equal(plan.territories[1].population, 1300000);
-  assert.equal(plan.territories[1].asOf, '2026-01-01');
-  assert.equal(plan.territories[1].source, 'Росстат');
-  assert.deepEqual(plan.territories[1].attributes, { year: 2026 });
+  assert.equal(plan.regionCount, 1);
+  assert.equal(plan.cityCount, 2);
+  assert.equal(plan.cities[0].regionName, 'Тестовая область');
+  assert.equal(plan.cities[0].cityName, 'Тестоград');
+  assert.equal(plan.cities[0].population, 1300000);
+  assert.equal(plan.cities[0].asOf, '2026-01-01');
+  assert.equal(plan.cities[0].source, 'Росстат');
+  assert.deepEqual(plan.cities[0].attributes, { year: 2026 });
+  assert.equal(plan.cities[1].population, null);
+  assert.equal(plan.cities[1].asOf, '2025-01-01');
+  assert.equal(plan.cities[1].source, 'Регионстат');
 });
 
-test('population plan preserves per-territory source/date and null population', () => {
+test('same city name is allowed in different regions', () => {
   const plan = buildPopulationPlan({
     schemaVersion: 2,
-    territories: [
-      territory({
-        population: null,
-        asOf: '2025-01-01',
-        source: 'Региональная статистика',
+    regions: [
+      region(),
+      region({
+        name: 'Другая область',
+        cities: [{ name: 'Тестоград', population: 1000 }],
       }),
     ],
   });
-
-  assert.equal(plan.territories[0].population, null);
-  assert.equal(plan.territories[0].asOf, '2025-01-01');
-  assert.equal(plan.territories[0].source, 'Региональная статистика');
+  assert.equal(plan.cityCount, 2);
 });
 
-test('population plan rejects invalid schema, values and duplicate OSM identity', () => {
+test('population plan rejects invalid schema and duplicate names inside one region', () => {
   assert.throws(
     () => buildPopulationPlan({
       schemaVersion: 1,
-      territories: [territory()],
+      regions: [region()],
     }),
     PopulationValidationError,
   );
@@ -85,25 +84,29 @@ test('population plan rejects invalid schema, values and duplicate OSM identity'
     () => buildPopulationPlan({
       schemaVersion: 2,
       asOf: '2026-02-30',
-      territories: [territory()],
+      regions: [region()],
     }),
     PopulationValidationError,
   );
   assert.throws(
     () => buildPopulationPlan({
       schemaVersion: 2,
-      territories: [territory({ population: 0 })],
+      regions: [region({
+        cities: [{ name: 'Тестоград', population: 0 }],
+      })],
     }),
     /positive integer/,
   );
   assert.throws(
     () => buildPopulationPlan({
       schemaVersion: 2,
-      territories: [
-        territory(),
-        territory({ name: 'Другое имя' }),
-      ],
+      regions: [region({
+        cities: [
+          { name: 'Тестоград', population: 1000 },
+          { name: 'Тестоград', population: 2000 },
+        ],
+      })],
     }),
-    /Duplicate OSM territory identity/,
+    /Duplicate city name/,
   );
 });
