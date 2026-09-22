@@ -420,7 +420,7 @@ function stableProcessingView(task) {
       : null,
   ].filter(Boolean).join(' · ');
 
-  let databaseStatus = 'PostgreSQL/PostGIS: ожидает следующего пакета';
+  let databaseStatus = '';
   if (databaseEntry) {
     const details = databaseEntry.details ?? {};
     const batch = Number(details.batch);
