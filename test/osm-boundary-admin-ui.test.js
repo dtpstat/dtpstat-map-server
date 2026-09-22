@@ -88,9 +88,13 @@ test('OSM object editor is a top-level admin section with population editing', a
   assert.match(editor, /changes\.populationAsOf/);
   assert.match(editor, /changes\.populationSource/);
   assert.match(editor, /changes\.attributes/);
+  assert.match(html, /Отображение и активность/);
+  assert.match(html, /Источник OSM/);
+  assert.match(html, /Данные территории/);
+  assert.match(html, /Статистика геометрии/);
   assert.match(
     html,
-    /Данные территории хранятся независимо от флага «Активен»/,
+    /Хранится независимо от флага «Активная геометрия»/,
   );
   assert.match(editor, /function normalizeSearchText\(value\)/);
   assert.match(editor, /\.toLocaleLowerCase\('ru-RU'\)[\s\S]*\.replace\(\/\\s\+\/gu, ''\)/);
