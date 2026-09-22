@@ -101,6 +101,31 @@ function createPool({ stageCount = 3, boundaryCount = 3 } = {}) {
       if (normalized.startsWith('SELECT name')) {
         return { rows: [], rowCount: 0 };
       }
+      if (
+        normalized.startsWith('SELECT count(*)::integer AS count') &&
+        normalized.includes('FROM city_boundaries')
+      ) {
+        return { rows: [{ count: boundaryCount }], rowCount: 1 };
+      }
+      if (
+        normalized.startsWith('WITH batch AS') &&
+        normalized.includes('UPDATE city_boundaries AS child') &&
+        normalized.includes('max(id)::text AS "lastId"')
+      ) {
+        const afterId = Number(parameters[0]);
+        const batchSize = Number(parameters[1]);
+        const count = Math.max(
+          0,
+          Math.min(batchSize, boundaryCount - afterId),
+        );
+        return {
+          rows: [{
+            count,
+            lastId: count > 0 ? String(afterId + count) : null,
+          }],
+          rowCount: 1,
+        };
+      }
       if (normalized.startsWith('SELECT count(*)::integer')) {
         return { rows: [{ count: stageCount }], rowCount: 1 };
       }
