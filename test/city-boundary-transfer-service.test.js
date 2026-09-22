@@ -148,10 +148,25 @@ test('city transfer stages large snapshots in bounded batches', async () => {
   const stageQueries = pool.queries.filter((query) =>
     query.startsWith('WITH payload_rows AS'));
   assert.equal(stageQueries.length, 3);
+  const stageWriteProgress = progress.filter(
+    (value) => value.phase === 'stage-write',
+  );
   const stageProgress = progress.filter((value) => value.phase === 'stage');
+  assert.deepEqual(stageWriteProgress.map((value) => value.batchPlaces), [50, 50, 21]);
+  assert.deepEqual(stageWriteProgress.map((value) => value.stagedPlaces), [0, 50, 100]);
   assert.deepEqual(stageProgress.map((value) => value.batchPlaces), [50, 50, 21]);
   assert.deepEqual(stageProgress.map((value) => value.stagedPlaces), [50, 100, 121]);
   assert.ok(stageProgress.every((value) => value.payloadBytes > 0));
+
+  for (const batch of [1, 2, 3]) {
+    const writeIndex = progress.findIndex(
+      (value) => value.phase === 'stage-write' && value.batch === batch,
+    );
+    const doneIndex = progress.findIndex(
+      (value) => value.phase === 'stage' && value.batch === batch,
+    );
+    assert.ok(writeIndex >= 0 && writeIndex < doneIndex);
+  }
 });
 
 test('city transfer dryRun performs a full validation and rolls back', async () => {
