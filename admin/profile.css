@@ -114,44 +114,6 @@
   border-color: #8e3a36;
   color: #ffd0cc;
 }
-.profile-confirm-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1600;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  background: rgb(0 0 0 / 72%);
-  backdrop-filter: blur(4px);
-}
-.profile-confirm-overlay[hidden] { display: none; }
-.profile-confirm-dialog {
-  width: min(32rem, 100%);
-  padding: 1.1rem;
-  border: 1px solid #4e666d;
-  border-radius: 14px;
-  background: #0d171a;
-  box-shadow: 0 1.5rem 5rem rgb(0 0 0 / 55%);
-}
-.profile-confirm-dialog h3 { margin-bottom: .45rem; }
-.profile-confirm-dialog p {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.5;
-}
-.profile-confirm-actions {
-  margin-top: 1rem;
-  display: flex;
-  justify-content: flex-end;
-  gap: .55rem;
-}
-.profile-confirm-actions button { width: auto; }
-.profile-confirm-actions .danger {
-  background: #51211f;
-  border-color: #8e3a36;
-  color: #ffd0cc;
-}
-
 @media (max-width: 1050px) {
   #profile-editor-host {
     flex: 0 0 auto;
