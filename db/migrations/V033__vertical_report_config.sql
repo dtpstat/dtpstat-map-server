@@ -1,0 +1,63 @@
+SET SEARCH_PATH = BUSLANES, PUBLIC;
+
+CREATE TABLE BUSLANES.REPORT_CONFIG_VERTICAL
+(
+    CONFIG_KEY   TEXT PRIMARY KEY
+        CHECK (CONFIG_KEY ~ '^[a-z][a-z0-9_]{0,63}$'),
+    CONFIG_VALUE JSONB       NOT NULL,
+    UPDATED_AT   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO BUSLANES.REPORT_CONFIG_VERTICAL (CONFIG_KEY, CONFIG_VALUE, UPDATED_AT)
+SELECT 'metrics', METRICS, UPDATED_AT
+FROM BUSLANES.REPORT_CONFIG
+WHERE ID = 1
+UNION ALL
+SELECT 'table_columns', TABLE_COLUMNS, UPDATED_AT
+FROM BUSLANES.REPORT_CONFIG
+WHERE ID = 1
+UNION ALL
+SELECT 'csv_columns', CSV_COLUMNS, UPDATED_AT
+FROM BUSLANES.REPORT_CONFIG
+WHERE ID = 1
+UNION ALL
+SELECT
+    'rank',
+    JSONB_BUILD_OBJECT(
+        'sort',
+        COALESCE(
+            RANK_SORT,
+            JSONB_BUILD_ARRAY(
+                JSONB_BUILD_OBJECT(
+                    'metricKey', RANK_METRIC_KEY,
+                    'direction', RANK_DIRECTION
+                )
+            )
+        )
+    ),
+    UPDATED_AT
+FROM BUSLANES.REPORT_CONFIG
+WHERE ID = 1;
+
+DO $MIGRATION$
+BEGIN
+    IF (SELECT COUNT(*) FROM BUSLANES.REPORT_CONFIG_VERTICAL) <> 4 THEN
+        RAISE EXCEPTION 'REPORT_CONFIG migration expected exactly four configuration entries';
+    END IF;
+END
+$MIGRATION$;
+
+DROP TABLE BUSLANES.REPORT_CONFIG;
+
+ALTER TABLE BUSLANES.REPORT_CONFIG_VERTICAL
+    RENAME TO REPORT_CONFIG;
+
+COMMENT ON TABLE BUSLANES.REPORT_CONFIG IS
+    'Vertical declarative report configuration. Add settings as rows instead of widening the singleton table.';
+
+COMMENT ON COLUMN BUSLANES.REPORT_CONFIG.CONFIG_KEY IS
+    'Stable application-owned configuration key.';
+COMMENT ON COLUMN BUSLANES.REPORT_CONFIG.CONFIG_VALUE IS
+    'Validated JSON value for this report configuration key.';
+COMMENT ON COLUMN BUSLANES.REPORT_CONFIG.UPDATED_AT IS
+    'Last update time for this configuration entry.';
