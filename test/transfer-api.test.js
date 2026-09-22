@@ -34,8 +34,9 @@ const lineSnapshot = {
   features: [],
 };
 const populationSnapshot = {
-  schemaVersion: 1,
-  populations: [],
+  schemaVersion: 2,
+  exportedAt: '2026-09-05T12:00:00.000Z',
+  territories: [],
 };
 
 function config() {
@@ -605,7 +606,18 @@ test('line and population imports accept gzip request bodies', async () => {
     }],
   };
   const populations = {
-    populations: [{ name: 'Казань', population: 1300000 }],
+    schemaVersion: 2,
+    territories: [{
+      osmType: 'relation',
+      osmId: '123',
+      name: 'Казань',
+      type: 'city',
+      placeType: 'city',
+      adminLevel: 6,
+      population: 1300000,
+      attributes: {},
+      children: [],
+    }],
   };
 
   await withServer(async (baseUrl) => {
