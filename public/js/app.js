@@ -7,6 +7,7 @@ import {
   loadViewportGeometries,
 } from './api.js';
 import { createCityList } from './city-list.js';
+import { subscribeDerivedDataChanges } from './derived-data-events.js';
 import {
   createMapController,
   ROAD_DATA_MIN_ZOOM,
@@ -75,6 +76,7 @@ let lineTypesSignature = '';
 let lineTypesRefresh = null;
 let lineDisplayRefresh = null;
 let openMapRefresh = null;
+let derivedDataRefresh = null;
 
 function setMapMessage(message, isError = false) {
   mapMessage.hidden = !message;
@@ -202,6 +204,42 @@ async function refreshOpenMap() {
   })();
   return openMapRefresh;
 }
+
+async function refreshDerivedData() {
+  if (!mapController) return;
+  if (derivedDataRefresh) return derivedDataRefresh;
+
+  derivedDataRefresh = (async () => {
+    setCityStatus('Обновляем таблицу и линии…');
+    try {
+      const [cities, lineTypes] = await Promise.all([
+        loadCities(),
+        loadLineTypes(),
+      ]);
+      cityList.setCities(cities);
+      citiesById = new Map(cities.map((city) => [city.id, city]));
+      mapController.setCities(cities);
+      applyLineTypes(lineTypes);
+      if (focusedCityId !== null && !citiesById.has(focusedCityId)) {
+        focusedCityId = null;
+        cityList.select(null);
+      }
+      mapController.refreshViewport();
+      setCityStatus(cities.length ? '' : 'Данные пока не загружены');
+    } catch (error) {
+      setCityStatus('Не удалось обновить таблицу после изменения данных', true);
+      console.error('Не удалось обновить производные данные', error);
+    } finally {
+      derivedDataRefresh = null;
+    }
+  })();
+
+  return derivedDataRefresh;
+}
+
+subscribeDerivedDataChanges(() => {
+  void refreshDerivedData();
+});
 
 function selectCity(city) {
   activeRequest?.abort();
