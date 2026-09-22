@@ -1,3 +1,5 @@
+import { trackDirtyForm } from './admin-dirty-state.js';
+
 if (typeof document !== 'undefined') {
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
@@ -42,6 +44,7 @@ if (typeof document !== 'undefined') {
     const message = section.querySelector('#public-download-name-message');
     const geoJsonPreview = section.querySelector('[data-download-preview="geojson"]');
     const csvPreview = section.querySelector('[data-download-preview="csv"]');
+    const dirtyState = trackDirtyForm(form, { label: 'Имя файлов открытых данных' });
 
     function setMessage(text, tone = '') {
       message.textContent = text;
@@ -71,6 +74,7 @@ if (typeof document !== 'undefined') {
         input.maxLength = Number(payload.editor?.publicDownloadName?.maxLength) || 120;
         input.value = payload.settings?.publicDownloadName || 'bus-lanes';
         renderPreview();
+        dirtyState?.markClean();
       } catch (error) {
         setMessage(`Не удалось загрузить имя файлов: ${error.message}`, 'error');
       }
@@ -95,6 +99,7 @@ if (typeof document !== 'undefined') {
         if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
         input.value = payload.settings.publicDownloadName;
         renderPreview();
+        dirtyState?.markClean();
         setMessage('Имя файлов и публичные URL обновлены.', 'success');
         window.dispatchEvent(new CustomEvent('dtpstat:project-settings-changed'));
       } catch (error) {
