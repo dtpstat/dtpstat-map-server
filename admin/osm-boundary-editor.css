@@ -261,10 +261,6 @@
     grid-column: 1 / -1;
     max-height: 22rem;
   }
-  .osm-boundary-details {
-    grid-column: 1 / -1;
-    max-height: 22rem;
-  }
   .osm-boundary-details-header {
     grid-template-columns: minmax(0, 1fr) minmax(24rem, auto);
     align-items: center;
