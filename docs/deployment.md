@@ -72,7 +72,7 @@ MAPBOX_ACCESS_TOKEN=pk....
 
 ## Миграции
 
-Текущий набор: `V001…V041`.
+Текущий набор: `V001…V042`.
 
 Последние migrations:
 
@@ -93,17 +93,18 @@ V030__osm_checkpoint_batch_count.sql
 V031__unbuildable_osm_checkpoint_geometry.sql
 V032__boundary_population_attributes.sql
 V033__vertical_report_config.sql
-V034__geometry_and_osm_editor_roles.sql
-V035__universal_city_geometries.sql
-V036__geometry_import_conflicts.sql
-V037__sync_geometry_editor_cities.sql
-V038__geometry_model_invariants.sql
-V039__city_boundary_identity_and_pending_guards.sql
-V040__effective_geometry_ownership.sql
-V041__geometry_final_state_constraints.sql
+V034__admin_password_policy.sql
+V035__geometry_and_osm_editor_roles.sql
+V036__universal_city_geometries.sql
+V037__geometry_import_conflicts.sql
+V038__sync_geometry_editor_cities.sql
+V039__geometry_model_invariants.sql
+V040__city_boundary_identity_and_pending_guards.sql
+V041__effective_geometry_ownership.sql
+V042__geometry_final_state_constraints.sql
 ```
 
-Назначение `V023…V041`:
+Назначение `V023…V042`:
 
 - `V023` — logical `FULL_NAME` OSM boundary, merge relation fragments по `PLACE_TYPE + FULL_NAME`, sync `CITIES.FULL_NAME`;
 - `V024` — ordered `REPORT_CONFIG.RANK_SORT`;
@@ -116,16 +117,17 @@ V041__geometry_final_state_constraints.sql
 - `V031` — сохранение/диагностика OSM objects, для которых geometry не удалось построить;
 - `V032` — boundary-owned population/asOf/source/attributes и синхронизация активной population projection;
 - `V033` — перенос `REPORT_CONFIG` на вертикальное `CONFIG_KEY/CONFIG_VALUE` storage без изменения внешнего report API;
-- `V034` — отдельные admin roles для geometry/OSM editors;
-- `V035` — универсальные Point/Line/Polygon city geometries;
-- `V036` — pending geometry-import conflicts;
-- `V037` — синхронизация geometry editor с city model;
-- `V038` — geometry invariants/derived normalization;
-- `V039` — identity и pending-import guards;
-- `V040` — effective geometry ownership;
-- `V041` — финальные ограничения geometry model.
+- `V034` — настраиваемая политика паролей администраторов;
+- `V035` — отдельные admin roles для geometry/OSM editors;
+- `V036` — универсальные Point/Line/Polygon city geometries;
+- `V037` — pending geometry-import conflicts;
+- `V038` — синхронизация geometry editor с city model;
+- `V039` — geometry invariants/derived normalization;
+- `V040` — identity и pending-import guards;
+- `V041` — effective geometry ownership;
+- `V042` — финальные ограничения geometry model.
 
-Следующая migration: **V042+**. Опубликованные migration files не изменяются задним числом.
+Следующая migration: **V043+**. Опубликованные migration files не изменяются задним числом.
 
 Startup автоматически применяет pending migrations под PostgreSQL advisory lock, затем повторно сверяет `<DATABASE_SCHEMA>.schema_versions` с набором `db/migrations`. Modified/gapped/newer history или ошибка SQL считаются startup error: HTTP listeners не открываются. `npm run db:migrate` остаётся ручной preflight-командой, но для обычного restart больше не обязателен.
 
