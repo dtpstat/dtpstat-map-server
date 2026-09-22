@@ -132,6 +132,23 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
               <label>Максимальная жизнь сессии, сек. <input name="sessionAbsoluteSeconds" type="number" min="300" max="2592000" required></label>
               <label>Хранить аудит, дней (0 = бессрочно) <input name="auditRetentionDays" type="number" min="0" max="3650" required></label>
             </fieldset>
+            <fieldset><legend>Политика паролей</legend>
+              <div class="security-password-lengths">
+                <label>Минимум символов
+                  <input name="passwordMinLength" type="number" min="1" max="4096" required>
+                </label>
+                <label>Максимум символов
+                  <input name="passwordMaxLength" type="number" min="1" max="4096" required>
+                </label>
+              </div>
+              <div class="security-password-requirements">
+                <label class="check"><input name="passwordRequireLowercase" type="checkbox"> Строчная буква</label>
+                <label class="check"><input name="passwordRequireUppercase" type="checkbox"> Прописная буква</label>
+                <label class="check"><input name="passwordRequireDigit" type="checkbox"> Цифра</label>
+                <label class="check"><input name="passwordRequireSpecial" type="checkbox"> Спецсимвол</label>
+              </div>
+              <p class="security-info">Политика применяется к пользовательской смене пароля, заданным вручную паролям и новым временным паролям.</p>
+            </fieldset>
             <button type="submit">Сохранить параметры</button>
             <p id="security-settings-message" class="security-message" role="status"></p>
           </form>
@@ -947,7 +964,10 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     try {
       const payload = await api('/api/admin/security/settings');
       for (const [key, value] of Object.entries(payload.settings)) {
-        if (form.elements[key]) form.elements[key].value = value;
+        const control = form.elements[key];
+        if (!control) continue;
+        if (control.type === 'checkbox') control.checked = Boolean(value);
+        else control.value = value;
       }
       setMessage(message, 'Параметры загружены.');
     } catch (error) {
@@ -959,16 +979,25 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     event.preventDefault();
     const form = event.currentTarget;
     if (!form.reportValidity()) return;
-    const keys = [
+    const numericKeys = [
       'maxFailedAttempts','failureWindowSeconds','lockoutSeconds',
       'ipMaxFailedAttempts','ipFailureWindowSeconds','ipLockoutSeconds',
       'sessionIdleSeconds','sessionAbsoluteSeconds','auditRetentionDays',
+      'passwordMinLength','passwordMaxLength',
     ];
+    const booleanKeys = [
+      'passwordRequireLowercase','passwordRequireUppercase',
+      'passwordRequireDigit','passwordRequireSpecial',
+    ];
+    const settings = Object.fromEntries([
+      ...numericKeys.map((key) => [key, Number(form.elements[key].value)]),
+      ...booleanKeys.map((key) => [key, form.elements[key].checked]),
+    ]);
     try {
       await api('/api/admin/security/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(Object.fromEntries(keys.map((key) => [key, Number(form.elements[key].value)]))),
+        body: JSON.stringify(settings),
       });
       setMessage(host.querySelector('#security-settings-message'), 'Параметры сохранены.', 'success');
     } catch (error) {
