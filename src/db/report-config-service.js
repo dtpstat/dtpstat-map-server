@@ -8,38 +8,27 @@ import { acquireDataImportLock } from './database-locks.js';
 
 const LOAD_CONFIG_SQL = `
   SELECT
-    metrics,
-    table_columns AS "tableColumns",
-    csv_columns AS "csvColumns",
-    rank_sort AS "rankSort",
-    rank_metric_key AS "rankMetricKey",
-    rank_direction AS "rankDirection",
-    updated_at AS "updatedAt"
+    jsonb_object_agg(config_key, config_value) AS config,
+    max(updated_at) AS "updatedAt"
   FROM report_config
-  WHERE id = 1
+  WHERE config_key IN ('metrics', 'table_columns', 'csv_columns', 'rank')
 `;
 
 const SAVE_CONFIG_SQL = `
-  INSERT INTO report_config (
-    id,
-    metrics,
-    table_columns,
-    csv_columns,
-    rank_sort,
-    rank_metric_key,
-    rank_direction,
-    updated_at
+  WITH saved AS (
+    INSERT INTO report_config (config_key, config_value, updated_at)
+    VALUES
+      ('metrics', $1::jsonb, now()),
+      ('table_columns', $2::jsonb, now()),
+      ('csv_columns', $3::jsonb, now()),
+      ('rank', $4::jsonb, now())
+    ON CONFLICT (config_key) DO UPDATE SET
+      config_value = EXCLUDED.config_value,
+      updated_at = now()
+    RETURNING updated_at
   )
-  VALUES (1, $1::jsonb, $2::jsonb, $3::jsonb, $4::jsonb, $5, $6, now())
-  ON CONFLICT (id) DO UPDATE SET
-    metrics = EXCLUDED.metrics,
-    table_columns = EXCLUDED.table_columns,
-    csv_columns = EXCLUDED.csv_columns,
-    rank_sort = EXCLUDED.rank_sort,
-    rank_metric_key = EXCLUDED.rank_metric_key,
-    rank_direction = EXCLUDED.rank_direction,
-    updated_at = now()
-  RETURNING updated_at AS "updatedAt"
+  SELECT max(updated_at) AS "updatedAt"
+  FROM saved
 `;
 
 const FIELD_SQL = Object.freeze({
@@ -65,18 +54,20 @@ const AGGREGATE_SQL = Object.freeze({
 });
 
 function rowToConfig(row) {
-  if (!row) throw new Error('Report configuration is missing; run database migrations');
-  const rank = Array.isArray(row.rankSort) && row.rankSort.length > 0
-    ? { sort: row.rankSort }
-    : {
-        metricKey: row.rankMetricKey,
-        direction: row.rankDirection,
-      };
+  const stored = row?.config;
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) {
+    throw new Error('Report configuration is missing; run database migrations');
+  }
+  for (const key of ['metrics', 'table_columns', 'csv_columns', 'rank']) {
+    if (!Object.hasOwn(stored, key)) {
+      throw new Error(`Report configuration is incomplete: missing ${key}`);
+    }
+  }
   return validateReportConfig({
-    metrics: row.metrics,
-    tableColumns: row.tableColumns,
-    csvColumns: row.csvColumns,
-    rank,
+    metrics: stored.metrics,
+    tableColumns: stored.table_columns,
+    csvColumns: stored.csv_columns,
+    rank: stored.rank,
     updatedAt: row.updatedAt instanceof Date
       ? row.updatedAt.toISOString()
       : row.updatedAt,
@@ -355,14 +346,11 @@ export function createReportConfigService(pool) {
         const config = validateReportConfig(payload, {
           allowedLineTypeNames: lineTypes.rows.map((row) => row.name),
         });
-        const primaryRank = config.rank.sort[0];
         const saved = await client.query(SAVE_CONFIG_SQL, [
           JSON.stringify(config.metrics),
           JSON.stringify(config.tableColumns),
           JSON.stringify(config.csvColumns),
-          JSON.stringify(config.rank.sort),
-          primaryRank.metricKey,
-          primaryRank.direction,
+          JSON.stringify(config.rank),
         ]);
         const updatedAt = saved.rows[0]?.updatedAt;
         const normalized = {
