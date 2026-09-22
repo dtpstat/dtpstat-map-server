@@ -520,19 +520,28 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
 
     const avatar = document.createElement('span');
     avatar.className = 'security-audit-avatar';
-    avatar.textContent = auditAvatarFallback(entry.username);
 
-    if (entry.userId && entry.hasAvatar) {
+    const fallback = document.createElement('span');
+    fallback.className = 'security-audit-avatar-fallback';
+    fallback.textContent = auditAvatarFallback(entry.username);
+    avatar.append(fallback);
+
+    if (entry.userId) {
       const image = document.createElement('img');
       image.alt = '';
       image.loading = 'lazy';
+      image.hidden = true;
+      image.addEventListener('load', () => {
+        image.hidden = false;
+        fallback.hidden = true;
+      }, { once: true });
+      image.addEventListener('error', () => {
+        image.remove();
+        fallback.hidden = false;
+      }, { once: true });
       image.src =
         `/api/admin/security/users/${encodeURIComponent(entry.userId)}/avatar`;
-      image.addEventListener('load', () => {
-        avatar.textContent = '';
-        avatar.append(image);
-      }, { once: true });
-      image.addEventListener('error', () => image.remove(), { once: true });
+      avatar.append(image);
     }
 
     const name = document.createElement('span');
