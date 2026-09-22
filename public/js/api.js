@@ -28,7 +28,7 @@ export function loadProjectSettings() {
 }
 
 export async function loadCities() {
-  const payload = await getJson('/api/cities');
+  const payload = await getJson('/api/cities', { cache: 'no-store' });
   return payload.cities;
 }
 
