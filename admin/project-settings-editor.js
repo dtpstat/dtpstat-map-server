@@ -1,4 +1,7 @@
 import { publishDerivedDataChange } from './derived-data-events.js';
+import { adminConfirm } from './admin-dialog.js';
+import { trackDirtyForm } from './admin-dirty-state.js';
+import { readTabState, writeTabState } from './admin-tab-state.js';
 
 if (typeof document !== 'undefined') {
   const session = await globalThis.dtpstatAdminSession?.catch(() => null);
@@ -152,7 +155,7 @@ if (typeof document !== 'undefined') {
                     <span id="project-city-marker-state">Загружаем состояние…</span>
                   </div>
                   <label>Новая иконка PNG
-                    <input name="cityMarkerIcon" type="file" accept="image/png">
+                    <input name="cityMarkerIcon" type="file" accept="image/png" data-dirty-ignore>
                     <small>Квадратный PNG 16×16…256×256 px, не более 256 КБ. Прозрачность поддерживается.</small>
                   </label>
                   <div class="project-city-marker-actions">
@@ -241,6 +244,7 @@ if (typeof document !== 'undefined') {
       const projectTabs = [...form.querySelectorAll('[data-project-settings-tab]')];
       const projectPanels = [...form.querySelectorAll('[data-project-settings-panel]')];
       const selectProjectPanel = (key) => {
+        writeTabState('project-settings', key);
         for (const tab of projectTabs) {
           const active = tab.dataset.projectSettingsTab === key;
           tab.setAttribute('aria-selected', String(active));
@@ -257,8 +261,14 @@ if (typeof document !== 'undefined') {
         const panel = event.target.closest('[data-project-settings-panel]');
         if (panel) selectProjectPanel(panel.dataset.projectSettingsPanel);
       }, true);
-      selectProjectPanel('general');
+      const availableProjectTabs = projectTabs.map((tab) => tab.dataset.projectSettingsTab);
+      selectProjectPanel(readTabState(
+        'project-settings',
+        availableProjectTabs,
+        'general',
+      ));
 
+      const dirtyState = trackDirtyForm(form, { label: 'Настройки проекта' });
       const projectName = form.elements.namedItem('projectName');
       const themePreset = form.elements.namedItem('themePreset');
       const showLineLabels = form.elements.namedItem('showLineLabels');
@@ -418,6 +428,7 @@ if (typeof document !== 'undefined') {
           applySettings(payload.settings);
           allowedTags.textContent = payload.editor.tags.map((tag) => `<${tag}>`).join(' · ');
           allowedClasses.textContent = payload.editor.classes.map((name) => `.${name}`).join(' · ');
+          dirtyState?.markClean();
           setMessage('Настройки загружены.');
         } catch (error) {
           setMessage(error.message, 'error');
@@ -464,7 +475,14 @@ if (typeof document !== 'undefined') {
 
       cityMarkerReset.addEventListener('click', async () => {
         if (cityMarkerReset.disabled) return;
-        if (!window.confirm('Вернуть стандартную иконку города?')) return;
+        const confirmed = await adminConfirm({
+          title: 'Вернуть стандартную иконку?',
+          message: 'Пользовательская иконка города будет удалена и заменена стандартной.',
+          confirmLabel: 'Вернуть стандартную',
+          cancelLabel: 'Отмена',
+          destructive: true,
+        });
+        if (!confirmed) return;
         cityMarkerUpload.disabled = true;
         cityMarkerReset.disabled = true;
         setMessage('Возвращаем стандартную иконку…');
@@ -521,6 +539,7 @@ if (typeof document !== 'undefined') {
           const payload = await response.json();
           if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
           applySettings(payload.settings);
+          dirtyState?.markClean();
           setMessage(
             'Настройки проекта сохранены. Таблицы рейтинга пересчитаны.',
             'success',
