@@ -159,6 +159,20 @@ export function createAdminSecurityRouter({ securityService, adminAuth, maxBodyB
     },
   );
 
+  router.get(
+    '/admin/profile/password-policy',
+    adminAuth.requireProfile,
+    async (_request, response, next) => {
+      try {
+        response
+          .set('Cache-Control', 'no-store')
+          .json({ policy: await securityService.getPasswordPolicy() });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   router.put(
     '/admin/profile/password',
     adminAuth.requireProfile,
@@ -442,7 +456,7 @@ export function createAdminSecurityRouter({ securityService, adminAuth, maxBodyB
 
   router.get(
     '/admin/security/users/:userId/avatar',
-    adminAuth.requireAudit,
+    adminAuth.requireUsersOrAudit,
     async (request, response, next) => {
       const userId = parsePositiveInteger(request.params.userId);
       if (!userId) {
