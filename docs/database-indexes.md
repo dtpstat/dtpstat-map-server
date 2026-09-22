@@ -112,7 +112,7 @@ CHECK (ID = 1)
 
 ## REPORT_CONFIG
 
-Начиная с `V033` — вертикальное key/value-хранилище:
+Начиная с `V041` — вертикальное key/value-хранилище:
 
 ```text
 PRIMARY KEY (CONFIG_KEY)
