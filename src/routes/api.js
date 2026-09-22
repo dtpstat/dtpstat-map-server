@@ -175,6 +175,12 @@ export function createApiRouter({
       message =
         `PostgreSQL/PostGIS: staging-пакет ${progress.batch ?? '?'} записан; ` +
         `всего ${progress.stagedPlaces ?? '?'} объектов`;
+    } else if (progress.phase === 'hierarchy') {
+      message =
+        `Иерархия территорий: ${progress.processed ?? 0}/${progress.total ?? '?'}` +
+        (progress.batchCount
+          ? `; пакет ${progress.batch ?? 0}/${progress.batchCount}`
+          : '');
     } else if (progress.phase === 'validated') {
       message = 'Входные данные проверены';
     } else if (progress.phase === 'warnings') {
