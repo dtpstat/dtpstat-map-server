@@ -122,7 +122,10 @@ test('geometry mutations update editor state locally and explicit recalc refresh
 
 test('explicit geometry recalculation signals an already-open public map tab', async () => {
   const editor = await read('admin/geometry-editor.js');
-  assert.match(editor, /PUBLISHED_DATA_REVISION_KEY/);
+  assert.match(
+    editor,
+    /import \{ publishDerivedDataChange \} from '\.\/derived-data-events\.js';/,
+  );
   assert.match(editor, /publishDerivedDataChange\('geometry-editor'\)/);
   assert.match(editor, /основная карта/);
 });
