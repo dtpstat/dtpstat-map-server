@@ -36,7 +36,8 @@ test('geometry editor is an independent top-level role-protected admin section',
   assert.match(editor, /state\.history\.length > 50/);
   assert.match(editor, /geometry-editor\/merge/);
   assert.match(editor, /\/cut/);
-  assert.match(editor, /window\.confirm/);
+  assert.match(editor, /adminConfirm\(/);
+  assert.doesNotMatch(editor, /window\.confirm/);
 
   assert.match(styles, /grid-template-columns:\s*minmax\(19rem, \.72fr\)[\s\S]*minmax\(30rem, 1\.8fr\)[\s\S]*minmax\(20rem, \.82fr\)/);
   assert.match(styles, /\.geometry-editor-list[\s\S]*overflow:\s*auto/);
