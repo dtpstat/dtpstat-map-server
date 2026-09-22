@@ -26,6 +26,13 @@ function formatSeconds(value) {
   return Number.isInteger(days) ? `${days} дн` : `${days.toFixed(1)} дн`;
 }
 
+function formatMeters(value) {
+  if (!Number.isFinite(value) || value < 0) return '';
+  if (value < 1000) return `${value} м`;
+  const km = value / 1000;
+  return Number.isInteger(km) ? `${km} км` : `${km.toFixed(2)} км`;
+}
+
 function humanValue(input) {
   const value = Number(input.value);
   if (!Number.isFinite(value)) return '';
@@ -34,6 +41,7 @@ function humanValue(input) {
     case 'milliseconds': return formatSeconds(value / 1000);
     case 'seconds': return formatSeconds(value);
     case 'days': return `${value} дн`;
+    case 'meters': return formatMeters(value);
     default: return '';
   }
 }
