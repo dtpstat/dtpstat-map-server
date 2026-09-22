@@ -90,7 +90,7 @@ HTTP_PORT=3002
 
 ## Миграции
 
-Текущая последовательность: `V001…V032`.
+Текущая последовательность: `V001…V033`.
 
 Последние изменения:
 
@@ -111,8 +111,9 @@ HTTP_PORT=3002
 | `V030` | накопительный счётчик фактически сохранённых geometry batches в checkpoint |
 | `V031` | диагностика OSM-объектов без построенной geometry в resumable checkpoint |
 | `V032` | population/asOf/source/attributes на `CITY_BOUNDARIES` и активная проекция в `CITY_POPULATIONS` |
+| `V033` | вертикальное key/value-хранилище `REPORT_CONFIG` вместо растущей singleton-строки |
 
-Следующая migration: **V033+**. Уже опубликованные migrations не редактируются задним числом.
+Следующая migration: **V034+**. Уже опубликованные migrations не редактируются задним числом.
 
 История хранится в:
 
