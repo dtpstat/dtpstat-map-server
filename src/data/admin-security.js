@@ -835,6 +835,8 @@ export function createAdminSecurityService(repository) {
     revokeSession: (userId, sessionId) => repository.revokeSessionById(userId, sessionId),
     revokeOtherSessions: (userId, sessionId) => repository.revokeUserSessions(userId, sessionId),
     getSecuritySettings: () => repository.getSecuritySettings(),
+    getPasswordPolicy: async () =>
+      adminPasswordPolicy(await repository.getSecuritySettings()),
     saveSecuritySettings,
     listIpBlocks: () => repository.listIpBlocks(),
     createIpBlock,
