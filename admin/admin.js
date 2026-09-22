@@ -137,6 +137,10 @@ function createTransferOverlay() {
         <strong class="admin-transfer-percent"></strong>
       </div>
       <p class="admin-transfer-amount"></p>
+      <div class="admin-transfer-processing-status" hidden>
+        <p class="admin-transfer-json-status"></p>
+        <p class="admin-transfer-db-status"></p>
+      </div>
       <p class="admin-transfer-detail"></p>
       <button class="danger admin-transfer-cancel" type="button">Отменить</button>
     </section>
@@ -150,6 +154,9 @@ function createTransferOverlay() {
     progress: root.querySelector('.admin-transfer-progress'),
     percent: root.querySelector('.admin-transfer-percent'),
     amount: root.querySelector('.admin-transfer-amount'),
+    processingStatus: root.querySelector('.admin-transfer-processing-status'),
+    jsonStatus: root.querySelector('.admin-transfer-json-status'),
+    dbStatus: root.querySelector('.admin-transfer-db-status'),
     detail: root.querySelector('.admin-transfer-detail'),
     cancel: root.querySelector('.admin-transfer-cancel'),
   };
@@ -349,6 +356,117 @@ function processingProgress(task) {
   return { label, ratio, amount, detail };
 }
 
+function stableProcessingView(task) {
+  const logs = task?.log ?? [];
+  const prepared = logs.find((entry) =>
+    entry.message === 'Входной поток подготовлен');
+  const parseEntries = logs.filter((entry) =>
+    ['parse', 'parsed'].includes(entry.details?.phase) &&
+    Number.isFinite(Number(entry.details?.decodedBytes)));
+  const latestParse = parseEntries.at(-1) ?? null;
+  const parsed = reverseFind(
+    logs,
+    (entry) => entry.details?.phase === 'parsed',
+  );
+  const databaseEntry = reverseFind(
+    logs,
+    (entry) => ['stage-write', 'stage'].includes(entry.details?.phase),
+  );
+  const current = processingProgress(task);
+
+  if (!latestParse) {
+    return {
+      ...current,
+      jsonStatus: '',
+      databaseStatus: '',
+      stableInputProgress: false,
+    };
+  }
+
+  let expectedJsonBytes = Number(prepared?.details?.expectedJsonBytes);
+  if (!Number.isFinite(expectedJsonBytes) || expectedJsonBytes <= 0) {
+    const transport = task?.parameters?.transport;
+    if (transport !== 'application/zip') {
+      expectedJsonBytes = Number(task?.parameters?.uploadBytes);
+    }
+  }
+
+  const decodedBytes = Math.max(
+    ...parseEntries.map((entry) => Number(entry.details.decodedBytes)),
+  );
+  const itemCount = Math.max(
+    0,
+    ...parseEntries
+      .map((entry) => Number(entry.details?.items))
+      .filter(Number.isFinite),
+  );
+  const ratio =
+    Number.isFinite(expectedJsonBytes) && expectedJsonBytes > 0
+      ? Math.min(1, decodedBytes / expectedJsonBytes)
+      : (parsed ? 1 : null);
+  const amount =
+    Number.isFinite(expectedJsonBytes) && expectedJsonBytes > 0
+      ? `${formatTransferBytes(decodedBytes)} / ${formatTransferBytes(expectedJsonBytes)}`
+      : formatTransferBytes(decodedBytes);
+
+  const jsonStatus = [
+    `JSON: ${formatTransferBytes(decodedBytes)}` +
+      (Number.isFinite(expectedJsonBytes) && expectedJsonBytes > 0
+        ? ` / ${formatTransferBytes(expectedJsonBytes)}`
+        : ''),
+    itemCount > 0
+      ? `${itemCount.toLocaleString('ru-RU')} записей`
+      : null,
+  ].filter(Boolean).join(' · ');
+
+  let databaseStatus = 'PostgreSQL/PostGIS: ожидает следующего пакета';
+  if (databaseEntry) {
+    const details = databaseEntry.details ?? {};
+    const batch = Number(details.batch);
+    const staged = Number(details.stagedPlaces);
+    const batchPlaces = Number(details.batchPlaces);
+    const writing = details.phase === 'stage-write';
+    const parts = [
+      Number.isFinite(batch)
+        ? `пакет ${batch.toLocaleString('ru-RU')}`
+        : null,
+      writing
+        ? 'запись…'
+        : 'записан',
+      Number.isFinite(staged)
+        ? `всего ${staged.toLocaleString('ru-RU')} объектов`
+        : null,
+      writing && Number.isFinite(batchPlaces)
+        ? `в пакете ${batchPlaces.toLocaleString('ru-RU')}`
+        : null,
+    ].filter(Boolean);
+    databaseStatus = `PostgreSQL/PostGIS: ${parts.join(' · ')}`;
+  }
+
+  const currentPhase = reverseFind(
+    logs,
+    (entry) => typeof entry.details?.phase === 'string',
+  )?.details?.phase;
+  const interleaved = ['parse', 'stage-write', 'stage'].includes(currentPhase);
+  const label = parsed
+    ? (interleaved ? 'Входной JSON прочитан' : current.label)
+    : 'Чтение и подготовка входного JSON';
+  const detail = interleaved
+    ? 'JSON и staging обрабатываются потоково; индикатор выше показывает только реальный прогресс чтения входного JSON.'
+    : current.detail;
+
+  return {
+    ...current,
+    label,
+    ratio,
+    amount,
+    detail,
+    jsonStatus,
+    databaseStatus,
+    stableInputProgress: true,
+  };
+}
+
 function showTransferOverlay({ file, taskKey, taskType }) {
   state.transfer = {
     mode: 'upload',
@@ -392,6 +510,7 @@ function renderTransferOverlay() {
     : 'Отменить';
 
   if (transfer.mode === 'upload') {
+    transferOverlay.processingStatus.hidden = true;
     const total = Math.max(0, Number(transfer.total) || 0);
     const loaded = Math.min(total || Number.MAX_SAFE_INTEGER, Number(transfer.loaded) || 0);
     const ratio = total > 0 ? Math.min(1, loaded / total) : null;
@@ -422,6 +541,7 @@ function renderTransferOverlay() {
   }
 
   if (transfer.mode === 'waiting') {
+    transferOverlay.processingStatus.hidden = true;
     transferOverlay.phase.textContent = 'Файл передан';
     transferOverlay.progress.removeAttribute('value');
     transferOverlay.percent.textContent = '';
@@ -435,7 +555,10 @@ function renderTransferOverlay() {
   }
 
   const task = state.task?.id === transfer.taskId ? state.task : null;
-  const progress = processingProgress(task);
+  const progress = stableProcessingView(task);
+  transferOverlay.processingStatus.hidden = !progress.stableInputProgress;
+  transferOverlay.jsonStatus.textContent = progress.jsonStatus ?? '';
+  transferOverlay.dbStatus.textContent = progress.databaseStatus ?? '';
   transferOverlay.phase.textContent = progress.label;
   if (progress.ratio === null) {
     transferOverlay.progress.removeAttribute('value');
