@@ -512,6 +512,13 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
       );
       return;
     }
+    if (progress.phase === 'hierarchy') {
+      console.info(
+        `OSM boundary hierarchy ${progress.processed}/${progress.total}: ` +
+        `batch ${progress.batch}/${progress.batchCount}`,
+      );
+      return;
+    }
     console.info(
       `OSM city update batch ${progress.batch}/${progress.batchCount}: ` +
       `${progress.stagedPlaces}/${progress.indexedPlaces} places staged`,
