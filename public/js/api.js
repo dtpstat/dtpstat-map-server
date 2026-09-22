@@ -33,7 +33,7 @@ export async function loadCities() {
 }
 
 export async function loadLineTypes() {
-  const payload = await getJson('/api/line-types');
+  const payload = await getJson('/api/line-types', { cache: 'no-store' });
   return payload.lineTypes;
 }
 
