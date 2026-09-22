@@ -56,7 +56,10 @@ test('current user and audit rows render profile avatars with fallback initials'
 
   assert.match(editor, /function auditUserCell\(entry\)/);
   assert.match(editor, /if \(entry\.userId\)/);
-  assert.match(editor, /entry\.userId === currentUser\?\.id/);
+  assert.match(
+    editor,
+    /String\(entry\.userId\) === String\(currentUser\?\.id \?\? ''\)/,
+  );
   assert.match(editor, /\/api\/admin\/profile\/avatar\?v=\$\{Date\.now\(\)\}/);
   assert.match(editor, /security-audit-avatar-fallback/);
   assert.match(editor, /image\.hidden = false/);
@@ -80,4 +83,16 @@ test('profile avatar hides fallback only after successful image load', async () 
   assert.match(profile, /image\.hidden = false;[\s\S]*fallback\.hidden = true;/);
   assert.match(profile, /image\.hidden = true;[\s\S]*fallback\.hidden = false;/);
   assert.match(styles, /\.profile-avatar\[hidden\] \{ display: none !important; \}/);
+});
+
+
+test('audit avatars are eager enough to load while initially hidden', async () => {
+  const editor = await read('admin/security-editor-v2.js');
+
+  assert.doesNotMatch(editor, /image\.loading = 'lazy'/);
+  assert.match(editor, /image\.decoding = 'async'/);
+  assert.match(
+    editor,
+    /\/api\/admin\/security\/users\/\$\{encodeURIComponent\(entry\.userId\)\}\/avatar\?v=\$\{Date\.now\(\)\}/,
+  );
 });
