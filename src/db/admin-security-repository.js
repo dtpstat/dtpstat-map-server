@@ -191,6 +191,12 @@ const SECURITY_FIELDS_SQL = `
   session_idle_seconds AS "sessionIdleSeconds",
   session_absolute_seconds AS "sessionAbsoluteSeconds",
   audit_retention_days AS "auditRetentionDays",
+  password_min_length AS "passwordMinLength",
+  password_max_length AS "passwordMaxLength",
+  password_require_lowercase AS "passwordRequireLowercase",
+  password_require_uppercase AS "passwordRequireUppercase",
+  password_require_digit AS "passwordRequireDigit",
+  password_require_special AS "passwordRequireSpecial",
   updated_at AS "updatedAt"
 `;
 
@@ -316,12 +322,18 @@ export function createAdminSecurityRepository(database) {
           max_failed_attempts=$1, failure_window_seconds=$2, lockout_seconds=$3,
           ip_max_failed_attempts=$4, ip_failure_window_seconds=$5, ip_lockout_seconds=$6,
           session_idle_seconds=$7, session_absolute_seconds=$8, audit_retention_days=$9,
+          password_min_length=$10, password_max_length=$11,
+          password_require_lowercase=$12, password_require_uppercase=$13,
+          password_require_digit=$14, password_require_special=$15,
           updated_at=NOW()
         WHERE id=1 RETURNING ${SECURITY_FIELDS_SQL}
       `, [
         settings.maxFailedAttempts, settings.failureWindowSeconds, settings.lockoutSeconds,
         settings.ipMaxFailedAttempts, settings.ipFailureWindowSeconds, settings.ipLockoutSeconds,
         settings.sessionIdleSeconds, settings.sessionAbsoluteSeconds, settings.auditRetentionDays,
+        settings.passwordMinLength, settings.passwordMaxLength,
+        settings.passwordRequireLowercase, settings.passwordRequireUppercase,
+        settings.passwordRequireDigit, settings.passwordRequireSpecial,
       ]);
       if (!result.rows[0]) throw new Error('Admin security settings row is missing; run database migrations');
       return result.rows[0];
