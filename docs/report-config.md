@@ -35,19 +35,27 @@ Backend валидирует модель и компилирует SQL сам.
 
 ## Хранение
 
-`REPORT_CONFIG` — singleton:
+Начиная с `V033`, `REPORT_CONFIG` хранится вертикально:
 
 ```text
-METRICS
-TABLE_COLUMNS
-CSV_COLUMNS
-RANK_SORT
-RANK_METRIC_KEY
-RANK_DIRECTION
-UPDATED_AT
+CONFIG_KEY      CONFIG_VALUE (JSONB)   UPDATED_AT
+metrics         [...]
+table_columns   [...]
+csv_columns     [...]
+rank            {"sort":[...]}
 ```
 
-`RANK_SORT` добавлен в `V024`. Старые `RANK_METRIC_KEY/RANK_DIRECTION` остаются compatibility mirror первого criterion.
+`CONFIG_KEY` — primary key. Новый независимый параметр отчёта добавляется новой
+строкой, а не новой колонкой таблицы. Это позволяет расширять report settings
+без постоянных `ALTER TABLE ... ADD COLUMN`.
+
+Внутри одной настройки связанные структуры остаются JSONB-документами:
+список метрик, описание колонок и ranking policy атомарно валидируются
+приложением.
+
+`V033` переносит данные из прежней singleton-схемы
+`METRICS/TABLE_COLUMNS/CSV_COLUMNS/RANK_SORT/RANK_METRIC_KEY/RANK_DIRECTION`
+без изменения внешнего API или project-settings transfer format.
 
 `CITY_REPORT_VALUES`:
 
