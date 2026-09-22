@@ -121,10 +121,21 @@ if (host) {
     const fallback = host.querySelector('#profile-avatar-fallback');
     const fallbackText = (user.displayName || user.username || '?').trim().slice(0, 1).toUpperCase();
     fallback.textContent = fallbackText;
+    image.onload = null;
+    image.onerror = null;
+
     if (user.hasAvatar) {
+      image.hidden = true;
+      fallback.hidden = false;
+      image.onload = () => {
+        image.hidden = false;
+        fallback.hidden = true;
+      };
+      image.onerror = () => {
+        image.hidden = true;
+        fallback.hidden = false;
+      };
       image.src = `/api/admin/profile/avatar?v=${Date.now()}`;
-      image.hidden = false;
-      fallback.hidden = true;
     } else {
       image.removeAttribute('src');
       image.hidden = true;
