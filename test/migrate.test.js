@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import {
   applyMigrations,
@@ -6,6 +9,7 @@ import {
   renderMigrationSql,
   validateMigrationSequence,
 } from '../scripts/migrate.js';
+import { migrateDatabase } from '../src/db/migration-runner.js';
 
 const migrations = [
   {
@@ -87,9 +91,11 @@ function createClient(appliedRows = [], { legacyHistory = false } = {}) {
 test('migration runner applies every pending version in its own transaction', async () => {
   const client = createClient();
 
-  const version = await applyMigrations(client, migrations);
+  const result = await applyMigrations(client, migrations);
 
-  assert.equal(version, 2);
+  assert.equal(result.version, 2);
+  assert.equal(result.appliedCount, 2);
+  assert.equal(result.totalCount, 2);
   assert.equal(
     client.queries.some((query) => query.text === 'CREATE SCHEMA IF NOT EXISTS buslanes'),
     true,
@@ -175,4 +181,106 @@ test('migration runner refuses changed history without executing SQL', async () 
     client.queries.some((query) => query.text.startsWith('MIGRATION')),
     false,
   );
+});
+
+
+async function withMigrationDirectory(files, callback) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dtpstat-runner-'));
+  try {
+    const directory = path.join(root, 'db', 'migrations');
+    await fs.mkdir(directory, { recursive: true });
+    for (const [fileName, sql] of Object.entries(files)) {
+      await fs.writeFile(path.join(directory, fileName), sql);
+    }
+    return await callback(root);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+}
+
+function autoMigrationPool({ failOnSql = null } = {}) {
+  const queries = [];
+  let released = false;
+  const client = {
+    async query(text, values) {
+      const normalized = text.trim();
+      queries.push({ text: normalized, values });
+      if (failOnSql && normalized.includes(failOnSql)) {
+        throw new Error('synthetic migration failure');
+      }
+      if (normalized.startsWith('SELECT to_regclass')) {
+        return { rows: [{ legacy: null }] };
+      }
+      if (normalized.startsWith('SELECT version, filename, checksum')) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    release() {
+      released = true;
+    },
+  };
+  return {
+    databaseSchema: 'buslanes',
+    queries,
+    get released() { return released; },
+    async connect() { return client; },
+  };
+}
+
+test('automatic migration runner serializes startup with an advisory lock', async () => {
+  await withMigrationDirectory({
+    'V001__base.sql': 'MIGRATION ONE',
+    'V002__next.sql': 'MIGRATION TWO',
+  }, async (projectRoot) => {
+    const pool = autoMigrationPool();
+    const events = [];
+    const result = await migrateDatabase(pool, {
+      projectRoot,
+      schema: 'buslanes',
+      logger(event) { events.push(event); },
+    });
+
+    assert.equal(result.version, 2);
+    assert.equal(result.appliedCount, 2);
+    assert.equal(result.totalCount, 2);
+    assert.deepEqual(
+      events.filter((event) => event.status === 'applied')
+        .map((event) => event.migration.fileName),
+      ['V001__base.sql', 'V002__next.sql'],
+    );
+    assert.equal(
+      pool.queries[0].text,
+      'SELECT pg_advisory_lock(hashtext($1))',
+    );
+    assert.deepEqual(pool.queries[0].values, ['buslanes:migrations']);
+    assert.equal(
+      pool.queries.at(-1).text,
+      'SELECT pg_advisory_unlock(hashtext($1))',
+    );
+    assert.equal(pool.released, true);
+  });
+});
+
+test('automatic migration runner unlocks and releases after migration failure', async () => {
+  await withMigrationDirectory({
+    'V001__base.sql': 'MIGRATION FAIL',
+  }, async (projectRoot) => {
+    const pool = autoMigrationPool({ failOnSql: 'MIGRATION FAIL' });
+
+    await assert.rejects(
+      migrateDatabase(pool, {
+        projectRoot,
+        schema: 'buslanes',
+      }),
+      /synthetic migration failure/,
+    );
+
+    assert.ok(pool.queries.some((query) => query.text === 'ROLLBACK'));
+    assert.equal(
+      pool.queries.at(-1).text,
+      'SELECT pg_advisory_unlock(hashtext($1))',
+    );
+    assert.equal(pool.released, true);
+  });
 });
