@@ -984,8 +984,15 @@ if (form) {
         renderAll();
       });
       actions.append(up, down, remove);
-      row.append(kindLabel, titleLabel, details, actions);
-      card.append(row);
+      if (csv) {
+        row.append(kindLabel, titleLabel, details, actions);
+        card.append(row);
+      } else {
+        row.classList.add('report-column-row-public');
+        row.append(kindLabel, titleLabel, actions);
+        card.append(row);
+        if (details.childElementCount > 0) card.append(details);
+      }
 
       if (!csv) {
         const headerOptions = document.createElement('div');
