@@ -312,29 +312,6 @@ body.admin-transfer-locked { overflow: hidden; }
   font-variant-numeric: tabular-nums;
 }
 
-.admin-transfer-json-status::before {
-  content: 'JSON';
-  display: inline-block;
-  min-width: 8.5rem;
-  margin-right: .5rem;
-  color: var(--text);
-  font-weight: 700;
-}
-
-.admin-transfer-db-status::before {
-  content: 'PostgreSQL/PostGIS';
-  display: inline-block;
-  min-width: 8.5rem;
-  margin-right: .5rem;
-  color: var(--text);
-  font-weight: 700;
-}
-
-.admin-transfer-json-status:not(:empty)::before,
-.admin-transfer-db-status:not(:empty)::before {
-  content: none;
-}
-
 .admin-transfer-detail {
   min-height: 2.7rem;
   margin-top: .35rem;
