@@ -1,5 +1,6 @@
 :root {
   color-scheme: dark;
+  font-size: 14px;
   --bg: #0b1114;
   --panel: #121b1f;
   --panel-2: #172328;
@@ -472,11 +473,30 @@ body.admin-dialog-open { overflow: hidden; }
 }
 .admin-dirty-indicator[hidden] { display: none; }
 
+.admin-human-unit-wrap {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+.admin-human-unit-wrap > input {
+  width: 100%;
+  padding-right: 7.5rem;
+}
 .admin-human-unit {
-  margin-top: -.15rem;
-  color: #b2c2c6;
-  font-size: .67rem;
+  position: absolute;
+  top: 50%;
+  right: .65rem;
+  max-width: 6.4rem;
+  overflow: hidden;
+  color: #a9bcc0;
+  font-size: .66rem;
   font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 .admin-human-unit[hidden] { display: none; }
 
