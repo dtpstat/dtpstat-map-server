@@ -134,6 +134,11 @@ export function createApiRouter({
     next();
   };
 
+  const clearCompletedAdminTask = (_request, _response, next) => {
+    adminTasks.clearCompleted?.();
+    next();
+  };
+
   const progressLog = (context, progress) => {
     let message = `Прогресс: ${progress.phase}`;
     if (progress.phase === 'resume') {
@@ -537,12 +542,14 @@ export function createApiRouter({
     '/admin/import',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
+    clearCompletedAdminTask,
     importLines,
   );
   router.post(
     '/admin/import/lines',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
+    clearCompletedAdminTask,
     importLines,
   );
 
@@ -550,6 +557,7 @@ export function createApiRouter({
     '/admin/import/cities',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
+    clearCompletedAdminTask,
     async (request, response, next) => {
       const dryRun = parseBoolean(request.query.dryRun, false);
       if (dryRun === null) {
@@ -586,6 +594,7 @@ export function createApiRouter({
     '/admin/update',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
+    clearCompletedAdminTask,
     jsonBody(kmlUpdate.maxRequestBodyBytes, 'application/json'),
     (request, response, next) => {
       const hasRequestBody =
@@ -669,6 +678,7 @@ export function createApiRouter({
     '/admin/update/cities',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
+    clearCompletedAdminTask,
     jsonBody(osmCityUpdate.maxRequestBodyBytes, 'application/json'),
     (request, response, next) => {
       const hasRequestBody =
@@ -876,6 +886,7 @@ export function createApiRouter({
     '/admin/populations',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
+    clearCompletedAdminTask,
     async (request, response, next) => {
       const upload = await receivePortableUpload(request, response, next);
       if (!upload) return;
