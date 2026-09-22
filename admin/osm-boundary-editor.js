@@ -48,7 +48,8 @@ if (typeof document !== 'undefined') {
   const refreshButton = document.querySelector('#osm-boundary-refresh');
   const form = document.querySelector('#osm-boundary-form');
   const title = document.querySelector('#osm-boundary-selected-title');
-  const meta = document.querySelector('#osm-boundary-meta');
+  const sourceMeta = document.querySelector('#osm-boundary-source-meta');
+  const geometryMeta = document.querySelector('#osm-boundary-geometry-meta');
   const message = document.querySelector('#osm-boundary-message');
   const mapHost = document.querySelector('#osm-boundary-map');
 
@@ -69,7 +70,7 @@ if (typeof document !== 'undefined') {
     const populationAsOf = field('populationAsOf');
     const populationSource = field('populationSource');
     const attributes = field('attributes');
-    const save = form.querySelector('button[type="submit"]');
+    const save = document.querySelector('#osm-boundary-save');
     const enableBranch = document.querySelector('#osm-boundary-enable-branch');
     const disableBranch = document.querySelector('#osm-boundary-disable-branch');
 
@@ -367,7 +368,8 @@ if (typeof document !== 'undefined') {
         attributes.value = '{}';
         attributes.dataset.initialValue = '{}';
         title.textContent = 'Выберите объект в дереве';
-        meta.replaceChildren();
+        sourceMeta?.replaceChildren();
+        geometryMeta?.replaceChildren();
         updateBranchActions(null);
         renderTree();
         return;
@@ -390,15 +392,18 @@ if (typeof document !== 'undefined') {
       attributes.value = JSON.stringify(territoryAttributes, null, 2);
       attributes.dataset.initialValue = JSON.stringify(territoryAttributes);
       title.textContent = item.displayName;
-      meta.replaceChildren(
+      sourceMeta?.replaceChildren(
         metaItem('OSM', `${item.osmType}/${item.osmId}`),
         metaItem('Исходное имя', item.osmName),
         metaItem('Класс', item.placeType ? `place=${item.placeType}` : 'administrative'),
         metaItem('admin_level', item.adminLevel),
-        metaItem('Площадь, км²', Number(item.areaKm2).toLocaleString('ru-RU', { maximumFractionDigits: 2 })),
         metaItem('DB city_id', item.cityId),
-        metaItem('Население на дату', item.populationAsOf),
-        metaItem('Источник населения', item.populationSource),
+      );
+      geometryMeta?.replaceChildren(
+        metaItem(
+          'Площадь, км²',
+          Number(item.areaKm2).toLocaleString('ru-RU', { maximumFractionDigits: 2 }),
+        ),
       );
       updateBranchActions(item);
       renderTree();
