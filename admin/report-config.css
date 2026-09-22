@@ -251,6 +251,38 @@
   gap: .65rem;
 }
 
+/*
+ * Public table columns are deliberately edited as vertical forms. Column
+ * presentation keeps growing over time, so a horizontal row would make every
+ * new option compete for another slice of the available width.
+ */
+#report-table-columns .report-column-row,
+#report-table-columns .report-column-details,
+#report-table-columns .report-column-header-options {
+  grid-template-columns: 1fr;
+}
+
+#report-table-columns .report-column-row {
+  align-items: stretch;
+}
+
+#report-table-columns .report-column-details {
+  gap: .55rem;
+}
+
+#report-table-columns .report-column-header-options {
+  align-items: stretch;
+}
+
+#report-table-columns .report-row-actions {
+  justify-self: start;
+  justify-content: start;
+}
+
+#report-table-columns .report-header-bold-control {
+  min-height: auto;
+}
+
 .report-header-bold-control {
   min-height: 2.15rem;
   align-items: center;
