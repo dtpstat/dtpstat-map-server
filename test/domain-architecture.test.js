@@ -188,3 +188,25 @@ test('OSM update facade delegates index composition and batch policy', async () 
   assert.match(batchPolicy, /export function assertCompleteBatch\(/u);
   assert.match(batchPolicy, /export function createObjectBatches\(/u);
 });
+
+
+test('OSM update facade delegates geometry batch processing to session', async () => {
+  const source = await fs.readFile(
+    path.join(srcRoot, 'db', 'osm-city-update-service.js'),
+    'utf8',
+  );
+  const geometrySession = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-geometry-session.js'),
+    'utf8',
+  );
+
+  assert.match(source, /processOsmGeometryBatches\(/u);
+  assert.doesNotMatch(source, /buildOsmPlacesBatchQuery/u);
+  assert.doesNotMatch(source, /geometry-504-retry-limit/u);
+  assert.doesNotMatch(source, /splitSizes/u);
+  assert.match(geometrySession, /buildOsmPlacesBatchQuery\(/u);
+  assert.match(geometrySession, /geometry-504-retry-limit/u);
+  assert.match(geometrySession, /splitSizes/u);
+  assert.match(geometrySession, /boundaryUpdateRepository\.stageBatch\(/u);
+  assert.match(geometrySession, /checkpointRepository\.stageBatch\(/u);
+});
