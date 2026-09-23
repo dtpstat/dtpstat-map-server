@@ -1,11 +1,7 @@
 import crypto from 'node:crypto';
 import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
+import { downloadOsmCities } from '../data/osm-city-downloader.js';
 import {
-  downloadOsmCities,
-  OsmCityDownloadError,
-} from '../data/osm-city-downloader.js';
-import {
-  buildOsmPlacesBatchQuery,
   parseOsmCityResponse,
   parseOsmPlaceIdsResponse,
 } from '../data/osm-city-parser.js';
@@ -16,20 +12,15 @@ import {
 } from '../data/osm-city-update-options.js';
 import { createOsmBoundaryUpdateRepository } from '../modules/osm/boundary-update-repository.js';
 import { createOverpassRequestSession } from '../modules/osm/overpass-request-session.js';
+import { objectKey } from '../modules/osm/update-batch-policy.js';
 import {
-  addNameCounts,
-  assertCompleteBatch,
-  createObjectBatches,
-  objectKey,
-} from '../modules/osm/update-batch-policy.js';
-import {
-  addContentChecksums,
   checkpointCompletionChecksum,
   checkpointErrorDetails,
   checkpointMode,
   checkpointSettingsFingerprint,
 } from '../modules/osm/update-checkpoint-policy.js';
 import { OsmCityGeometryError } from '../modules/osm/update-errors.js';
+import { processOsmGeometryBatches } from '../modules/osm/update-geometry-session.js';
 import { loadOsmUpdateIndex } from '../modules/osm/update-index-session.js';
 import { acquireDataImportLock } from './database-locks.js';
 import { rebuildCityBoundaryHierarchy } from './city-boundary-hierarchy.js';
@@ -358,10 +349,6 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         operation.onProgress?.(progress);
       }
 
-      const geometryBatches = createObjectBatches(
-        pendingObjects,
-        options.batchSize,
-      );
       const client = await pool.connect();
       let inTransaction = false;
       try {
@@ -370,143 +357,45 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         if (!checkpointRepository) {
           await boundaryUpdateRepository.createStage(client);
         }
-        let cityPlaces = 0;
-        let townPlaces = 0;
-        let administrativePlaces = 0;
-        let ignoredElements = mode.resume
-          ? checkpoint.ignoredElements
-          : 0;
-        const nameCounts = new Map();
 
-        for (let batchIndex = 0; batchIndex < geometryBatches.length;) {
-          throwIfAdminTaskCancelled(operation.signal);
-          const objects = geometryBatches[batchIndex];
-          const batchNumber = batchIndex + 1;
-          let batchDownload;
-          try {
-            batchDownload = await downloadQuery(
-              buildOsmPlacesBatchQuery(objects, options.queryTimeoutSeconds),
-              {
-                requestPhase: 'geometry',
-                batch: batchNumber,
-                batchCount: geometryBatches.length,
-                objectCount: objects.length,
-              },
-            );
-          } catch (error) {
-            const oversizedResponse =
-              error instanceof OsmCityDownloadError &&
-              error.code === 'response-size-limit';
-            const exhausted504 =
-              error instanceof OsmCityDownloadError &&
-              error.code === 'geometry-504-retry-limit' &&
-              error.statusCode === 504;
-
-            if (oversizedResponse || exhausted504) {
-              if (objects.length === 1) {
-                const object = objects[0];
-                const objectError = new OsmCityDownloadError(
-                  oversizedResponse
-                    ? `OSM object ${objectKey(object)} exceeds the configured single-response size limit`
-                    : `OSM object ${objectKey(object)} still returns HTTP 504 after ${options.maxRetries} retries`,
-                  {
-                    code: oversizedResponse
-                      ? 'response-size-limit'
-                      : 'retry-limit',
-                    statusCode: error.statusCode,
-                    limitBytes: options.maxResponseBytes,
-                    receivedBytes: error.receivedBytes,
-                    finalURL: error.finalURL,
-                  },
-                );
-                objectError.cause = error;
-                throw objectError;
-              }
-
-              const splitAt = Math.ceil(objects.length / 2);
-              const left = objects.slice(0, splitAt);
-              const right = objects.slice(splitAt);
-              geometryBatches.splice(batchIndex, 1, left, right);
-              const progress = {
-                phase: 'split',
-                requestPhase: 'geometry',
-                reason: exhausted504 ? 'http-504' : 'response-size-limit',
-                statusCode: exhausted504 ? 504 : undefined,
-                retryCount: exhausted504 ? error.retryCount : 0,
-                configuredMaxRetries: options.maxRetries,
-                batch: batchNumber,
-                batchCount: geometryBatches.length,
-                objectCount: objects.length,
-                splitSizes: [left.length, right.length],
-                limitBytes: oversizedResponse
-                  ? options.maxResponseBytes
-                  : undefined,
-                indexedPlaces: index.objects.length,
-                stagedPlaces,
-              };
-              reportProgress(progress);
-              operation.onProgress?.(progress);
-              continue;
-            }
-            throw error;
-          }
-
-          const parsed = parseBatch(batchDownload.jsonText);
-          assertCompleteBatch(objects, parsed.places, batchNumber);
-
-          let batchUnbuildableGeometryPlaces = 0;
-          if (checkpointRepository) {
-            checkpoint = await checkpointRepository.stageBatch(
-              checkpoint.id,
-              addContentChecksums(parsed.places),
-              {
-                ...metricDelta(),
-                ignoredElements: parsed.ignoredElements,
-              },
-            );
-            geometryPlaces = Number(checkpoint.geometryObjects ?? 0);
-            unbuildableGeometryPlaces = Number(
-              checkpoint.unbuildableGeometryObjects ?? 0,
-            );
-            batchUnbuildableGeometryPlaces = Number(
-              checkpoint.batchUnbuildableGeometryObjects ?? 0,
-            );
-            rememberPersistedMetrics();
-          } else {
-            await boundaryUpdateRepository.stageBatch(
-              client,
-              parsed.places,
-              batchNumber,
-            );
-            geometryPlaces += parsed.places.length;
-          }
-          throwIfAdminTaskCancelled(operation.signal);
-
-          cityPlaces += parsed.cityPlaces;
-          townPlaces += parsed.townPlaces;
-          administrativePlaces += parsed.administrativePlaces ?? 0;
-          ignoredElements += parsed.ignoredElements;
-          stagedPlaces += parsed.places.length;
-          addNameCounts(nameCounts, parsed.places);
-          const progress = {
-            phase: 'geometry',
-            batch: batchNumber,
-            batchCount: geometryBatches.length,
-            stagedPlaces,
-            geometryPlaces,
-            unbuildableGeometryPlaces,
-            batchUnbuildableGeometryPlaces,
-            indexedPlaces: index.objects.length,
-          };
-          reportProgress(progress);
-          operation.onProgress?.(progress);
-          batchIndex += 1;
-        }
-
+        const geometryResult = await processOsmGeometryBatches({
+          pendingObjects,
+          options,
+          indexedPlaces: index.objects.length,
+          checkpoint,
+          checkpointRepository,
+          boundaryUpdateRepository,
+          client,
+          downloadQuery,
+          parseBatch,
+          metricDelta,
+          rememberPersistedMetrics,
+          initialStagedPlaces: stagedPlaces,
+          initialGeometryPlaces: geometryPlaces,
+          initialUnbuildableGeometryPlaces: unbuildableGeometryPlaces,
+          initialIgnoredElements: mode.resume
+            ? checkpoint.ignoredElements
+            : 0,
+          assertNotCancelled() {
+            throwIfAdminTaskCancelled(operation.signal);
+          },
+          emitProgress(progress) {
+            reportProgress(progress);
+            operation.onProgress?.(progress);
+          },
+        });
+        checkpoint = geometryResult.checkpoint;
+        stagedPlaces = geometryResult.stagedPlaces;
+        geometryPlaces = geometryResult.geometryPlaces;
+        unbuildableGeometryPlaces =
+          geometryResult.unbuildableGeometryPlaces;
+        let cityPlaces = geometryResult.cityPlaces;
+        let townPlaces = geometryResult.townPlaces;
+        let administrativePlaces = geometryResult.administrativePlaces;
+        let ignoredElements = geometryResult.ignoredElements;
+        let duplicateNames = geometryResult.duplicateNames;
+        let batchCount = geometryResult.batchCount;
         let checksum;
-        let duplicateNames = [...nameCounts.values()]
-          .filter((count) => count > 1).length;
-        let batchCount = geometryBatches.length;
 
         if (checkpointRepository) {
           checkpoint = await checkpointRepository.getById(checkpoint.id);
