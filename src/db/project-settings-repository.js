@@ -1,373 +1,58 @@
 import {
-  buildProjectSettingsPlan,
-  normalizePublicThemePreset,
-  ProjectSettingsValidationError,
-} from '../data/project-settings.js';
-import { normalizeMapboxAccessToken } from '../data/mapbox-access-token.js';
-import { normalizePublicDownloadName } from '../data/public-download-name.js';
+  createProjectSettingsService,
+} from '../modules/project/settings-service.js';
 import { acquireDataImportLock } from './database-locks.js';
-import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
-
-const SELECT_SETTINGS_SQL = `
-  SELECT
-    project_name AS "projectName",
-    keywords,
-    footer_html AS "footerHtml",
-    yandex_metrika_id AS "yandexMetrikaId",
-    google_analytics_id AS "googleAnalyticsId",
-    theme_preset AS "themePreset",
-    show_line_labels AS "showLineLabels",
-    show_line_popups AS "showLinePopups",
-    large_city_population_threshold::integer AS "largeCityPopulationThreshold",
-    large_city_area_km2_threshold::double precision AS "largeCityAreaKm2Threshold",
-    public_download_name AS "publicDownloadName",
-    (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured",
-    (city_marker_icon IS NOT NULL) AS "cityMarkerIconConfigured",
-    city_marker_icon_width::integer AS "cityMarkerIconWidth",
-    city_marker_icon_height::integer AS "cityMarkerIconHeight",
-    updated_at AS "updatedAt"
-  FROM project_settings
-  WHERE id = 1
-`;
-
-const SELECT_MAPBOX_TOKEN_SQL = `
-  SELECT mapbox_access_token AS "mapboxAccessToken"
-  FROM project_settings
-  WHERE id = 1
-`;
-
-const SELECT_CITY_MARKER_ICON_SQL = `
-  SELECT
-    city_marker_icon AS data,
-    city_marker_icon_mime AS mime,
-    city_marker_icon_width::integer AS width,
-    city_marker_icon_height::integer AS height
-  FROM project_settings
-  WHERE id = 1
-`;
-
-const SELECT_MAPBOX_BOOTSTRAP_STATE_SQL = `
-  SELECT
-    mapbox_access_token_initialized AS initialized,
-    (mapbox_access_token IS NOT NULL) AS configured
-  FROM project_settings
-  WHERE id = 1
-`;
-
-const UPDATE_SETTINGS_SQL = `
-  UPDATE project_settings
-  SET
-    project_name = $1,
-    keywords = $2::text[],
-    footer_html = $3,
-    yandex_metrika_id = $4,
-    google_analytics_id = $5,
-    theme_preset = COALESCE($6::text, theme_preset),
-    show_line_labels = $7,
-    show_line_popups = COALESCE($8::boolean, show_line_popups),
-    mapbox_access_token = CASE
-      WHEN $9::text IS NULL THEN mapbox_access_token
-      ELSE $9::text
-    END,
-    mapbox_access_token_initialized = CASE
-      WHEN $9::text IS NULL THEN mapbox_access_token_initialized
-      ELSE TRUE
-    END,
-    large_city_population_threshold = $10,
-    large_city_area_km2_threshold = $11,
-    updated_at = now()
-  WHERE id = 1
-  RETURNING
-    project_name AS "projectName",
-    keywords,
-    footer_html AS "footerHtml",
-    yandex_metrika_id AS "yandexMetrikaId",
-    google_analytics_id AS "googleAnalyticsId",
-    theme_preset AS "themePreset",
-    show_line_labels AS "showLineLabels",
-    show_line_popups AS "showLinePopups",
-    large_city_population_threshold::integer AS "largeCityPopulationThreshold",
-    large_city_area_km2_threshold::double precision AS "largeCityAreaKm2Threshold",
-    public_download_name AS "publicDownloadName",
-    (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured",
-    (city_marker_icon IS NOT NULL) AS "cityMarkerIconConfigured",
-    city_marker_icon_width::integer AS "cityMarkerIconWidth",
-    city_marker_icon_height::integer AS "cityMarkerIconHeight",
-    updated_at AS "updatedAt"
-`;
-
-const UPDATE_PUBLIC_DOWNLOAD_NAME_SQL = `
-  UPDATE project_settings
-  SET
-    public_download_name = $1,
-    updated_at = now()
-  WHERE id = 1
-  RETURNING
-    public_download_name AS "publicDownloadName",
-    updated_at AS "updatedAt"
-`;
-
-const UPDATE_CITY_MARKER_ICON_SQL = `
-  UPDATE project_settings
-  SET
-    city_marker_icon = $1,
-    city_marker_icon_mime = $2,
-    city_marker_icon_width = $3,
-    city_marker_icon_height = $4,
-    updated_at = now()
-  WHERE id = 1
-  RETURNING
-    TRUE AS "cityMarkerIconConfigured",
-    city_marker_icon_width::integer AS "cityMarkerIconWidth",
-    city_marker_icon_height::integer AS "cityMarkerIconHeight",
-    updated_at AS "updatedAt"
-`;
-
-const CLEAR_CITY_MARKER_ICON_SQL = `
-  UPDATE project_settings
-  SET
-    city_marker_icon = NULL,
-    city_marker_icon_mime = NULL,
-    city_marker_icon_width = NULL,
-    city_marker_icon_height = NULL,
-    updated_at = now()
-  WHERE id = 1
-  RETURNING
-    FALSE AS "cityMarkerIconConfigured",
-    NULL::integer AS "cityMarkerIconWidth",
-    NULL::integer AS "cityMarkerIconHeight",
-    updated_at AS "updatedAt"
-`;
-
-const BOOTSTRAP_MAPBOX_TOKEN_SQL = `
-  UPDATE project_settings
-  SET
-    mapbox_access_token = $1,
-    mapbox_access_token_initialized = TRUE,
-    updated_at = NOW()
-  WHERE id = 1
-    AND mapbox_access_token_initialized = FALSE
-  RETURNING
-    (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured"
-`;
-
-function splitProjectSettingsPayload(payload) {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    throw new ProjectSettingsValidationError('Request body must be a JSON object');
-  }
-  const hasShowLinePopups = Object.hasOwn(payload, 'showLinePopups');
-  const {
-    themePreset: rawThemePreset,
-    showLineLabels = false,
-    showLinePopups: rawShowLinePopups,
-    mapboxAccessToken = null,
-    largeCityPopulationThreshold = 400000,
-    largeCityAreaKm2Threshold = null,
-    ...base
-  } = payload;
-  if (typeof showLineLabels !== 'boolean') {
-    throw new ProjectSettingsValidationError('showLineLabels must be boolean');
-  }
-  if (hasShowLinePopups && typeof rawShowLinePopups !== 'boolean') {
-    throw new ProjectSettingsValidationError('showLinePopups must be boolean');
-  }
-  const populationThreshold = Number(largeCityPopulationThreshold);
-  if (
-    !Number.isSafeInteger(populationThreshold) ||
-    populationThreshold <= 0 ||
-    populationThreshold > 2147483647
-  ) {
-    throw new ProjectSettingsValidationError(
-      'largeCityPopulationThreshold must be a positive integer',
-    );
-  }
-  const areaThreshold = largeCityAreaKm2Threshold === null ||
-      largeCityAreaKm2Threshold === undefined ||
-      largeCityAreaKm2Threshold === ''
-    ? null
-    : Number(largeCityAreaKm2Threshold);
-  if (areaThreshold !== null && (!Number.isFinite(areaThreshold) || areaThreshold < 0)) {
-    throw new ProjectSettingsValidationError(
-      'largeCityAreaKm2Threshold must be a non-negative number or null',
-    );
-  }
-  return {
-    plan: buildProjectSettingsPlan(base),
-    themePreset: rawThemePreset === undefined
-      ? null
-      : normalizePublicThemePreset(rawThemePreset),
-    showLineLabels,
-    showLinePopups: hasShowLinePopups ? rawShowLinePopups : null,
-    mapboxAccessToken: normalizeMapboxAccessToken(mapboxAccessToken, { optional: true }),
-    largeCityPopulationThreshold: populationThreshold,
-    largeCityAreaKm2Threshold: areaThreshold,
-  };
-}
+import {
+  createProjectSettingsStorageRepository,
+} from './project-settings-storage-repository.js';
+import {
+  RECALCULATE_CITY_STATISTICS_SQL,
+} from './recalculate-city-statistics.js';
 
 /**
- * @param {{ query: (text: string, values?: unknown[]) => Promise<{rows: any[]}> }} database
- * @param {{ styleUrl?: string, initialCenter?: number[], initialZoom?: number }} publicMapDefaults
+ * DB composition adapter for project settings.
+ *
+ * @param {{
+ *   query: (text: string, values?: unknown[]) => Promise<any>,
+ *   connect?: () => Promise<any>,
+ *   databaseSchema?: string
+ * }} database
+ * @param {{
+ *   styleUrl?: string,
+ *   initialCenter?: number[],
+ *   initialZoom?: number
+ * }} publicMapDefaults
+ * @param {{
+ *   storage?: ReturnType<typeof createProjectSettingsStorageRepository>,
+ *   acquireLock?: (client: any, pool: any) => Promise<void>,
+ *   recalculateStatistics?: (queryable: any) => Promise<any>,
+ *   recalculateStatisticsSql?: string
+ * }} [dependencies]
  */
-export function createProjectSettingsRepository(database, publicMapDefaults = {}) {
-  async function get() {
-    const result = await database.query(SELECT_SETTINGS_SQL);
-    if (!result.rows[0]) {
-      throw new Error('Project settings row is missing; run database migrations');
-    }
-    return result.rows[0];
-  }
+export function createProjectSettingsRepository(
+  database,
+  publicMapDefaults = {},
+  dependencies = {},
+) {
+  const recalculateStatisticsSql =
+    dependencies.recalculateStatisticsSql ??
+    RECALCULATE_CITY_STATISTICS_SQL;
 
-  async function getMapboxAccessToken() {
-    const result = await database.query(SELECT_MAPBOX_TOKEN_SQL);
-    if (!result.rows[0]) {
-      throw new Error('Project settings row is missing; run database migrations');
-    }
-    return result.rows[0].mapboxAccessToken ?? null;
-  }
-
-  async function getCityMarkerIcon() {
-    const result = await database.query(SELECT_CITY_MARKER_ICON_SQL);
-    const row = result.rows[0];
-    if (!row) {
-      throw new Error('Project settings row is missing; run database migrations');
-    }
-    if (!row.data) return null;
-    return {
-      data: row.data,
-      mime: row.mime,
-      width: row.width,
-      height: row.height,
-    };
-  }
-
-  async function getPublicMapConfig() {
-    return {
-      accessToken: await getMapboxAccessToken(),
-      styleUrl: publicMapDefaults.styleUrl,
-      initialCenter: publicMapDefaults.initialCenter,
-      initialZoom: publicMapDefaults.initialZoom,
-    };
-  }
-
-  async function bootstrapMapboxAccessToken(value) {
-    const stateResult = await database.query(SELECT_MAPBOX_BOOTSTRAP_STATE_SQL);
-    const state = stateResult.rows[0];
-    if (!state) {
-      throw new Error('Project settings row is missing; run database migrations');
-    }
-    if (state.initialized) {
-      return { initialized: false, configured: Boolean(state.configured) };
-    }
-
-    const token = normalizeMapboxAccessToken(value, { optional: true });
-    if (!token) {
-      return { initialized: false, configured: false };
-    }
-    const result = await database.query(BOOTSTRAP_MAPBOX_TOKEN_SQL, [token]);
-    return {
-      initialized: result.rows.length > 0,
-      configured: Boolean(result.rows[0]?.mapboxAccessTokenConfigured),
-    };
-  }
-
-  async function save(payload) {
-    const {
-      plan,
-      themePreset,
-      showLineLabels,
-      showLinePopups,
-      mapboxAccessToken,
-      largeCityPopulationThreshold,
-      largeCityAreaKm2Threshold,
-    } = splitProjectSettingsPayload(payload);
-    const values = [
-      plan.projectName,
-      plan.keywords,
-      plan.footerHtml,
-      plan.yandexMetrikaId,
-      plan.googleAnalyticsId,
-      themePreset,
-      showLineLabels,
-      showLinePopups,
-      mapboxAccessToken,
-      largeCityPopulationThreshold,
-      largeCityAreaKm2Threshold,
-    ];
-
-    // Production uses a Pool, so keep the threshold update and derived city
-    // classification in one transaction. The query-only fallback is retained
-    // for small isolated unit-test repositories.
-    if (typeof database.connect !== 'function') {
-      const result = await database.query(UPDATE_SETTINGS_SQL, values);
-      await database.query(RECALCULATE_CITY_STATISTICS_SQL);
-      if (!result.rows[0]) {
-        throw new Error(
-          'Project settings row is missing; run database migrations',
-        );
-      }
-      return result.rows[0];
-    }
-
-    const client = await database.connect();
-    try {
-      await client.query('BEGIN');
-      await acquireDataImportLock(client, database);
-      const result = await client.query(UPDATE_SETTINGS_SQL, values);
-      if (!result.rows[0]) {
-        throw new Error(
-          'Project settings row is missing; run database migrations',
-        );
-      }
-      await client.query(RECALCULATE_CITY_STATISTICS_SQL);
-      await client.query('COMMIT');
-      return result.rows[0];
-    } catch (error) {
-      await client.query('ROLLBACK').catch(() => {});
-      throw error;
-    } finally {
-      client.release();
-    }
-  }
-
-  async function savePublicDownloadName(value) {
-    const publicDownloadName = normalizePublicDownloadName(value);
-    const result = await database.query(UPDATE_PUBLIC_DOWNLOAD_NAME_SQL, [publicDownloadName]);
-    if (!result.rows[0]) {
-      throw new Error('Project settings row is missing; run database migrations');
-    }
-    return result.rows[0];
-  }
-
-  async function saveCityMarkerIcon(icon) {
-    const result = await database.query(UPDATE_CITY_MARKER_ICON_SQL, [
-      icon.data,
-      icon.mime,
-      icon.width,
-      icon.height,
-    ]);
-    if (!result.rows[0]) {
-      throw new Error('Project settings row is missing; run database migrations');
-    }
-    return result.rows[0];
-  }
-
-  async function clearCityMarkerIcon() {
-    const result = await database.query(CLEAR_CITY_MARKER_ICON_SQL);
-    if (!result.rows[0]) {
-      throw new Error('Project settings row is missing; run database migrations');
-    }
-    return result.rows[0];
-  }
-
-  return {
-    get,
-    save,
-    savePublicDownloadName,
-    getMapboxAccessToken,
-    getCityMarkerIcon,
-    getPublicMapConfig,
-    bootstrapMapboxAccessToken,
-    saveCityMarkerIcon,
-    clearCityMarkerIcon,
-  };
+  return createProjectSettingsService(
+    database,
+    publicMapDefaults,
+    {
+      ...dependencies,
+      storage:
+        dependencies.storage ??
+        createProjectSettingsStorageRepository(),
+      acquireLock:
+        dependencies.acquireLock ??
+        acquireDataImportLock,
+      recalculateStatistics:
+        dependencies.recalculateStatistics ??
+        ((queryable) =>
+          queryable.query(recalculateStatisticsSql)),
+    },
+  );
 }
