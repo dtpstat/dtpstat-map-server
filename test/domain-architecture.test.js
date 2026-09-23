@@ -802,7 +802,7 @@ test('portable export application service separates JSON framing from DB storage
   assert.match(service, /streamCityBoundaries/u);
   assert.match(service, /streamPopulationRegions/u);
   assert.match(service, /storage\.streamLineItems\(/u);
-  assert.match(service, /schemaVersion\\":3/u);
+  assert.match(service, /schemaVersion":3/u);
   assert.doesNotMatch(service, /DECLARE portable_/u);
   assert.doesNotMatch(service, /ST_AsGeoJSON/u);
   assert.doesNotMatch(service, /WITH RECURSIVE ancestry/u);
