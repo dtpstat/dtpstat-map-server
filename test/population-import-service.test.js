@@ -464,6 +464,97 @@ test('legacy schema v2 without OSM identity remains supported', async () => {
   assert.equal(pool.stageRows[0].cityOsmId, null);
 });
 
+
+test('v2+ name fallback uses OSM aliases and linked application city names', async () => {
+  const pool = createFakePool();
+  const service = createPopulationImportService(pool);
+  const payload = {
+    schemaVersion: 2,
+    regions: [{
+      name: 'Республика Татарстан',
+      attributes: {},
+      cities: [{
+        name: 'Казань',
+        population: 1318604,
+        attributes: {},
+      }],
+    }],
+  };
+
+  await service.updateFromJson(payload);
+
+  const resolutionSql = pool.queries.find((query) =>
+    query.startsWith('CREATE TEMP TABLE population_transfer_resolved'));
+  assert.ok(resolutionSql);
+
+  for (const alias of [
+    "boundary.osm_name",
+    "boundary.tags ->> 'name:ru'",
+    "boundary.tags ->> 'official_name:ru'",
+    "boundary.tags ->> 'official_name'",
+    "boundary.tags ->> 'short_name:ru'",
+    "boundary.tags ->> 'loc_name:ru'",
+    "boundary.tags ->> 'alt_name:ru'",
+    "boundary.tags ->> 'alt_name'",
+  ]) {
+    assert.match(resolutionSql, new RegExp(
+      alias.replace(/[.*+?^$\{\}()|[\]\\]/g, '\\test('legacy schema v2 without OSM identity remains supported', async () => {
+  const pool = createFakePool();
+  const service = createPopulationImportService(pool);
+
+  const result = await service.updateFromJson(upload);
+
+  assert.equal(result.cities, 1);
+  assert.equal(result.partial, false);
+  assert.equal(pool.stageRows[0].regionOsmType, null);
+  assert.equal(pool.stageRows[0].regionOsmId, null);
+  assert.equal(pool.stageRows[0].cityOsmType, null);
+  assert.equal(pool.stageRows[0].cityOsmId, null);
+});
+'),
+    ));
+  }
+
+  assert.match(resolutionSql, /boundary\.tags \? 'ISO3166-2'/);
+  assert.match(resolutionSql, /DENSE_RANK\(\) OVER/);
+  assert.match(resolutionSql, /application_city\.name/);
+  assert.match(resolutionSql, /application_city\.full_name/);
+  assert.match(
+    resolutionSql,
+    /boundary\.place_type IN \('city', 'town'\)[\s\S]*OR boundary\.city_id IS NOT NULL/,
+  );
+  assert.match(
+    resolutionSql,
+    /WHEN boundary\.city_id IS NOT NULL THEN 0/,
+  );
+  assert.match(
+    resolutionSql,
+    /WHEN boundary\.is_active THEN 0/,
+  );
+});
+
+test('v3 entries without OSM identity use the same v2+ name fallback', async () => {
+  const pool = createFakePool();
+  const service = createPopulationImportService(pool);
+  const payload = {
+    schemaVersion: 3,
+    regions: [{
+      name: 'Республика Башкортостан',
+      cities: [{
+        name: 'Уфа',
+        population: 1163304,
+      }],
+    }],
+  };
+
+  const result = await service.updateFromJson(payload);
+
+  assert.equal(result.cities, 1);
+  assert.equal(result.partial, false);
+  assert.equal(pool.stageRows[0].regionOsmId, null);
+  assert.equal(pool.stageRows[0].cityOsmId, null);
+});
+
 test('mixed exact and name-only entries resolving to one boundary skip duplicate target', async () => {
   const statuses = [
     {
