@@ -23,9 +23,9 @@
   min-height: 30rem;
   display: grid;
   grid-template-columns:
-    minmax(18rem, .68fr)
-    minmax(28rem, 1.65fr)
-    minmax(24rem, 1fr);
+    minmax(17rem, .68fr)
+    minmax(28rem, 1.72fr)
+    minmax(22rem, .95fr);
   gap: .85rem;
 }
 .osm-boundary-section-card .osm-boundary-layout {
@@ -117,7 +117,7 @@
 }
 .osm-boundary-node-button {
   width: 100%;
-  padding: .45rem .55rem;
+  padding: .38rem .48rem;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -125,6 +125,7 @@
   text-align: left;
   color: var(--text);
   background: transparent;
+  font-size: .72rem;
   font-weight: 600;
 }
 .osm-boundary-node-button:hover { background: var(--panel-2); filter: none !important; }
@@ -207,9 +208,9 @@
 }
 .osm-boundary-edit-group {
   min-width: 0;
-  padding: .58rem;
+  padding: .5rem;
   display: grid;
-  gap: .52rem;
+  gap: .42rem;
   border: 1px solid #233840;
   border-radius: 8px;
   background: rgb(12 20 23 / 62%);
@@ -217,7 +218,7 @@
 .osm-boundary-edit-group h4 {
   margin: 0;
   color: #dbe9eb;
-  font-size: .76rem;
+  font-size: .72rem;
 }
 .osm-boundary-group-help {
   margin: -.2rem 0 0;
@@ -257,6 +258,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--text);
+  font-size: .72rem;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
