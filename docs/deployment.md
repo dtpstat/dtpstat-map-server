@@ -93,9 +93,11 @@ V030__osm_checkpoint_batch_count.sql
 V031__unbuildable_osm_checkpoint_geometry.sql
 V032__boundary_population_attributes.sql
 V033__vertical_report_config.sql
+V034__admin_password_policy.sql
+V035__osm_editor_role.sql
 ```
 
-Назначение `V023…V033`:
+Назначение `V023…V035`:
 
 - `V023` — logical `FULL_NAME` OSM boundary, merge relation fragments по `PLACE_TYPE + FULL_NAME`, sync `CITIES.FULL_NAME`;
 - `V024` — ordered `REPORT_CONFIG.RANK_SORT`;
@@ -107,9 +109,11 @@ V033__vertical_report_config.sql
 - `V030` — cumulative staged batch count для resumable OSM update;
 - `V031` — сохранение/диагностика OSM objects, для которых geometry не удалось построить;
 - `V032` — boundary-owned population/asOf/source/attributes и синхронизация активной population projection;
-- `V033` — перенос `REPORT_CONFIG` на вертикальное `CONFIG_KEY/CONFIG_VALUE` storage без изменения внешнего report API.
+- `V033` — перенос `REPORT_CONFIG` на вертикальное `CONFIG_KEY/CONFIG_VALUE` storage без изменения внешнего report API;
+- `V034` — настраиваемая политика паролей администраторов;
+- `V035` — отдельное право доступа к OSM object editor.
 
-Следующая migration: **V034+**. Опубликованные migration files не изменяются задним числом.
+Следующая migration: **V036+**. Опубликованные migration files не изменяются задним числом.
 
 Startup автоматически применяет pending migrations под PostgreSQL advisory lock, затем повторно сверяет `<DATABASE_SCHEMA>.schema_versions` с набором `db/migrations`. Modified/gapped/newer history или ошибка SQL считаются startup error: HTTP listeners не открываются. `npm run db:migrate` остаётся ручной preflight-командой, но для обычного restart больше не обязателен.
 
