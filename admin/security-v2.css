@@ -369,8 +369,8 @@ body.security-modal-open { overflow: hidden; }
   background-repeat: no-repeat;
   background-size: cover;
 }
-.security-user-avatar.has-image .security-user-avatar-fallback,
-.security-audit-avatar.has-image .security-audit-avatar-fallback {
+.security-user-avatar.is-image-loaded .security-user-avatar-fallback,
+.security-audit-avatar.is-image-loaded .security-audit-avatar-fallback {
   opacity: 0;
 }
 
