@@ -109,3 +109,43 @@ test('admin authorization does not convert permission 403 into session expiry', 
     false,
   );
 });
+
+
+test('OSM editor permission is independent from broad data management', async () => {
+  const adminAuth = createAdminAuthorization({
+    async authenticateRequest() {
+      return {
+        status: 'success',
+        authMethod: 'session',
+        sessionId: 14,
+        sessionEffectiveExpiresAt: '2026-09-20T10:30:00.000Z',
+        user: {
+          id: 3,
+          username: 'osm-editor',
+          isSuperuser: false,
+          canManageData: false,
+          canEditOsm: true,
+          mustChangePassword: false,
+        },
+      };
+    },
+  });
+  const req = request();
+  const res = response();
+  let osmNext = false;
+
+  await adminAuth.requireOsmEditor(req, res, () => {
+    osmNext = true;
+  });
+
+  assert.equal(osmNext, true);
+
+  const dataReq = request();
+  const dataRes = response();
+  let dataNext = false;
+  await adminAuth.requireData(dataReq, dataRes, () => {
+    dataNext = true;
+  });
+  assert.equal(dataNext, false);
+  assert.equal(dataRes.statusCode, 403);
+});
