@@ -162,22 +162,26 @@ test('OSM object editor is a top-level admin section with population editing', a
   assert.doesNotMatch(editor, /globalThis\.L|tile\.openstreetmap\.org|Leaflet/);
   assert.match(
     styles,
-    /grid-template-columns:\s*minmax\(18rem, \.68fr\)[\s\S]*minmax\(28rem, 1\.65fr\)[\s\S]*minmax\(24rem, 1fr\)/,
+    /grid-template-columns:\s*minmax\(17rem, \.68fr\)[\s\S]*minmax\(28rem, 1\.72fr\)[\s\S]*minmax\(22rem, \.95fr\)/,
   );
   assert.ok(
     html.indexOf('Данные территории') < html.indexOf('Источник OSM'),
-    'editable territory data must stay above read-only OSM metadata',
+    'OSM source metadata must stay inside the territory-data flow',
   );
   assert.ok(
     html.indexOf('Источник OSM') < html.indexOf('Статистика геометрии'),
-    'OSM source metadata must stay next to geometry statistics',
+    'OSM source metadata must remain before geometry statistics',
+  );
+  assert.match(
+    html,
+    /osm-boundary-edit-group-territory[\s\S]*osm-boundary-source-inline[\s\S]*osm-boundary-source-meta[\s\S]*<\/section>[\s\S]*osm-boundary-edit-group-geometry/,
   );
   assert.match(styles, /#osm-boundary-form[\s\S]*flex-direction:\s*column/);
   assert.match(styles, /\.osm-boundary-tree-panel[\s\S]*flex-direction:\s*column/);
   assert.match(styles, /\.osm-boundary-tree[\s\S]*overflow:\s*auto/);
   assert.match(styles, /\.osm-boundary-primary-actions/);
   assert.match(styles, /display:\s*flex/);
-  assert.match(styles, /\.osm-boundary-edit-group-source/);
+  assert.match(styles, /\.osm-boundary-source-inline/);
   assert.match(styles, /\.osm-boundary-edit-group-territory/);
   assert.match(styles, /\.osm-boundary-edit-group-geometry/);
   assert.match(styles, /\.osm-boundary-state-legend/);
