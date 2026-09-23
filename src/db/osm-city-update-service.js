@@ -5,11 +5,6 @@ import {
   parseOsmCityResponse,
   parseOsmPlaceIdsResponse,
 } from '../data/osm-city-parser.js';
-import {
-  normalizeOsmUpdateUrl,
-  OsmCityUpdateValidationError,
-  resolveOsmCityUpdateRequest,
-} from '../data/osm-city-update-options.js';
 import { createOsmBoundaryUpdateRepository } from '../modules/osm/boundary-update-repository.js';
 import { createOverpassRequestSession } from '../modules/osm/overpass-request-session.js';
 import {
@@ -26,7 +21,14 @@ import { OsmCityGeometryError } from '../modules/osm/update-errors.js';
 import { commitOsmBoundaryUpdate } from '../modules/osm/update-commit-session.js';
 import { processOsmGeometryBatches } from '../modules/osm/update-geometry-session.js';
 import { loadOsmUpdateIndex } from '../modules/osm/update-index-session.js';
+import { reportOsmUpdateProgress } from '../modules/osm/update-progress-reporter.js';
+import {
+  buildOsmUpdateResult,
+  buildOsmUpdateRunValues,
+  finalizeOsmUpdateResult,
+} from '../modules/osm/update-result.js';
 import { createOsmRequestMetricsState } from '../modules/osm/update-request-metrics.js';
+import { resolveOsmUpdateRuntimeOptions } from '../modules/osm/update-runtime-options.js';
 import { acquireDataImportLock } from './database-locks.js';
 import { rebuildCityBoundaryHierarchy } from './city-boundary-hierarchy.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
@@ -88,54 +90,8 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
     dependencies.boundaryUpdateRepository ?? createOsmBoundaryUpdateRepository();
   const sleep = dependencies.sleep ?? abortableDelay;
   const now = dependencies.now ?? Date.now;
-  const reportProgress = dependencies.reportProgress ?? ((progress) => {
-    if (progress.phase === 'resume') {
-      console.info(
-        `OSM city update resumed checkpoint ${progress.checkpointId}: ` +
-        `${progress.stagedPlaces}/${progress.indexedPlaces} already staged, ` +
-        `${progress.remainingPlaces} remaining`,
-      );
-      return;
-    }
-    if (progress.phase === 'index') {
-      console.info(
-        `OSM city update index ${progress.indexPart}/${progress.indexPartCount}: ` +
-        `${progress.indexedPlaces} place IDs loaded`,
-      );
-      return;
-    }
-    if (progress.phase === 'retry') {
-      const reason = progress.retryKind === 'network'
-        ? `network ${progress.networkCode ?? progress.networkMessage ?? 'failure'}`
-        : `HTTP ${progress.statusCode}`;
-      console.warn(
-        `OSM city update ${reason}: retry ` +
-        `${progress.attempt}/${progress.maxRetries} in ${progress.waitMs} ms`,
-      );
-      return;
-    }
-    if (progress.phase === 'split') {
-      const reason = progress.reason === 'http-504'
-        ? `HTTP 504 after ${progress.retryCount} retries`
-        : `response exceeded ${progress.limitBytes} bytes`;
-      console.warn(
-        `OSM geometry batch ${progress.batch}: ${reason}; split ` +
-        `${progress.objectCount} objects into ${progress.splitSizes.join('+')}`,
-      );
-      return;
-    }
-    if (progress.phase === 'hierarchy') {
-      console.info(
-        `OSM boundary hierarchy ${progress.processed}/${progress.total}: ` +
-        `batch ${progress.batch}/${progress.batchCount}`,
-      );
-      return;
-    }
-    console.info(
-      `OSM city update batch ${progress.batch}/${progress.batchCount}: ` +
-      `${progress.stagedPlaces}/${progress.indexedPlaces} places staged`,
-    );
-  });
+  const reportProgress =
+    dependencies.reportProgress ?? reportOsmUpdateProgress;
 
   return {
     async checkpointStatus() {
@@ -159,41 +115,12 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
      */
     async update(body, query = {}, operation = {}) {
       throwIfAdminTaskCancelled(operation.signal);
-      const savedSettings = settingsRepository
-        ? await settingsRepository.get()
-        : null;
-      if (savedSettings?.sourceURL) {
-        const savedSourceURL = normalizeOsmUpdateUrl(
-          savedSettings.sourceURL,
-          config.allowedHosts,
-        );
-        if (config.allowedURLs && !config.allowedURLs.has(savedSourceURL)) {
-          throw new OsmCityUpdateValidationError(
-            `Saved OSM URL is no longer allowed by deployment configuration: ${savedSourceURL}`,
-          );
-        }
-      }
-      const runtimeConfig = savedSettings
-        ? {
-            ...config,
-            url: savedSettings.sourceURL,
-            includeCity: savedSettings.includeCity,
-            includeTown: savedSettings.includeTown,
-            includeAdministrative: savedSettings.includeAdministrative,
-            adminLevelMin: savedSettings.adminLevelMin,
-            adminLevelMax: savedSettings.adminLevelMax,
-            batchSize: savedSettings.batchSize,
-            minDelayMs: savedSettings.minDelayMs,
-            timeoutMs: savedSettings.timeoutMs,
-            queryTimeoutSeconds: savedSettings.queryTimeoutSeconds,
-            maxResponseBytes: savedSettings.maxResponseBytes,
-            maxTotalBytes: savedSettings.maxTotalBytes,
-            maxRetries: savedSettings.maxRetries,
-            retryBaseDelayMs: savedSettings.retryBaseDelayMs,
-            retryMaxDelayMs: savedSettings.retryMaxDelayMs,
-          }
-        : config;
-      const options = resolveOsmCityUpdateRequest(body, query, runtimeConfig);
+      const options = await resolveOsmUpdateRuntimeOptions({
+        settingsRepository,
+        config,
+        body,
+        query,
+      });
       const mode = checkpointMode(query);
       const settingsFingerprint = checkpointSettingsFingerprint(options);
       let checkpoint = await prepareOsmCheckpoint({
@@ -359,22 +286,19 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         }
         const requestMetricSnapshot = requestMetricsState.snapshot();
 
-        const runValues = [
-          options.url,
+        const runValues = buildOsmUpdateRunValues({
+          options,
           checksum,
-          requestMetricSnapshot.downloadedBytes,
-          index.sourceElements,
+          requestMetrics: requestMetricSnapshot,
+          index,
           geometryPlaces,
           ignoredElements,
-          index.osmTimestamp,
           cityPlaces,
           townPlaces,
           duplicateNames,
           administrativePlaces,
-          index.duplicateIndexObjects,
-          options.batchSize,
           batchCount,
-        ];
+        });
 
         const commitResult = await commitOsmBoundaryUpdate({
           client,
@@ -414,56 +338,32 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           onCommit: operation.onCommit,
         });
 
-        const result = {
-          dryRun: options.dryRun,
-          sourceURL: options.url,
-          indexFinalURLs: [...indexFinalURLs],
-          indexRequestCount: indexQueries.length,
-          downloadedBytes: requestMetricSnapshot.downloadedBytes,
-          sourceElements: index.sourceElements,
-          indexedPlaces: index.objects.length,
-          importedPlaces: geometryPlaces,
+        const result = buildOsmUpdateResult({
+          options,
+          indexQueries,
+          indexFinalURLs,
+          requestMetrics: requestMetricSnapshot,
+          index,
+          geometryPlaces,
           unbuildableGeometryPlaces,
           cityPlaces,
           townPlaces,
           administrativePlaces,
-          duplicateIndexObjects: index.duplicateIndexObjects,
           duplicateNames,
           ignoredElements,
-          batchSize: options.batchSize,
           batchCount,
-          maxResponseBytes: options.maxResponseBytes,
-          maxTotalBytes: options.maxTotalBytes,
-          minDelayMs: options.minDelayMs,
-          maxRetries: options.maxRetries,
-          requestAttemptCount: requestMetricSnapshot.requestAttemptCount,
-          retryCount: requestMetricSnapshot.retryCount,
-          retryWaitMs: requestMetricSnapshot.retryWaitMs,
-          throttleWaitMs: requestMetricSnapshot.throttleWaitMs,
           restoredGeometryLinks: commitResult.restoredGeometryLinks,
-          osmTimestamp: index.osmTimestamp,
           checksum,
-          checkpointId: checkpoint?.id ?? null,
-          resumed: mode.resume,
+          checkpoint,
+          mode,
           reusedObjects: stagedKeys.size,
-          completedAt: new Date().toISOString(),
-        };
+        });
 
-        if (!commitResult.committed) {
-          return {
-            ...result,
-            checkpointStatus: checkpointRepository ? 'ready' : null,
-            resumable: Boolean(checkpointRepository),
-          };
-        }
-
-        return {
-          ...result,
-          checkpointStatus: checkpointRepository ? 'completed' : null,
-          resumable: false,
-          updateRunId: commitResult.run.id,
-          completedAt: commitResult.run.createdAt,
-        };
+        return finalizeOsmUpdateResult({
+          result,
+          commitResult,
+          checkpointEnabled: Boolean(checkpointRepository),
+        });
       } catch (error) {
         try {
           await persistOsmCheckpointFailure({
