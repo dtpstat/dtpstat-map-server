@@ -5,6 +5,7 @@ const USER_FIELDS_SQL = `
   email,
   can_manage_data AS "canManageData",
   can_manage_interface AS "canManageInterface",
+  can_edit_osm AS "canEditOsm",
   can_manage_users AS "canManageUsers",
   can_view_audit AS "canViewAudit",
   can_manage_security AS "canManageSecurity",
@@ -40,6 +41,7 @@ const SESSION_USER_FIELDS = `
   users.email,
   users.can_manage_data AS "canManageData",
   users.can_manage_interface AS "canManageInterface",
+  users.can_edit_osm AS "canEditOsm",
   users.can_manage_users AS "canManageUsers",
   users.can_view_audit AS "canViewAudit",
   users.can_manage_security AS "canManageSecurity",
@@ -86,11 +88,11 @@ const GET_USER_SQL = `SELECT ${USER_FIELDS_SQL} FROM admin_users WHERE id = $1`;
 const CREATE_USER_SQL = `
   INSERT INTO admin_users (
     username, display_name, email, password_hash,
-    can_manage_data, can_manage_interface, can_manage_users,
+    can_manage_data, can_manage_interface, can_edit_osm, can_manage_users,
     can_view_audit, can_manage_security,
     is_superuser, is_bootstrap, must_change_password
   )
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
   RETURNING ${USER_FIELDS_SQL}
 `;
 
@@ -101,14 +103,15 @@ const UPDATE_USER_SQL = `
     email = $3,
     can_manage_data = $4,
     can_manage_interface = $5,
-    can_manage_users = $6,
-    can_view_audit = $7,
-    can_manage_security = $8,
-    is_blocked = $9,
-    manual_blocked_at = $10,
-    manual_blocked_until = $11,
-    manual_block_reason = $12,
-    manual_blocked_by = $13,
+    can_edit_osm = $6,
+    can_manage_users = $7,
+    can_view_audit = $8,
+    can_manage_security = $9,
+    is_blocked = $10,
+    manual_blocked_at = $11,
+    manual_blocked_until = $12,
+    manual_block_reason = $13,
+    manual_blocked_by = $14,
     updated_at = NOW()
   WHERE id = $1
   RETURNING ${USER_FIELDS_SQL}
@@ -265,7 +268,7 @@ export function createAdminSecurityRepository(database) {
     async createUser(user) {
       const result = await database.query(CREATE_USER_SQL, [
         user.username, user.displayName, user.email, user.passwordHash,
-        user.canManageData, user.canManageInterface, user.canManageUsers,
+        user.canManageData, user.canManageInterface, user.canEditOsm, user.canManageUsers,
         user.canViewAudit, user.canManageSecurity,
         user.isSuperuser, Boolean(user.isBootstrap), Boolean(user.mustChangePassword),
       ]);
@@ -274,7 +277,7 @@ export function createAdminSecurityRepository(database) {
     async updateUser(userId, user) {
       const result = await database.query(UPDATE_USER_SQL, [
         userId, user.displayName, user.email,
-        user.canManageData, user.canManageInterface, user.canManageUsers,
+        user.canManageData, user.canManageInterface, user.canEditOsm, user.canManageUsers,
         user.canViewAudit, user.canManageSecurity,
         user.isBlocked, user.manualBlockedAt ?? null, user.manualBlockedUntil ?? null,
         user.manualBlockReason ?? null, user.manualBlockedBy ?? null,
