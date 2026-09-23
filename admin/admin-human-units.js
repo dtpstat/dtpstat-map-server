@@ -61,7 +61,7 @@ function bind(input) {
 
   const update = () => {
     const formatted = humanValue(input);
-    output.textContent = formatted || '';
+    output.textContent = formatted ? `≈ ${formatted}` : '';
     output.hidden = !formatted;
   };
   input.addEventListener('input', update);
