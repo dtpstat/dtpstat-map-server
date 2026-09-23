@@ -15,12 +15,11 @@ import {
   OsmCityUpdateValidationError,
   resolveOsmCityUpdateRequest,
 } from '../data/osm-city-update-options.js';
+import { createOverpassRequestSession } from '../modules/osm/overpass-request-session.js';
 import { acquireDataImportLock } from './database-locks.js';
 import { rebuildCityBoundaryHierarchy } from './city-boundary-hierarchy.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
-const RETRYABLE_HTTP_STATUS_CODES = new Set([429, 502, 503, 504]);
-const GEOMETRY_504_RETRIES_BEFORE_SPLIT = 3;
 const OSM_CHECKPOINT_FORMAT_VERSION = 1;
 
 function checkpointOptionSnapshot(options) {
@@ -616,7 +615,6 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
 
       const checksumHash = crypto.createHash('sha256');
       let downloadedBytes = mode.resume ? checkpoint.downloadedBytes : 0;
-      let lastRequestCompletedAt = null;
       let requestAttemptCount = mode.resume
         ? checkpoint.requestAttemptCount
         : 0;
@@ -654,161 +652,41 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         };
       };
 
-      const downloadQuery = async (overpassQuery, requestProgress) => {
-        for (let attempt = 0; ; attempt += 1) {
-          throwIfAdminTaskCancelled(operation.signal);
-          if (lastRequestCompletedAt !== null) {
-            const waitMs = Math.max(
-              0,
-              lastRequestCompletedAt + options.minDelayMs - now(),
-            );
-            if (waitMs > 0) {
-              throttleWaitMs += waitMs;
-              await sleep(waitMs, operation.signal);
-            }
-          }
-
-          const remainingTotalBytes =
-            options.maxTotalBytes - downloadedBytes;
-          if (remainingTotalBytes < 1) {
-            throw new OsmCityDownloadError(
-              'OSM responses exceed the configured total size limit',
-              {
-                code: 'total-size-limit',
-                limitBytes: options.maxTotalBytes,
-                receivedBytes: downloadedBytes,
-              },
-            );
-          }
-          const responseLimitBytes = Math.min(
-            options.maxResponseBytes,
-            remainingTotalBytes,
-          );
-
-          requestAttemptCount += 1;
-          try {
-            const downloaded = await download(options.url, overpassQuery, {
-              allowedHosts: config.allowedHosts,
-              timeoutMs: options.timeoutMs,
-              maxBytes: responseLimitBytes,
-              userAgent: config.userAgent,
-              signal: operation.signal,
-            });
-            lastRequestCompletedAt = now();
-            throwIfAdminTaskCancelled(operation.signal);
-            downloadedBytes += downloaded.bytes;
-            checksumHash
-              .update(String(downloaded.bytes))
-              .update(':')
-              .update(downloaded.jsonText);
-            return downloaded;
-          } catch (error) {
-            lastRequestCompletedAt = now();
-            if (
-              error instanceof OsmCityDownloadError &&
-              error.code === 'response-size-limit' &&
-              responseLimitBytes < options.maxResponseBytes
-            ) {
-              const totalLimitError = new OsmCityDownloadError(
-                'OSM responses exceed the configured total size limit',
-                {
-                  code: 'total-size-limit',
-                  limitBytes: options.maxTotalBytes,
-                  receivedBytes: downloadedBytes,
-                  finalURL: error.finalURL,
-                },
-              );
-              totalLimitError.cause = error;
-              throw totalLimitError;
-            }
-            const retryableHttp =
-              error instanceof OsmCityDownloadError &&
-              RETRYABLE_HTTP_STATUS_CODES.has(error.statusCode);
-            const retryableNetwork =
-              error instanceof OsmCityDownloadError &&
-              error.retryable === true &&
-              (
-                error.code === 'network-error' ||
-                error.code === 'network-timeout'
-              );
-            if (!retryableHttp && !retryableNetwork) {
-              throw error;
-            }
-
-            const retryAttempt = attempt + 1;
-            const splitEligible504 =
-              retryableHttp &&
-              error.statusCode === 504 &&
-              requestProgress.requestPhase === 'geometry' &&
-              (requestProgress.objectCount ?? 0) > 1;
-            const retryLimit = splitEligible504
-              ? Math.min(
-                  options.maxRetries,
-                  GEOMETRY_504_RETRIES_BEFORE_SPLIT,
-                )
-              : options.maxRetries;
-            if (retryAttempt > retryLimit) {
-              const exhausted = new OsmCityDownloadError(
-                retryableNetwork
-                  ? `OSM network download failed after ${retryLimit} retries: ` +
-                    `${error.networkCode ?? error.networkMessage ?? 'network failure'}`
-                  : `OSM download returned HTTP ${error.statusCode} after ` +
-                    `${retryLimit} retries`,
-                {
-                  statusCode: error.statusCode,
-                  retryAfterMs: error.retryAfterMs,
-                  finalURL: error.finalURL,
-                  code: splitEligible504
-                    ? 'geometry-504-retry-limit'
-                    : 'retry-limit',
-                  networkCode: error.networkCode,
-                  networkMessage: error.networkMessage,
-                  retryable: false,
-                },
-              );
-              exhausted.retryCount = retryLimit;
-              exhausted.configuredMaxRetries = options.maxRetries;
-              exhausted.cause = error;
-              throw exhausted;
-            }
-
-            const fallbackDelayMs = Math.min(
-              options.retryBaseDelayMs * (2 ** (retryAttempt - 1)),
-              options.retryMaxDelayMs,
-            );
-            const waitMs = Math.max(
-              options.minDelayMs,
-              fallbackDelayMs,
-              error.retryAfterMs ?? 0,
-            );
-            retryCount += 1;
-            retryWaitMs += waitMs;
-            const progress = {
-              phase: 'retry',
-              ...requestProgress,
-              statusCode: error.statusCode,
-              attempt: retryAttempt,
-              maxRetries: retryLimit,
-              configuredMaxRetries: options.maxRetries,
-              waitMs,
-              retryAt: new Date(now() + waitMs).toISOString(),
-              retryAfterMs: error.retryAfterMs,
-              fallbackDelayMs,
-              ...(retryableNetwork
-                ? {
-                    retryKind: 'network',
-                    networkCode: error.networkCode,
-                    networkMessage: error.networkMessage,
-                  }
-                : {}),
-            };
-            reportProgress(progress);
-            operation.onProgress?.(progress);
-            await sleep(waitMs, operation.signal);
-            lastRequestCompletedAt = null;
-          }
-        }
+      const requestMetrics = {
+        get downloadedBytes() { return downloadedBytes; },
+        set downloadedBytes(value) { downloadedBytes = value; },
+        get requestAttemptCount() { return requestAttemptCount; },
+        set requestAttemptCount(value) { requestAttemptCount = value; },
+        get retryCount() { return retryCount; },
+        set retryCount(value) { retryCount = value; },
+        get retryWaitMs() { return retryWaitMs; },
+        set retryWaitMs(value) { retryWaitMs = value; },
+        get throttleWaitMs() { return throttleWaitMs; },
+        set throttleWaitMs(value) { throttleWaitMs = value; },
       };
+      const requestSession = createOverpassRequestSession({
+        download,
+        config,
+        options,
+        signal: operation.signal,
+        sleep,
+        now,
+        metrics: requestMetrics,
+        assertNotCancelled() {
+          throwIfAdminTaskCancelled(operation.signal);
+        },
+        emitProgress(progress) {
+          reportProgress(progress);
+          operation.onProgress?.(progress);
+        },
+        onDownloaded(downloaded) {
+          checksumHash
+            .update(String(downloaded.bytes))
+            .update(':')
+            .update(downloaded.jsonText);
+        },
+      });
+      const { downloadQuery } = requestSession;
 
       const indexQueries = buildRussianPlaceIdOverpassQueries(
         options.queryTimeoutSeconds,
