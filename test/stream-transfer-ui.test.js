@@ -47,7 +47,7 @@ test('portable transfer UI offers ZIP and uploads selected files without file.te
   assert.doesNotMatch(populationHandler, /file\.text\(/);
 
   assert.match(admin, /admin-transfer-overlay/);
-  assert.match(admin, /beforeunload/);
+  assert.doesNotMatch(admin, /beforeunload/);
   assert.match(admin, /fileImportTaskTypes/);
   assert.match(
     admin,
