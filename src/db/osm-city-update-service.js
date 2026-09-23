@@ -16,79 +16,18 @@ import {
   resolveOsmCityUpdateRequest,
 } from '../data/osm-city-update-options.js';
 import { createOverpassRequestSession } from '../modules/osm/overpass-request-session.js';
+import {
+  addContentChecksums,
+  checkpointCompletionChecksum,
+  checkpointErrorDetails,
+  checkpointIndexFingerprint,
+  checkpointMode,
+  checkpointOptionSnapshot,
+  checkpointSettingsFingerprint,
+} from '../modules/osm/update-checkpoint-policy.js';
 import { acquireDataImportLock } from './database-locks.js';
 import { rebuildCityBoundaryHierarchy } from './city-boundary-hierarchy.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
-
-const OSM_CHECKPOINT_FORMAT_VERSION = 1;
-
-function checkpointOptionSnapshot(options) {
-  return {
-    formatVersion: OSM_CHECKPOINT_FORMAT_VERSION,
-    sourceURL: options.url,
-    includeCity: options.includeCity,
-    includeTown: options.includeTown,
-    includeAdministrative: options.includeAdministrative,
-    adminLevelMin: options.adminLevelMin,
-    adminLevelMax: options.adminLevelMax,
-    queryTimeoutSeconds: options.queryTimeoutSeconds,
-    batchSize: options.batchSize,
-  };
-}
-
-function sha256Json(value) {
-  return crypto
-    .createHash('sha256')
-    .update(JSON.stringify(value))
-    .digest('hex');
-}
-
-function checkpointSettingsFingerprint(options) {
-  return sha256Json(checkpointOptionSnapshot(options));
-}
-
-function checkpointIndexFingerprint(objects) {
-  return sha256Json(objects.map((object) => ({
-    osmType: object.osmType,
-    osmId: object.osmId,
-  })));
-}
-
-function checkpointMode(query) {
-  const resume = query.resume === 'true';
-  const restart = query.restart === 'true';
-  if (
-    (query.resume !== undefined && query.resume !== 'true' && query.resume !== 'false') ||
-    (query.restart !== undefined && query.restart !== 'true' && query.restart !== 'false')
-  ) {
-    throw new OsmCityUpdateValidationError(
-      'resume and restart must equal true or false',
-    );
-  }
-  if (resume && restart) {
-    throw new OsmCityUpdateValidationError(
-      'resume and restart cannot both be true',
-    );
-  }
-  return { resume, restart };
-}
-
-function checkpointErrorDetails(error) {
-  return {
-    name: error instanceof Error ? error.name : 'Error',
-    message: error instanceof Error ? error.message : String(error),
-    code: error?.code ?? null,
-    statusCode: error?.statusCode ?? null,
-    networkCode: error?.networkCode ?? null,
-  };
-}
-
-function addContentChecksums(places) {
-  return places.map((place) => ({
-    ...place,
-    contentChecksum: sha256Json(place),
-  }));
-}
 
 /** @param {number} milliseconds @param {AbortSignal | undefined} signal */
 function abortableDelay(milliseconds, signal) {
@@ -996,11 +935,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           const checksums = await checkpointRepository.checksums(
             checkpoint.id,
           );
-          checksum = sha256Json({
-            formatVersion: OSM_CHECKPOINT_FORMAT_VERSION,
-            indexFingerprint: checkpoint.indexFingerprint,
-            objects: checksums,
-          });
+          checksum = checkpointCompletionChecksum(checkpoint, checksums);
         } else {
           checksum = checksumHash.digest('hex');
         }
