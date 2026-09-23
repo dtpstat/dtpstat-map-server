@@ -1,5 +1,8 @@
 import crypto from 'node:crypto';
-import { sanitizeAdminAuditData } from './admin-audit-details.js';
+import {
+  sanitizeAdminAuditData,
+  sanitizeAdminAuditLog,
+} from './admin-audit-details.js';
 import { serviceLog } from '../service-log.js';
 
 export class AdminTaskAlreadyRunningError extends Error {
@@ -145,6 +148,10 @@ export function createAdminTaskManager(dependencies = {}) {
         ? { error: sanitizeAdminAuditData(task.error) }
         : {}),
     };
+    const auditDetails = {
+      ...details,
+      taskLog: sanitizeAdminAuditLog(task.log),
+    };
     serviceLog(task.status === 'succeeded' ? 'info' : 'warning', 'admin.data-operation', {
       operationType: task.type,
       status: task.status,
@@ -153,6 +160,7 @@ export function createAdminTaskManager(dependencies = {}) {
       userId: task.actor.userId ?? null,
       username: task.actor.username ?? null,
       ...details,
+      taskLogEntries: task.log.length,
     });
     if (!recordTaskAudit) return;
     try {
@@ -164,7 +172,7 @@ export function createAdminTaskManager(dependencies = {}) {
         ipAddress: task.actor.ipAddress ?? null,
         userId: task.actor.userId ?? null,
         username: task.actor.username ?? null,
-        details,
+        details: auditDetails,
       });
     } catch (error) {
       appendLog(task, 'warning', 'Не удалось записать аудит admin-операции', {
@@ -243,7 +251,19 @@ export function createAdminTaskManager(dependencies = {}) {
 
       task.status = 'succeeded';
       task.completedAt = completedAt;
-      appendLog(task, 'info', 'Задача успешно завершена');
+      if (task.result?.partial) {
+        appendLog(
+          task,
+          'warning',
+          'Задача завершена с предупреждениями',
+          {
+            warningCount: task.result.warningCount ?? 0,
+            skippedCount: task.result.skippedCount ?? 0,
+          },
+        );
+      } else {
+        appendLog(task, 'info', 'Задача успешно завершена');
+      }
       if (successfulUpdate) emit({ type: 'success', update: successfulUpdate });
     } catch (error) {
       if (
@@ -263,7 +283,9 @@ export function createAdminTaskManager(dependencies = {}) {
     } finally {
       task.completedAt ??= now();
       await persistTaskAudit(task);
-      emit({ type: 'task', task: snapshot(task) });
+      if (currentTask === task) {
+        emit({ type: 'task', task: snapshot(task) });
+      }
     }
   }
 
@@ -320,6 +342,15 @@ export function createAdminTaskManager(dependencies = {}) {
 
     current() {
       return currentTask ? snapshot(currentTask) : null;
+    },
+
+    clearCompleted() {
+      if (currentTask === null || activeStatus(currentTask.status)) {
+        return false;
+      }
+      currentTask = null;
+      emit({ type: 'task', task: null });
+      return true;
     },
 
     successfulUpdates() {

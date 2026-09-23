@@ -20,6 +20,8 @@ function exportPool() {
             themePreset: 'modern',
             showLineLabels: true,
             showLinePopups: false,
+            largeCityPopulationThreshold: 400000,
+            largeCityAreaKm2Threshold: 250,
             publicDownloadName: 'tram-lines',
             mapboxAccessToken: 'pk.test-public-token-value',
           }],
@@ -40,47 +42,49 @@ function exportPool() {
       if (/FROM report_config/i.test(text)) {
         return {
           rows: [{
-            metrics: [
-              {
-                key: 'population',
-                name: 'Население',
-                source: { kind: 'field', field: 'city.population' },
-                operations: [],
+            config: {
+              metrics: [
+                {
+                  key: 'population',
+                  name: 'Население',
+                  source: { kind: 'field', field: 'city.population' },
+                  operations: [],
+                },
+                {
+                  key: 'area',
+                  name: 'Площадь',
+                  source: { kind: 'field', field: 'city.area_m2' },
+                  operations: [],
+                },
+              ],
+              table_columns: [
+                { kind: 'city', title: 'город' },
+                {
+                  kind: 'metric',
+                  metricKey: 'population',
+                  title: 'население',
+                  scale: 1,
+                  decimals: 0,
+                  formatRules: [],
+                },
+              ],
+              csv_columns: [
+                { kind: 'city', title: 'city' },
+                {
+                  kind: 'metric',
+                  metricKey: 'population',
+                  title: 'population',
+                  scale: 1,
+                  decimals: null,
+                },
+              ],
+              rank: {
+                sort: [
+                  { metricKey: 'population', direction: 'desc' },
+                  { metricKey: 'area', direction: 'asc' },
+                ],
               },
-              {
-                key: 'area',
-                name: 'Площадь',
-                source: { kind: 'field', field: 'city.area_m2' },
-                operations: [],
-              },
-            ],
-            tableColumns: [
-              { kind: 'city', title: 'город' },
-              {
-                kind: 'metric',
-                metricKey: 'population',
-                title: 'население',
-                scale: 1,
-                decimals: 0,
-                formatRules: [],
-              },
-            ],
-            csvColumns: [
-              { kind: 'city', title: 'city' },
-              {
-                kind: 'metric',
-                metricKey: 'population',
-                title: 'population',
-                scale: 1,
-                decimals: null,
-              },
-            ],
-            rankSort: [
-              { metricKey: 'population', direction: 'desc' },
-              { metricKey: 'area', direction: 'asc' },
-            ],
-            rankMetricKey: 'population',
-            rankDirection: 'desc',
+            },
           }],
         };
       }
@@ -106,10 +110,12 @@ test('settings export contains download name, sequential ranking and line displa
   const payload = await service.exportSettings();
 
   assert.equal(payload._dtpstat.kind, 'project-settings');
-  assert.equal(payload._dtpstat.schemaVersion, 6);
+  assert.equal(payload._dtpstat.schemaVersion, 8);
   assert.equal(payload.projectSettings.themePreset, 'modern');
   assert.equal(payload.projectSettings.showLineLabels, true);
   assert.equal(payload.projectSettings.showLinePopups, false);
+  assert.equal(payload.projectSettings.largeCityPopulationThreshold, 400000);
+  assert.equal(payload.projectSettings.largeCityAreaKm2Threshold, 250);
   assert.equal(payload.projectSettings.publicDownloadName, 'tram-lines');
   assert.equal(payload.projectSettings.mapboxAccessToken, 'pk.test-public-token-value');
   assert.equal(payload.lineTypes[0].name, 'default');
@@ -152,7 +158,7 @@ test('settings import rejects unsupported schema versions before touching the da
 
   await assert.rejects(
     service.importSettings({
-      _dtpstat: { kind: 'project-settings', schemaVersion: 7 },
+      _dtpstat: { kind: 'project-settings', schemaVersion: 9 },
     }),
     (error) => error instanceof ProjectSettingsTransferValidationError && /schemaVersion/.test(error.message),
   );

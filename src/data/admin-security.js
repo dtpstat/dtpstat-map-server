@@ -13,6 +13,15 @@ const SESSION_TOKEN_BYTES = 32;
 const AVATAR_MAX_BYTES = 256 * 1024;
 const AVATAR_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const TEMP_PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+const TEMP_PASSWORD_SPECIAL = '!@#$%&*+-_=';
+export const DEFAULT_ADMIN_PASSWORD_POLICY = Object.freeze({
+  passwordMinLength: 12,
+  passwordMaxLength: 1024,
+  passwordRequireLowercase: false,
+  passwordRequireUppercase: false,
+  passwordRequireDigit: false,
+  passwordRequireSpecial: false,
+});
 
 export class AdminSecurityValidationError extends Error {
   constructor(message) {
@@ -59,17 +68,58 @@ export function normalizeAdminEmail(value) {
   return email;
 }
 
-function normalizePassword(value, { bootstrap = false } = {}) {
+export function adminPasswordPolicy(settings = {}) {
+  return {
+    passwordMinLength:
+      settings.passwordMinLength ?? DEFAULT_ADMIN_PASSWORD_POLICY.passwordMinLength,
+    passwordMaxLength:
+      settings.passwordMaxLength ?? DEFAULT_ADMIN_PASSWORD_POLICY.passwordMaxLength,
+    passwordRequireLowercase:
+      settings.passwordRequireLowercase
+      ?? DEFAULT_ADMIN_PASSWORD_POLICY.passwordRequireLowercase,
+    passwordRequireUppercase:
+      settings.passwordRequireUppercase
+      ?? DEFAULT_ADMIN_PASSWORD_POLICY.passwordRequireUppercase,
+    passwordRequireDigit:
+      settings.passwordRequireDigit
+      ?? DEFAULT_ADMIN_PASSWORD_POLICY.passwordRequireDigit,
+    passwordRequireSpecial:
+      settings.passwordRequireSpecial
+      ?? DEFAULT_ADMIN_PASSWORD_POLICY.passwordRequireSpecial,
+  };
+}
+
+function normalizePassword(value, { bootstrap = false, policy = null } = {}) {
   if (typeof value !== 'string') {
     throw new AdminSecurityValidationError('password must be a string');
   }
-  const minimum = bootstrap ? 1 : 12;
-  if (value.length < minimum || value.length > 1024) {
+  if (bootstrap) {
+    if (!value.length) {
+      throw new AdminSecurityValidationError('bootstrap password must not be empty');
+    }
+    return value;
+  }
+
+  const rules = adminPasswordPolicy(policy ?? {});
+  if (
+    value.length < rules.passwordMinLength
+    || value.length > rules.passwordMaxLength
+  ) {
     throw new AdminSecurityValidationError(
-      bootstrap
-        ? 'bootstrap password must not be empty'
-        : 'password must contain between 12 and 1024 characters',
+      `password must contain between ${rules.passwordMinLength} and ${rules.passwordMaxLength} characters`,
     );
+  }
+  if (rules.passwordRequireLowercase && !/\p{Ll}/u.test(value)) {
+    throw new AdminSecurityValidationError('password must contain a lowercase letter');
+  }
+  if (rules.passwordRequireUppercase && !/\p{Lu}/u.test(value)) {
+    throw new AdminSecurityValidationError('password must contain an uppercase letter');
+  }
+  if (rules.passwordRequireDigit && !/\p{N}/u.test(value)) {
+    throw new AdminSecurityValidationError('password must contain a digit');
+  }
+  if (rules.passwordRequireSpecial && !/[^\p{L}\p{N}]/u.test(value)) {
+    throw new AdminSecurityValidationError('password must contain a special character');
   }
   return value;
 }
@@ -97,6 +147,9 @@ export function normalizeAdminSecuritySettings(payload) {
     'maxFailedAttempts', 'failureWindowSeconds', 'lockoutSeconds',
     'ipMaxFailedAttempts', 'ipFailureWindowSeconds', 'ipLockoutSeconds',
     'sessionIdleSeconds', 'sessionAbsoluteSeconds', 'auditRetentionDays',
+    'passwordMinLength', 'passwordMaxLength',
+    'passwordRequireLowercase', 'passwordRequireUppercase',
+    'passwordRequireDigit', 'passwordRequireSpecial',
   ]);
   const unknown = Object.keys(payload).filter((key) => !allowed.has(key));
   if (unknown.length > 0) {
@@ -104,7 +157,7 @@ export function normalizeAdminSecuritySettings(payload) {
       `Request body contains unsupported properties: ${unknown.join(', ')}`,
     );
   }
-  return {
+  const normalized = {
     maxFailedAttempts: integerField(payload.maxFailedAttempts, 'maxFailedAttempts', 1, 100),
     failureWindowSeconds: integerField(payload.failureWindowSeconds, 'failureWindowSeconds', 10, 86400),
     lockoutSeconds: integerField(payload.lockoutSeconds, 'lockoutSeconds', 10, 604800),
@@ -114,7 +167,42 @@ export function normalizeAdminSecuritySettings(payload) {
     sessionIdleSeconds: integerField(payload.sessionIdleSeconds, 'sessionIdleSeconds', 60, 86400),
     sessionAbsoluteSeconds: integerField(payload.sessionAbsoluteSeconds, 'sessionAbsoluteSeconds', 300, 2592000),
     auditRetentionDays: integerField(payload.auditRetentionDays, 'auditRetentionDays', 0, 3650),
+    passwordMinLength: integerField(payload.passwordMinLength, 'passwordMinLength', 1, 4096),
+    passwordMaxLength: integerField(payload.passwordMaxLength, 'passwordMaxLength', 1, 4096),
+    passwordRequireLowercase: booleanField(
+      payload.passwordRequireLowercase,
+      'passwordRequireLowercase',
+    ),
+    passwordRequireUppercase: booleanField(
+      payload.passwordRequireUppercase,
+      'passwordRequireUppercase',
+    ),
+    passwordRequireDigit: booleanField(
+      payload.passwordRequireDigit,
+      'passwordRequireDigit',
+    ),
+    passwordRequireSpecial: booleanField(
+      payload.passwordRequireSpecial,
+      'passwordRequireSpecial',
+    ),
   };
+  if (normalized.passwordMinLength > normalized.passwordMaxLength) {
+    throw new AdminSecurityValidationError(
+      'passwordMinLength must not exceed passwordMaxLength',
+    );
+  }
+  const requiredClasses = [
+    normalized.passwordRequireLowercase,
+    normalized.passwordRequireUppercase,
+    normalized.passwordRequireDigit,
+    normalized.passwordRequireSpecial,
+  ].filter(Boolean).length;
+  if (normalized.passwordMaxLength < requiredClasses) {
+    throw new AdminSecurityValidationError(
+      'passwordMaxLength is too small for the selected character requirements',
+    );
+  }
+  return normalized;
 }
 
 async function derivePassword(password, salt, parameters = {}) {
@@ -187,6 +275,7 @@ function publicUser(user) {
     email: user.email ?? null,
     canManageData: Boolean(user.canManageData),
     canManageInterface: Boolean(user.canManageInterface),
+    canEditOsm: Boolean(user.canEditOsm),
     canManageUsers: Boolean(user.canManageUsers),
     canViewAudit: Boolean(user.canViewAudit),
     canManageSecurity: Boolean(user.canManageSecurity),
@@ -221,11 +310,36 @@ function tokenHash(token) {
   return crypto.createHash('sha256').update(token).digest();
 }
 
-export function generateTemporaryPassword() {
-  const bytes = crypto.randomBytes(16);
-  let raw = '';
-  for (const byte of bytes) raw += TEMP_PASSWORD_ALPHABET[byte % TEMP_PASSWORD_ALPHABET.length];
-  return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}`;
+export function generateTemporaryPassword(policy = DEFAULT_ADMIN_PASSWORD_POLICY) {
+  const rules = adminPasswordPolicy(policy);
+  const required = [];
+  if (rules.passwordRequireLowercase) required.push('abcdefghijkmnopqrstuvwxyz');
+  if (rules.passwordRequireUppercase) required.push('ABCDEFGHJKLMNPQRSTUVWXYZ');
+  if (rules.passwordRequireDigit) required.push('23456789');
+  if (rules.passwordRequireSpecial) required.push(TEMP_PASSWORD_SPECIAL);
+
+  const targetLength = Math.min(
+    rules.passwordMaxLength,
+    Math.max(rules.passwordMinLength, Math.min(16, rules.passwordMaxLength)),
+  );
+  if (targetLength < required.length) {
+    throw new AdminSecurityValidationError(
+      'Password policy cannot generate a compliant temporary password',
+    );
+  }
+
+  const randomChar = (alphabet) =>
+    alphabet[crypto.randomInt(0, alphabet.length)];
+  const characters = required.map(randomChar);
+  const alphabet = TEMP_PASSWORD_ALPHABET
+    + (rules.passwordRequireSpecial ? TEMP_PASSWORD_SPECIAL : '');
+  while (characters.length < targetLength) characters.push(randomChar(alphabet));
+
+  for (let index = characters.length - 1; index > 0; index -= 1) {
+    const swap = crypto.randomInt(0, index + 1);
+    [characters[index], characters[swap]] = [characters[swap], characters[index]];
+  }
+  return characters.join('');
 }
 
 function secondsUntil(timestamp, now = new Date()) {
@@ -268,6 +382,7 @@ export function createAdminSecurityService(repository) {
         passwordHash,
         canManageData: true,
         canManageInterface: true,
+        canEditOsm: true,
         canManageUsers: true,
         canViewAudit: true,
         canManageSecurity: true,
@@ -469,12 +584,32 @@ export function createAdminSecurityService(repository) {
         return { status: 'blocked', user, retryAfterSeconds };
       }
     }
-    if (now.valueOf() - new Date(session.sessionLastSeenAt).valueOf() > 60000) {
+    let lastSeenAt = new Date(session.sessionLastSeenAt);
+    const idleTouchIntervalMs = Math.min(
+      60_000,
+      Math.max(1_000, Math.floor(settings.sessionIdleSeconds * 1000 / 2)),
+    );
+    if (now.valueOf() - lastSeenAt.valueOf() >= idleTouchIntervalMs) {
+      lastSeenAt = now;
       await repository.touchSession(session.sessionId, now.toISOString());
     }
+    const absoluteExpiresAt = new Date(session.sessionExpiresAt);
+    const idleExpiresAt = new Date(
+      lastSeenAt.valueOf() + settings.sessionIdleSeconds * 1000,
+    );
+    const effectiveExpiresAt = new Date(Math.min(
+      absoluteExpiresAt.valueOf(),
+      idleExpiresAt.valueOf(),
+    ));
     return {
-      status: 'success', user, sessionId: session.sessionId,
-      authMethod: 'session', token,
+      status: 'success',
+      user,
+      sessionId: session.sessionId,
+      authMethod: 'session',
+      token,
+      sessionAbsoluteExpiresAt: absoluteExpiresAt.toISOString(),
+      sessionIdleExpiresAt: idleExpiresAt.toISOString(),
+      sessionEffectiveExpiresAt: effectiveExpiresAt.toISOString(),
     };
   }
 
@@ -500,20 +635,23 @@ export function createAdminSecurityService(repository) {
     }
     const allowed = new Set([
       'username', 'displayName', 'email', 'password',
-      'canManageData', 'canManageInterface', 'canManageUsers', 'canViewAudit', 'canManageSecurity',
+      'canManageData', 'canManageInterface', 'canEditOsm',
+      'canManageUsers', 'canViewAudit', 'canManageSecurity',
     ]);
     const unknown = Object.keys(payload).filter((key) => !allowed.has(key));
     if (unknown.length) throw new AdminSecurityValidationError(`Request body contains unsupported properties: ${unknown.join(', ')}`);
     const username = normalizeAdminUsername(payload.username);
-    const temporaryPassword = payload.password ? null : generateTemporaryPassword();
+    const policy = adminPasswordPolicy(await repository.getSecuritySettings());
+    const temporaryPassword = payload.password ? null : generateTemporaryPassword(policy);
     const password = payload.password ?? temporaryPassword;
     const user = {
       username,
       displayName: normalizeAdminDisplayName(payload.displayName, username),
       email: normalizeAdminEmail(payload.email),
-      passwordHash: await hashAdminPassword(password),
+      passwordHash: await hashAdminPassword(password, { policy }),
       canManageData: booleanField(payload.canManageData, 'canManageData'),
       canManageInterface: booleanField(payload.canManageInterface, 'canManageInterface'),
+      canEditOsm: booleanField(payload.canEditOsm, 'canEditOsm'),
       canManageUsers: booleanField(payload.canManageUsers, 'canManageUsers'),
       canViewAudit: booleanField(payload.canViewAudit, 'canViewAudit'),
       canManageSecurity: booleanField(payload.canManageSecurity, 'canManageSecurity'),
@@ -535,7 +673,7 @@ export function createAdminSecurityService(repository) {
       throw new AdminSecurityValidationError('Request body must be a JSON object');
     }
     const allowed = new Set([
-      'displayName', 'email', 'canManageData', 'canManageInterface',
+      'displayName', 'email', 'canManageData', 'canManageInterface', 'canEditOsm',
       'canManageUsers', 'canViewAudit', 'canManageSecurity',
     ]);
     const unknown = Object.keys(payload).filter((key) => !allowed.has(key));
@@ -549,6 +687,7 @@ export function createAdminSecurityService(repository) {
       email: payload.email === undefined ? current.email : normalizeAdminEmail(payload.email),
       canManageData: protectedUser ? true : booleanField(payload.canManageData, 'canManageData', current.canManageData),
       canManageInterface: protectedUser ? true : booleanField(payload.canManageInterface, 'canManageInterface', current.canManageInterface),
+      canEditOsm: protectedUser ? true : booleanField(payload.canEditOsm, 'canEditOsm', current.canEditOsm),
       canManageUsers: protectedUser ? true : booleanField(payload.canManageUsers, 'canManageUsers', current.canManageUsers),
       canViewAudit: protectedUser ? true : booleanField(payload.canViewAudit, 'canViewAudit', current.canViewAudit),
       canManageSecurity: protectedUser ? true : booleanField(payload.canManageSecurity, 'canManageSecurity', current.canManageSecurity),
@@ -568,8 +707,9 @@ export function createAdminSecurityService(repository) {
   async function resetTemporaryPassword(userId) {
     const current = await repository.getUser(userId);
     if (!current) return null;
-    const temporaryPassword = generateTemporaryPassword();
-    const passwordHash = await hashAdminPassword(temporaryPassword);
+    const policy = adminPasswordPolicy(await repository.getSecuritySettings());
+    const temporaryPassword = generateTemporaryPassword(policy);
+    const passwordHash = await hashAdminPassword(temporaryPassword, { policy });
     const user = await repository.updatePassword(userId, passwordHash, true);
     await repository.revokeUserSessions(userId);
     return { user: publicUser(user), temporaryPassword };
@@ -635,7 +775,8 @@ export function createAdminSecurityService(repository) {
     if (!await verifyAdminPassword(payload.currentPassword, current.passwordHash)) {
       throw new AdminSecurityValidationError('Current password is incorrect');
     }
-    const passwordHash = await hashAdminPassword(payload.newPassword);
+    const policy = adminPasswordPolicy(await repository.getSecuritySettings());
+    const passwordHash = await hashAdminPassword(payload.newPassword, { policy });
     const user = await repository.updatePassword(userId, passwordHash, false);
     await repository.revokeUserSessions(userId, currentSessionId);
     return publicUser(user);
@@ -699,6 +840,8 @@ export function createAdminSecurityService(repository) {
     revokeSession: (userId, sessionId) => repository.revokeSessionById(userId, sessionId),
     revokeOtherSessions: (userId, sessionId) => repository.revokeUserSessions(userId, sessionId),
     getSecuritySettings: () => repository.getSecuritySettings(),
+    getPasswordPolicy: async () =>
+      adminPasswordPolicy(await repository.getSecuritySettings()),
     saveSecuritySettings,
     listIpBlocks: () => repository.listIpBlocks(),
     createIpBlock,

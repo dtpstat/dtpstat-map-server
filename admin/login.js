@@ -1,5 +1,11 @@
 const form = document.querySelector('#admin-login-form');
 const message = document.querySelector('#admin-login-message');
+const loginReason = new URLSearchParams(window.location.search);
+
+if (message && loginReason.get('expired') === '1') {
+  message.textContent = 'Сессия истекла. Войдите снова.';
+  message.className = 'notice';
+}
 
 async function alreadyAuthenticated() {
   try {

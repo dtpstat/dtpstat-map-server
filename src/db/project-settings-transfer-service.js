@@ -1,4 +1,7 @@
-import { normalizeAdminSecuritySettings } from '../data/admin-security.js';
+import {
+  DEFAULT_ADMIN_PASSWORD_POLICY,
+  normalizeAdminSecuritySettings,
+} from '../data/admin-security.js';
 import { buildLineTypesPlan } from '../data/line-types.js';
 import { normalizeMapboxAccessToken } from '../data/mapbox-access-token.js';
 import { buildProjectSettingsPlan, ProjectSettingsValidationError } from '../data/project-settings.js';
@@ -8,12 +11,13 @@ import {
   validateReportConfig,
 } from '../data/report-config.js';
 import { acquireDataImportLock } from './database-locks.js';
+import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 import {
   compileReportMetricQuery,
   compileReportRankQuery,
 } from './report-config-service.js';
 
-const SETTINGS_TRANSFER_SCHEMA_VERSION = 6;
+const SETTINGS_TRANSFER_SCHEMA_VERSION = 8;
 const SETTINGS_TRANSFER_KIND = 'project-settings';
 const LEGACY_SECURITY_DEFAULTS = Object.freeze({
   ipMaxFailedAttempts: 20,
@@ -54,9 +58,9 @@ function validateEnvelope(payload) {
   if (metadata.kind !== SETTINGS_TRANSFER_KIND) {
     throw new ProjectSettingsTransferValidationError(`_dtpstat.kind must be ${SETTINGS_TRANSFER_KIND}`);
   }
-  if (![1, 2, 3, 4, 5, SETTINGS_TRANSFER_SCHEMA_VERSION].includes(metadata.schemaVersion)) {
+  if (![1, 2, 3, 4, 5, 6, 7, SETTINGS_TRANSFER_SCHEMA_VERSION].includes(metadata.schemaVersion)) {
     throw new ProjectSettingsTransferValidationError(
-      `_dtpstat.schemaVersion must be 1, 2, 3, 4, 5 or ${SETTINGS_TRANSFER_SCHEMA_VERSION}`,
+      `_dtpstat.schemaVersion must be 1, 2, 3, 4, 5, 6, 7 or ${SETTINGS_TRANSFER_SCHEMA_VERSION}`,
     );
   }
   return { input, schemaVersion: metadata.schemaVersion };
@@ -67,11 +71,15 @@ function normalizeProjectSettings(payload) {
   const hasMapboxAccessToken = Object.hasOwn(input, 'mapboxAccessToken');
   const hasShowLinePopups = Object.hasOwn(input, 'showLinePopups');
   const hasPublicDownloadName = Object.hasOwn(input, 'publicDownloadName');
+  const hasPopulationThreshold = Object.hasOwn(input, 'largeCityPopulationThreshold');
+  const hasAreaThreshold = Object.hasOwn(input, 'largeCityAreaKm2Threshold');
   const {
     showLineLabels = false,
     showLinePopups: rawShowLinePopups,
     publicDownloadName: rawPublicDownloadName,
     mapboxAccessToken: rawMapboxAccessToken,
+    largeCityPopulationThreshold: rawPopulationThreshold,
+    largeCityAreaKm2Threshold: rawAreaThreshold,
     ...base
   } = input;
   if (typeof showLineLabels !== 'boolean') {
@@ -80,8 +88,26 @@ function normalizeProjectSettings(payload) {
   if (hasShowLinePopups && typeof rawShowLinePopups !== 'boolean') {
     throw new ProjectSettingsValidationError('showLinePopups must be boolean');
   }
+  const populationThreshold = hasPopulationThreshold
+    ? Number(rawPopulationThreshold)
+    : 400000;
+  if (!Number.isSafeInteger(populationThreshold) || populationThreshold <= 0) {
+    throw new ProjectSettingsValidationError(
+      'largeCityPopulationThreshold must be a positive integer',
+    );
+  }
+  const areaThreshold = !hasAreaThreshold || rawAreaThreshold === null || rawAreaThreshold === ''
+    ? null
+    : Number(rawAreaThreshold);
+  if (areaThreshold !== null && (!Number.isFinite(areaThreshold) || areaThreshold < 0)) {
+    throw new ProjectSettingsValidationError(
+      'largeCityAreaKm2Threshold must be non-negative or null',
+    );
+  }
   return {
     ...buildProjectSettingsPlan(base),
+    largeCityPopulationThreshold: populationThreshold,
+    largeCityAreaKm2Threshold: areaThreshold,
     showLineLabels,
     // Transfer schemas 1-3 predate this field. Their effective behaviour was
     // always to show hover popups, so missing values intentionally normalize
@@ -100,9 +126,12 @@ function normalizeProjectSettings(payload) {
 
 function normalizeTransferredSecurity(payload, schemaVersion) {
   const input = object(payload, 'securitySettings');
-  return normalizeAdminSecuritySettings(
-    schemaVersion === 1 ? { ...LEGACY_SECURITY_DEFAULTS, ...input } : input,
-  );
+  const defaults = schemaVersion === 1
+    ? { ...LEGACY_SECURITY_DEFAULTS, ...DEFAULT_ADMIN_PASSWORD_POLICY }
+    : schemaVersion < 8
+      ? DEFAULT_ADMIN_PASSWORD_POLICY
+      : {};
+  return normalizeAdminSecuritySettings({ ...defaults, ...input });
 }
 
 const EXPORT_PROJECT_SETTINGS_SQL = `
@@ -112,6 +141,8 @@ const EXPORT_PROJECT_SETTINGS_SQL = `
     theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
     show_line_popups AS "showLinePopups",
+    large_city_population_threshold::integer AS "largeCityPopulationThreshold",
+    large_city_area_km2_threshold::double precision AS "largeCityAreaKm2Threshold",
     public_download_name AS "publicDownloadName",
     mapbox_access_token AS "mapboxAccessToken"
   FROM project_settings WHERE id = 1
@@ -124,10 +155,9 @@ const EXPORT_LINE_TYPES_SQL = `
 `;
 
 const EXPORT_REPORT_CONFIG_SQL = `
-  SELECT metrics, table_columns AS "tableColumns", csv_columns AS "csvColumns",
-    rank_sort AS "rankSort",
-    rank_metric_key AS "rankMetricKey", rank_direction AS "rankDirection"
-  FROM report_config WHERE id = 1
+  SELECT jsonb_object_agg(config_key, config_value) AS config
+  FROM report_config
+  WHERE config_key IN ('metrics', 'table_columns', 'csv_columns', 'rank')
 `;
 
 const EXPORT_SECURITY_SETTINGS_SQL = `
@@ -140,7 +170,13 @@ const EXPORT_SECURITY_SETTINGS_SQL = `
     ip_lockout_seconds AS "ipLockoutSeconds",
     session_idle_seconds AS "sessionIdleSeconds",
     session_absolute_seconds AS "sessionAbsoluteSeconds",
-    audit_retention_days AS "auditRetentionDays"
+    audit_retention_days AS "auditRetentionDays",
+    password_min_length AS "passwordMinLength",
+    password_max_length AS "passwordMaxLength",
+    password_require_lowercase AS "passwordRequireLowercase",
+    password_require_uppercase AS "passwordRequireUppercase",
+    password_require_digit AS "passwordRequireDigit",
+    password_require_special AS "passwordRequireSpecial"
   FROM admin_security_settings WHERE id = 1
 `;
 
@@ -157,6 +193,8 @@ const UPDATE_PROJECT_SETTINGS_SQL = `
       WHEN $11::boolean THEN TRUE
       ELSE mapbox_access_token_initialized
     END,
+    large_city_population_threshold=$13,
+    large_city_area_km2_threshold=$14,
     updated_at=NOW()
   WHERE id=1
 `;
@@ -195,16 +233,14 @@ const INSERT_MISSING_LINE_TYPES_SQL = `
 `;
 
 const SAVE_REPORT_CONFIG_SQL = `
-  INSERT INTO report_config(
-    id,metrics,table_columns,csv_columns,rank_sort,rank_metric_key,rank_direction,updated_at
-  ) VALUES (1,$1::jsonb,$2::jsonb,$3::jsonb,$4::jsonb,$5,$6,NOW())
-  ON CONFLICT(id) DO UPDATE SET
-    metrics=EXCLUDED.metrics,
-    table_columns=EXCLUDED.table_columns,
-    csv_columns=EXCLUDED.csv_columns,
-    rank_sort=EXCLUDED.rank_sort,
-    rank_metric_key=EXCLUDED.rank_metric_key,
-    rank_direction=EXCLUDED.rank_direction,
+  INSERT INTO report_config(config_key, config_value, updated_at)
+  VALUES
+    ('metrics', $1::jsonb, NOW()),
+    ('table_columns', $2::jsonb, NOW()),
+    ('csv_columns', $3::jsonb, NOW()),
+    ('rank', $4::jsonb, NOW())
+  ON CONFLICT(config_key) DO UPDATE SET
+    config_value=EXCLUDED.config_value,
     updated_at=NOW()
 `;
 
@@ -219,6 +255,12 @@ const UPDATE_SECURITY_SETTINGS_SQL = `
     session_idle_seconds=$7,
     session_absolute_seconds=$8,
     audit_retention_days=$9,
+    password_min_length=$10,
+    password_max_length=$11,
+    password_require_lowercase=$12,
+    password_require_uppercase=$13,
+    password_require_digit=$14,
+    password_require_special=$15,
     updated_at=NOW()
   WHERE id=1
 `;
@@ -233,10 +275,14 @@ async function materializeReport(client, config) {
       SELECT 1
       FROM city_boundaries AS boundary_presence
       WHERE boundary_presence.city_id = city.id
+        AND boundary_presence.is_active
     )
       AND EXISTS (
         SELECT 1
         FROM city_geometries AS geometry_presence
+        JOIN city_boundaries AS geometry_boundary
+          ON geometry_boundary.id = geometry_presence.boundary_id
+         AND geometry_boundary.is_active
         WHERE geometry_presence.city_id = city.id
       )
     ORDER BY city.id
@@ -290,12 +336,14 @@ export function createProjectSettingsTransferService(pool) {
           throw new Error('Project settings are incomplete; run database migrations');
         }
         await client.query('COMMIT');
-        const rankSort = Array.isArray(reportRow.rankSort) && reportRow.rankSort.length > 0
-          ? reportRow.rankSort
-          : [{
-              metricKey: reportRow.rankMetricKey,
-              direction: reportRow.rankDirection,
-            }];
+        const storedReportConfig = reportRow.config;
+        if (
+          !storedReportConfig ||
+          typeof storedReportConfig !== 'object' ||
+          Array.isArray(storedReportConfig)
+        ) {
+          throw new Error('Report configuration is incomplete; run database migrations');
+        }
         return {
           _dtpstat: {
             kind: SETTINGS_TRANSFER_KIND,
@@ -305,10 +353,10 @@ export function createProjectSettingsTransferService(pool) {
           projectSettings,
           lineTypes: lineTypes.rows,
           reportConfig: {
-            metrics: reportRow.metrics,
-            tableColumns: reportRow.tableColumns,
-            csvColumns: reportRow.csvColumns,
-            rank: { sort: rankSort },
+            metrics: storedReportConfig.metrics,
+            tableColumns: storedReportConfig.table_columns,
+            csvColumns: storedReportConfig.csv_columns,
+            rank: storedReportConfig.rank,
           },
           securitySettings,
         };
@@ -358,15 +406,14 @@ export function createProjectSettingsTransferService(pool) {
           projectSettings.publicDownloadName,
           projectSettings.hasMapboxAccessToken,
           projectSettings.mapboxAccessToken,
+          projectSettings.largeCityPopulationThreshold,
+          projectSettings.largeCityAreaKm2Threshold,
         ]);
-        const primaryRank = reportConfig.rank.sort[0];
         await client.query(SAVE_REPORT_CONFIG_SQL, [
           JSON.stringify(reportConfig.metrics),
           JSON.stringify(reportConfig.tableColumns),
           JSON.stringify(reportConfig.csvColumns),
-          JSON.stringify(reportConfig.rank.sort),
-          primaryRank.metricKey,
-          primaryRank.direction,
+          JSON.stringify({ sort: reportConfig.rank.sort }),
         ]);
         await client.query(UPDATE_SECURITY_SETTINGS_SQL, [
           securitySettings.maxFailedAttempts,
@@ -378,8 +425,15 @@ export function createProjectSettingsTransferService(pool) {
           securitySettings.sessionIdleSeconds,
           securitySettings.sessionAbsoluteSeconds,
           securitySettings.auditRetentionDays,
+          securitySettings.passwordMinLength,
+          securitySettings.passwordMaxLength,
+          securitySettings.passwordRequireLowercase,
+          securitySettings.passwordRequireUppercase,
+          securitySettings.passwordRequireDigit,
+          securitySettings.passwordRequireSpecial,
         ]);
 
+        await client.query(RECALCULATE_CITY_STATISTICS_SQL);
         const materializedCities = await materializeReport(client, reportConfig);
         await client.query('COMMIT');
         return {

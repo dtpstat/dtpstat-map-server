@@ -1,3 +1,8 @@
+import { adminAlert, adminConfirm } from './admin-dialog.js';
+import { trackDirtyForm } from './admin-dirty-state.js';
+import { bindHumanUnits } from './admin-human-units.js';
+import { readTabState, writeTabState } from './admin-tab-state.js';
+
 const session = await globalThis.dtpstatAdminSession?.catch(() => null);
 const currentUser = session?.user;
 const host = document.querySelector('#security-editor-host');
@@ -82,19 +87,22 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           <div><h3>Аудит</h3><p>Входы и административные операции с фильтрацией и быстрыми реакциями.</p></div>
           <a class="secondary-link" id="security-audit-export" href="/api/admin/security/audit/export.csv" download>Экспорт CSV</a>
         </div>
-        <form id="security-audit-filter" class="security-audit-filter">
-          <label>От <input name="from" type="datetime-local"></label>
-          <label>До <input name="to" type="datetime-local"></label>
-          <label>Тип события <select name="eventType"><option value="">Все</option></select></label>
-          <label>Операция <select name="operationType"><option value="">Все</option></select></label>
-          <label>Статус <select name="status"><option value="">Все</option></select></label>
-          <label>Пользователь <input name="username" type="text"></label>
-          <label>IP <input name="ipAddress" type="text"></label>
-          <div class="security-filter-actions">
-            <button type="submit">Применить</button>
-            <button type="button" class="secondary" id="security-audit-reset">Сбросить</button>
-          </div>
-        </form>
+        <details class="security-audit-filter-panel">
+          <summary>Фильтры аудита</summary>
+          <form id="security-audit-filter" class="security-audit-filter">
+            <label>От <input name="from" type="datetime-local"></label>
+            <label>До <input name="to" type="datetime-local"></label>
+            <label>Тип события <select name="eventType"><option value="">Все</option></select></label>
+            <label>Операция <select name="operationType"><option value="">Все</option></select></label>
+            <label>Статус <select name="status"><option value="">Все</option></select></label>
+            <label>Пользователь <input name="username" type="text"></label>
+            <label>IP <input name="ipAddress" type="text"></label>
+            <div class="security-filter-actions">
+              <button type="submit">Применить</button>
+              <button type="button" class="secondary" id="security-audit-reset">Сбросить</button>
+            </div>
+          </form>
+        </details>
         <div class="security-audit-table-wrap">
           <table class="security-audit-table">
             <thead><tr>
@@ -117,21 +125,44 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         <div class="security-settings-grid">
           <form id="security-settings-form" class="security-settings-form">
             <h3>Защита входа и сессии</h3>
-            <fieldset><legend>Учётная запись</legend>
-              <label>Попыток до блокировки <input name="maxFailedAttempts" type="number" min="1" max="100" required></label>
-              <label>Окно попыток, сек. <input name="failureWindowSeconds" type="number" min="10" max="86400" required></label>
-              <label>Блокировка, сек. <input name="lockoutSeconds" type="number" min="10" max="604800" required></label>
+            <fieldset><legend>Политика паролей</legend>
+              <div class="security-password-policy-row">
+                <label class="security-password-minimum">
+                  Минимум символов
+                  <input name="passwordMinLength" type="number" min="1" max="4096" required>
+                </label>
+                <input name="passwordMaxLength" type="hidden">
+                <div class="security-password-requirements">
+                  <label class="check"><input name="passwordRequireLowercase" type="checkbox"> Строчная буква</label>
+                  <label class="check"><input name="passwordRequireUppercase" type="checkbox"> Прописная буква</label>
+                  <label class="check"><input name="passwordRequireDigit" type="checkbox"> Цифра</label>
+                  <label class="check"><input name="passwordRequireSpecial" type="checkbox"> Спецсимвол</label>
+                </div>
+                <p class="security-info">Требования показываются пользователю при смене пароля.</p>
+              </div>
             </fieldset>
-            <fieldset><legend>IP</legend>
-              <label>Попыток до IP lockout <input name="ipMaxFailedAttempts" type="number" min="1" max="1000" required></label>
-              <label>Окно IP, сек. <input name="ipFailureWindowSeconds" type="number" min="10" max="86400" required></label>
-              <label>IP lockout, сек. <input name="ipLockoutSeconds" type="number" min="10" max="604800" required></label>
-            </fieldset>
-            <fieldset><legend>Сессии и аудит</legend>
-              <label>Idle timeout, сек. <input name="sessionIdleSeconds" type="number" min="60" max="86400" required></label>
-              <label>Максимальная жизнь сессии, сек. <input name="sessionAbsoluteSeconds" type="number" min="300" max="2592000" required></label>
-              <label>Хранить аудит, дней (0 = бессрочно) <input name="auditRetentionDays" type="number" min="0" max="3650" required></label>
-            </fieldset>
+
+            <details class="admin-advanced-settings">
+              <summary>Тонкая настройка блокировок, сессий и аудита</summary>
+              <div class="admin-advanced-settings-body">
+                <p class="admin-advanced-settings-note">Эти параметры обычно меняет технический администратор. Рядом с секундами показывается привычное время.</p>
+                <fieldset><legend>Учётная запись</legend>
+                  <label>Попыток до блокировки <input name="maxFailedAttempts" type="number" min="1" max="100" required></label>
+                  <label>Окно попыток, сек. <input name="failureWindowSeconds" type="number" min="10" max="86400" required data-human-unit="seconds"></label>
+                  <label>Блокировка, сек. <input name="lockoutSeconds" type="number" min="10" max="604800" required data-human-unit="seconds"></label>
+                </fieldset>
+                <fieldset><legend>IP</legend>
+                  <label>Попыток до IP lockout <input name="ipMaxFailedAttempts" type="number" min="1" max="1000" required></label>
+                  <label>Окно IP, сек. <input name="ipFailureWindowSeconds" type="number" min="10" max="86400" required data-human-unit="seconds"></label>
+                  <label>IP lockout, сек. <input name="ipLockoutSeconds" type="number" min="10" max="604800" required data-human-unit="seconds"></label>
+                </fieldset>
+                <fieldset><legend>Сессии и аудит</legend>
+                  <label>Idle timeout, сек. <input name="sessionIdleSeconds" type="number" min="60" max="86400" required data-human-unit="seconds"></label>
+                  <label>Максимальная жизнь сессии, сек. <input name="sessionAbsoluteSeconds" type="number" min="300" max="2592000" required data-human-unit="seconds"></label>
+                  <label>Хранить аудит, дней (0 = бессрочно) <input name="auditRetentionDays" type="number" min="0" max="3650" required data-human-unit="days"></label>
+                </fieldset>
+              </div>
+            </details>
             <button type="submit">Сохранить параметры</button>
             <p id="security-settings-message" class="security-message" role="status"></p>
           </form>
@@ -151,17 +182,84 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       </section>
     ` : ''}
     <div id="security-secret-overlay" class="security-secret-overlay" hidden></div>
+    <div id="security-audit-detail-overlay" class="security-audit-detail-overlay" hidden>
+      <section class="security-audit-detail-dialog"
+               role="dialog"
+               aria-modal="true"
+               aria-labelledby="security-audit-detail-title">
+        <header class="security-audit-detail-header">
+          <div>
+            <p class="security-audit-detail-eyebrow">ДЕТАЛИ АУДИТА</p>
+            <h3 id="security-audit-detail-title">—</h3>
+            <p id="security-audit-detail-meta" class="security-muted"></p>
+          </div>
+          <button type="button"
+                  class="secondary security-audit-detail-close"
+                  aria-label="Закрыть">×</button>
+        </header>
+        <div class="security-audit-detail-toolbar">
+          <button type="button" class="secondary" data-audit-view="tree"
+                  aria-pressed="true">Tree</button>
+          <button type="button" class="secondary" data-audit-view="raw"
+                  aria-pressed="false">Raw</button>
+          <span class="security-audit-detail-toolbar-spacer"></span>
+          <button type="button" class="secondary" id="security-audit-expand-all">
+            Развернуть всё
+          </button>
+          <button type="button" class="secondary" id="security-audit-collapse-all">
+            Свернуть всё
+          </button>
+          <button type="button" id="security-audit-copy-json">Копировать JSON</button>
+        </div>
+        <div class="security-audit-detail-body">
+          <div id="security-audit-json-tree" class="security-json-tree"></div>
+          <pre id="security-audit-json-raw" class="security-json-raw" hidden></pre>
+        </div>
+      </section>
+    </div>
   `;
 
   const tabs = [...host.querySelectorAll('[data-security-tab]')];
   const panels = [...host.querySelectorAll('[data-security-panel]')];
+  const securitySettingsForm = host.querySelector('#security-settings-form');
+  const securitySettingsDirty = trackDirtyForm(
+    securitySettingsForm,
+    { label: 'Параметры безопасности' },
+  );
+  bindHumanUnits(host);
   const userById = new Map();
+  const loadedAvatarUrls = new Set();
+
+  function applyAvatarBackground(avatar, fallback, url) {
+    avatar.style.backgroundImage = `url("${url}")`;
+    if (loadedAvatarUrls.has(url)) {
+      avatar.classList.add('is-image-loaded');
+      return;
+    }
+    const loader = new Image();
+    loader.decoding = 'async';
+    loader.addEventListener('load', () => {
+      loadedAvatarUrls.add(url);
+      avatar.classList.add('is-image-loaded');
+    }, { once: true });
+    loader.addEventListener('error', () => {
+      avatar.style.removeProperty('background-image');
+      avatar.classList.remove('is-image-loaded');
+      fallback.hidden = false;
+    }, { once: true });
+    loader.src = url;
+  }
+
   let selectedUserId = null;
   let auditOffset = 0;
   const auditLimit = 100;
   let secretTimer = null;
+  let auditDetailEntry = null;
+  let auditDetailMode = 'tree';
+  const jsonBranchRenderers = new WeakMap();
 
   function selectTab(key) {
+    writeTabState('security', key);
     for (const tab of tabs) {
       const active = tab.dataset.securityTab === key;
       tab.setAttribute('aria-selected', String(active));
@@ -172,7 +270,8 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     if (key === 'security') void Promise.all([loadSettings(), loadIpBlocks()]);
   }
   for (const tab of tabs) tab.addEventListener('click', () => selectTab(tab.dataset.securityTab));
-  selectTab(tabs[0]?.dataset.securityTab);
+  const securityTabKeys = tabs.map((tab) => tab.dataset.securityTab);
+  selectTab(readTabState('security', securityTabKeys, securityTabKeys[0]));
 
   function showTemporaryPassword(password, username) {
     const overlay = host.querySelector('#security-secret-overlay');
@@ -245,6 +344,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           <div class="security-role-grid">
             ${roleCheckbox('canManageData', 'Управление данными', user.canManageData, protectedUser)}
             ${roleCheckbox('canManageInterface', 'Настройка интерфейса', user.canManageInterface, protectedUser)}
+            ${roleCheckbox('canEditOsm', 'Объекты OSM', user.canEditOsm, protectedUser)}
             ${roleCheckbox('canManageUsers', 'Управление пользователями', user.canManageUsers, protectedUser)}
             ${roleCheckbox('canViewAudit', 'Просмотр аудита', user.canViewAudit, protectedUser)}
             ${roleCheckbox('canManageSecurity', 'Управление безопасностью', user.canManageSecurity, protectedUser)}
@@ -287,6 +387,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
             email: form.elements.email.value.trim() || null,
             canManageData: form.elements.canManageData.checked,
             canManageInterface: form.elements.canManageInterface.checked,
+            canEditOsm: form.elements.canEditOsm.checked,
             canManageUsers: form.elements.canManageUsers.checked,
             canViewAudit: form.elements.canViewAudit.checked,
             canManageSecurity: form.elements.canManageSecurity.checked,
@@ -301,7 +402,14 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     });
 
     detail.querySelector('#security-temp-password').addEventListener('click', async () => {
-      if (!window.confirm(`Сбросить пароль ${user.username}, завершить его сессии и выдать временный пароль?`)) return;
+      const confirmed = await adminConfirm({
+        title: 'Выдать временный пароль?',
+        message: `Пароль пользователя ${user.username} будет сброшен, а его активные сессии завершены.`,
+        confirmLabel: 'Сбросить пароль',
+        cancelLabel: 'Отмена',
+        destructive: true,
+      });
+      if (!confirmed) return;
       try {
         const payload = await api(`/api/admin/security/users/${user.id}/temporary-password`, { method: 'POST' });
         showTemporaryPassword(payload.temporaryPassword, user.username);
@@ -339,7 +447,14 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       }
     });
     detail.querySelector('#security-user-delete').addEventListener('click', async () => {
-      if (!window.confirm(`Удалить пользователя ${user.username}? Это действие необратимо.`)) return;
+      const confirmed = await adminConfirm({
+        title: 'Удалить пользователя?',
+        message: `Пользователь ${user.username} будет удалён. Это действие необратимо.`,
+        confirmLabel: 'Удалить пользователя',
+        cancelLabel: 'Отмена',
+        destructive: true,
+      });
+      if (!confirmed) return;
       try {
         await api(`/api/admin/security/users/${user.id}`, { method: 'DELETE' });
         selectedUserId = null;
@@ -367,6 +482,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           <div class="security-role-grid">
             ${roleCheckbox('canManageData', 'Управление данными', false, false)}
             ${roleCheckbox('canManageInterface', 'Настройка интерфейса', false, false)}
+            ${roleCheckbox('canEditOsm', 'Объекты OSM', false, false)}
             ${roleCheckbox('canManageUsers', 'Управление пользователями', false, false)}
             ${roleCheckbox('canViewAudit', 'Просмотр аудита', false, false)}
             ${roleCheckbox('canManageSecurity', 'Управление безопасностью', false, false)}
@@ -390,6 +506,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
             email: form.elements.email.value.trim() || null,
             canManageData: form.elements.canManageData.checked,
             canManageInterface: form.elements.canManageInterface.checked,
+            canEditOsm: form.elements.canEditOsm.checked,
             canManageUsers: form.elements.canManageUsers.checked,
             canViewAudit: form.elements.canViewAudit.checked,
             canManageSecurity: form.elements.canManageSecurity.checked,
@@ -411,15 +528,29 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     button.setAttribute('role', 'option');
     const state = user.isBlocked ? 'BLOCKED' : user.mustChangePassword ? 'TEMP' : 'ACTIVE';
     button.innerHTML = `
+      <span class="security-user-avatar" aria-hidden="true">
+        <span class="security-user-avatar-fallback"></span>
+      </span>
       <span class="security-user-row-main"><strong></strong><small></small></span>
       <span class="security-user-row-state is-${state.toLowerCase()}">${state}</span>
     `;
+    const avatar = button.querySelector('.security-user-avatar');
+    const fallback = button.querySelector('.security-user-avatar-fallback');
+    fallback.textContent = auditAvatarFallback(user.displayName ?? user.username);
+    if (user.hasAvatar) {
+      const avatarVersion = encodeURIComponent(user.updatedAt ?? '1');
+      const avatarUrl =
+        `/api/admin/security/users/${encodeURIComponent(user.id)}/avatar?v=${avatarVersion}`;
+      applyAvatarBackground(avatar, fallback, avatarUrl);
+    }
     button.querySelector('strong').textContent = user.displayName ?? user.username;
     button.querySelector('small').textContent = `@${user.username}${user.email ? ` · ${user.email}` : ''}`;
     button.classList.toggle('is-selected', user.id === selectedUserId);
     button.addEventListener('click', () => {
       selectedUserId = user.id;
-      renderUsersList();
+      for (const row of host.querySelectorAll('.security-user-row')) {
+        row.classList.toggle('is-selected', row.dataset.userId === String(user.id));
+      }
       renderDetail(user);
     });
     return button;
@@ -471,14 +602,239 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     return params;
   }
 
+  function auditAvatarFallback(value) {
+    return String(value || '?').trim().slice(0, 1).toLocaleUpperCase('ru-RU') || '?';
+  }
+
+  function auditUserCell(entry) {
+    const cell = document.createElement('td');
+    const identity = document.createElement('span');
+    identity.className = 'security-audit-user';
+
+    const avatar = document.createElement('span');
+    avatar.className = 'security-audit-avatar';
+
+    const fallback = document.createElement('span');
+    fallback.className = 'security-audit-avatar-fallback';
+    fallback.textContent = auditAvatarFallback(entry.username);
+    avatar.append(fallback);
+
+    if (entry.userId) {
+      const currentUserRow =
+        String(entry.userId) === String(currentUser?.id ?? '');
+      const avatarUrl = currentUserRow
+        ? '/api/admin/profile/avatar'
+        : `/api/admin/security/users/${encodeURIComponent(entry.userId)}/avatar`;
+      applyAvatarBackground(avatar, fallback, avatarUrl);
+    }
+
+    const name = document.createElement('span');
+    name.textContent = entry.username ?? '—';
+    identity.append(avatar, name);
+    cell.append(identity);
+    return cell;
+  }
+
+  function jsonPrimitive(value) {
+    const span = document.createElement('span');
+    if (value === null) {
+      span.className = 'security-json-null';
+      span.textContent = 'null';
+      return span;
+    }
+    if (typeof value === 'string') {
+      span.className = 'security-json-string';
+      span.textContent = JSON.stringify(value);
+      return span;
+    }
+    if (typeof value === 'number') {
+      span.className = 'security-json-number';
+      span.textContent = String(value);
+      return span;
+    }
+    if (typeof value === 'boolean') {
+      span.className = 'security-json-boolean';
+      span.textContent = String(value);
+      return span;
+    }
+    span.className = 'security-json-string';
+    span.textContent = JSON.stringify(String(value));
+    return span;
+  }
+
+  function appendJsonKey(hostElement, key) {
+    if (key === null || key === undefined) return;
+    const keyNode = document.createElement('span');
+    keyNode.className = 'security-json-key';
+    keyNode.textContent = JSON.stringify(String(key));
+    hostElement.append(keyNode, document.createTextNode(': '));
+  }
+
+  function ensureJsonBranch(details) {
+    const render = jsonBranchRenderers.get(details);
+    if (!render) return;
+    jsonBranchRenderers.delete(details);
+    render();
+  }
+
+  function jsonTreeNode(key, value) {
+    const complex = value !== null && typeof value === 'object';
+    if (!complex) {
+      const line = document.createElement('div');
+      line.className = 'security-json-line';
+      appendJsonKey(line, key);
+      line.append(jsonPrimitive(value));
+      return line;
+    }
+
+    const array = Array.isArray(value);
+    const keys = array ? value.map((_item, index) => index) : Object.keys(value);
+    const details = document.createElement('details');
+    details.className = 'security-json-branch';
+
+    const summary = document.createElement('summary');
+    appendJsonKey(summary, key);
+    const shape = document.createElement('span');
+    shape.className = 'security-json-shape';
+    shape.textContent = array
+      ? `Array [${keys.length}]`
+      : `Object {${keys.length}}`;
+    summary.append(shape);
+
+    const children = document.createElement('div');
+    children.className = 'security-json-children';
+    details.append(summary, children);
+
+    jsonBranchRenderers.set(details, () => {
+      const fragment = document.createDocumentFragment();
+      for (const childKey of keys) {
+        fragment.append(jsonTreeNode(childKey, value[childKey]));
+      }
+      children.append(fragment);
+    });
+    details.addEventListener('toggle', () => {
+      if (details.open) ensureJsonBranch(details);
+    });
+    return details;
+  }
+
+  function renderAuditJsonTree(value) {
+    const tree = host.querySelector('#security-audit-json-tree');
+    tree.replaceChildren();
+    const root = jsonTreeNode(null, value);
+    tree.append(root);
+    if (root instanceof HTMLDetailsElement) {
+      root.open = true;
+      ensureJsonBranch(root);
+    }
+  }
+
+  function setAuditDetailMode(mode) {
+    auditDetailMode = mode === 'raw' ? 'raw' : 'tree';
+    const tree = host.querySelector('#security-audit-json-tree');
+    const raw = host.querySelector('#security-audit-json-raw');
+    tree.hidden = auditDetailMode !== 'tree';
+    raw.hidden = auditDetailMode !== 'raw';
+    for (const button of host.querySelectorAll('[data-audit-view]')) {
+      button.setAttribute(
+        'aria-pressed',
+        String(button.dataset.auditView === auditDetailMode),
+      );
+    }
+    host.querySelector('#security-audit-expand-all').disabled =
+      auditDetailMode !== 'tree';
+    host.querySelector('#security-audit-collapse-all').disabled =
+      auditDetailMode !== 'tree';
+  }
+
+  function closeAuditDetails() {
+    const overlay = host.querySelector('#security-audit-detail-overlay');
+    overlay.hidden = true;
+    document.body.classList.remove('security-modal-open');
+    host.querySelector('#security-audit-json-tree').replaceChildren();
+    host.querySelector('#security-audit-json-raw').textContent = '';
+    auditDetailEntry = null;
+  }
+
+  function openAuditDetails(entry) {
+    auditDetailEntry = entry;
+    const overlay = host.querySelector('#security-audit-detail-overlay');
+    const title = host.querySelector('#security-audit-detail-title');
+    const meta = host.querySelector('#security-audit-detail-meta');
+    const raw = host.querySelector('#security-audit-json-raw');
+    const details = entry.details ?? {};
+
+    title.textContent = entry.operationType || entry.eventType || `Аудит #${entry.id}`;
+    meta.textContent = [
+      `#${entry.id}`,
+      formatDate(entry.createdAt),
+      entry.username ?? 'без пользователя',
+      entry.ipAddress ?? null,
+      entry.status ?? null,
+    ].filter(Boolean).join(' · ');
+    raw.textContent = JSON.stringify(details, null, 2);
+    renderAuditJsonTree(details);
+    setAuditDetailMode('tree');
+    overlay.hidden = false;
+    document.body.classList.add('security-modal-open');
+    overlay.querySelector('.security-audit-detail-close')?.focus();
+  }
+
+  function expandAuditJsonTree() {
+    const tree = host.querySelector('#security-audit-json-tree');
+    const queue = [...tree.querySelectorAll('details.security-json-branch')];
+    for (let index = 0; index < queue.length; index += 1) {
+      const details = queue[index];
+      ensureJsonBranch(details);
+      details.open = true;
+      const children = details.querySelector(':scope > .security-json-children');
+      if (children) {
+        queue.push(
+          ...children.querySelectorAll(':scope > details.security-json-branch'),
+        );
+      }
+    }
+  }
+
+  function collapseAuditJsonTree() {
+    for (const details of host.querySelectorAll(
+      '#security-audit-json-tree details.security-json-branch',
+    )) {
+      details.open = false;
+    }
+  }
+
+  async function copyAuditJson() {
+    if (!auditDetailEntry) return;
+    const button = host.querySelector('#security-audit-copy-json');
+    await navigator.clipboard.writeText(
+      JSON.stringify(auditDetailEntry.details ?? {}, null, 2),
+    );
+    const previous = button.textContent;
+    button.textContent = 'Скопировано';
+    setTimeout(() => {
+      button.textContent = previous;
+    }, 1200);
+  }
+
   async function quickBlockUser(entry) {
     if (!canManageUsers || !entry.userId) return;
     const target = userById.get(entry.userId);
     if (target?.isBootstrap) {
-      window.alert('Bootstrap-администратор не может быть заблокирован вручную.');
+      await adminAlert({
+        title: 'Блокировка недоступна',
+        message: 'Bootstrap-администратор не может быть заблокирован вручную.',
+      });
       return;
     }
-    if (!window.confirm(`Заблокировать ${entry.username ?? `user #${entry.userId}`} на 1 час?`)) return;
+    const confirmed = await adminConfirm({
+      title: 'Заблокировать учётную запись?',
+      message: `${entry.username ?? `user #${entry.userId}`} будет заблокирован на 1 час.`,
+      confirmLabel: 'Заблокировать',
+      cancelLabel: 'Отмена',
+      destructive: true,
+    });
+    if (!confirmed) return;
     await api(`/api/admin/security/users/${entry.userId}/block`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -492,7 +848,14 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
 
   async function quickBlockIp(entry) {
     if (!canManageSecurity || !entry.ipAddress) return;
-    if (!window.confirm(`Заблокировать IP ${entry.ipAddress} на 1 час?`)) return;
+    const confirmed = await adminConfirm({
+      title: 'Заблокировать IP?',
+      message: `IP ${entry.ipAddress} будет заблокирован на 1 час.`,
+      confirmLabel: 'Заблокировать IP',
+      cancelLabel: 'Отмена',
+      destructive: true,
+    });
+    if (!confirmed) return;
     await api('/api/admin/security/ip-blocks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -507,14 +870,23 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
 
   function auditRow(entry) {
     const row = document.createElement('tr');
+
+    const time = document.createElement('td');
+    time.textContent = formatDate(entry.createdAt);
+    row.append(time, auditUserCell(entry));
+
     for (const value of [
-      formatDate(entry.createdAt), entry.username ?? '—', entry.ipAddress ?? '—',
-      entry.eventType, entry.operationType, entry.status, entry.durationMs ?? '—',
+      entry.ipAddress ?? '—',
+      entry.eventType,
+      entry.operationType,
+      entry.status,
+      entry.durationMs ?? '—',
     ]) {
       const cell = document.createElement('td');
       cell.textContent = String(value);
       row.append(cell);
     }
+
     const actions = document.createElement('td');
     actions.className = 'security-audit-actions';
     if (canManageUsers && entry.userId) {
@@ -522,7 +894,13 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       button.type = 'button';
       button.className = 'mini-button';
       button.textContent = 'Блок. учётку';
-      button.addEventListener('click', () => void quickBlockUser(entry).then(loadAudit).catch((error) => setMessage(host.querySelector('#security-audit-message'), error.message, 'error')));
+      button.addEventListener('click', () => void quickBlockUser(entry)
+        .then(loadAudit)
+        .catch((error) => setMessage(
+          host.querySelector('#security-audit-message'),
+          error.message,
+          'error',
+        )));
       actions.append(button);
     }
     if (canManageSecurity && entry.ipAddress) {
@@ -530,22 +908,34 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       button.type = 'button';
       button.className = 'mini-button';
       button.textContent = 'Блок. IP';
-      button.addEventListener('click', () => void quickBlockIp(entry).then(loadAudit).catch((error) => setMessage(host.querySelector('#security-audit-message'), error.message, 'error')));
+      button.addEventListener('click', () => void quickBlockIp(entry)
+        .then(loadAudit)
+        .catch((error) => setMessage(
+          host.querySelector('#security-audit-message'),
+          error.message,
+          'error',
+        )));
       actions.append(button);
     }
     if (!actions.childElementCount) actions.textContent = '—';
     row.append(actions);
+
     const detailsCell = document.createElement('td');
-    const details = document.createElement('details');
-    const summary = document.createElement('summary');
-    const pre = document.createElement('pre');
     const changeCount = Array.isArray(entry.details?.changes)
       ? entry.details.changes.length
       : 0;
-    summary.textContent = changeCount ? `Изменения (${changeCount})` : 'JSON';
-    pre.textContent = JSON.stringify(entry.details ?? {}, null, 2);
-    details.append(summary, pre);
-    detailsCell.append(details);
+    const taskLogCount = Array.isArray(entry.details?.taskLog)
+      ? entry.details.taskLog.length
+      : 0;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'secondary mini-button security-audit-details-open';
+    button.textContent = [
+      changeCount ? `Изменения (${changeCount})` : null,
+      taskLogCount ? `Журнал (${taskLogCount})` : null,
+    ].filter(Boolean).join(' · ') || 'Детали';
+    button.addEventListener('click', () => openAuditDetails(entry));
+    detailsCell.append(button);
     row.append(detailsCell);
     return row;
   }
@@ -607,6 +997,25 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     void loadAudit();
   });
 
+  const auditOverlay = host.querySelector('#security-audit-detail-overlay');
+  auditOverlay?.querySelector('.security-audit-detail-close')
+    ?.addEventListener('click', closeAuditDetails);
+  auditOverlay?.addEventListener('click', (event) => {
+    if (event.target === auditOverlay) closeAuditDetails();
+  });
+  host.querySelector('#security-audit-expand-all')
+    ?.addEventListener('click', expandAuditJsonTree);
+  host.querySelector('#security-audit-collapse-all')
+    ?.addEventListener('click', collapseAuditJsonTree);
+  host.querySelector('#security-audit-copy-json')
+    ?.addEventListener('click', () => void copyAuditJson());
+  for (const button of host.querySelectorAll('[data-audit-view]')) {
+    button.addEventListener('click', () => setAuditDetailMode(button.dataset.auditView));
+  }
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !auditOverlay?.hidden) closeAuditDetails();
+  });
+
   async function loadSettings() {
     if (!canManageSecurity) return;
     const form = host.querySelector('#security-settings-form');
@@ -614,8 +1023,13 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     try {
       const payload = await api('/api/admin/security/settings');
       for (const [key, value] of Object.entries(payload.settings)) {
-        if (form.elements[key]) form.elements[key].value = value;
+        const control = form.elements[key];
+        if (!control) continue;
+        if (control.type === 'checkbox') control.checked = Boolean(value);
+        else control.value = value;
       }
+      bindHumanUnits(form);
+      securitySettingsDirty?.markClean();
       setMessage(message, 'Параметры загружены.');
     } catch (error) {
       setMessage(message, error.message, 'error');
@@ -626,17 +1040,27 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     event.preventDefault();
     const form = event.currentTarget;
     if (!form.reportValidity()) return;
-    const keys = [
+    const numericKeys = [
       'maxFailedAttempts','failureWindowSeconds','lockoutSeconds',
       'ipMaxFailedAttempts','ipFailureWindowSeconds','ipLockoutSeconds',
       'sessionIdleSeconds','sessionAbsoluteSeconds','auditRetentionDays',
+      'passwordMinLength','passwordMaxLength',
     ];
+    const booleanKeys = [
+      'passwordRequireLowercase','passwordRequireUppercase',
+      'passwordRequireDigit','passwordRequireSpecial',
+    ];
+    const settings = Object.fromEntries([
+      ...numericKeys.map((key) => [key, Number(form.elements[key].value)]),
+      ...booleanKeys.map((key) => [key, form.elements[key].checked]),
+    ]);
     try {
       await api('/api/admin/security/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(Object.fromEntries(keys.map((key) => [key, Number(form.elements[key].value)]))),
+        body: JSON.stringify(settings),
       });
+      securitySettingsDirty?.markClean();
       setMessage(host.querySelector('#security-settings-message'), 'Параметры сохранены.', 'success');
     } catch (error) {
       setMessage(host.querySelector('#security-settings-message'), error.message, 'error');

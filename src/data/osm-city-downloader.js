@@ -1,7 +1,17 @@
 export class OsmCityDownloadError extends Error {
   /**
    * @param {string} message
-   * @param {{ statusCode?: number, retryAfterMs?: number | null, finalURL?: string }} [details]
+   * @param {{
+   *   statusCode?: number,
+   *   retryAfterMs?: number | null,
+   *   finalURL?: string,
+   *   code?: string,
+   *   limitBytes?: number,
+   *   receivedBytes?: number,
+   *   networkCode?: string | null,
+   *   networkMessage?: string | null,
+   *   retryable?: boolean,
+   * }} [details]
    */
   constructor(message, details = {}) {
     super(message);
@@ -9,7 +19,93 @@ export class OsmCityDownloadError extends Error {
     this.statusCode = details.statusCode ?? null;
     this.retryAfterMs = details.retryAfterMs ?? null;
     this.finalURL = details.finalURL ?? null;
+    this.code = details.code ?? null;
+    this.limitBytes = details.limitBytes ?? null;
+    this.receivedBytes = details.receivedBytes ?? null;
+    this.networkCode = details.networkCode ?? null;
+    this.networkMessage = details.networkMessage ?? null;
+    this.retryable = details.retryable ?? false;
   }
+}
+
+const RETRYABLE_NETWORK_CODES = new Set([
+  'EAI_AGAIN',
+  'ENOTFOUND',
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ETIMEDOUT',
+  'ENETUNREACH',
+  'EHOSTUNREACH',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_SOCKET',
+]);
+
+function nestedErrorDetail(error, key) {
+  let current = error;
+  for (let depth = 0; current && depth < 5; depth += 1) {
+    if (typeof current?.[key] === 'string' && current[key]) {
+      return current[key];
+    }
+    current = current?.cause;
+  }
+  return null;
+}
+
+function wrapNetworkError(error, {
+  operationSignal,
+  timeoutController,
+  timeoutMs,
+  finalURL,
+}) {
+  if (operationSignal?.aborted) {
+    return operationSignal.reason instanceof Error
+      ? operationSignal.reason
+      : error;
+  }
+
+  if (timeoutController.signal.aborted) {
+    const timeoutError = new OsmCityDownloadError(
+      `OSM download timed out after ${timeoutMs} ms`,
+      {
+        code: 'network-timeout',
+        networkCode: 'ETIMEDOUT',
+        networkMessage: `request timeout after ${timeoutMs} ms`,
+        retryable: true,
+        finalURL,
+      },
+    );
+    timeoutError.cause = error;
+    return timeoutError;
+  }
+
+  const networkCode = nestedErrorDetail(error, 'code');
+  const networkMessage =
+    nestedErrorDetail(error?.cause, 'message') ??
+    nestedErrorDetail(error, 'message') ??
+    (error instanceof Error ? error.message : String(error));
+  const retryable =
+    RETRYABLE_NETWORK_CODES.has(networkCode) ||
+    (
+      !networkCode &&
+      error instanceof TypeError &&
+      error.message === 'fetch failed'
+    );
+
+  const wrapped = new OsmCityDownloadError(
+    `OSM download failed: ${networkMessage}` +
+    (networkCode ? ` [${networkCode}]` : ''),
+    {
+      code: 'network-error',
+      networkCode,
+      networkMessage,
+      retryable,
+      finalURL,
+    },
+  );
+  wrapped.cause = error;
+  return wrapped;
 }
 
 /**
@@ -88,19 +184,12 @@ export async function downloadOsmCities(
           body,
         });
       } catch (error) {
-        if (options.signal?.aborted) {
-          throw options.signal.reason instanceof Error
-            ? options.signal.reason
-            : error;
-        }
-        if (controller.signal.aborted) {
-          throw new OsmCityDownloadError(
-            `OSM download timed out after ${options.timeoutMs} ms`,
-          );
-        }
-        throw new OsmCityDownloadError(
-          `OSM download failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        throw wrapNetworkError(error, {
+          operationSignal: options.signal,
+          timeoutController: controller,
+          timeoutMs: options.timeoutMs,
+          finalURL: url.toString(),
+        });
       }
 
       if (response.status >= 300 && response.status < 400) {
@@ -131,6 +220,12 @@ export async function downloadOsmCities(
       if (Number.isFinite(declaredLength) && declaredLength > options.maxBytes) {
         throw new OsmCityDownloadError(
           'OSM response exceeds the configured size limit',
+          {
+            code: 'response-size-limit',
+            limitBytes: options.maxBytes,
+            receivedBytes: declaredLength,
+            finalURL: url.toString(),
+          },
         );
       }
       if (!response.body) {
@@ -139,15 +234,31 @@ export async function downloadOsmCities(
 
       const chunks = [];
       let bytes = 0;
-      for await (const chunk of response.body) {
-        const buffer = Buffer.from(chunk);
-        bytes += buffer.length;
-        if (bytes > options.maxBytes) {
-          throw new OsmCityDownloadError(
-            'OSM response exceeds the configured size limit',
-          );
+      try {
+        for await (const chunk of response.body) {
+          const buffer = Buffer.from(chunk);
+          bytes += buffer.length;
+          if (bytes > options.maxBytes) {
+            throw new OsmCityDownloadError(
+              'OSM response exceeds the configured size limit',
+              {
+                code: 'response-size-limit',
+                limitBytes: options.maxBytes,
+                receivedBytes: bytes,
+                finalURL: url.toString(),
+              },
+            );
+          }
+          chunks.push(buffer);
         }
-        chunks.push(buffer);
+      } catch (error) {
+        if (error instanceof OsmCityDownloadError) throw error;
+        throw wrapNetworkError(error, {
+          operationSignal: options.signal,
+          timeoutController: controller,
+          timeoutMs: options.timeoutMs,
+          finalURL: url.toString(),
+        });
       }
       if (bytes === 0) {
         throw new OsmCityDownloadError('OSM download returned an empty body');

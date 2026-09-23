@@ -19,6 +19,7 @@ import { createAdminSecurityRouter } from './routes/admin-security-api.js';
 import { createApiRouter } from './routes/api.js';
 import { createKmlTransferRouter } from './routes/kml-transfer-api.js';
 import { createLineTypesRouter } from './routes/line-types-api.js';
+import { createOsmBoundariesRouter } from './routes/osm-boundaries-api.js';
 import { createProjectSettingsRouter } from './routes/project-settings-api.js';
 import { createProjectSettingsTransferRouter } from './routes/project-settings-transfer-api.js';
 import { createReportConfigRouter } from './routes/report-config-api.js';
@@ -117,6 +118,8 @@ const TEST_PROJECT_SETTINGS = Object.freeze({
   themePreset: 'classic',
   showLineLabels: false,
   showLinePopups: true,
+  largeCityPopulationThreshold: 400000,
+  largeCityAreaKm2Threshold: null,
   publicDownloadName: DEFAULT_PUBLIC_DOWNLOAD_NAME,
   updatedAt: '2026-01-01T00:00:00.000Z',
 });
@@ -183,6 +186,12 @@ function testSecuritySettings() {
     sessionIdleSeconds: 1800,
     sessionAbsoluteSeconds: 43200,
     auditRetentionDays: 365,
+    passwordMinLength: 12,
+    passwordMaxLength: 1024,
+    passwordRequireLowercase: false,
+    passwordRequireUppercase: false,
+    passwordRequireDigit: false,
+    passwordRequireSpecial: false,
   };
 }
 
@@ -192,7 +201,7 @@ function testSettingsTransferService() {
       return {
         _dtpstat: {
           kind: 'project-settings',
-          schemaVersion: 6,
+          schemaVersion: 8,
           exportedAt: '2026-01-01T00:00:00.000Z',
         },
         projectSettings: TEST_PROJECT_SETTINGS,
@@ -223,6 +232,7 @@ function testSecurity(config) {
     email: null,
     canManageData: true,
     canManageInterface: true,
+    canEditOsm: true,
     canManageUsers: true,
     canViewAudit: true,
     canManageSecurity: true,
@@ -244,8 +254,10 @@ function testSecurity(config) {
     requireProfile: requireAuth,
     requireData: requireAuth,
     requireInterface: requireAuth,
+    requireOsmEditor: requireAuth,
     requireUsers: requireAuth,
     requireAudit: requireAuth,
+    requireUsersOrAudit: requireAuth,
     requireSecurity: requireAuth,
     requireSuperuser: requireAuth,
   };
@@ -280,6 +292,17 @@ function testSecurity(config) {
     async revokeSession() { return true; },
     async revokeOtherSessions() { return 0; },
     async getSecuritySettings() { return testSecuritySettings(); },
+    async getPasswordPolicy() {
+      const settings = testSecuritySettings();
+      return {
+        passwordMinLength: settings.passwordMinLength,
+        passwordMaxLength: settings.passwordMaxLength,
+        passwordRequireLowercase: settings.passwordRequireLowercase,
+        passwordRequireUppercase: settings.passwordRequireUppercase,
+        passwordRequireDigit: settings.passwordRequireDigit,
+        passwordRequireSpecial: settings.passwordRequireSpecial,
+      };
+    },
     async saveSecuritySettings(payload) { return payload; },
     async listIpBlocks() { return []; },
     async createIpBlock(payload) { return { id: 1, ...payload }; },
@@ -299,6 +322,10 @@ function testSecurity(config) {
  *   reportConfigService?: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
  *   refreshPublicDownloads?: () => Promise<any>,
  *   refreshPublicDownloadsAfterSettingsImport?: () => Promise<any>,
+ *   refreshProjectDerived?: () => Promise<any>,
+ *   refreshOsmBoundaryDerived?: () => Promise<any>,
+ *   osmImportSettingsRepository?: { get: Function, save: Function },
+ *   osmBoundaryAdminRepository?: { list: Function, getGeometry: Function, update: Function },
  *   exportRepository: import('./routes/api.js').DataExportRepository,
  *   importService: import('./routes/api.js').DataImportService,
  *   cityBoundaryTransferService: import('./routes/api.js').CityBoundaryTransferService,
@@ -319,6 +346,10 @@ export function createApp({
   reportConfigService,
   refreshPublicDownloads,
   refreshPublicDownloadsAfterSettingsImport,
+  refreshProjectDerived,
+  refreshOsmBoundaryDerived,
+  osmImportSettingsRepository,
+  osmBoundaryAdminRepository,
   exportRepository,
   importService,
   cityBoundaryTransferService,
@@ -456,7 +487,18 @@ export function createApp({
     projectSettingsRepository: effectiveProjectSettingsRepository,
     ...commonAdmin,
     afterPublicDownloadNameSave: async () => refreshPublicDownloads?.(),
+    afterSettingsSave: async () => refreshProjectDerived?.(),
   }));
+  if (osmImportSettingsRepository && osmBoundaryAdminRepository) {
+    app.use('/api', createOsmBoundariesRouter({
+      settingsRepository: osmImportSettingsRepository,
+      boundaryRepository: osmBoundaryAdminRepository,
+      adminAuth: effectiveAdminAuth,
+      securityService: effectiveSecurityService,
+      osmConfig: config.osmCityUpdate,
+      afterBoundaryChange: async () => refreshOsmBoundaryDerived?.(),
+    }));
+  }
   app.use('/api', createReportConfigRouter({
     reportConfigService: effectiveReportConfigService,
     lineTypesRepository: effectiveLineTypesRepository,

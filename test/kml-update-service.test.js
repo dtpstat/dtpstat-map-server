@@ -86,8 +86,8 @@ const defaultMatchRows = [
 ];
 
 const defaultResolvedCities = [
-  { id: 1, name: 'Первый' },
-  { id: 2, name: 'Второй' },
+  { boundaryId: 11, id: 1, name: 'Первый' },
+  { boundaryId: 12, id: 2, name: 'Второй' },
 ];
 
 function createPool({
@@ -126,7 +126,7 @@ function createPool({
         const rows = loadCount === 1 ? initialTypeRows : finalTypeRows;
         return { rows, rowCount: rows.length };
       }
-      if (normalized === 'SELECT EXISTS (SELECT 1 FROM city_boundaries) AS ready') {
+      if (normalized === 'SELECT EXISTS (SELECT 1 FROM city_boundaries WHERE is_active) AS ready') {
         return { rows: [{ ready: hasBoundaries }], rowCount: 1 };
       }
       if (normalized.includes('LEFT JOIN LATERAL')) {
@@ -147,7 +147,7 @@ function createPool({
       }
       if (
         normalized.startsWith('WITH requested AS') &&
-        normalized.includes('SELECT city.id::integer AS id, city.name')
+        normalized.includes('boundary.id::integer AS "boundaryId"')
       ) {
         return { rows: resolvedCities, rowCount: resolvedCities.length };
       }
@@ -245,12 +245,13 @@ test('KML matches every imported OSM place and materializes missing city records
 
   const matchStageQuery = pool.queries.find((query) =>
     query.startsWith('CREATE TEMP TABLE kml_place_match_geometries'));
-  assert.match(matchStageQuery, /FROM city_boundaries\s*$/);
+  assert.match(matchStageQuery, /FROM city_boundaries\s+WHERE is_active\s*$/);
   assert.doesNotMatch(matchStageQuery, /WHERE city_id IS NOT NULL/);
 
   const matchQuery = pool.queries.find((query) => query.includes('LEFT JOIN LATERAL'));
-  assert.match(matchQuery, /LEFT JOIN cities AS named_city ON named_city\.name = boundary\.osm_name/);
-  assert.match(matchQuery, /COALESCE\(boundary\.city_id, named_city\.id\) AS city_id/);
+  assert.doesNotMatch(matchQuery, /named_city/);
+  assert.match(matchQuery, /boundary\.city_id AS city_id/);
+  assert.match(matchQuery, /boundary\.display_name AS place_name/);
   assert.equal(pool.queries.at(-1), 'COMMIT');
   assert.equal(pool.released, true);
 });

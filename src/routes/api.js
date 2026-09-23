@@ -1,4 +1,7 @@
 import express, { Router } from 'express';
+import path from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import {
   AdminTaskAlreadyRunningError,
 } from '../data/admin-task-manager.js';
@@ -11,6 +14,13 @@ import {
   OsmCityUpdateValidationError,
   resolveOsmCityUpdateRequest,
 } from '../data/osm-city-update-options.js';
+import { createSingleFileZipStream } from '../data/single-file-zip.js';
+import {
+  openUploadedJson,
+  receiveStreamUpload,
+  removeStreamUpload,
+  StreamUploadError,
+} from '../http/stream-upload.js';
 import {
   adminClientIp,
   createAdminOperationAudit,
@@ -52,7 +62,17 @@ import {
  *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
  *   securityService: ReturnType<import('../data/admin-security.js').createAdminSecurityService>,
  *   publicMap: object,
- *   importApi: { maxBodyBytes: number },
+ *   importApi: {
+ *     maxBodyBytes: number,
+ *     maxStreamUploadBytes: number,
+ *     maxStreamJsonBytes: number,
+ *     maxStreamItemBytes: number,
+ *     maxStreamZipCompressionRatio?: number,
+ *     maxStreamZipEntries?: number,
+ *     maxStreamJsonDepth?: number,
+ *     maxStreamJsonItems?: number,
+ *     streamUploadDirectory: string
+ *   },
  *   kmlUpdate: { maxRequestBodyBytes: number, cityBufferMeters: number, cityBufferMaxMeters: number },
  *   osmCityUpdate: any
  * }} dependencies
@@ -74,6 +94,18 @@ export function createApiRouter({
   osmCityUpdate,
 }) {
   const router = Router();
+  const streamTransfer = {
+    uploadDirectory: importApi.streamUploadDirectory ??
+      path.join(process.cwd(), 'var', 'import-staging'),
+    maxUploadBytes: importApi.maxStreamUploadBytes ?? importApi.maxBodyBytes,
+    maxJsonBytes: importApi.maxStreamJsonBytes ?? importApi.maxBodyBytes,
+    maxItemBytes: importApi.maxStreamItemBytes ?? importApi.maxBodyBytes,
+    maxZipCompressionRatio:
+      importApi.maxStreamZipCompressionRatio ?? 1000,
+    maxZipEntries: importApi.maxStreamZipEntries ?? 64,
+    maxJsonDepth: importApi.maxStreamJsonDepth ?? 128,
+    maxJsonItems: importApi.maxStreamJsonItems ?? 5_000_000,
+  };
   const adminStatusURL = (request, taskId) =>
     `${request.baseUrl}/admin/status/${taskId}`;
   const operationAudit = (type) => createAdminOperationAudit(securityService, type);
@@ -102,25 +134,76 @@ export function createApiRouter({
     next();
   };
 
+  const clearCompletedAdminTask = (_request, _response, next) => {
+    adminTasks.clearCompleted?.();
+    next();
+  };
+
   const progressLog = (context, progress) => {
     let message = `Прогресс: ${progress.phase}`;
-    if (progress.phase === 'index') {
+    if (progress.phase === 'resume') {
+      message = `OSM: возобновление checkpoint ${progress.checkpointId}; уже загружено ${progress.stagedPlaces}/${progress.indexedPlaces}, осталось ${progress.remainingPlaces}`;
+      if ((progress.unbuildableGeometryPlaces ?? 0) > 0) {
+        message += `; без построенного полигона ${progress.unbuildableGeometryPlaces}`;
+      }
+    } else if (progress.phase === 'index') {
       message = `OSM: загружена часть индекса ${progress.indexPart}/${progress.indexPartCount}`;
     } else if (progress.phase === 'geometry') {
       message = `OSM: обработан пакет ${progress.batch}/${progress.batchCount}`;
+      if ((progress.batchUnbuildableGeometryPlaces ?? 0) > 0) {
+        message += `; без построенного полигона ${progress.batchUnbuildableGeometryPlaces}`;
+      }
     } else if (progress.phase === 'retry') {
       const target = progress.requestPhase === 'geometry'
         ? `пакет ${progress.batch}/${progress.batchCount}`
         : `часть индекса ${progress.indexPart}/${progress.indexPartCount}`;
-      message = `OSM: HTTP ${progress.statusCode}, ${target}; повтор ${progress.attempt}/${progress.maxRetries} через ${Math.ceil(progress.waitMs / 1000)} сек.`;
+      const reason = progress.retryKind === 'network'
+        ? `сетевая ошибка ${progress.networkCode ?? progress.networkMessage ?? 'fetch'}`
+        : `HTTP ${progress.statusCode}`;
+      message = `OSM: ${reason}, ${target}; повтор ${progress.attempt}/${progress.maxRetries} через ${Math.ceil(progress.waitMs / 1000)} сек.`;
+    } else if (progress.phase === 'split') {
+      message = progress.reason === 'http-504'
+        ? `OSM: пакет ${progress.batch} получил HTTP 504 после ${progress.retryCount} повторов; разделён ${progress.objectCount} → ${progress.splitSizes.join(' + ')} объектов`
+        : `OSM: пакет ${progress.batch} слишком большой; разделён ${progress.objectCount} → ${progress.splitSizes.join(' + ')} объектов`;
     } else if (progress.phase === 'kml-source') {
       message = `KML: обработан источник ${progress.source}/${progress.sourceCount}`;
+    } else if (progress.phase === 'stage-write') {
+      message =
+        `PostgreSQL/PostGIS: запись staging-пакета ${progress.batch ?? '?'}` +
+        ` (${progress.batchPlaces ?? '?'} объектов)`;
+    } else if (progress.phase === 'stage') {
+      message =
+        `PostgreSQL/PostGIS: staging-пакет ${progress.batch ?? '?'} записан; ` +
+        `всего ${progress.stagedPlaces ?? '?'} объектов`;
+    } else if (progress.phase === 'delete-boundaries') {
+      message =
+        `Удаление старого snapshot территорий` +
+        (progress.places ? `; новый snapshot: ${progress.places} объектов` : '');
+    } else if (progress.phase === 'insert-boundaries') {
+      message =
+        `Вставка нового snapshot территорий` +
+        (progress.places ? `; объектов: ${progress.places}` : '');
+    } else if (progress.phase === 'hierarchy') {
+      message =
+        `Иерархия территорий: ${progress.processed ?? 0}/${progress.total ?? '?'}` +
+        (progress.batchCount
+          ? `; пакет ${progress.batch ?? 0}/${progress.batchCount}`
+          : '');
     } else if (progress.phase === 'validated') {
       message = 'Входные данные проверены';
+    } else if (progress.phase === 'warnings') {
+      message =
+        `Импорт продолжен с предупреждениями: ` +
+        `${progress.warningCount ?? 0}; пропущено записей: ` +
+        `${progress.skippedCount ?? 0}`;
     } else if (progress.phase === 'database') {
       message = 'Изменения базы данных подготовлены';
     }
-    context.log(message, progress);
+    context.log(
+      message,
+      progress,
+      progress.phase === 'warnings' ? 'warning' : 'info',
+    );
   };
 
   const parseCoordinates = (value, count) => {
@@ -163,12 +246,14 @@ export function createApiRouter({
         taskId: task.id,
         task: { ...task, statusURL },
       });
+      return task;
     } catch (error) {
       if (error instanceof AdminTaskAlreadyRunningError) {
         respondWithActiveTask(request, response, error.task);
-        return;
+        return null;
       }
       next(error);
+      return null;
     }
   };
 
@@ -179,21 +264,113 @@ export function createApiRouter({
     type,
   });
 
-  const sendDownload = (response, fileName, contentType, payload) => {
-    response.set('Cache-Control', 'no-store');
-    response.set('Content-Disposition', `attachment; filename="${fileName}"`);
-    response.type(contentType).send(JSON.stringify(payload));
+  const streamingExportRoute = (
+    fileName,
+    contentType,
+    streamLoader,
+    fallbackLoader,
+    zip = false,
+  ) => async (request, response, next) => {
+    try {
+      const source = typeof streamLoader === 'function'
+        ? streamLoader()
+        : [JSON.stringify(await fallbackLoader()), '\n'];
+      const output = zip
+        ? createSingleFileZipStream(fileName, source, {
+            signal: request.signal,
+          })
+        : Readable.from(source);
+      const downloadName = zip
+        ? `${fileName.replace(/\.(?:geojson|json)$/iu, '')}.zip`
+        : fileName;
+      response
+        .set('Cache-Control', 'no-store')
+        .set(
+          'Content-Disposition',
+          `attachment; filename="${downloadName}"`,
+        )
+        .type(zip ? 'application/zip' : contentType);
+      await pipeline(output, response);
+    } catch (error) {
+      if (response.headersSent) {
+        response.destroy(error);
+        return;
+      }
+      next(error);
+    }
   };
 
-  const exportRoute = (fileName, contentType, loader) =>
-    async (_request, response, next) => {
-      try {
-        const payload = await loader();
-        sendDownload(response, fileName, contentType, payload);
-      } catch (error) {
-        next(error);
+  const portableContentTypes = new Set([
+    'application/json',
+    'application/geo+json',
+    'application/zip',
+  ]);
+
+  const receivePortableUpload = async (request, response, next) => {
+    try {
+      return await receiveStreamUpload(request, {
+        directory: streamTransfer.uploadDirectory,
+        maxUploadBytes: streamTransfer.maxUploadBytes,
+        allowedContentTypes: portableContentTypes,
+      });
+    } catch (error) {
+      if (error instanceof StreamUploadError) {
+        response.status(error.statusCode).json({ error: error.message });
+        return null;
       }
-    };
+      next(error);
+      return null;
+    }
+  };
+
+  const portableServiceMethod = (service, streamingName) => {
+    if (typeof service?.[streamingName] !== 'function') {
+      throw new Error(
+        `Streaming transfer service method is unavailable: ${streamingName}`,
+      );
+    }
+    return service[streamingName].bind(service);
+  };
+
+  const executePortableUpload = async (
+    upload,
+    context,
+    serviceMethod,
+    operation = {},
+  ) => {
+    try {
+      const input = await openUploadedJson(upload, {
+        maxJsonBytes: streamTransfer.maxJsonBytes,
+        maxZipCompressionRatio: streamTransfer.maxZipCompressionRatio,
+        maxZipEntries: streamTransfer.maxZipEntries,
+        signal: context.signal,
+      });
+      context.log('Входной поток подготовлен', {
+        transport: input.transport,
+        archiveEntry: input.fileName,
+        uploadBytes: upload.bytes,
+        expectedJsonBytes: input.expectedJsonBytes,
+      });
+      return await serviceMethod(input.stream, {
+        ...operation,
+        maxJsonBytes: streamTransfer.maxJsonBytes,
+        maxItemBytes: streamTransfer.maxItemBytes,
+        maxJsonDepth: streamTransfer.maxJsonDepth,
+        maxJsonItems: streamTransfer.maxJsonItems,
+        signal: context.signal,
+        onCommit: () => context.beginCommit(),
+        onProgress: (progress) => progressLog(context, progress),
+      });
+    } finally {
+      await removeStreamUpload(upload).catch((error) => {
+        context.log(
+          'Не удалось удалить временный upload-файл',
+          { message: error.message },
+          'warning',
+        );
+      });
+    }
+  };
 
   router.get('/config', (_request, response) => {
     response.set('Cache-Control', 'public, max-age=300');
@@ -213,7 +390,10 @@ export function createApiRouter({
   router.get('/cities', async (_request, response, next) => {
     try {
       const cities = await repository.listCities();
-      response.set('Cache-Control', 'public, max-age=300');
+      // Category and rank are derived from mutable project thresholds and
+      // materialized report values. Never let a browser keep the old
+      // classification after the administrator saves new criteria.
+      response.set('Cache-Control', 'no-store');
       response.json({ cities });
     } catch (error) {
       next(error);
@@ -282,111 +462,156 @@ export function createApiRouter({
     }
   });
 
+  const cityStream = exportRepository?.streamCityBoundaries?.bind(
+    exportRepository,
+  );
+  const lineStream = exportRepository?.streamLines?.bind(exportRepository);
+  const populationStream = exportRepository?.streamPopulations?.bind(
+    exportRepository,
+  );
+
   router.get(
     '/admin/export/cities',
     adminAuth.requireData,
     operationAudit('data.export.cities'),
-    exportRoute(
+    streamingExportRoute(
       'cities.geojson',
       'application/geo+json',
+      cityStream,
       () => exportRepository.exportCityBoundaries(),
+    ),
+  );
+  router.get(
+    '/admin/export/cities.zip',
+    adminAuth.requireData,
+    operationAudit('data.export.cities-zip'),
+    streamingExportRoute(
+      'cities.geojson',
+      'application/geo+json',
+      cityStream,
+      () => exportRepository.exportCityBoundaries(),
+      true,
     ),
   );
   router.get(
     '/admin/export/lines',
     adminAuth.requireData,
     operationAudit('data.export.lines'),
-    exportRoute(
+    streamingExportRoute(
       'lines.geojson',
       'application/geo+json',
+      lineStream,
       () => exportRepository.exportLines(),
+    ),
+  );
+  router.get(
+    '/admin/export/lines.zip',
+    adminAuth.requireData,
+    operationAudit('data.export.lines-zip'),
+    streamingExportRoute(
+      'lines.geojson',
+      'application/geo+json',
+      lineStream,
+      () => exportRepository.exportLines(),
+      true,
     ),
   );
   router.get(
     '/admin/export/populations',
     adminAuth.requireData,
     operationAudit('data.export.populations'),
-    exportRoute(
+    streamingExportRoute(
       'populations.json',
       'application/json',
+      populationStream,
       () => exportRepository.exportPopulations(),
     ),
   );
-
-  const lineImportMiddleware = [
+  router.get(
+    '/admin/export/populations.zip',
     adminAuth.requireData,
-    rejectWhileAdminTaskActive,
-    jsonBody(
-      importApi.maxBodyBytes,
-      ['application/json', 'application/geo+json'],
+    operationAudit('data.export.populations-zip'),
+    streamingExportRoute(
+      'populations.json',
+      'application/json',
+      populationStream,
+      () => exportRepository.exportPopulations(),
+      true,
     ),
-  ];
-  const importLines = (request, response, next) => {
-    if (request.body === undefined) {
-      response.status(415).json({
-        error: 'Content-Type must be application/json or application/geo+json',
-      });
-      return;
-    }
-    startAdminTask(request, response, next, {
+  );
+
+  const importLines = async (request, response, next) => {
+    const upload = await receivePortableUpload(request, response, next);
+    if (!upload) return;
+    const task = startAdminTask(request, response, next, {
       type: 'geojson-import',
       endpoint: '/api/admin/import/lines',
       recordsSuccessfulUpdate: true,
       parameters: {
-        featureCount: Array.isArray(request.body?.features) ? request.body.features.length : null,
-        businessLineTypes: Array.isArray(request.body?.lineTypes) ? request.body.lineTypes.length : null,
-        payload: adminAuditPayloadFingerprint(request.body),
+        transport: upload.contentType,
+        contentEncoding: upload.contentEncoding,
+        uploadBytes: upload.bytes,
+        uploadSha256: upload.sha256,
       },
-    }, async (context) => importService.replaceFromGeoJson(
-      request.body,
-      {
-        signal: context.signal,
-        onCommit: () => context.beginCommit(),
-        onProgress: (progress) => progressLog(context, progress),
-      },
+    }, async (context) => executePortableUpload(
+      upload,
+      context,
+      portableServiceMethod(
+        importService,
+        'replaceFromGeoJsonStream',
+      ),
     ));
+    if (!task) await removeStreamUpload(upload).catch(() => {});
   };
-  router.post('/admin/import', ...lineImportMiddleware, importLines);
-  router.post('/admin/import/lines', ...lineImportMiddleware, importLines);
+  router.post(
+    '/admin/import',
+    adminAuth.requireData,
+    rejectWhileAdminTaskActive,
+    clearCompletedAdminTask,
+    importLines,
+  );
+  router.post(
+    '/admin/import/lines',
+    adminAuth.requireData,
+    rejectWhileAdminTaskActive,
+    clearCompletedAdminTask,
+    importLines,
+  );
 
   router.post(
     '/admin/import/cities',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
-    jsonBody(
-      importApi.maxBodyBytes,
-      ['application/json', 'application/geo+json'],
-    ),
-    (request, response, next) => {
-      if (request.body === undefined) {
-        response.status(415).json({
-          error: 'Content-Type must be application/json or application/geo+json',
-        });
-        return;
-      }
+    clearCompletedAdminTask,
+    async (request, response, next) => {
       const dryRun = parseBoolean(request.query.dryRun, false);
       if (dryRun === null) {
         response.status(400).json({ error: 'dryRun must be true or false' });
         return;
       }
-      startAdminTask(request, response, next, {
+      const upload = await receivePortableUpload(request, response, next);
+      if (!upload) return;
+      const task = startAdminTask(request, response, next, {
         type: 'city-geojson-import',
         endpoint: '/api/admin/import/cities',
         recordsSuccessfulUpdate: !dryRun,
         parameters: {
           dryRun,
-          featureCount: Array.isArray(request.body?.features) ? request.body.features.length : null,
-          payload: adminAuditPayloadFingerprint(request.body),
+          transport: upload.contentType,
+          contentEncoding: upload.contentEncoding,
+          uploadBytes: upload.bytes,
+          uploadSha256: upload.sha256,
         },
-      }, async (context) => cityBoundaryTransferService.replaceFromGeoJson(
-        request.body,
-        {
-          dryRun,
-          signal: context.signal,
-          onCommit: () => context.beginCommit(),
-          onProgress: (progress) => progressLog(context, progress),
-        },
+      }, async (context) => executePortableUpload(
+        upload,
+        context,
+        portableServiceMethod(
+          cityBoundaryTransferService,
+          'replaceFromGeoJsonStream',
+        ),
+        { dryRun },
       ));
+      if (!task) await removeStreamUpload(upload).catch(() => {});
     },
   );
 
@@ -394,6 +619,7 @@ export function createApiRouter({
     '/admin/update',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
+    clearCompletedAdminTask,
     jsonBody(kmlUpdate.maxRequestBodyBytes, 'application/json'),
     (request, response, next) => {
       const hasRequestBody =
@@ -440,10 +666,44 @@ export function createApiRouter({
     },
   );
 
+  router.get(
+    '/admin/osm-checkpoint',
+    adminAuth.requireData,
+    async (_request, response, next) => {
+      try {
+        const checkpoint = await osmCityUpdateService.checkpointStatus();
+        response.set('Cache-Control', 'no-store');
+        response.json({ checkpoint });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.delete(
+    '/admin/osm-checkpoint',
+    adminAuth.requireData,
+    rejectWhileAdminTaskActive,
+    operationAudit('data.osm-checkpoint.discard'),
+    async (_request, response, next) => {
+      try {
+        const checkpoint = await osmCityUpdateService.discardCheckpoint();
+        response.set('Cache-Control', 'no-store');
+        response.json({
+          discarded: Boolean(checkpoint),
+          checkpoint,
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   router.post(
     '/admin/update/cities',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
+    clearCompletedAdminTask,
     jsonBody(osmCityUpdate.maxRequestBodyBytes, 'application/json'),
     (request, response, next) => {
       const hasRequestBody =
@@ -459,12 +719,28 @@ export function createApiRouter({
           request.query,
           osmCityUpdate,
         );
+        const resume = parseBoolean(request.query.resume, false);
+        const restart = parseBoolean(request.query.restart, false);
+        if (resume === null || restart === null) {
+          response.status(400).json({
+            error: 'resume and restart must be true or false',
+          });
+          return;
+        }
+        if (resume && restart) {
+          response.status(400).json({
+            error: 'resume and restart cannot both be true',
+          });
+          return;
+        }
         startAdminTask(request, response, next, {
           type: 'osm-city-update',
           endpoint: '/api/admin/update/cities',
           recordsSuccessfulUpdate: !options.dryRun,
           parameters: {
             dryRun: options.dryRun,
+            resume,
+            restart,
             batchSize: options.batchSize,
             minDelayMs: options.minDelayMs,
             maxRetries: options.maxRetries,
@@ -503,6 +779,18 @@ export function createApiRouter({
         transfer: {
           requestCompression: ['gzip', 'deflate', 'br'],
           responseCompression: 'Accept-Encoding negotiation',
+          portableFormats: ['json', 'zip-single-file'],
+          streaming: true,
+          zip: {
+            entries: 1,
+            zip64: false,
+            compressionMethods: ['store', 'deflate'],
+          },
+          limits: {
+            uploadBytes: streamTransfer.maxUploadBytes,
+            decodedJsonBytes: streamTransfer.maxJsonBytes,
+            itemBytes: streamTransfer.maxItemBytes,
+          },
         },
         osmCityUpdate: {
           allowedURLs: [...osmCityUpdate.allowedURLs],
@@ -623,30 +911,29 @@ export function createApiRouter({
     '/admin/populations',
     adminAuth.requireData,
     rejectWhileAdminTaskActive,
-    jsonBody(importApi.maxBodyBytes, 'application/json'),
-    (request, response, next) => {
-      if (request.body === undefined) {
-        response.status(415).json({ error: 'Content-Type must be application/json' });
-        return;
-      }
-      startAdminTask(request, response, next, {
+    clearCompletedAdminTask,
+    async (request, response, next) => {
+      const upload = await receivePortableUpload(request, response, next);
+      if (!upload) return;
+      const task = startAdminTask(request, response, next, {
         type: 'population-update',
         endpoint: '/api/admin/populations',
         recordsSuccessfulUpdate: true,
         parameters: {
-          recordCount: Array.isArray(request.body?.populations) ? request.body.populations.length : null,
-          asOf: request.body?.asOf ?? null,
-          source: request.body?.source ?? null,
-          payload: adminAuditPayloadFingerprint(request.body),
+          transport: upload.contentType,
+          contentEncoding: upload.contentEncoding,
+          uploadBytes: upload.bytes,
+          uploadSha256: upload.sha256,
         },
-      }, async (context) => populationService.updateFromJson(
-        request.body,
-        {
-          signal: context.signal,
-          onCommit: () => context.beginCommit(),
-          onProgress: (progress) => progressLog(context, progress),
-        },
+      }, async (context) => executePortableUpload(
+        upload,
+        context,
+        portableServiceMethod(
+          populationService,
+          'updateFromJsonStream',
+        ),
       ));
+      if (!task) await removeStreamUpload(upload).catch(() => {});
     },
   );
 

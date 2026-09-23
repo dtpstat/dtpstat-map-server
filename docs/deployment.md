@@ -18,7 +18,6 @@ npm ci
 cp .env.example .env
 # заполнить .env
 npm run db:init
-npm run db:migrate
 npm start
 ```
 
@@ -73,7 +72,7 @@ MAPBOX_ACCESS_TOKEN=pk....
 
 ## Миграции
 
-Текущий набор: `V001…V026`.
+Текущий набор: `V001…V033`.
 
 Последние migrations:
 
@@ -87,16 +86,56 @@ V023__merge_osm_relation_city_parts.sql
 V024__multi_column_report_ranking.sql
 V025__public_download_name.sql
 V026__dynamic_public_download_links.sql
+V027__osm_boundary_management.sql
+V028__osm_download_size_limits.sql
+V029__resumable_osm_updates.sql
+V030__osm_checkpoint_batch_count.sql
+V031__unbuildable_osm_checkpoint_geometry.sql
+V032__boundary_population_attributes.sql
+V033__vertical_report_config.sql
+V034__admin_password_policy.sql
+V035__osm_editor_role.sql
 ```
 
-Назначение `V023…V026`:
+Назначение `V023…V035`:
 
 - `V023` — logical `FULL_NAME` OSM boundary, merge relation fragments по `PLACE_TYPE + FULL_NAME`, sync `CITIES.FULL_NAME`;
 - `V024` — ordered `REPORT_CONFIG.RANK_SORT`;
 - `V025` — configurable `PROJECT_SETTINGS.PUBLIC_DOWNLOAD_NAME`;
-- `V026` — dynamic footer placeholders для GeoJSON/CSV URLs.
+- `V026` — dynamic footer placeholders для GeoJSON/CSV URLs;
+- `V027` — отмена name-based relation merge, active/display OSM identity, containment hierarchy, DB-backed import settings и large/small thresholds;
+- `V028` — отдельные single-response/total byte limits для OSM и adaptive split слишком крупных geometry batches;
+- `V029` — persistent OSM checkpoint/index/stage для resume после failure/cancel/Node restart;
+- `V030` — cumulative staged batch count для resumable OSM update;
+- `V031` — сохранение/диагностика OSM objects, для которых geometry не удалось построить;
+- `V032` — boundary-owned population/asOf/source/attributes и синхронизация активной population projection;
+- `V033` — перенос `REPORT_CONFIG` на вертикальное `CONFIG_KEY/CONFIG_VALUE` storage без изменения внешнего report API;
+- `V034` — настраиваемая политика паролей администраторов;
+- `V035` — отдельное право доступа к OSM object editor.
 
-Следующая migration: **V027+**. Опубликованные migration files не изменяются задним числом.
+Следующая migration: **V036+**. Опубликованные migration files не изменяются задним числом.
+
+Startup автоматически применяет pending migrations под PostgreSQL advisory lock, затем повторно сверяет `<DATABASE_SCHEMA>.schema_versions` с набором `db/migrations`. Modified/gapped/newer history или ошибка SQL считаются startup error: HTTP listeners не открываются. `npm run db:migrate` остаётся ручной preflight-командой, но для обычного restart больше не обязателен.
+
+## Большие portable JSON / ZIP transfers
+
+City boundaries, lines и populations импортируются потоково. Входной request
+сначала spooled в `var/import-staging`, затем raw JSON/GeoJSON либо единственная
+JSON entry ZIP читается в одну DB transaction. Полный JSON не материализуется в
+heap Node. При parse/schema/PostGIS ошибке выполняется полный `ROLLBACK`.
+
+Production limits задаются отдельно от небольших JSON API:
+
+```dotenv
+IMPORT_API_MAX_STREAM_UPLOAD_BYTES=2147483648
+IMPORT_API_MAX_STREAM_JSON_BYTES=3221225472
+IMPORT_API_MAX_STREAM_ITEM_BYTES=134217728
+```
+
+`client_max_body_size` reverse proxy должен учитывать именно
+`IMPORT_API_MAX_STREAM_UPLOAD_BYTES`. ZIP поддерживается в строгом single-file
+ZIP32 режиме (одна entry без directories; Store/Deflate; CRC32; без encryption
+и ZIP64). Orphan spool-файлы старше 24 часов удаляются при startup.
 
 ## Production за nginx
 
@@ -186,9 +225,10 @@ pm2 save
 
 ```bash
 git pull
-npm run db:migrate
 pm2 restart tramlanes
 ```
+
+При restart приложение само применит pending migrations до открытия порта. Для явной проверки заранее по-прежнему можно выполнить `npm run db:migrate`.
 
 После изменения `.env`:
 
@@ -236,23 +276,40 @@ var/public-downloads/tram-lines.csv
 
 `var/` — runtime state, не backup/source bundle.
 
-## OSM city normalization
+## OSM boundary model
 
-После `V023` relation fragments одного логического города объединяются по:
+`V027` отменяет ошибочную V023-нормализацию разных relations по имени.
+Исторический migration V023 не переписывается, но его trigger/function и
+`CITY_BOUNDARIES.FULL_NAME` удаляются.
 
-```text
-OSM_TYPE = relation
-PLACE_TYPE
-FULL_NAME
-```
-
-`FULL_NAME` вычисляется как:
+Source identity:
 
 ```text
-addr:district → name:ru → osm_name
+OSM_TYPE + OSM_ID
 ```
 
-В результате одна логическая city/town boundary может быть `MultiPolygon`, даже если OSM source отдал несколько relation objects.
+Runtime OSM settings (`place=city/town`, administrative admin_level range,
+batch size, throttling, timeout/retry limits, max response bytes и max total
+bytes) хранятся в `OSM_IMPORT_SETTINGS`. Большой geometry batch автоматически
+дробится, если один Overpass response превышает single-response limit.
+
+С V029 успешные geometry batches не являются process-local: индекс и stage
+сохраняются в `OSM_CITY_UPDATE_CHECKPOINTS` /
+`OSM_CITY_UPDATE_CHECKPOINT_STAGE`. Ошибка задачи или restart Node не удаляют
+этот прогресс. Resume разрешён только при совпадении fingerprint source URL,
+selectors, admin_level range, Overpass query timeout и batch semantics с
+checkpoint. Retry/throttle/network limits можно менять между попытками.
+Production boundaries заменяются только после полного stage одной транзакцией.
+Completed/discarded checkpoint metadata очищается автоматически через 7 дней,
+failed/cancelled — через 90 дней; `downloading` после crash и `ready` не
+удаляются автоматически.
+
+Deployment allowlists
+`OSM_CITY_UPDATE_ALLOWED_HOSTS/URLS` остаются в ENV как security boundary.
+
+После полного snapshot строится hierarchy: непосредственный parent — самый
+маленький больший polygon, полностью покрывающий child через `ST_Covers`.
+Пересечение без containment не создаёт связь.
 
 ## Project settings
 
@@ -264,9 +321,12 @@ DB-backed `PROJECT_SETTINGS` включает:
 - line labels/popups;
 - public Mapbox token;
 - custom city marker;
-- public download base name.
+- public download base name;
+- large-city population threshold;
+- large-city area threshold, используемый только при отсутствии населения.
 
-Настройки меняются в **Настройка интерфейса → Проект**.
+Настройки меняются в **Настройка интерфейса → Проект**. Параметры OSM-загрузки
+редактируются отдельно в **Управление данными → OSM геометрии → Обновление**.
 
 ## Settings transfer
 
@@ -281,10 +341,11 @@ Current format:
 
 ```text
 kind = project-settings
-schemaVersion = 6
+schemaVersion = 7
 ```
 
-Import принимает v1-v6. V5 добавляет `rank.sort`, V6 — `publicDownloadName`.
+Import принимает v1-v7. V5 добавляет `rank.sort`, V6 — `publicDownloadName`,
+V7 — large-city population/area thresholds.
 
 После import report values и public snapshots перестраиваются на target data.
 

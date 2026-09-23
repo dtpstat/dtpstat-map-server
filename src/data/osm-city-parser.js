@@ -1,17 +1,72 @@
 import { OsmCityUpdateValidationError } from './osm-city-update-options.js';
 
-/** @param {number} timeoutSeconds */
-export function buildRussianPlaceIdOverpassQueries(timeoutSeconds) {
-  return ['city', 'town'].flatMap((placeType) =>
-    ['way', 'relation'].map((osmType) => ({
-      placeType,
-      osmType,
-      query: `[out:json][timeout:${timeoutSeconds}];
+function adminLevelPattern(minimum, maximum) {
+  const levels = [];
+  for (let level = minimum; level <= maximum; level += 1) levels.push(level);
+  return `^(${levels.join('|')})$`;
+}
+
+/**
+ * Build a small ID-only index first. Geometry is still fetched later in
+ * sequential batches. One OSM object may match both a place selector and an
+ * administrative selector; the update service deduplicates by type/id.
+ *
+ * @param {number} timeoutSeconds
+ * @param {{
+ *   includeCity?: boolean,
+ *   includeTown?: boolean,
+ *   includeAdministrative?: boolean,
+ *   adminLevelMin?: number,
+ *   adminLevelMax?: number
+ * }} [options]
+ */
+export function buildRussianPlaceIdOverpassQueries(timeoutSeconds, options = {}) {
+  const includeCity = options.includeCity ?? true;
+  const includeTown = options.includeTown ?? true;
+  const includeAdministrative = options.includeAdministrative ?? false;
+  const adminLevelMin = options.adminLevelMin ?? 4;
+  const adminLevelMax = options.adminLevelMax ?? 8;
+  const queries = [];
+  const placeTypes = [
+    ...(includeCity ? ['city'] : []),
+    ...(includeTown ? ['town'] : []),
+  ];
+
+  for (const placeType of placeTypes) {
+    for (const osmType of ['way', 'relation']) {
+      queries.push({
+        kind: 'place',
+        placeType,
+        osmType,
+        query: `[out:json][timeout:${timeoutSeconds}];
 area["ISO3166-1"="RU"]["boundary"="administrative"]["admin_level"="2"]->.ru;
 ${osmType}(area.ru)["place"="${placeType}"]["name"];
 out ids;`,
-    })),
-  );
+      });
+    }
+  }
+
+  if (includeAdministrative) {
+    const levels = adminLevelPattern(adminLevelMin, adminLevelMax);
+    for (const osmType of ['way', 'relation']) {
+      queries.push({
+        kind: 'administrative',
+        placeType: null,
+        osmType,
+        query: `[out:json][timeout:${timeoutSeconds}];
+area["ISO3166-1"="RU"]["boundary"="administrative"]["admin_level"="2"]->.ru;
+${osmType}(area.ru)["boundary"="administrative"]["admin_level"~"${levels}"]["name"];
+out ids;`,
+      });
+    }
+  }
+
+  if (queries.length === 0) {
+    throw new OsmCityUpdateValidationError(
+      'At least one OSM object class must be enabled',
+    );
+  }
+  return queries;
 }
 
 /**
@@ -95,7 +150,7 @@ export function parseOsmPlaceIdsResponse(jsonText) {
       element.id <= 0
     ) {
       throw new OsmCityUpdateValidationError(
-        'OSM ID response contains an invalid place object',
+        'OSM ID response contains an invalid boundary object',
       );
     }
     const objectKey = `${element.type}/${element.id}`;
@@ -132,7 +187,7 @@ function coordinates(value) {
       latitude > 90
     ) {
       throw new OsmCityUpdateValidationError(
-        'OSM place geometry contains coordinates outside WGS84',
+        'OSM boundary geometry contains coordinates outside WGS84',
       );
     }
     result.push([longitude, latitude]);
@@ -153,6 +208,14 @@ function linework(element) {
     .filter((line) => line !== null);
 }
 
+function parsedAdminLevel(tags) {
+  if (tags?.boundary !== 'administrative') return null;
+  const raw = tags.admin_level;
+  if (typeof raw !== 'string' || !/^[0-9]+$/.test(raw)) return null;
+  const level = Number(raw);
+  return Number.isSafeInteger(level) && level > 0 && level <= 20 ? level : null;
+}
+
 /** @param {string} jsonText */
 export function parseOsmCityResponse(jsonText) {
   const document = parseDocument(jsonText);
@@ -162,19 +225,26 @@ export function parseOsmCityResponse(jsonText) {
   const places = [];
   let ignoredElements = 0;
   for (const element of document.elements) {
-    const name = typeof element?.tags?.name === 'string'
-      ? element.tags.name.trim().normalize('NFC')
+    const tags = element?.tags ?? {};
+    const name = typeof tags.name === 'string'
+      ? tags.name.trim().normalize('NFC')
       : '';
+    const placeType = tags.place === 'city' || tags.place === 'town'
+      ? tags.place
+      : null;
+    const adminLevel = parsedAdminLevel(tags);
     if (
       (element?.type !== 'way' && element?.type !== 'relation') ||
-      (element?.tags?.place !== 'city' && element?.tags?.place !== 'town') ||
+      (!placeType && adminLevel === null) ||
       !name
     ) {
       ignoredElements += 1;
       continue;
     }
     if (!Number.isSafeInteger(element.id) || element.id <= 0) {
-      throw new OsmCityUpdateValidationError(`OSM place ${name} has an invalid id`);
+      throw new OsmCityUpdateValidationError(
+        `OSM boundary ${name} has an invalid id`,
+      );
     }
     const objectKey = `${element.type}/${element.id}`;
     if (objectKeys.has(objectKey)) {
@@ -186,16 +256,17 @@ export function parseOsmCityResponse(jsonText) {
     const lines = linework(element);
     if (lines.length === 0) {
       throw new OsmCityUpdateValidationError(
-        `OSM place ${name} has no way geometry`,
+        `OSM boundary ${name} has no way geometry`,
       );
     }
     nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
     places.push({
       name,
-      placeType: element.tags.place,
+      placeType,
+      adminLevel,
       osmType: element.type,
       osmId: element.id,
-      tags: element.tags,
+      tags,
       linework: {
         type: 'MultiLineString',
         coordinates: lines,
@@ -209,7 +280,7 @@ export function parseOsmCityResponse(jsonText) {
     left.osmId - right.osmId);
   if (places.length === 0) {
     throw new OsmCityUpdateValidationError(
-      'OSM response contains no named Russian place=city/town ways or relations',
+      'OSM response contains no indexed named place/admin boundary objects',
     );
   }
 
@@ -219,6 +290,7 @@ export function parseOsmCityResponse(jsonText) {
     ignoredElements,
     cityPlaces: places.filter((place) => place.placeType === 'city').length,
     townPlaces: places.filter((place) => place.placeType === 'town').length,
+    administrativePlaces: places.filter((place) => place.adminLevel !== null).length,
     duplicateNames: [...nameCounts.values()].filter((count) => count > 1).length,
     osmTimestamp: osmTimestamp(document),
   };

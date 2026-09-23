@@ -11,8 +11,9 @@ Node.js/Express + PostgreSQL/PostGIS сервер интерактивной к�
 ## Возможности
 
 - публичная Mapbox-карта с viewport-загрузкой линий;
-- города и границы из OSM/Overpass;
-- объединение частей одного OSM `relation` в один логический город;
+- города и административные границы из OSM/Overpass;
+- пакетная загрузка `place=city/town` и настраиваемого диапазона `boundary=administrative`;
+- дерево вложенности OSM-полигонов, ручные active/displayName/displayType и Mapbox-preview;
 - импорт GeoJSON, KML и Google My Maps;
 - переносимый GeoJSON/KML со словарём `LINE_TYPES`;
 - сохранение `<Placemark><name>` как `properties.placemarkName`;
@@ -37,7 +38,6 @@ npm ci
 cp .env.example .env
 # заполнить .env
 npm run db:init
-npm run db:migrate
 npm start
 ```
 
@@ -46,7 +46,6 @@ npm start
 ```bash
 docker compose up -d database
 npm run db:init
-npm run db:migrate
 npm start
 ```
 
@@ -91,7 +90,7 @@ HTTP_PORT=3002
 
 ## Миграции
 
-Текущая последовательность: `V001…V026`.
+Текущая последовательность: `V001…V033`.
 
 Последние изменения:
 
@@ -106,8 +105,17 @@ HTTP_PORT=3002
 | `V024` | последовательный multi-column ranking (`REPORT_CONFIG.RANK_SORT`) |
 | `V025` | `PROJECT_SETTINGS.PUBLIC_DOWNLOAD_NAME` |
 | `V026` | динамические ссылки на публичные GeoJSON/CSV в footer |
+| `V027` | OSM object identity, active/display identity, hierarchy, DB-backed OSM import settings и пороги large/small |
+| `V028` | раздельные лимиты одного Overpass response / всей загрузки и база для adaptive geometry batching |
+| `V029` | durable checkpoint + persistent geometry staging для возобновления OSM update после ошибки/рестарта |
+| `V030` | накопительный счётчик фактически сохранённых geometry batches в checkpoint |
+| `V031` | диагностика OSM-объектов без построенной geometry в resumable checkpoint |
+| `V032` | population/asOf/source/attributes на `CITY_BOUNDARIES` и активная проекция в `CITY_POPULATIONS` |
+| `V033` | вертикальное key/value-хранилище `REPORT_CONFIG` вместо растущей singleton-строки |
+| `V034` | настраиваемая политика паролей администраторов |
+| `V035` | отдельное право редактора OSM-дерева |
 
-Следующая migration: **V027+**. Уже опубликованные migrations не редактируются задним числом.
+Следующая migration: **V036+**. Уже опубликованные migrations не редактируются задним числом.
 
 История хранится в:
 
@@ -115,25 +123,61 @@ HTTP_PORT=3002
 <DATABASE_SCHEMA>.schema_versions
 ```
 
-## OSM города
+`npm start` автоматически применяет все pending migrations из `db/migrations` **до** bootstrap и открытия HTTP/HTTPS listeners. Migration runner использует PostgreSQL advisory lock, поэтому параллельные старты одного schema не применяют одну migration дважды. Checksum/history по-прежнему проверяются; при modified/gapped/newer history или SQL-ошибке startup завершается и приложение не начинает обслуживать запросы. `npm run db:migrate` остаётся доступной ручной preflight-командой.
 
-`CITY_BOUNDARIES.FULL_NAME` вычисляется как первое непустое значение:
+## Большие portable JSON / ZIP transfers
+
+Admin transfer для OSM boundaries, линий и населения поддерживает raw
+JSON/GeoJSON и single-entry ZIP/ZIP64. Экспорт формируется потоково; импорт
+принимает в том числе chunked ZIP из pipe/stdin и затем разбирает JSON по
+элементам без materialization всего документа в heap Node. Directory entries
+игнорируются, после них должна остаться ровно одна data entry; её имя и
+расширение не используются для определения JSON schema.
+
+DB import выполняется одной транзакцией: malformed JSON/ZIP, schema/PostGIS
+ошибка или cancellation приводят к полному `ROLLBACK`. Лимиты streaming
+transport/decoded JSON/item, ZIP ratio/entry count и JSON depth/record count
+задаются через `IMPORT_API_MAX_STREAM_*`. Подробнее:
+[docs/data-transfer.md](docs/data-transfer.md).
+
+## OSM геометрии
+
+Начиная с `V027`, исходная identity каждого объекта — строго:
 
 ```text
-addr:district
-→ name:ru
-→ osm_name
+OSM_TYPE + OSM_ID
 ```
 
-Для `OSM_TYPE='relation'` строки с одинаковыми:
+Разные relations больше никогда не объединяются по совпадению имени. Историческая
+нормализация V023 отключена новой migration; после перехода на V027 рекомендуется
+один раз заново выполнить OSM update, чтобы восстановить объекты, ранее потерянные
+из-за name-based merge.
 
-```text
-PLACE_TYPE + FULL_NAME
-```
+Загрузчик получает ID-индекс, дедуплицирует пересечения selectors по
+`(osm_type, osm_id)`, затем последовательно загружает geometry batches.
+Начиная с V028 лимит памяти одного Overpass-ответа отделён от суммарного
+лимита операции. Если geometry batch превышает single-response limit, он
+автоматически делится пополам и повторяется.
 
-считаются частями одного логического города и объединяются в `MultiPolygon`.
+Начиная с V029 индекс OSM и успешно проверенные geometry batches сохраняются
+в PostgreSQL как durable checkpoint. После ошибки, отмены или перезапуска Node
+администратор может явно выбрать «Возобновить»: уже staged объекты повторно
+не скачиваются. Production `CITY_BOUNDARIES` при этом остаётся неизменной до
+полного snapshot и одной финальной транзакции. «Запустить заново» при наличии
+checkpoint требует явного подтверждения; старый checkpoint сохраняется до
+успешного получения нового индекса.
 
-`OSM_TYPE/OSM_ID` пока сохраняются как provenance и используются portable city-transfer для восстановления связей. Это не identity логического города после нормализации relation fragments.
+Для каждого объекта отдельно хранятся source-признаки OSM и пользовательская
+конфигурация:
+
+- `PLACE_TYPE` / `ADMIN_LEVEL`;
+- `IS_ACTIVE`;
+- `DISPLAY_NAME` / `DISPLAY_TYPE`;
+- `PARENT_ID`, вычисленный по полному `ST_Covers(parent, child)`;
+- `AREA_M2`.
+
+Только активные boundaries участвуют в привязке населения, линий, публичной
+карте и отчётах. Просто пересекающиеся полигоны не образуют parent/child связь.
 
 ## Основные таблицы
 
@@ -147,6 +191,7 @@ PLACE_TYPE + FULL_NAME
 - `project_settings`;
 - `report_config`;
 - `city_report_values`;
+- `osm_import_settings`;
 - `admin_users`;
 - `admin_sessions`;
 - `admin_security_settings`;
@@ -283,9 +328,9 @@ GET  /api/admin/settings/export
 POST /api/admin/settings/import
 ```
 
-Текущий package: `project-settings`, **schemaVersion 6**.
+Текущий package: `project-settings`, **schemaVersion 7**.
 
-Импорт принимает `v1…v6` и нормализует legacy fields. V5 добавил `rank.sort`, V6 — `publicDownloadName`.
+Импорт принимает `v1…v7` и нормализует legacy fields. V5 добавил `rank.sort`, V6 — `publicDownloadName`, V7 — пороги разделения больших/малых городов.
 
 Переносятся project settings, line types, report config, security policy и public Mapbox token. Не переносятся users/password hashes/sessions/audit, source data, `.env`, TLS/DB secrets и custom city marker binary.
 

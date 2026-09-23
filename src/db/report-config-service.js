@@ -8,45 +8,37 @@ import { acquireDataImportLock } from './database-locks.js';
 
 const LOAD_CONFIG_SQL = `
   SELECT
-    metrics,
-    table_columns AS "tableColumns",
-    csv_columns AS "csvColumns",
-    rank_sort AS "rankSort",
-    rank_metric_key AS "rankMetricKey",
-    rank_direction AS "rankDirection",
-    updated_at AS "updatedAt"
+    jsonb_object_agg(config_key, config_value) AS config,
+    max(updated_at) AS "updatedAt"
   FROM report_config
-  WHERE id = 1
+  WHERE config_key IN ('metrics', 'table_columns', 'csv_columns', 'rank')
 `;
 
 const SAVE_CONFIG_SQL = `
-  INSERT INTO report_config (
-    id,
-    metrics,
-    table_columns,
-    csv_columns,
-    rank_sort,
-    rank_metric_key,
-    rank_direction,
-    updated_at
+  WITH saved AS (
+    INSERT INTO report_config (config_key, config_value, updated_at)
+    VALUES
+      ('metrics', $1::jsonb, now()),
+      ('table_columns', $2::jsonb, now()),
+      ('csv_columns', $3::jsonb, now()),
+      ('rank', $4::jsonb, now())
+    ON CONFLICT (config_key) DO UPDATE SET
+      config_value = EXCLUDED.config_value,
+      updated_at = now()
+    RETURNING updated_at
   )
-  VALUES (1, $1::jsonb, $2::jsonb, $3::jsonb, $4::jsonb, $5, $6, now())
-  ON CONFLICT (id) DO UPDATE SET
-    metrics = EXCLUDED.metrics,
-    table_columns = EXCLUDED.table_columns,
-    csv_columns = EXCLUDED.csv_columns,
-    rank_sort = EXCLUDED.rank_sort,
-    rank_metric_key = EXCLUDED.rank_metric_key,
-    rank_direction = EXCLUDED.rank_direction,
-    updated_at = now()
-  RETURNING updated_at AS "updatedAt"
+  SELECT max(updated_at) AS "updatedAt"
+  FROM saved
 `;
 
 const FIELD_SQL = Object.freeze({
   'city.population': 'population.population::double precision',
-  'city.area_m2': `(SELECT ST_Area(city_boundary.geom::geography)::double precision
+  'city.area_m2': `(SELECT city_boundary.area_m2::double precision
     FROM city_boundaries AS city_boundary
-    WHERE city_boundary.city_id = city.id)`,
+    WHERE city_boundary.city_id = city.id
+      AND city_boundary.is_active
+    ORDER BY city_boundary.area_m2 DESC
+    LIMIT 1)`,
   'geometry.length_m': 'geometry.length_m::double precision',
   'geometry.lane_length_m': 'geometry.lane_length_m::double precision',
   'geometry.lanes': 'geometry.lanes::double precision',
@@ -62,18 +54,20 @@ const AGGREGATE_SQL = Object.freeze({
 });
 
 function rowToConfig(row) {
-  if (!row) throw new Error('Report configuration is missing; run database migrations');
-  const rank = Array.isArray(row.rankSort) && row.rankSort.length > 0
-    ? { sort: row.rankSort }
-    : {
-        metricKey: row.rankMetricKey,
-        direction: row.rankDirection,
-      };
+  const stored = row?.config;
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) {
+    throw new Error('Report configuration is missing; run database migrations');
+  }
+  for (const key of ['metrics', 'table_columns', 'csv_columns', 'rank']) {
+    if (!Object.hasOwn(stored, key)) {
+      throw new Error(`Report configuration is incomplete: missing ${key}`);
+    }
+  }
   return validateReportConfig({
-    metrics: row.metrics,
-    tableColumns: row.tableColumns,
-    csvColumns: row.csvColumns,
-    rank,
+    metrics: stored.metrics,
+    tableColumns: stored.table_columns,
+    csvColumns: stored.csv_columns,
+    rank: stored.rank,
     updatedAt: row.updatedAt instanceof Date
       ? row.updatedAt.toISOString()
       : row.updatedAt,
@@ -177,6 +171,12 @@ export function compileReportMetricQuery(metric) {
           ON population.city_id = city.id
         LEFT JOIN city_geometries AS geometry
           ON geometry.city_id = city.id
+         AND EXISTS (
+           SELECT 1
+           FROM city_boundaries AS metric_boundary
+           WHERE metric_boundary.id = geometry.boundary_id
+             AND metric_boundary.is_active
+         )
         LEFT JOIN line_types AS line_type
           ON line_type.id = geometry.line_type_id
         GROUP BY city.id, population.population
@@ -259,10 +259,14 @@ async function materialize(queryable, config) {
       SELECT 1
       FROM city_boundaries AS boundary_presence
       WHERE boundary_presence.city_id = city.id
+        AND boundary_presence.is_active
     )
       AND EXISTS (
         SELECT 1
         FROM city_geometries AS geometry_presence
+        JOIN city_boundaries AS geometry_boundary
+          ON geometry_boundary.id = geometry_presence.boundary_id
+         AND geometry_boundary.is_active
         WHERE geometry_presence.city_id = city.id
       )
     ORDER BY city.id
@@ -342,14 +346,11 @@ export function createReportConfigService(pool) {
         const config = validateReportConfig(payload, {
           allowedLineTypeNames: lineTypes.rows.map((row) => row.name),
         });
-        const primaryRank = config.rank.sort[0];
         const saved = await client.query(SAVE_CONFIG_SQL, [
           JSON.stringify(config.metrics),
           JSON.stringify(config.tableColumns),
           JSON.stringify(config.csvColumns),
-          JSON.stringify(config.rank.sort),
-          primaryRank.metricKey,
-          primaryRank.direction,
+          JSON.stringify({ sort: config.rank.sort }),
         ]);
         const updatedAt = saved.rows[0]?.updatedAt;
         const normalized = {

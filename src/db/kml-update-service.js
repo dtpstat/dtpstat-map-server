@@ -22,8 +22,8 @@ const CREATE_MATCH_GEOMETRIES_SQL = `
   SELECT
     id AS boundary_id,
     city_id,
-    osm_name,
-    place_type,
+    display_name,
+    display_type,
     osm_type,
     CASE
       WHEN $1::double precision = 0 THEN geom
@@ -35,6 +35,7 @@ const CREATE_MATCH_GEOMETRIES_SQL = `
       )
     END AS geom
   FROM city_boundaries
+  WHERE is_active
 `;
 
 const INDEX_MATCH_GEOMETRIES_SQL = `
@@ -72,14 +73,13 @@ const MATCH_GEOMETRIES_SQL = `
   LEFT JOIN LATERAL (
     SELECT
       boundary.boundary_id,
-      COALESCE(boundary.city_id, named_city.id) AS city_id,
-      COALESCE(linked_city.name, named_city.name, boundary.osm_name) AS city_name,
-      boundary.osm_name AS place_name,
-      boundary.place_type,
+      boundary.city_id AS city_id,
+      COALESCE(linked_city.name, boundary.display_name) AS city_name,
+      boundary.display_name AS place_name,
+      boundary.display_type AS place_type,
       count(*) OVER ()::integer AS candidate_count
     FROM kml_place_match_geometries AS boundary
     LEFT JOIN cities AS linked_city ON linked_city.id = boundary.city_id
-    LEFT JOIN cities AS named_city ON named_city.name = boundary.osm_name
     CROSS JOIN LATERAL (
       SELECT ST_CollectionExtract(
         ST_Intersection(prepared.geom, boundary.geom),
@@ -102,35 +102,28 @@ const MATCH_GEOMETRIES_SQL = `
 
 const UPSERT_MATCHED_OSM_CITIES_SQL = `
   WITH requested AS (
-    SELECT DISTINCT
-      payload."cityName" AS city_name,
-      payload."boundaryId" AS boundary_id
-    FROM jsonb_to_recordset($1::jsonb) AS payload(
-      "cityName" text,
-      "boundaryId" bigint
-    )
-    WHERE payload."cityName" IS NOT NULL
-      AND payload."boundaryId" IS NOT NULL
+    SELECT DISTINCT payload."boundaryId" AS boundary_id
+    FROM jsonb_to_recordset($1::jsonb) AS payload("boundaryId" bigint)
+    WHERE payload."boundaryId" IS NOT NULL
   ),
   canonical AS (
-    SELECT DISTINCT ON (requested.city_name)
-      requested.city_name,
+    SELECT
+      boundary.id AS boundary_id,
+      boundary.display_name AS city_name,
+      boundary.display_type AS city_type,
       boundary.osm_type,
       boundary.osm_id,
-      boundary.place_type
+      boundary.place_type,
+      boundary.admin_level
     FROM requested
     JOIN city_boundaries AS boundary ON boundary.id = requested.boundary_id
-    ORDER BY
-      requested.city_name,
-      (boundary.city_id IS NOT NULL) DESC,
-      (boundary.osm_type = 'relation') DESC,
-      ST_Area(boundary.geom::geography) DESC,
-      boundary.id
+    WHERE boundary.is_active
   )
   INSERT INTO cities (
     slug,
     name,
     full_name,
+    display_type,
     lane_length_m,
     attributes
   )
@@ -138,17 +131,22 @@ const UPSERT_MATCHED_OSM_CITIES_SQL = `
     'osm-' || canonical.osm_type || '-' || canonical.osm_id,
     canonical.city_name,
     canonical.city_name,
+    canonical.city_type,
     0,
     jsonb_build_object(
       '_osm',
       jsonb_build_object(
         'osmType', canonical.osm_type,
         'osmId', canonical.osm_id,
-        'placeType', canonical.place_type
+        'placeType', canonical.place_type,
+        'adminLevel', canonical.admin_level
       )
     )
   FROM canonical
-  ON CONFLICT (name) DO UPDATE SET
+  ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    full_name = EXCLUDED.full_name,
+    display_type = EXCLUDED.display_type,
     attributes = cities.attributes || EXCLUDED.attributes,
     updated_at = now()
   RETURNING id::integer AS id, name
@@ -156,46 +154,34 @@ const UPSERT_MATCHED_OSM_CITIES_SQL = `
 
 const LINK_MATCHED_OSM_CITIES_SQL = `
   WITH requested AS (
-    SELECT DISTINCT payload."cityName" AS city_name
-    FROM jsonb_to_recordset($1::jsonb) AS payload("cityName" text)
-    WHERE payload."cityName" IS NOT NULL
-  ),
-  candidates AS (
-    SELECT DISTINCT ON (city.id)
-      city.id AS city_id,
-      boundary.id AS boundary_id
-    FROM requested
-    JOIN cities AS city ON city.name = requested.city_name
-    JOIN city_boundaries AS boundary ON boundary.osm_name = city.name
-    WHERE boundary.city_id IS NULL
-      AND NOT EXISTS (
-        SELECT 1
-        FROM city_boundaries AS linked
-        WHERE linked.city_id = city.id
-      )
-    ORDER BY
-      city.id,
-      (boundary.osm_type = 'relation') DESC,
-      ST_Area(boundary.geom::geography) DESC,
-      boundary.id
+    SELECT DISTINCT payload."boundaryId" AS boundary_id
+    FROM jsonb_to_recordset($1::jsonb) AS payload("boundaryId" bigint)
+    WHERE payload."boundaryId" IS NOT NULL
   )
   UPDATE city_boundaries AS boundary
-  SET city_id = candidates.city_id,
+  SET city_id = city.id,
       updated_at = now()
-  FROM candidates
-  WHERE boundary.id = candidates.boundary_id
+  FROM requested, cities AS city
+  WHERE boundary.id = requested.boundary_id
+    AND city.slug = 'osm-' || boundary.osm_type || '-' || boundary.osm_id
+    AND boundary.is_active
+    AND boundary.city_id IS NULL
 `;
 
 const LOAD_MATCHED_CITY_IDS_SQL = `
   WITH requested AS (
-    SELECT DISTINCT payload."cityName" AS city_name
-    FROM jsonb_to_recordset($1::jsonb) AS payload("cityName" text)
-    WHERE payload."cityName" IS NOT NULL
+    SELECT DISTINCT payload."boundaryId" AS boundary_id
+    FROM jsonb_to_recordset($1::jsonb) AS payload("boundaryId" bigint)
+    WHERE payload."boundaryId" IS NOT NULL
   )
-  SELECT city.id::integer AS id, city.name
+  SELECT
+    boundary.id::integer AS "boundaryId",
+    city.id::integer AS id,
+    city.name
   FROM requested
-  JOIN cities AS city ON city.name = requested.city_name
-  ORDER BY city.id
+  JOIN city_boundaries AS boundary ON boundary.id = requested.boundary_id
+  JOIN cities AS city ON city.id = boundary.city_id
+  ORDER BY boundary.id
 `;
 
 const INSERT_MISSING_LINE_TYPES_SQL = `
@@ -483,7 +469,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
         }
 
         const boundaryResult = await client.query(
-          'SELECT EXISTS (SELECT 1 FROM city_boundaries) AS ready',
+          'SELECT EXISTS (SELECT 1 FROM city_boundaries WHERE is_active) AS ready',
         );
         if (!boundaryResult.rows[0]?.ready) {
           throw new KmlUpdateMatchError(
@@ -526,10 +512,10 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           cityName: row.cityName ?? row.placeName,
           boundaryId: row.boundaryId,
         }));
-        let cityIdByName = new Map(
+        let cityIdByBoundary = new Map(
           matchedRows
-            .filter((row) => row.cityId !== null && row.cityName)
-            .map((row) => [row.cityName, Number(row.cityId)]),
+            .filter((row) => row.cityId !== null)
+            .map((row) => [Number(row.boundaryId), Number(row.cityId)]),
         );
 
         if (!options.dryRun) {
@@ -542,13 +528,13 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           const cityResult = await client.query(LOAD_MATCHED_CITY_IDS_SQL, [
             JSON.stringify(matchedCityPayload),
           ]);
-          cityIdByName = new Map(
-            cityResult.rows.map((row) => [row.name, Number(row.id)]),
+          cityIdByBoundary = new Map(
+            cityResult.rows.map((row) => [Number(row.boundaryId), Number(row.id)]),
           );
-          if (cityIdByName.size !== new Set(
-            matchedCityPayload.map((row) => row.cityName),
+          if (cityIdByBoundary.size !== new Set(
+            matchedCityPayload.map((row) => Number(row.boundaryId)),
           ).size) {
-            throw new Error('Not every matched OSM place was resolved to a city record');
+            throw new Error('Not every active OSM boundary was resolved to a city record');
           }
         }
 
@@ -559,7 +545,7 @@ export function createKmlUpdateService(pool, config, dependencies = {}) {
           );
           const cityName = row.cityName ?? row.placeName;
           const cityId = row.cityId === null
-            ? cityIdByName.get(cityName) ?? null
+            ? cityIdByBoundary.get(Number(row.boundaryId)) ?? null
             : Number(row.cityId);
           if (!options.dryRun && cityId === null) {
             throw new Error(`Matched OSM place has no city record: ${cityName}`);

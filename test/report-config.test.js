@@ -24,6 +24,42 @@ test('default bus-lane report configuration is valid', () => {
     [1, 1],
   );
   assert.deepEqual(config.tableColumns[2].formatRules, []);
+  assert.equal(config.tableColumns[2].headerBold, true);
+  assert.equal(config.tableColumns[2].headerTooltip, null);
+});
+
+test('public table headers normalize short labels, tooltips and explicit weight', () => {
+  const config = structuredClone(DEFAULT_REPORT_CONFIG);
+  config.tableColumns[2].title = 'ВП';
+  config.tableColumns[2].headerTooltip = '  Полная длина выделенных полос, км  ';
+  config.tableColumns[2].headerBold = false;
+
+  const normalized = validateReportConfig(config);
+  assert.equal(normalized.tableColumns[2].title, 'ВП');
+  assert.equal(
+    normalized.tableColumns[2].headerTooltip,
+    'Полная длина выделенных полос, км',
+  );
+  assert.equal(normalized.tableColumns[2].headerBold, false);
+
+  delete config.tableColumns[2].headerBold;
+  config.tableColumns[2].headerTooltip = '   ';
+  const legacy = validateReportConfig(config);
+  assert.equal(legacy.tableColumns[2].headerBold, true);
+  assert.equal(legacy.tableColumns[2].headerTooltip, null);
+
+  config.tableColumns[2].headerTooltip = 'x'.repeat(241);
+  assert.throws(
+    () => validateReportConfig(config),
+    /headerTooltip must contain at most 240 characters/,
+  );
+
+  config.tableColumns[2].headerTooltip = null;
+  config.tableColumns[2].headerBold = 'yes';
+  assert.throws(
+    () => validateReportConfig(config),
+    /headerBold must be a boolean/,
+  );
 });
 
 test('city area and median geometry aggregation are available in the catalog', () => {

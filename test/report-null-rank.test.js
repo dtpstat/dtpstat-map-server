@@ -6,11 +6,12 @@ import { createReportConfigService } from '../src/db/report-config-service.js';
 function configRow() {
   const config = structuredClone(DEFAULT_REPORT_CONFIG);
   return {
-    metrics: config.metrics,
-    tableColumns: config.tableColumns,
-    csvColumns: config.csvColumns,
-    rankMetricKey: config.rank.metricKey,
-    rankDirection: config.rank.direction,
+    config: {
+      metrics: config.metrics,
+      table_columns: config.tableColumns,
+      csv_columns: config.csvColumns,
+      rank: config.rank,
+    },
     updatedAt: new Date('2026-09-06T00:00:00.000Z'),
   };
 }
@@ -20,7 +21,7 @@ test('report materialization ranks only visible cities and leaves missing metric
   let rankingSql = '';
   const client = {
     async query(text) {
-      if (/FROM report_config\s+WHERE id = 1/s.test(text)) {
+      if (/FROM report_config/.test(text)) {
         return { rows: [configRow()] };
       }
       if (/INSERT INTO city_report_values \(city_id, values, updated_at\)/.test(text)) {
@@ -42,11 +43,11 @@ test('report materialization ranks only visible cities and leaves missing metric
   assert.equal(result.cities, 2);
   assert.match(
     materializeSql,
-    /FROM city_boundaries AS boundary_presence\s*WHERE boundary_presence\.city_id = city\.id/s,
+    /FROM city_boundaries AS boundary_presence\s*WHERE boundary_presence\.city_id = city\.id\s*AND boundary_presence\.is_active/s,
   );
   assert.match(
     materializeSql,
-    /FROM city_geometries AS geometry_presence\s*WHERE geometry_presence\.city_id = city\.id/s,
+    /FROM city_geometries AS geometry_presence\s*JOIN city_boundaries AS geometry_boundary\s*ON geometry_boundary\.id = geometry_presence\.boundary_id\s*AND geometry_boundary\.is_active\s*WHERE geometry_presence\.city_id = city\.id/s,
   );
   assert.match(
     rankingSql,

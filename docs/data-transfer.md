@@ -2,7 +2,7 @@
 
 Admin API переносит три независимых набора source data:
 
-1. OSM city/town boundaries — GeoJSON;
+1. OSM place/admin boundaries — GeoJSON;
 2. линии + dictionary business line types — GeoJSON или portable KML;
 3. население — JSON.
 
@@ -19,7 +19,7 @@ GET  /api/admin/settings/export
 POST /api/admin/settings/import
 ```
 
-Текущий settings format: `schemaVersion 6`.
+Текущий settings format: `schemaVersion 7`.
 
 Подробнее: [project-settings-transfer.md](project-settings-transfer.md).
 
@@ -41,25 +41,38 @@ POST /api/admin/settings/import
 GET /api/admin/export/cities
 ```
 
-Файл: `cities.geojson`.
+Файлы:
+
+- `GET /api/admin/export/cities` → `cities.geojson`;
+- `GET /api/admin/export/cities.zip` → `cities.zip`, внутри ровно один `cities.geojson`.
+
+Оба варианта формируются потоково; полный FeatureCollection не собирается в памяти Node.
 
 Portable city snapshot содержит OSM provenance и, если boundary уже связан с application city, переносимые city fields.
 
-Boundary properties включают:
+Boundary properties schemaVersion 2 включают:
 
-- `placeType` (`city`/`town`);
+- `placeType` (`city`/`town`/null);
+- `adminLevel`;
+- `active`;
+- `displayName` / `displayType`;
 - `osmType` (`way`/`relation`);
 - `osmId`;
 - `osmName`;
 - OSM tags/timestamp;
+- boundary-owned `population/populationAsOf/populationSource/attributes`;
 - geometry `Polygon`/`MultiPolygon`;
-- linked city slug/name/fullName/attributes.
+- linked city slug/name/fullName/displayType/attributes.
 
 ## Import
 
 ```text
 POST /api/admin/import/cities
 Content-Type: application/geo+json
+
+# или
+POST /api/admin/import/cities
+Content-Type: application/zip
 ```
 
 Import:
@@ -68,31 +81,20 @@ Import:
 2. загружает temporary staging пакетами;
 3. проверяет PostGIS geometry validity/area;
 4. сохраняет существующие line-to-boundary references по OSM provenance, где это возможно;
-5. заменяет `CITY_BOUNDARIES` в transaction;
-6. применяет DB normalization `V023`;
-7. пересчитывает report/public snapshots после успешного real update.
+5. атомарно заменяет `CITY_BOUNDARIES`;
+6. пересчитывает hierarchy по полному `ST_Covers`;
+7. синхронизирует application cities только с активными boundaries;
+8. пересчитывает city statistics, report/public snapshots.
 
-### Логический город после V023
+### Identity и hierarchy после V027
 
-`CITY_BOUNDARIES.FULL_NAME` вычисляется как:
+`osmType + osmId` — identity исходного OSM объекта. Разные relations не
+объединяются по имени. Пользовательская identity активного объекта задаётся
+отдельно через `displayType + displayName`; среди активных она уникальна после
+нормализации регистра и пробелов.
 
-```text
-addr:district
-→ name:ru
-→ osm_name
-```
-
-Для `OSM_TYPE='relation'` несколько source rows с одинаковыми:
-
-```text
-PLACE_TYPE + FULL_NAME
-```
-
-объединяются в один `MultiPolygon` через `ST_UnaryUnion(ST_Collect(...))`.
-
-Таким образом `osmType + osmId` остаётся **source provenance/portable-transfer key**, но не является identity логического города после relation normalization.
-
-Когда normalized boundary связан с `CITIES.ID`, его `FULL_NAME` синхронизируется в `CITIES.FULL_NAME`. Короткое `CITIES.NAME` остаётся отдельным display/import name.
+`parentId` является производным и в portable snapshot не считается authority:
+после импорта дерево строится заново по геометрическому containment.
 
 # Линии и LINE_TYPES
 
@@ -102,7 +104,12 @@ PLACE_TYPE + FULL_NAME
 GET /api/admin/export/lines
 ```
 
-Файл: `lines.geojson`.
+Файлы:
+
+- `GET /api/admin/export/lines` → `lines.geojson`;
+- `GET /api/admin/export/lines.zip` → `lines.zip`, внутри ровно один `lines.geojson`.
+
+JSON и ZIP формируются потоково.
 
 Canonical format содержит versioned dictionary `lineTypes` и geometry metadata.
 
@@ -142,6 +149,10 @@ Public map может показывать это значение:
 ```text
 POST /api/admin/import/lines
 Content-Type: application/geo+json
+
+# или
+POST /api/admin/import/lines
+Content-Type: application/zip
 ```
 
 Legacy alias:
@@ -198,53 +209,201 @@ Portable KML использует тот же NAME-based business-type matching,
 
 # Население
 
+Население и связанные с ним attributes хранятся независимо от флага
+`active`. Импорт населения никогда не активирует и не деактивирует OSM-объекты.
+
+Для активных boundaries сервер отдельно синхронизирует рабочую проекцию
+`CITY_POPULATIONS`, которую используют отчёты и public API.
+
 ## Export
 
 ```text
 GET /api/admin/export/populations
 ```
 
-Файл: `populations.json`.
+Файлы:
 
-Для каждой записи переносятся name/citySlug/population/asOf/source/attributes.
+- `GET /api/admin/export/populations` → `populations.json`;
+- `GET /api/admin/export/populations.zip` → `populations.zip`, внутри ровно один `populations.json`.
+
+Canonical format — `schemaVersion: 2`. Population snapshot содержит только
+человекочитаемую hierarchy `регион → города`; OSM type/id в этом формате
+отсутствуют намеренно.
+
+```json
+{
+  "schemaVersion": 2,
+  "exportedAt": "2026-09-22T12:00:00.000Z",
+  "asOf": "2026-01-01",
+  "source": "Росстат",
+  "regions": [
+    {
+      "name": "Республика Татарстан",
+      "attributes": {
+        "federalDistrict": "Приволжский федеральный округ"
+      },
+      "cities": [
+        {
+          "name": "Казань",
+          "population": 1320000,
+          "attributes": {}
+        },
+        {
+          "name": "Набережные Челны",
+          "population": 544000,
+          "asOf": "2025-01-01",
+          "source": "Татарстанстат",
+          "attributes": {}
+        }
+      ]
+    }
+  ]
+}
+```
+
+На уровне региона обязательны `name` и непустой `cities[]`; `attributes`
+необязателен и по умолчанию равен `{}`.
+
+У города обязательны `name` и `population`. `population` может быть
+`null`, что очищает население найденного города. `asOf/source` могут
+наследоваться от top-level значений или переопределяться для конкретного
+города. `attributes` необязателен и по умолчанию равен `{}`.
+
+Поле `active` в population format отсутствует намеренно.
 
 ## Import
 
 ```text
 POST /api/admin/populations
 Content-Type: application/json
+
+# или
+POST /api/admin/populations
+Content-Type: application/zip
 ```
 
-Population snapshot может содержать города, отсутствующие в target `cities`. Такие entries пропускаются без падения всей операции.
+Import:
 
-Result содержит, в частности:
+1. потоково читает top-level `regions[]`;
+2. нормализует имена без учёта регистра, `ё/е`, пробелов и пунктуации;
+3. повторные блоки одного региона объединяет; повторный город внутри того же
+   региона пропускает с warning;
+4. невалидный отдельный регион/город пропускает с warning, не отменяя
+   корректную часть файла;
+5. находит регион по имени среди региональных boundaries;
+6. ищет город по имени только внутри поддерева найденного региона;
+7. отсутствующие **и неоднозначные** регионы/города пропускает с warning;
+8. обновляет `population/asOf/source/attributes` только успешно
+   сопоставленных городов и `attributes` успешно найденных регионов;
+9. не изменяет `IS_ACTIVE`;
+10. синхронизирует активную проекцию `CITY_POPULATIONS`, пересчитывает
+    статистику и фиксирует корректную часть одной транзакцией.
+
+Если хотя бы одна запись была пропущена, task технически завершается
+`succeeded`, но result содержит `partial: true`, а журнал получает
+`WARNING Задача завершена с предупреждениями`. Полный rollback остаётся для
+ошибок всего документа/transport (битый JSON/ZIP, несовместимый
+`schemaVersion`, превышение лимитов), отмены задачи и неожиданных ошибок БД.
+
+Пример result:
 
 ```json
 {
-  "cities": 71,
-  "requestedCities": 72,
-  "skippedCount": 1,
-  "skippedCities": ["Киров"]
+  "regions": 84,
+  "requestedRegions": 85,
+  "cities": 1117,
+  "requestedCities": 1119,
+  "normalizedCities": 1119,
+  "skippedCount": 2,
+  "warningCount": 2,
+  "partial": true,
+  "skippedCities": [
+    "Примерная область / Город не найден",
+    "Другая область / Неоднозначный город"
+  ],
+  "warnings": [
+    {
+      "code": "city-missing",
+      "scope": "city",
+      "regionName": "Примерная область",
+      "cityName": "Город не найден",
+      "skipped": true
+    }
+  ]
 }
 ```
 
-Invalid population values, conflicts и malformed payload по-прежнему являются ошибками.
+# Streaming JSON / ZIP и body limits
 
-# Compression и body limits
+Большие portable city/line/population transfers **не проходят через
+`express.json()`**. HTTP body сначала потоково записывается как сжатый/raw
+spool-файл в `var/import-staging`, после чего background admin task читает его
+потоком. Распакованный JSON целиком ни на диск, ни в RAM не создаётся.
 
-Application limit крупных protected imports:
+Streaming parser сканирует уже декодированные chunks пакетно, без
+посимвольного async-loop. Для длинного одиночного JSON item byte-progress
+публикуется прямо во время чтения потока, а city-boundary import перед каждым
+PostgreSQL/PostGIS staging batch отдельно публикует фазу `stage-write`.
+Поэтому UI различает собственно чтение JSON и ожидание DB batch.
+
+Для raw JSON/GeoJSON по-прежнему поддерживаются HTTP `gzip`, `deflate` и
+`br`. ZIP передаётся как `Content-Type: application/zip` без дополнительного
+`Content-Encoding`.
+
+ZIP-контракт намеренно строгий:
+
+- после игнорирования directory entries должна остаться ровно **одна**
+  ordinary data entry;
+- имя и расширение этой entry не определяют формат: допустимы, например,
+  `stdin`, `payload/data` и даже anonymous entry с пустым именем, который
+  создаёт `7z ... -si` без явного имени; JSON/GeoJSON определяется и
+  валидируется по содержимому/schema;
+- encryption и multi-volume ZIP не поддерживаются;
+- поддерживаются Store и Deflate;
+- поддерживаются classic ZIP и ZIP64, включая streamed archives с data
+  descriptor, когда размер entry неизвестен в local header;
+- проверяются CRC32, decoded size, central-directory consistency,
+  максимальное число entries и compression ratio.
+
+Сам HTTP request также может быть потоком без `Content-Length`
+(`Transfer-Encoding: chunked`). Это позволяет подавать на endpoint ZIP,
+который другой процесс формирует из stdin на лету. Сервер не собирает его в
+RAM: на диск spoolятся только transport bytes архива, после чего единственная
+data entry декодируется непосредственно в streaming JSON parser. Отдельный
+распакованный JSON-файл не создаётся.
+
+Лимиты:
 
 ```dotenv
+# Старый лимит небольших JSON API; не используется как RAM-buffer для больших
+# portable imports.
 IMPORT_API_MAX_BODY_BYTES=26214400
+
+# Размер входящего transport body: raw JSON, HTTP-compressed JSON или ZIP.
+IMPORT_API_MAX_STREAM_UPLOAD_BYTES=8589934592
+
+# Максимальный размер JSON после HTTP/ZIP decompression.
+IMPORT_API_MAX_STREAM_JSON_BYTES=34359738368
+
+# Максимальный размер одного feature/population JSON value.
+IMPORT_API_MAX_STREAM_ITEM_BYTES=134217728
+
+# ZIP-bomb / archive structure limits.
+IMPORT_API_MAX_STREAM_ZIP_RATIO=1000
+IMPORT_API_MAX_STREAM_ZIP_ENTRIES=64
+
+# Streaming JSON complexity limits.
+IMPORT_API_MAX_STREAM_JSON_DEPTH=128
+IMPORT_API_MAX_STREAM_JSON_ITEMS=5000000
 ```
 
-Если используется nginx:
+Для nginx `client_max_body_size` должен быть **не меньше**
+`IMPORT_API_MAX_STREAM_UPLOAD_BYTES` (либо выбранного production значения).
+Например для лимита 8 GiB нужно настраивать nginx соответственно, а не оставлять
+старые `30m`. Для действительно streaming/chunked upload также необходимо,
+чтобы reverse proxy не буферизовал request body целиком собственной политикой.
 
-```nginx
-client_max_body_size 30m;
-```
-
-Admin exports поддерживают HTTP compression. Import body может быть gzip-compressed, например:
+Пример raw gzip:
 
 ```bash
 AUTH="$ADMIN_USERNAME:$ADMIN_PASSWORD"
@@ -257,6 +416,32 @@ gzip -c cities.geojson | curl --fail-with-body \
   --data-binary @- \
   https://target.example/api/admin/import/cities
 ```
+
+Пример готового ZIP:
+
+```bash
+curl --fail-with-body \
+  --user "$AUTH" \
+  -X POST \
+  -H 'Content-Type: application/zip' \
+  --data-binary @cities.zip \
+  https://target.example/api/admin/import/cities
+```
+
+То же API принимает ZIP из pipe/stdin: upstream ZIP producer пишет archive
+bytes в stdout, а `curl --data-binary @-` передаёт их без промежуточного
+JSON-файла на стороне сервера. Имя единственной data entry может быть
+`stdin`; расширение `.json` не требуется.
+
+После полного приёма transport stream сервер отвечает `202` и запускает
+admin task. Полный transport body не держится в heap; spool нужен для проверки
+ZIP central directory/ZIP64 metadata перед транзакционным чтением JSON.
+Синтаксическая ошибка JSON, неправильный ZIP, несовместимый schema, системная
+DB/PostGIS ошибка или отмена задачи переводят task в `failed/cancelled`;
+такие ошибки делают `ROLLBACK` целиком. Ошибки отдельных записей population
+import являются best-effort warnings: проблемные записи не попадают в staging,
+а валидная часть той же транзакции коммитится. Временный spool удаляется после завершения task, а orphan
+spools после process crash чистятся при следующем startup (старше 24 часов).
 
 # Single-task guard
 

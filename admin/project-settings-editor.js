@@ -1,3 +1,8 @@
+import { publishDerivedDataChange } from './derived-data-events.js';
+import { adminConfirm } from './admin-dialog.js';
+import { trackDirtyForm } from './admin-dirty-state.js';
+import { readTabState, writeTabState } from './admin-tab-state.js';
+
 if (typeof document !== 'undefined') {
   const session = await globalThis.dtpstatAdminSession?.catch(() => null);
   const user = session?.user;
@@ -51,7 +56,19 @@ if (typeof document !== 'undefined') {
           </p>
 
           <form id="project-settings-form">
+            <nav class="project-settings-tabs" role="tablist" aria-label="Разделы настроек проекта">
+              <button type="button" role="tab" data-project-settings-tab="general"
+                      aria-selected="true" aria-controls="project-settings-general">Основное</button>
+              <button type="button" role="tab" data-project-settings-tab="map"
+                      aria-selected="false" aria-controls="project-settings-map">Карта</button>
+              <button type="button" role="tab" data-project-settings-tab="metadata"
+                      aria-selected="false" aria-controls="project-settings-metadata">Метаданные и API</button>
+              <button type="button" role="tab" data-project-settings-tab="footer"
+                      aria-selected="false" aria-controls="project-settings-footer">Подвал</button>
+            </nav>
             <div class="form-fields project-settings-grid">
+              <section class="project-settings-page" id="project-settings-general"
+                       role="tabpanel" data-project-settings-panel="general">
               <label>Название проекта
                 <input name="projectName" type="text" maxlength="160" required
                        placeholder="Например: Выделенные полосы в России">
@@ -91,6 +108,30 @@ if (typeof document !== 'undefined') {
                 </div>
               </section>
 
+              </section>
+
+              <section class="project-settings-page" id="project-settings-map"
+                       role="tabpanel" data-project-settings-panel="map" hidden>
+              <section class="project-settings-section" aria-labelledby="project-city-category-title">
+                <div>
+                  <h5 id="project-city-category-title">Разделение больших и малых городов</h5>
+                  <p>Если население известно, используется порог населения. При отсутствии населения — порог площади активной OSM-геометрии.</p>
+                </div>
+                <div class="project-metrics-grid">
+                  <label>Население большого города от
+                    <input name="largeCityPopulationThreshold" type="number"
+                           min="1" step="1" required inputmode="numeric">
+                    <small>Сравнение выполняется по правилу население ≥ порога.</small>
+                  </label>
+                  <label>Площадь большого города от, км²
+                    <input name="largeCityAreaKm2Threshold" type="number"
+                           min="0" step="any" inputmode="decimal"
+                           placeholder="не задано">
+                    <small>Используется только когда данных населения нет. Пустое значение отключает fallback по площади.</small>
+                  </label>
+                </div>
+              </section>
+
               <label class="check project-setting-check">
                 <input name="showLineLabels" type="checkbox">
                 Постоянно отображать наименования линий
@@ -114,7 +155,7 @@ if (typeof document !== 'undefined') {
                     <span id="project-city-marker-state">Загружаем состояние…</span>
                   </div>
                   <label>Новая иконка PNG
-                    <input name="cityMarkerIcon" type="file" accept="image/png">
+                    <input name="cityMarkerIcon" type="file" accept="image/png" data-dirty-ignore>
                     <small>Квадратный PNG 16×16…256×256 px, не более 256 КБ. Прозрачность поддерживается.</small>
                   </label>
                   <div class="project-city-marker-actions">
@@ -124,6 +165,10 @@ if (typeof document !== 'undefined') {
                 </div>
               </section>
 
+              </section>
+
+              <section class="project-settings-page" id="project-settings-metadata"
+                       role="tabpanel" data-project-settings-panel="metadata" hidden>
               <label>Ключевые слова
                 <textarea name="keywords" rows="5"
                           placeholder="выделенные полосы\nобщественный транспорт\nрейтинг городов"></textarea>
@@ -157,6 +202,10 @@ if (typeof document !== 'undefined') {
                 </div>
               </section>
 
+              </section>
+
+              <section class="project-settings-page" id="project-settings-footer"
+                       role="tabpanel" data-project-settings-panel="footer" hidden>
               <label>Информационный блок / подвал — HTML
                 <div class="project-settings-toolbar" id="project-html-toolbar" aria-label="Готовые HTML-стили">
                   <button type="button" data-project-snippet="h2">H2</button>
@@ -179,6 +228,7 @@ if (typeof document !== 'undefined') {
                 <div><strong>Стили проекта:</strong> <code id="project-allowed-classes">загрузка…</code></div>
                 <div>Inline style, script, iframe, обработчики событий и неизвестные классы сервер не принимает.</div>
               </div>
+              </section>
             </div>
             <button class="task-action" type="submit">Сохранить настройки проекта</button>
           </form>
@@ -191,10 +241,40 @@ if (typeof document !== 'undefined') {
     const form = document.querySelector('#project-settings-form');
 
     if (form) {
+      const projectTabs = [...form.querySelectorAll('[data-project-settings-tab]')];
+      const projectPanels = [...form.querySelectorAll('[data-project-settings-panel]')];
+      const selectProjectPanel = (key) => {
+        writeTabState('project-settings', key);
+        for (const tab of projectTabs) {
+          const active = tab.dataset.projectSettingsTab === key;
+          tab.setAttribute('aria-selected', String(active));
+          tab.tabIndex = active ? 0 : -1;
+        }
+        for (const panel of projectPanels) {
+          panel.hidden = panel.dataset.projectSettingsPanel !== key;
+        }
+      };
+      for (const tab of projectTabs) {
+        tab.addEventListener('click', () => selectProjectPanel(tab.dataset.projectSettingsTab));
+      }
+      form.addEventListener('invalid', (event) => {
+        const panel = event.target.closest('[data-project-settings-panel]');
+        if (panel) selectProjectPanel(panel.dataset.projectSettingsPanel);
+      }, true);
+      const availableProjectTabs = projectTabs.map((tab) => tab.dataset.projectSettingsTab);
+      selectProjectPanel(readTabState(
+        'project-settings',
+        availableProjectTabs,
+        'general',
+      ));
+
+      const dirtyState = trackDirtyForm(form, { label: 'Настройки проекта' });
       const projectName = form.elements.namedItem('projectName');
       const themePreset = form.elements.namedItem('themePreset');
       const showLineLabels = form.elements.namedItem('showLineLabels');
       const showLinePopups = form.elements.namedItem('showLinePopups');
+      const largeCityPopulationThreshold = form.elements.namedItem('largeCityPopulationThreshold');
+      const largeCityAreaKm2Threshold = form.elements.namedItem('largeCityAreaKm2Threshold');
       const cityMarkerIcon = form.elements.namedItem('cityMarkerIcon');
       const keywords = form.elements.namedItem('keywords');
       const yandexMetrikaId = form.elements.namedItem('yandexMetrikaId');
@@ -318,6 +398,11 @@ if (typeof document !== 'undefined') {
         themePreset.value = settings.themePreset ?? 'classic';
         showLineLabels.checked = Boolean(settings.showLineLabels);
         showLinePopups.checked = settings.showLinePopups !== false;
+        largeCityPopulationThreshold.value = String(
+          settings.largeCityPopulationThreshold ?? 400000,
+        );
+        largeCityAreaKm2Threshold.value =
+          settings.largeCityAreaKm2Threshold ?? '';
         keywords.value = settings.keywords.join('\n');
         yandexMetrikaId.value = settings.yandexMetrikaId ?? '';
         googleAnalyticsId.value = settings.googleAnalyticsId ?? '';
@@ -343,6 +428,7 @@ if (typeof document !== 'undefined') {
           applySettings(payload.settings);
           allowedTags.textContent = payload.editor.tags.map((tag) => `<${tag}>`).join(' · ');
           allowedClasses.textContent = payload.editor.classes.map((name) => `.${name}`).join(' · ');
+          dirtyState?.markClean();
           setMessage('Настройки загружены.');
         } catch (error) {
           setMessage(error.message, 'error');
@@ -389,7 +475,14 @@ if (typeof document !== 'undefined') {
 
       cityMarkerReset.addEventListener('click', async () => {
         if (cityMarkerReset.disabled) return;
-        if (!window.confirm('Вернуть стандартную иконку города?')) return;
+        const confirmed = await adminConfirm({
+          title: 'Вернуть стандартную иконку?',
+          message: 'Пользовательская иконка города будет удалена и заменена стандартной.',
+          confirmLabel: 'Вернуть стандартную',
+          cancelLabel: 'Отмена',
+          destructive: true,
+        });
+        if (!confirmed) return;
         cityMarkerUpload.disabled = true;
         cityMarkerReset.disabled = true;
         setMessage('Возвращаем стандартную иконку…');
@@ -430,6 +523,10 @@ if (typeof document !== 'undefined') {
               themePreset: themePreset.value,
               showLineLabels: showLineLabels.checked,
               showLinePopups: showLinePopups.checked,
+              largeCityPopulationThreshold: Number(largeCityPopulationThreshold.value),
+              largeCityAreaKm2Threshold: largeCityAreaKm2Threshold.value === ''
+                ? null
+                : Number(largeCityAreaKm2Threshold.value),
               keywords: splitKeywords(keywords.value),
               yandexMetrikaId: yandexMetrikaId.value.trim() || null,
               googleAnalyticsId: googleAnalyticsId.value.trim() || null,
@@ -442,7 +539,12 @@ if (typeof document !== 'undefined') {
           const payload = await response.json();
           if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
           applySettings(payload.settings);
-          setMessage('Настройки проекта сохранены.', 'success');
+          dirtyState?.markClean();
+          setMessage(
+            'Настройки проекта сохранены. Таблицы рейтинга пересчитаны.',
+            'success',
+          );
+          publishDerivedDataChange('project-settings');
           window.dispatchEvent(new CustomEvent('dtpstat:project-settings-changed'));
         } catch (error) {
           setMessage(error.message, 'error');

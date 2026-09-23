@@ -156,6 +156,10 @@ th button:focus-visible {
   padding-bottom: 5px;
   color: #111;
   font-size: .72rem;
+  font-weight: 400;
+}
+
+.city-table th.is-header-bold {
   font-weight: 700;
 }
 
@@ -170,7 +174,7 @@ th button:focus-visible {
   border-radius: 0;
   color: #000;
   background: transparent;
-  font-weight: 700;
+  font-weight: inherit;
   text-decoration: underline;
 }
 

@@ -25,6 +25,9 @@ const EXPORT_PUBLIC_GEOJSON_SQL = `
     )
   ) AS payload
   FROM city_geometries AS geometry
+  JOIN city_boundaries AS boundary
+    ON boundary.id = geometry.boundary_id
+   AND boundary.is_active
   JOIN line_types AS line_type ON line_type.id = geometry.line_type_id
   LEFT JOIN cities AS city ON city.id = geometry.city_id
   LEFT JOIN city_populations AS population ON population.city_id = city.id
@@ -41,11 +44,16 @@ const EXPORT_PUBLIC_CSV_SQL = `
     MAX(ST_XMax(boundary.bounds))::double precision AS maxx,
     MAX(ST_YMax(boundary.bounds))::double precision AS maxy
   FROM cities AS city
-  JOIN city_boundaries AS boundary ON boundary.city_id = city.id
+  JOIN city_boundaries AS boundary
+    ON boundary.city_id = city.id
+   AND boundary.is_active
   LEFT JOIN city_report_values AS report ON report.city_id = city.id
   WHERE EXISTS (
     SELECT 1
     FROM city_geometries AS geometry_presence
+    JOIN city_boundaries AS geometry_boundary
+      ON geometry_boundary.id = geometry_presence.boundary_id
+     AND geometry_boundary.is_active
     WHERE geometry_presence.city_id = city.id
   )
   GROUP BY
@@ -58,9 +66,9 @@ const EXPORT_PUBLIC_CSV_SQL = `
 `;
 
 const EXPORT_PUBLIC_CSV_COLUMNS_SQL = `
-  SELECT csv_columns AS "csvColumns"
+  SELECT config_value AS "csvColumns"
   FROM report_config
-  WHERE id = 1
+  WHERE config_key = 'csv_columns'
 `;
 
 /**

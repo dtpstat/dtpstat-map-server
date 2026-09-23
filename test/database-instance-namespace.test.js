@@ -40,9 +40,10 @@ test('runtime database namespace is not tied to the repository name', async () =
 });
 
 test('schema setting drives search path, migration rendering and lock namespace', async () => {
-  const [environment, migrate, example] = await Promise.all([
+  const [environment, migrate, migrationRunner, example] = await Promise.all([
     source('src/db/database-environment.js'),
     source('scripts/migrate.js'),
+    source('src/db/migration-runner.js'),
     source('.env.example'),
   ]);
 
@@ -50,7 +51,12 @@ test('schema setting drives search path, migration rendering and lock namespace'
   assert.match(environment, /DATABASE_SCHEMA/);
   assert.match(environment, /search_path=\$\{normalizeDatabaseSchema\(schema\)\},public/);
   assert.match(environment, /\$\{namespace\}:\$\{name\}/);
-  assert.match(migrate, /renderMigrationSql/);
-  assert.match(migrate, /schema_versions/);
+  assert.match(migrate, /databaseLockKey\(schema, 'migrations'\)/);
+  assert.match(migrate, /from '\.\.\/src\/db\/migration-runner\.js'/);
+  assert.match(migrationRunner, /function renderMigrationSql/);
+  assert.match(
+    migrationRunner,
+    /\$\{normalizeDatabaseSchema\(schema\)\}\.schema_versions/,
+  );
   assert.match(example, /^DATABASE_SCHEMA=buslanes$/m);
 });

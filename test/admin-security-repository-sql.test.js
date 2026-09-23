@@ -34,3 +34,33 @@ test('failed-login SQL avoids PostgreSQL keyword and RETURNING ambiguities', asy
   assert.doesNotMatch(queryText, /RETURNING\s+id\b/i);
   assert.deepEqual(queryValues, [7, timestamp, 900, 5, 1800]);
 });
+
+
+test('audit listing exposes avatar availability without changing historical username', async () => {
+  let queryText = '';
+  const database = {
+    async query(text) {
+      queryText = text;
+      return {
+        rows: [{
+          id: 9,
+          username: 'operator',
+          userId: 7,
+          hasAvatar: true,
+          details: {},
+        }],
+      };
+    },
+  };
+  const repository = createAdminSecurityRepository(database);
+
+  const rows = await repository.listAudit({ limit: 10, offset: 0 });
+
+  assert.equal(rows[0].hasAvatar, true);
+  assert.equal(rows[0].username, 'operator');
+  assert.match(
+    queryText,
+    /SELECT\s+admin_user\.avatar_data IS NOT NULL[\s\S]*FROM admin_users AS admin_user[\s\S]*admin_user\.id = admin_audit_log\.user_id/s,
+  );
+  assert.match(queryText, /AS "hasAvatar"/);
+});

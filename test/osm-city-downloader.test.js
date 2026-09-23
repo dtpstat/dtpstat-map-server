@@ -52,7 +52,14 @@ test('OSM downloader rejects foreign redirects and oversized responses', async (
       { ...options, maxBytes: 4 },
       async () => new Response('{"elements":[]}', { status: 200 }),
     ),
-    /size limit/,
+    (error) => {
+      assert.ok(error instanceof OsmCityDownloadError);
+      assert.match(error.message, /size limit/);
+      assert.equal(error.code, 'response-size-limit');
+      assert.equal(error.limitBytes, 4);
+      assert.ok(error.receivedBytes > 4);
+      return true;
+    },
   );
 });
 
@@ -72,6 +79,61 @@ test('OSM downloader preserves HTTP 429 and Retry-After metadata', async () => {
       assert.equal(error.statusCode, 429);
       assert.equal(error.retryAfterMs, 45000);
       assert.equal(error.finalURL, 'https://overpass-api.de/api/interpreter');
+      return true;
+    },
+  );
+});
+
+test('OSM downloader marks transient fetch failures as retryable network errors', async () => {
+  const cause = Object.assign(
+    new Error('other side closed the socket'),
+    { code: 'UND_ERR_SOCKET' },
+  );
+  const failure = new TypeError('fetch failed', { cause });
+
+  await assert.rejects(
+    downloadOsmCities(
+      'https://overpass-api.de/api/interpreter',
+      'out;',
+      options,
+      async () => { throw failure; },
+    ),
+    (error) => {
+      assert.ok(error instanceof OsmCityDownloadError);
+      assert.equal(error.code, 'network-error');
+      assert.equal(error.networkCode, 'UND_ERR_SOCKET');
+      assert.equal(error.networkMessage, 'other side closed the socket');
+      assert.equal(error.retryable, true);
+      assert.equal(
+        error.finalURL,
+        'https://overpass-api.de/api/interpreter',
+      );
+      assert.equal(error.cause, failure);
+      return true;
+    },
+  );
+});
+
+test('OSM downloader does not mark permanent TLS failures as retryable', async () => {
+  const cause = Object.assign(
+    new Error('certificate has expired'),
+    { code: 'CERT_HAS_EXPIRED' },
+  );
+
+  await assert.rejects(
+    downloadOsmCities(
+      'https://overpass-api.de/api/interpreter',
+      'out;',
+      options,
+      async () => {
+        throw new TypeError('fetch failed', { cause });
+      },
+    ),
+    (error) => {
+      assert.ok(error instanceof OsmCityDownloadError);
+      assert.equal(error.code, 'network-error');
+      assert.equal(error.networkCode, 'CERT_HAS_EXPIRED');
+      assert.equal(error.retryable, false);
       return true;
     },
   );

@@ -1,3 +1,5 @@
+import { trackDirtyForm } from './admin-dirty-state.js';
+
 if (typeof document !== 'undefined') {
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
@@ -7,10 +9,17 @@ if (typeof document !== 'undefined') {
   function mountEditor() {
     const projectForm = document.querySelector('#project-settings-form');
     const operation = document.querySelector('#operation-project-settings');
+    const metadataPanel = document.querySelector('#project-settings-metadata');
     const projectMessage = document.querySelector('#project-settings-message');
 
-    if (!projectForm || !operation || !projectMessage) return false;
+    if (!projectForm || !operation || !metadataPanel || !projectMessage) return false;
     if (document.querySelector('#public-download-name-form')) return true;
+
+    const externalForm = document.createElement('form');
+    externalForm.id = 'public-download-name-form';
+    externalForm.className = 'project-download-name-form-proxy';
+    externalForm.hidden = true;
+    operation.insertBefore(externalForm, projectMessage);
 
     const section = document.createElement('section');
     section.className = 'project-settings-section';
@@ -20,9 +29,10 @@ if (typeof document !== 'undefined') {
         <h5>Имя файлов открытых данных</h5>
         <p>Задаётся только базовое имя. Сервер сам добавляет <code>.geojson</code> и <code>.csv</code>; это же имя используется в публичных URL и для файлов на диске.</p>
       </div>
-      <form id="public-download-name-form" class="project-download-name-form">
+      <div class="project-download-name-form">
         <label>Базовое имя файла
-          <input name="publicDownloadName" type="text" maxlength="120" required
+          <input name="publicDownloadName" form="public-download-name-form"
+                 type="text" maxlength="120" required
                  autocomplete="off" spellcheck="false" placeholder="bus-lanes">
           <small>Без расширения и без символов пути <code>/</code> или <code>\\</code>.</small>
         </label>
@@ -30,18 +40,29 @@ if (typeof document !== 'undefined') {
           <span>GeoJSON:</span><code data-download-preview="geojson">/bus-lanes.geojson</code>
           <span>CSV:</span><code data-download-preview="csv">/bus-lanes.csv</code>
         </div>
-        <button class="secondary" type="submit">Сохранить имя файлов</button>
-      </form>
+        <button class="secondary" type="submit" form="public-download-name-form">Сохранить имя файлов</button>
+      </div>
       <p class="project-settings-message" id="public-download-name-message" role="status"></p>
     `;
-    operation.insertBefore(section, projectMessage);
+    metadataPanel.append(section);
 
-    const form = section.querySelector('#public-download-name-form');
+    const syncVisibility = () => {
+      section.hidden = metadataPanel.hidden;
+    };
+    syncVisibility();
+    const visibilityObserver = new MutationObserver(syncVisibility);
+    visibilityObserver.observe(metadataPanel, {
+      attributes: true,
+      attributeFilter: ['hidden'],
+    });
+
+    const form = externalForm;
     const input = form.elements.namedItem('publicDownloadName');
     const saveButton = form.querySelector('button[type="submit"]');
     const message = section.querySelector('#public-download-name-message');
     const geoJsonPreview = section.querySelector('[data-download-preview="geojson"]');
     const csvPreview = section.querySelector('[data-download-preview="csv"]');
+    const dirtyState = trackDirtyForm(form, { label: 'Имя файлов открытых данных' });
 
     function setMessage(text, tone = '') {
       message.textContent = text;
@@ -58,7 +79,10 @@ if (typeof document !== 'undefined') {
       csvPreview.textContent = `/${name}.csv`;
     }
 
-    input.addEventListener('input', renderPreview);
+    input.addEventListener('input', () => {
+      renderPreview();
+      dirtyState?.markDirty();
+    });
 
     async function load() {
       try {
@@ -71,6 +95,7 @@ if (typeof document !== 'undefined') {
         input.maxLength = Number(payload.editor?.publicDownloadName?.maxLength) || 120;
         input.value = payload.settings?.publicDownloadName || 'bus-lanes';
         renderPreview();
+        dirtyState?.markClean();
       } catch (error) {
         setMessage(`Не удалось загрузить имя файлов: ${error.message}`, 'error');
       }
@@ -95,6 +120,7 @@ if (typeof document !== 'undefined') {
         if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
         input.value = payload.settings.publicDownloadName;
         renderPreview();
+        dirtyState?.markClean();
         setMessage('Имя файлов и публичные URL обновлены.', 'success');
         window.dispatchEvent(new CustomEvent('dtpstat:project-settings-changed'));
       } catch (error) {

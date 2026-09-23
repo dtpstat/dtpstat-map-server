@@ -136,7 +136,11 @@ export function createAdminSecurityRouter({ securityService, adminAuth, maxBodyB
 
   router.get('/admin/me', adminAuth.requireProfile, (request, response) => {
     response.set('Cache-Control', 'no-store');
-    response.json({ user: request.adminUser, sessionId: request.adminSessionId });
+    response.json({
+      user: request.adminUser,
+      sessionId: request.adminSessionId,
+      expiresAt: request.adminSessionExpiresAt ?? null,
+    });
   });
 
   router.patch(
@@ -150,6 +154,20 @@ export function createAdminSecurityRouter({ securityService, adminAuth, maxBodyB
         response.set('Cache-Control', 'no-store').json({ user });
       } catch (error) {
         if (validation(response, error)) return;
+        next(error);
+      }
+    },
+  );
+
+  router.get(
+    '/admin/profile/password-policy',
+    adminAuth.requireProfile,
+    async (_request, response, next) => {
+      try {
+        response
+          .set('Cache-Control', 'no-store')
+          .json({ policy: await securityService.getPasswordPolicy() });
+      } catch (error) {
         next(error);
       }
     },
@@ -433,6 +451,31 @@ export function createAdminSecurityRouter({ securityService, adminAuth, maxBodyB
         if (!await securityService.deleteIpBlock(blockId)) return response.status(404).json({ error: 'IP block not found' });
         response.json({ deleted: true });
       } catch (error) { next(error); }
+    },
+  );
+
+  router.get(
+    '/admin/security/users/:userId/avatar',
+    adminAuth.requireUsersOrAudit,
+    async (request, response, next) => {
+      const userId = parsePositiveInteger(request.params.userId);
+      if (!userId) {
+        response.status(400).json({ error: 'userId must be a positive integer' });
+        return;
+      }
+      try {
+        const avatar = await securityService.getAvatar(userId);
+        if (!avatar?.data) {
+          response.status(404).end();
+          return;
+        }
+        response
+          .set('Cache-Control', 'private, max-age=60')
+          .type(avatar.mime)
+          .send(avatar.data);
+      } catch (error) {
+        next(error);
+      }
     },
   );
 

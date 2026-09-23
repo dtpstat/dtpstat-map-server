@@ -1,9 +1,16 @@
+import { confirmDirtyNavigation, installDirtyTabGuard } from './admin-dirty-state.js';
+import { readTabState, writeTabState } from './admin-tab-state.js';
+
 function canManageData(user) {
   return Boolean(user?.isSuperuser || user?.canManageData);
 }
 
 function canManageInterface(user) {
   return Boolean(user?.isSuperuser || user?.canManageInterface);
+}
+
+function canEditOsm(user) {
+  return Boolean(user?.isSuperuser || user?.canEditOsm);
 }
 
 function canAccessSecurity(user) {
@@ -93,6 +100,10 @@ function ensureTopbarActions() {
   button.className = 'secondary';
   button.textContent = 'Выйти';
   button.addEventListener('click', async () => {
+    if (!await confirmDirtyNavigation({
+      title: 'Выйти из админки?',
+      message: 'Есть несохранённые изменения. При выходе они будут потеряны.',
+    })) return;
     button.disabled = true;
     button.textContent = 'Выходим…';
     try {
@@ -132,6 +143,7 @@ function normalizeInterfaceEditorNodes() {
     // only by the interface role and by the outer interface panel scroller.
     reportPanel.querySelector('#report-config-form')?.removeAttribute('data-task-form');
     reportPanel.querySelector('.report-config-sections')?.classList.remove('form-fields');
+    reportPanel.querySelector('.report-config-editor')?.classList.remove('transfer-mode');
     document.querySelector('#interface-panels')?.append(reportPanel);
   }
 
@@ -158,6 +170,7 @@ function setupInterfaceTabs() {
   if (tabs.length === 0) return;
 
   const select = (key) => {
+    writeTabState('interface', key);
     for (const tab of tabs) {
       const active = tab.dataset.interfaceTab === key;
       tab.setAttribute('aria-selected', String(active));
@@ -170,10 +183,13 @@ function setupInterfaceTabs() {
   };
 
   for (const tab of tabs) tab.addEventListener('click', () => select(tab.dataset.interfaceTab));
-  select(
+  const available = tabs.map((tab) => tab.dataset.interfaceTab);
+  select(readTabState(
+    'interface',
+    available,
     tabs.find((tab) => tab.dataset.interfaceTab === 'project')?.dataset.interfaceTab
       ?? tabs[0].dataset.interfaceTab,
-  );
+  ));
 }
 
 async function loadInterfaceEditors(user) {
@@ -238,8 +254,10 @@ async function loadDataEditors() {
 
 function setupPrimarySections(user) {
   const mustChangePassword = Boolean(user.mustChangePassword);
+  const dataAccess = !mustChangePassword && canManageData(user);
   const permissions = {
-    data: !mustChangePassword && canManageData(user),
+    data: dataAccess,
+    'osm-objects': !mustChangePassword && canEditOsm(user),
     interface: !mustChangePassword && canManageInterface(user),
     security: !mustChangePassword && canAccessSecurity(user),
     profile: true,
@@ -253,9 +271,11 @@ function setupPrimarySections(user) {
     tab.hidden = !permissions[key];
   }
 
-  const available = ['data', 'interface', 'security', 'profile'].filter((key) => permissions[key]);
+  const available = ['data', 'osm-objects', 'interface', 'security', 'profile']
+    .filter((key) => permissions[key]);
   const select = (key) => {
     if (!permissions[key]) return;
+    writeTabState('primary', key);
     for (const tab of tabs) {
       const active = tab.dataset.adminSectionTab === key;
       tab.setAttribute('aria-selected', String(active));
@@ -264,26 +284,71 @@ function setupPrimarySections(user) {
     for (const panel of panels) panel.hidden = panel.dataset.adminSectionPanel !== key;
     if (connection) connection.hidden = key !== 'data' || !permissions.data;
     if (key === 'security') window.dispatchEvent(new CustomEvent('dtpstat:security-refresh'));
+    if (key === 'osm-objects') {
+      window.dispatchEvent(new CustomEvent('dtpstat:osm-boundary-editor-open'));
+    }
   };
 
   for (const tab of tabs) tab.addEventListener('click', () => select(tab.dataset.adminSectionTab));
-  select(mustChangePassword ? 'profile' : available[0]);
+  const initial = mustChangePassword
+    ? 'profile'
+    : readTabState('primary', available, available[0]);
+  select(initial);
   return { select };
 }
 
 function updateUserBadge(user) {
   const badge = document.querySelector('#admin-user');
-  if (!badge) return;
+  const label = document.querySelector('#admin-user-label');
+  const rolesHost = document.querySelector('#admin-user-roles');
+  const image = document.querySelector('#admin-user-avatar-image');
+  const fallback = document.querySelector('#admin-user-avatar-fallback');
+  if (!badge || !label || !rolesHost || !image || !fallback) return;
+
   const roles = [
     user.isSuperuser ? 'superuser' : null,
     user.canManageData ? 'данные' : null,
+    user.canEditOsm ? 'OSM' : null,
     user.canManageInterface ? 'интерфейс' : null,
     user.canManageUsers ? 'пользователи' : null,
     user.canViewAudit ? 'аудит' : null,
     user.canManageSecurity ? 'безопасность' : null,
-  ].filter(Boolean).join(' · ');
-  badge.textContent = `${user.displayName ?? user.username}${roles ? ` — ${roles}` : ''}`;
+  ].filter(Boolean);
+
+  label.textContent = user.displayName ?? user.username;
+  rolesHost.replaceChildren(...roles.map((role) => {
+    const tag = document.createElement('span');
+    tag.className = 'admin-user-role';
+    tag.textContent = role;
+    return tag;
+  }));
+  rolesHost.hidden = roles.length === 0;
+
+  fallback.textContent = String(
+    user.displayName ?? user.username ?? '?',
+  ).trim().slice(0, 1).toLocaleUpperCase('ru-RU') || '?';
+
+  if (!user.hasAvatar) {
+    image.hidden = true;
+    image.removeAttribute('src');
+    fallback.hidden = false;
+    return;
+  }
+
+  image.hidden = true;
+  fallback.hidden = false;
+  image.onload = () => {
+    image.hidden = false;
+    fallback.hidden = true;
+  };
+  image.onerror = () => {
+    image.hidden = true;
+    fallback.hidden = false;
+  };
+  const avatarVersion = encodeURIComponent(user.updatedAt ?? '1');
+  image.src = `/api/admin/profile/avatar?v=${avatarVersion}`;
 }
+
 
 async function startAdminShell() {
   const userBadge = document.querySelector('#admin-user');
@@ -300,6 +365,7 @@ async function startAdminShell() {
     await import('./profile-editor.js');
     if (!user.mustChangePassword) {
       if (canManageData(user)) await loadDataEditors();
+      if (canEditOsm(user)) await import('./osm-boundary-editor.js');
       if (canManageInterface(user)) await loadInterfaceEditors(user);
       if (canAccessSecurity(user)) await import('./security-editor-v2.js');
     }
@@ -320,3 +386,5 @@ async function startAdminShell() {
 }
 
 await startAdminShell();
+
+installDirtyTabGuard();

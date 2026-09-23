@@ -28,7 +28,7 @@ test('city list does not require population but does require line geometries', a
   );
   assert.match(
     sql,
-    /EXISTS \(\s*SELECT 1\s*FROM city_geometries AS geometry_presence\s*WHERE geometry_presence\.city_id = city\.id\s*\)/s,
+    /EXISTS \(\s*SELECT 1\s*FROM city_geometries AS geometry_presence\s*JOIN city_boundaries AS geometry_boundary[\s\S]*geometry_boundary\.is_active[\s\S]*geometry_presence\.city_id = city\.id\s*\)/s,
   );
   assert.match(
     sql,
@@ -107,6 +107,6 @@ test('viewport query uses padded selector, returns complete intersecting lines a
   assert.match(sql, /ST_Covers\(boundary\.geom, viewport\.center\)/);
   assert.match(
     sql,
-    /geometry_presence\.city_id = boundary\.city_id/,
+    /geometry_boundary\.id = geometry_presence\.boundary_id[\s\S]*geometry_boundary\.is_active[\s\S]*geometry_presence\.city_id = boundary\.city_id/,
   );
 });

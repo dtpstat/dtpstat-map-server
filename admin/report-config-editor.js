@@ -1,3 +1,6 @@
+import { trackDirtyForm } from './admin-dirty-state.js';
+import { readTabState, writeTabState } from './admin-tab-state.js';
+
 const stylesheet = document.createElement('link');
 stylesheet.rel = 'stylesheet';
 stylesheet.href = '/admin/report-config.css';
@@ -118,7 +121,11 @@ if (form) {
     config: null,
     catalog: null,
     lineTypes: [],
-    view: 'metrics',
+    view: readTabState(
+      'report-view',
+      ['metrics', 'table', 'csv', 'rank'],
+      'metrics',
+    ),
   };
   let keyCounter = 0;
 
@@ -131,6 +138,11 @@ if (form) {
   const message = document.querySelector('#report-config-message');
   const viewTabs = [...document.querySelectorAll('[data-report-view-tab]')];
   const viewPanels = [...document.querySelectorAll('[data-report-view-panel]')];
+  const dirtyState = trackDirtyForm(form, { label: 'Расчёты и публичная таблица' });
+  form.addEventListener('click', (event) => {
+    const button = event.target.closest('button[type="button"]');
+    if (button) dirtyState?.markDirty();
+  });
 
   function setMessage(text, tone = '') {
     message.textContent = text;
@@ -139,6 +151,7 @@ if (form) {
 
   function setView(view) {
     state.view = view;
+    writeTabState('report-view', view);
     for (const tab of viewTabs) {
       const active = tab.dataset.reportViewTab === view;
       tab.classList.toggle('is-active', active);
@@ -866,7 +879,11 @@ if (form) {
         title: state.config.metrics[0].name,
         scale: 1,
         decimals: 1,
-        ...(csv ? {} : { formatRules: [] }),
+        ...(csv ? {} : {
+          headerBold: true,
+          headerTooltip: null,
+          formatRules: [],
+        }),
       };
     }
     const kindCatalog = csv ? state.catalog.csvColumnKinds : state.catalog.tableColumnKinds;
@@ -874,7 +891,11 @@ if (form) {
     return {
       kind,
       title: definition?.label ?? kind,
-      ...(!csv && kind === 'rank' ? { formatRules: [] } : {}),
+      ...(!csv ? {
+        headerBold: true,
+        headerTooltip: null,
+        ...(kind === 'rank' ? { formatRules: [] } : {}),
+      } : {}),
     };
   }
 
@@ -899,7 +920,7 @@ if (form) {
       });
 
       const titleLabel = document.createElement('label');
-      titleLabel.textContent = csv ? 'Заголовок CSV' : 'Заголовок';
+      titleLabel.textContent = csv ? 'Заголовок CSV' : 'Отображаемое название';
       const title = document.createElement('input');
       title.type = 'text';
       title.maxLength = 100;
@@ -976,8 +997,45 @@ if (form) {
         renderAll();
       });
       actions.append(up, down, remove);
-      row.append(kindLabel, titleLabel, details, actions);
-      card.append(row);
+      if (csv) {
+        row.append(kindLabel, titleLabel, details, actions);
+        card.append(row);
+      } else {
+        row.classList.add('report-column-row-public');
+        row.append(kindLabel, titleLabel, actions);
+        card.append(row);
+        if (details.childElementCount > 0) card.append(details);
+      }
+
+      if (!csv) {
+        const headerOptions = document.createElement('div');
+        headerOptions.className = 'report-column-header-options';
+
+        const tooltipLabel = document.createElement('label');
+        tooltipLabel.textContent = 'Подсказка при наведении';
+        const tooltip = document.createElement('input');
+        tooltip.type = 'text';
+        tooltip.maxLength = 240;
+        tooltip.placeholder = 'Необязательно; полное пояснение к короткому заголовку';
+        tooltip.value = column.headerTooltip ?? '';
+        tooltip.addEventListener('change', () => {
+          column.headerTooltip = tooltip.value.trim() || null;
+        });
+        tooltipLabel.append(tooltip);
+
+        const boldLabel = document.createElement('label');
+        boldLabel.className = 'report-check-control report-header-bold-control';
+        const bold = document.createElement('input');
+        bold.type = 'checkbox';
+        bold.checked = column.headerBold !== false;
+        bold.addEventListener('change', () => {
+          column.headerBold = bold.checked;
+        });
+        boldLabel.append(bold, document.createTextNode('Жирный заголовок'));
+
+        headerOptions.append(tooltipLabel, boldLabel);
+        card.append(headerOptions);
+      }
 
       if (!csv && (column.kind === 'rank' || column.kind === 'metric')) {
         renderFormatRules(card, column);
@@ -1127,6 +1185,7 @@ if (form) {
       state.catalog = payload.catalog;
       state.lineTypes = payload.lineTypes ?? [];
       renderAll();
+      dirtyState?.markClean();
       setMessage('Конфигурация загружена.');
     } catch (error) {
       setMessage(error.message, 'error');
@@ -1157,6 +1216,7 @@ if (form) {
       if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
       state.config = clone(payload.config);
       renderAll();
+      dirtyState?.markClean();
       const cities = payload.materialized?.cities ?? 0;
       const metrics = payload.materialized?.metrics ?? state.config.metrics.length;
       setMessage(`Сохранено. Пересчитано городов: ${cities}; метрик: ${metrics}. CSV обновлён.`, 'success');
@@ -1165,6 +1225,6 @@ if (form) {
     }
   });
 
-  setView('metrics');
+  setView(state.view);
   void load();
 }

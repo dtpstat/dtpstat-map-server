@@ -50,7 +50,12 @@ const importResult = {
 };
 
 const populationResult = {
+  regions: 1,
+  requestedRegions: 1,
   cities: 1,
+  requestedCities: 1,
+  skippedCount: 0,
+  skippedCities: [],
   asOf: '2026-01-01',
   source: 'test',
   updatedAt: '2026-08-31T12:00:00.000Z',
@@ -70,6 +75,23 @@ const osmCityUpdateResult = {
   importedPlaces: 194,
   completedAt: '2026-08-31T12:00:00.000Z',
 };
+
+async function readJsonStream(source) {
+  const chunks = [];
+  for await (const chunk of source) chunks.push(Buffer.from(chunk));
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+function withStreamingMethod(service, streamingName, legacyName) {
+  if (typeof service?.[streamingName] === 'function') return service;
+  if (typeof service?.[legacyName] !== 'function') return service;
+  return {
+    ...service,
+    async [streamingName](source, operation) {
+      return service[legacyName](await readJsonStream(source), operation);
+    },
+  };
+}
 
 function createTestRepository() {
   return {
@@ -91,20 +113,24 @@ function createTestRepository() {
 }
 
 async function withServer(callback, options = {}) {
-  const importService =
-    options.importService ??
-    ({
+  const importService = withStreamingMethod(
+    options.importService ?? {
       async replaceFromGeoJson() {
         return importResult;
       },
-    });
-  const populationService =
-    options.populationService ??
-    ({
+    },
+    'replaceFromGeoJsonStream',
+    'replaceFromGeoJson',
+  );
+  const populationService = withStreamingMethod(
+    options.populationService ?? {
       async updateFromJson() {
         return populationResult;
       },
-    });
+    },
+    'updateFromJsonStream',
+    'updateFromJson',
+  );
   const kmlUpdateService =
     options.kmlUpdateService ??
     ({
@@ -123,6 +149,9 @@ async function withServer(callback, options = {}) {
     adminTasks: options.adminTasks,
     repository: options.repository ?? createTestRepository(),
     projectSettingsRepository: options.projectSettingsRepository,
+    osmImportSettingsRepository: options.osmImportSettingsRepository,
+    osmBoundaryAdminRepository: options.osmBoundaryAdminRepository,
+    refreshOsmBoundaryDerived: options.refreshOsmBoundaryDerived,
     importService,
     populationService,
     kmlUpdateService,
@@ -238,6 +267,7 @@ test('API exposes public config, health, and ordered cities', async () => {
       status: 'ok',
       database: 'reachable',
     });
+    assert.equal(citiesResponse.headers.get('cache-control'), 'no-store');
     assert.deepEqual((await citiesResponse.json()).cities, cities);
   });
 });
@@ -389,6 +419,10 @@ test('admin entry requires auth while static admin assets remain public', async 
       headers: { Authorization: authorization },
     });
     assert.equal(authorized.status, 200);
+    const csp = authorized.headers.get('content-security-policy') ?? '';
+    assert.match(csp, /img-src[^;]*https:\/\/\*\.mapbox\.com/);
+    assert.match(csp, /connect-src[^;]*https:\/\/\*\.mapbox\.com/);
+    assert.doesNotMatch(csp, /tile\.openstreetmap\.org/);
     const html = await authorized.text();
     assert.match(html, /Администрирование/);
     assert.match(html, /role="tablist"/);
@@ -535,7 +569,17 @@ test('import endpoint rejects unsupported and malformed bodies', async () => {
       },
       body: '{',
     });
-    assert.equal(malformed.status, 400);
+    assert.equal(malformed.status, 202);
+    const { completed } = await acceptAndWaitForAdminTask(
+      malformed,
+      baseUrl,
+      authorization,
+    );
+    assert.equal(completed.status, 'failed');
+    assert.match(
+      completed.task.error.message,
+      /JSON|property name|Unexpected/i,
+    );
   });
 });
 
@@ -566,9 +610,18 @@ test('authenticated population endpoint updates a separate data source', async (
   };
   const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
   const body = {
+    schemaVersion: 2,
     asOf: '2026-01-01',
     source: 'test',
-    populations: [{ name: 'Казань', population: 1300000 }],
+    regions: [{
+      name: 'Республика Татарстан',
+      attributes: {},
+      cities: [{
+        name: 'Казань',
+        population: 1300000,
+        attributes: {},
+      }],
+    }],
   };
 
   await withServer(async (baseUrl) => {
@@ -649,6 +702,148 @@ test('KML update endpoint is protected and forwards explicit sources and overrid
     assert.equal(receivedQuery.dryRun, 'true');
     assert.equal(receivedQuery.unmatchedPolicy, 'skip');
   }, { kmlUpdateService });
+});
+
+test('OSM subtree endpoint toggles the whole selected branch once', async () => {
+  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const calls = [];
+  let derivedCalls = 0;
+  const osmImportSettingsRepository = {
+    async get() { return {}; },
+    async save(value) { return value; },
+  };
+  const osmBoundaryAdminRepository = {
+    async list() { return []; },
+    async getGeometry() { return null; },
+    async update() { return null; },
+    async setSubtreeActive(boundaryId, active) {
+      calls.push({ boundaryId, active });
+      return {
+        root: {
+          id: Number(boundaryId),
+          displayName: 'Тестовая область',
+          active,
+        },
+        active,
+        affectedCount: 14,
+        changedCount: 11,
+        previousActiveCount: 11,
+        previousInactiveCount: 3,
+      };
+    },
+  };
+
+  await withServer(async (baseUrl) => {
+    const unauthorized = await fetch(
+      `${baseUrl}/api/admin/osm-boundaries/42/subtree`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: false }),
+      },
+    );
+    assert.equal(unauthorized.status, 401);
+
+    const response = await fetch(
+      `${baseUrl}/api/admin/osm-boundaries/42/subtree`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: authorization,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ active: false }),
+      },
+    );
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('cache-control'), /no-store/);
+    const body = await response.json();
+    assert.deepEqual(calls, [{ boundaryId: '42', active: false }]);
+    assert.equal(body.subtree.affectedCount, 14);
+    assert.equal(body.subtree.changedCount, 11);
+    assert.equal(body.subtree.active, false);
+    assert.equal(derivedCalls, 1);
+
+    const invalid = await fetch(
+      `${baseUrl}/api/admin/osm-boundaries/42/subtree`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: authorization,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ active: 'false' }),
+      },
+    );
+    assert.equal(invalid.status, 400);
+  }, {
+    osmImportSettingsRepository,
+    osmBoundaryAdminRepository,
+    async refreshOsmBoundaryDerived() {
+      derivedCalls += 1;
+      return { refreshed: true };
+    },
+  });
+});
+
+test('OSM checkpoint API exposes and explicitly discards resumable progress', async () => {
+  let checkpoint = {
+    id: 7,
+    status: 'failed',
+    stagedObjects: 24800,
+    totalObjects: 27520,
+    remainingObjects: 2720,
+    updatedAt: '2026-09-20T12:00:00.000Z',
+  };
+  const osmCityUpdateService = {
+    async update() {
+      return osmCityUpdateResult;
+    },
+    async checkpointStatus() {
+      return checkpoint;
+    },
+    async discardCheckpoint() {
+      const value = checkpoint;
+      checkpoint = null;
+      return value;
+    },
+  };
+  const authorization = `Basic ${Buffer.from(
+    'importer:test:secret',
+  ).toString('base64')}`;
+
+  await withServer(async (baseUrl) => {
+    const unauthorized = await fetch(
+      `${baseUrl}/api/admin/osm-checkpoint`,
+    );
+    assert.equal(unauthorized.status, 401);
+
+    const response = await fetch(
+      `${baseUrl}/api/admin/osm-checkpoint`,
+      { headers: { Authorization: authorization } },
+    );
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('cache-control'), /no-store/);
+    assert.deepEqual((await response.json()).checkpoint, checkpoint);
+
+    const discarded = await fetch(
+      `${baseUrl}/api/admin/osm-checkpoint`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: authorization },
+      },
+    );
+    assert.equal(discarded.status, 200);
+    const discardedBody = await discarded.json();
+    assert.equal(discardedBody.discarded, true);
+    assert.equal(discardedBody.checkpoint.id, 7);
+
+    const after = await fetch(
+      `${baseUrl}/api/admin/osm-checkpoint`,
+      { headers: { Authorization: authorization } },
+    );
+    assert.equal((await after.json()).checkpoint, null);
+  }, { osmCityUpdateService });
 });
 
 test('OSM city update endpoint is protected and forwards URL and safe overrides', async () => {
@@ -748,7 +943,16 @@ test('one active admin task blocks every other mutating admin route', async () =
     layers: [{ name: 'Линии', multiple: 1 }],
   }];
   const populationBody = {
-    populations: [{ name: 'Казань', population: 1300000 }],
+    schemaVersion: 2,
+    regions: [{
+      name: 'Республика Татарстан',
+      attributes: {},
+      cities: [{
+        name: 'Казань',
+        population: 1300000,
+        attributes: {},
+      }],
+    }],
   };
 
   await withServer(async (baseUrl) => {

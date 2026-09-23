@@ -127,16 +127,17 @@ test('metric compiler can read previously materialized metric values', () => {
   assert.doesNotMatch(query.text, /'population'/);
 });
 
-test('city area field is calculated from the OSM boundary geography in square metres', () => {
+test('city area field uses the cached area of the active OSM boundary', () => {
   const query = compileReportMetricQuery({
     key: 'city_area_m2',
     source: { kind: 'field', field: 'city.area_m2' },
     operations: [],
   });
 
-  assert.match(query.text, /ST_Area\(city_boundary\.geom::geography\)::double precision/);
+  assert.match(query.text, /city_boundary\.area_m2::double precision/);
   assert.match(query.text, /FROM city_boundaries AS city_boundary/);
   assert.match(query.text, /city_boundary\.city_id = city\.id/);
+  assert.match(query.text, /city_boundary\.is_active/);
   assert.match(query.text, /GROUP BY city\.id, population\.population/);
   assert.deepEqual(query.values, ['city_area_m2']);
 });

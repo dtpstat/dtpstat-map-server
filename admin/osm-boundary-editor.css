@@ -1,0 +1,363 @@
+.osm-selection-grid,
+.osm-number-grid,
+.osm-level-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem;
+}
+.osm-selection-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.osm-settings-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1rem; }
+.osm-boundary-workspace { min-height: 34rem; }
+.osm-boundary-section-card > .panel-description {
+  flex: 0 0 auto;
+  margin: -.15rem 0 .9rem;
+}
+.osm-boundary-section-card .osm-boundary-workspace {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.osm-boundary-layout {
+  min-height: 30rem;
+  display: grid;
+  grid-template-columns:
+    minmax(17rem, .68fr)
+    minmax(28rem, 1.72fr)
+    minmax(22rem, .95fr);
+  gap: .85rem;
+}
+.osm-boundary-section-card .osm-boundary-layout {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.osm-boundary-tree-panel,
+.osm-boundary-map-panel,
+.osm-boundary-details {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0c1417;
+}
+.osm-boundary-tree-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.osm-boundary-search-label {
+  flex: 0 0 auto;
+  padding: .55rem;
+  border-bottom: 1px solid var(--line);
+}
+.osm-boundary-search-label > span {
+  display: block;
+  margin-bottom: .3rem;
+  color: var(--muted);
+  font-size: .68rem;
+}
+.osm-boundary-search {
+  width: 100%;
+}
+.osm-boundary-state-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem .7rem;
+  align-items: center;
+  padding: .42rem .55rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .65rem;
+}
+.osm-boundary-state-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: .28rem;
+}
+.osm-boundary-state-legend .osm-boundary-active-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+}
+.osm-boundary-tree {
+  min-height: 0;
+  padding: .55rem;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+.osm-boundary-children { margin-left: 1rem; padding-left: .55rem; border-left: 1px solid #294047; }
+.osm-boundary-node { margin: .15rem 0; }
+.osm-boundary-node-row {
+  display: grid;
+  grid-template-columns: 1.35rem minmax(0, 1fr);
+  align-items: stretch;
+}
+.osm-boundary-toggle,
+.osm-boundary-toggle-spacer {
+  width: 1.35rem;
+  min-width: 1.35rem;
+}
+.osm-boundary-toggle {
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  color: var(--muted);
+  background: transparent;
+  font-size: .9rem;
+  line-height: 1;
+}
+.osm-boundary-toggle:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--panel-2);
+  filter: none !important;
+}
+.osm-boundary-toggle:disabled {
+  opacity: .55;
+  cursor: default;
+}
+.osm-boundary-node-button {
+  width: 100%;
+  padding: .38rem .48rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .45rem;
+  text-align: left;
+  color: var(--text);
+  background: transparent;
+  font-size: .72rem;
+  font-weight: 600;
+}
+.osm-boundary-node-button:hover { background: var(--panel-2); filter: none !important; }
+.osm-boundary-node-button.is-selected { background: var(--accent-dark); }
+.osm-boundary-active-dot {
+  width: .65rem;
+  height: .65rem;
+  border-radius: 50%;
+  border: 1px solid #587079;
+  background: transparent;
+}
+.osm-boundary-active-dot.is-active {
+  border-color: var(--success);
+  background: var(--success);
+}
+.osm-boundary-active-dot.is-inactive {
+  border-color: #587079;
+  background: transparent;
+}
+.osm-boundary-active-dot.is-partial {
+  border-color: #d6a84b;
+  background: linear-gradient(90deg, #d6a84b 50%, transparent 50%);
+}
+.osm-boundary-node-copy { min-width: 0; }
+.osm-boundary-node-name,
+.osm-boundary-node-source { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.osm-boundary-node-source { color: var(--muted); font-size: .67rem; font-weight: 500; }
+.osm-boundary-node-type { color: var(--muted); font-size: .68rem; white-space: nowrap; }
+.osm-boundary-map-panel {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.osm-boundary-details {
+  padding: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+.osm-boundary-details-header {
+  padding: .5rem .6rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: .4rem;
+  border-bottom: 1px solid var(--line);
+  background: #101b1f;
+}
+.osm-boundary-primary-actions {
+  min-width: 0;
+  display: flex;
+  justify-content: stretch;
+  gap: .3rem;
+  white-space: nowrap;
+}
+.osm-boundary-primary-actions button {
+  flex: 1 1 0;
+}
+.osm-boundary-primary-actions button {
+  width: auto;
+  min-width: 0;
+  padding: .38rem .42rem;
+  border-radius: 7px;
+  font-size: .62rem;
+}
+.osm-boundary-details-scroll {
+  min-height: 0;
+  padding: .58rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+#osm-boundary-form {
+  display: flex;
+  flex-direction: column;
+  gap: .7rem;
+  min-width: 0;
+  overflow: visible;
+}
+.osm-boundary-edit-group {
+  min-width: 0;
+  padding: .5rem;
+  display: grid;
+  gap: .42rem;
+  border: 1px solid #233840;
+  border-radius: 8px;
+  background: rgb(12 20 23 / 62%);
+}
+.osm-boundary-edit-group h4 {
+  margin: 0;
+  color: #dbe9eb;
+  font-size: .72rem;
+}
+.osm-boundary-group-help {
+  margin: -.2rem 0 0;
+  color: var(--muted);
+  font-size: .66rem;
+  line-height: 1.4;
+}
+.osm-boundary-edit-group-display {
+  border-color: #315d59;
+  background: rgb(18 45 44 / 42%);
+}
+.osm-boundary-source-inline {
+  margin-top: .15rem;
+  padding-top: .5rem;
+  display: grid;
+  gap: .38rem;
+  border-top: 1px solid #3b4230;
+}
+.osm-boundary-source-inline h5 {
+  margin: 0;
+  color: #d5e0e2;
+  font-size: .68rem;
+}
+.osm-boundary-edit-group-territory {
+  border-color: #4c4731;
+  background: rgb(35 30 18 / 42%);
+}
+.osm-boundary-edit-group-geometry {
+  border-color: #35445b;
+  background: rgb(17 26 41 / 52%);
+}
+.osm-boundary-edit-group > label {
+  min-width: 0;
+}
+.osm-boundary-edit-group > .check {
+  align-self: flex-start;
+}
+.osm-boundary-branch-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: .67rem;
+  line-height: 1.4;
+}
+.osm-boundary-selected-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: .72rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.osm-boundary-meta {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: .45rem;
+}
+.osm-boundary-meta div { min-width: 0; padding: .45rem; border: 1px solid #233840; border-radius: 7px; }
+.osm-boundary-meta dt { color: var(--muted); font-size: .65rem; }
+.osm-boundary-meta dd { margin: .15rem 0 0; overflow-wrap: anywhere; font-size: .72rem; }
+.osm-boundary-map {
+  width: 100%;
+  height: 100%;
+  min-height: 24rem;
+  border-radius: 9px;
+  overflow: hidden;
+}
+.osm-boundary-section-card .osm-boundary-map {
+  min-height: 0;
+}
+.osm-boundary-map .mapboxgl-ctrl-attrib { font-size: 9px; }
+
+@media (max-width: 1250px) {
+  .osm-boundary-layout,
+  .osm-boundary-section-card .osm-boundary-layout {
+    grid-template-columns: minmax(18rem, .75fr) minmax(0, 1.6fr);
+  }
+  .osm-boundary-details {
+    grid-column: 1 / -1;
+    max-height: 22rem;
+  }
+  .osm-boundary-details-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  .osm-boundary-primary-actions {
+    justify-content: end;
+  }
+  #osm-boundary-form {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+  }
+  #osm-boundary-form > .notice,
+  #osm-boundary-form > .osm-boundary-branch-hint {
+    grid-column: 1 / -1;
+  }
+  .osm-boundary-meta {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 900px) {
+  .osm-boundary-layout,
+  .osm-boundary-section-card .osm-boundary-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .osm-boundary-section-card .osm-boundary-workspace { overflow: visible; }
+  .osm-boundary-tree-panel { max-height: 18rem; }
+  .osm-boundary-details {
+    grid-column: auto;
+    max-height: none;
+    overflow: hidden;
+  }
+  .osm-boundary-details-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .osm-boundary-primary-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .osm-boundary-details-scroll {
+    overflow: visible;
+  }
+  #osm-boundary-form {
+    display: flex;
+  }
+  .osm-boundary-meta {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .osm-boundary-section-card .osm-boundary-map {
+    min-height: 28rem;
+    height: auto;
+  }
+}
+@media (max-width: 650px) {
+  .osm-selection-grid,
+  .osm-number-grid,
+  .osm-level-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -1,3 +1,5 @@
+import { adminConfirm } from './admin-dialog.js';
+
 const session = await globalThis.dtpstatAdminSession?.catch(() => null);
 
 if (session?.user?.isSuperuser) {
@@ -61,7 +63,14 @@ if (session?.user?.isSuperuser) {
       if (!form.reportValidity()) return;
       const file = form.elements.file.files?.[0];
       if (!file) return;
-      if (!window.confirm('Импорт заменить настройки проекта и расчётов на значения из файла. Продолжить?')) return;
+      const confirmed = await adminConfirm({
+        title: 'Импортировать настройки проекта?',
+        message: 'Текущие настройки проекта и расчётов будут заменены значениями из файла. Пользователи, пароли и данные не переносятся.',
+        confirmLabel: 'Импортировать',
+        cancelLabel: 'Отмена',
+        destructive: true,
+      });
+      if (!confirmed) return;
       const button = form.querySelector('button[type="submit"]');
       button.disabled = true;
       message.textContent = 'Импортируем и пересчитываем проект…';

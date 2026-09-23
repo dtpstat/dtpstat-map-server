@@ -37,6 +37,46 @@ test('Overpass index is split into four small Russian type/place queries', () =>
   }
 });
 
+test('Overpass index can add administrative levels while keeping ID-only batching', () => {
+  const parts = buildRussianPlaceIdOverpassQueries(120, {
+    includeCity: true,
+    includeTown: false,
+    includeAdministrative: true,
+    adminLevelMin: 4,
+    adminLevelMax: 6,
+  });
+
+  assert.equal(parts.length, 4);
+  const administrative = parts.filter((part) => part.kind === 'administrative');
+  assert.equal(administrative.length, 2);
+  for (const part of administrative) {
+    assert.match(part.query, /"boundary"="administrative"/);
+    assert.match(part.query, /"admin_level"~"\^\(4\|5\|6\)\$"/);
+    assert.match(part.query, /out ids/);
+    assert.doesNotMatch(part.query, /geom/);
+  }
+});
+
+test('OSM parser accepts named administrative boundaries independently of place', () => {
+  const parsed = parseOsmCityResponse(JSON.stringify({
+    elements: [{
+      type: 'relation',
+      id: 77,
+      tags: {
+        name: 'Тестовая область',
+        boundary: 'administrative',
+        admin_level: '4',
+      },
+      members: [{ type: 'way', role: 'outer', geometry: square }],
+    }],
+  }));
+
+  assert.equal(parsed.places.length, 1);
+  assert.equal(parsed.places[0].placeType, null);
+  assert.equal(parsed.places[0].adminLevel, 4);
+  assert.equal(parsed.administrativePlaces, 1);
+});
+
 test('Overpass geometry query groups one explicit batch by OSM object type', () => {
   const query = buildOsmPlacesBatchQuery([
     { osmType: 'way', osmId: 11 },

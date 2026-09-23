@@ -34,7 +34,8 @@ const DEFAULT_CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'bas
  *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
  *   securityService: ReturnType<import('../data/admin-security.js').createAdminSecurityService>,
  *   maxBodyBytes: number,
- *   afterPublicDownloadNameSave?: () => Promise<any>
+ *   afterPublicDownloadNameSave?: () => Promise<any>,
+ *   afterSettingsSave?: () => Promise<any>
  * }} dependencies
  */
 export function createProjectSettingsRouter({
@@ -43,6 +44,7 @@ export function createProjectSettingsRouter({
   securityService,
   maxBodyBytes,
   afterPublicDownloadNameSave,
+  afterSettingsSave,
 }) {
   const router = Router();
   const jsonBody = express.json({
@@ -136,9 +138,10 @@ export function createProjectSettingsRouter({
       try {
         const previousSettings = await projectSettingsRepository.get();
         const settings = await projectSettingsRepository.save(request.body);
+        const derived = await afterSettingsSave?.();
         recordAdminOperationChanges(response, previousSettings, settings);
         response.set('Cache-Control', 'no-store');
-        response.json({ settings });
+        response.json({ settings, derived });
       } catch (error) {
         if (
           error instanceof ProjectSettingsValidationError ||

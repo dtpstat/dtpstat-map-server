@@ -6,6 +6,9 @@
   <title>Администрирование — карта данных</title>
   <link rel="stylesheet" href="/admin/admin.css">
   <link rel="stylesheet" href="/admin/line-types.css">
+  <link rel="stylesheet" href="/vendor/mapbox-gl/mapbox-gl.css">
+  <link rel="stylesheet" href="/admin/osm-boundary-editor.css">
+  <script src="/vendor/mapbox-gl/mapbox-gl.js"></script>
   <script type="module" src="/admin/admin-session.js"></script>
   <script type="module" src="/admin/project-branding.js"></script>
   <script type="module" src="/admin/admin-shell.js"></script>
@@ -17,7 +20,16 @@
       <h1>Администрирование</h1>
     </div>
     <div class="topbar-status">
-      <span class="admin-user" id="admin-user">Пользователь…</span>
+      <span class="admin-user" id="admin-user">
+        <span class="admin-user-avatar" aria-hidden="true">
+          <img id="admin-user-avatar-image" alt="" hidden>
+          <span id="admin-user-avatar-fallback">?</span>
+        </span>
+        <span class="admin-user-copy">
+          <span id="admin-user-label">Пользователь…</span>
+          <span class="admin-user-roles" id="admin-user-roles" hidden></span>
+        </span>
+      </span>
       <div class="connection connection-pending" id="connection-state">WebSocket: ожидание…</div>
     </div>
   </header>
@@ -26,6 +38,11 @@
     <button type="button" role="tab" data-admin-section-tab="data"
             aria-selected="false" aria-controls="admin-section-data">
       Управление данными
+    </button>
+    <button type="button" role="tab" id="admin-tab-osm-objects"
+            data-admin-section-tab="osm-objects"
+            aria-selected="false" aria-controls="admin-section-osm-objects">
+      Объекты OSM
     </button>
     <button type="button" role="tab" data-admin-section-tab="interface"
             aria-selected="false" aria-controls="admin-section-interface">
@@ -100,19 +117,19 @@
 
           <article class="task-panel" id="panel-osm" role="tabpanel"
                    aria-labelledby="tab-osm" data-task-panel="osm">
-            <h3>Города</h3>
-            <p class="panel-description">Границы OSM можно обновить напрямую из Overpass либо перенести готовым GeoJSON-снимком между серверами.</p>
+            <h3>OSM геометрии</h3>
+            <p class="panel-description">Населённые пункты и административные границы OSM загружаются пакетами, после чего активные объекты используются для населения и привязки линий.</p>
 
-            <nav class="operation-tabs" role="tablist" aria-label="Операции с городами">
+            <nav class="operation-tabs" role="tablist" aria-label="Операции с OSM геометриями">
               <button class="operation-tab" id="operation-tab-osm-update" type="button" role="tab"
                       aria-selected="true" aria-controls="operation-osm-update"
                       data-operation-tab="osm-update" data-operation-group="osm">
-                Обновить с OSM
+                Обновление
               </button>
               <button class="operation-tab" id="operation-tab-osm-geojson" type="button" role="tab"
                       aria-selected="false" aria-controls="operation-osm-geojson"
                       data-operation-tab="osm-geojson" data-operation-group="osm">
-                Импорт / экспорт GeoJSON
+                Импорт / экспорт
               </button>
             </nav>
 
@@ -121,8 +138,8 @@
                      data-operation-panel="osm-update" data-operation-group="osm">
               <div class="mode-heading">
                 <div>
-                  <h4>Обновить с OSM</h4>
-                  <p>Индекс RU city/town, последовательные пакеты геометрий и атомарная замена.</p>
+                  <h4>Обновить из Overpass</h4>
+                  <p>Сначала загружается ID-индекс, затем геометрии последовательно загружаются пакетами и атомарно заменяют снимок.</p>
                 </div>
               </div>
               <p class="last-success" data-last-success="osm-city-update">
@@ -130,38 +147,104 @@
               </p>
               <form id="osm-form" data-task-form="osm" data-task-type="osm-city-update">
                 <div class="form-fields">
-                  <label>Overpass URL
-                    <select name="URL" id="osm-url">
-                      <option value="">Загрузка настроек…</option>
-                    </select>
-                  </label>
-                  <label>Размер пакета
-                    <input name="batchSize" type="number" inputmode="numeric"
-                           min="1" step="1" placeholder="из ENV">
-                  </label>
-                  <label>Пауза между запросами, мс
-                    <input name="minDelayMs" type="number" inputmode="numeric"
-                           min="0" step="1" placeholder="из ENV">
-                  </label>
-                  <label>Максимум повторов временной ошибки
-                    <input name="maxRetries" type="number" inputmode="numeric"
-                           min="0" step="1" placeholder="из ENV">
-                  </label>
-                  <label>Начальная пауза повтора, мс
-                    <input name="retryBaseDelayMs" type="number" inputmode="numeric"
-                           min="1000" step="1" placeholder="из ENV">
-                  </label>
-                  <label>Предел backoff, мс
-                    <input name="retryMaxDelayMs" type="number" inputmode="numeric"
-                           min="1000" step="1" placeholder="из ENV">
-                  </label>
-                  <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
+                  <fieldset class="osm-config-group">
+                    <legend>Что загружать</legend>
+                    <p class="osm-config-help">Состав OSM-индекса. Эти параметры определяют, какие объекты попадут в снимок.</p>
+                    <div class="osm-selection-grid">
+                      <label class="check"><input name="includeCity" type="checkbox" checked> place=city</label>
+                      <label class="check"><input name="includeTown" type="checkbox" checked> place=town</label>
+                      <label class="check"><input name="includeAdministrative" type="checkbox" checked> boundary=administrative</label>
+                    </div>
+                    <div class="osm-level-grid">
+                      <label>admin_level от
+                        <input name="adminLevelMin" type="number" inputmode="numeric"
+                               min="1" max="20" step="1" required>
+                      </label>
+                      <label>admin_level до
+                        <input name="adminLevelMax" type="number" inputmode="numeric"
+                               min="1" max="20" step="1" required>
+                      </label>
+                    </div>
+                  </fieldset>
+
+                  <fieldset class="osm-config-group">
+                    <legend>Как и откуда загружать</legend>
+                    <p class="osm-config-help">Обычные параметры загрузки остаются на виду; защитные лимиты и retry-настройки вынесены в тонкую настройку.</p>
+                    <label>Overpass URL
+                      <select name="URL" id="osm-url" required>
+                        <option value="">Загрузка настроек…</option>
+                      </select>
+                    </label>
+                    <div class="osm-number-grid">
+                      <label>Размер пакета
+                        <input name="batchSize" type="number" inputmode="numeric"
+                               min="1" step="1" required>
+                      </label>
+                      <label>Пауза между запросами, мс
+                        <input name="minDelayMs" type="number" inputmode="numeric"
+                               min="0" step="1" required data-human-unit="milliseconds">
+                      </label>
+                    </div>
+                    <details class="admin-advanced-settings">
+                      <summary>Тонкая настройка загрузки</summary>
+                      <div class="admin-advanced-settings-body">
+                        <p class="admin-advanced-settings-note">Таймауты, ограничения объёма и параметры повторов обычно менять не требуется.</p>
+                        <div class="osm-number-grid">
+                          <label>HTTP timeout, мс
+                            <input name="timeoutMs" type="number" inputmode="numeric"
+                                   min="1000" step="1" required data-human-unit="milliseconds">
+                          </label>
+                          <label>Overpass timeout, сек
+                            <input name="queryTimeoutSeconds" type="number" inputmode="numeric"
+                                   min="1" step="1" required data-human-unit="seconds">
+                          </label>
+                          <label>Лимит одного ответа, байт
+                            <input name="maxResponseBytes" type="number" inputmode="numeric"
+                                   min="1048576" step="1" required data-human-unit="bytes">
+                          </label>
+                          <label>Общий лимит загрузки, байт
+                            <input name="maxTotalBytes" type="number" inputmode="numeric"
+                                   min="1048576" step="1" required data-human-unit="bytes">
+                          </label>
+                          <label>Максимум повторов
+                            <input name="maxRetries" type="number" inputmode="numeric"
+                                   min="0" step="1" required>
+                          </label>
+                          <label>Начальная пауза повтора, мс
+                            <input name="retryBaseDelayMs" type="number" inputmode="numeric"
+                                   min="1000" step="1" required data-human-unit="milliseconds">
+                          </label>
+                          <label>Предел backoff, мс
+                            <input name="retryMaxDelayMs" type="number" inputmode="numeric"
+                                   min="1000" step="1" required data-human-unit="milliseconds">
+                          </label>
+                        </div>
+                      </div>
+                    </details>
+                  </fieldset>
+
+                  <label class="check"><input name="dryRun" type="checkbox" checked data-dirty-ignore> Только проверка (dryRun)</label>
                 </div>
-                <button class="secondary defaults-button" id="osm-defaults" type="button">
-                  Загрузить значения по умолчанию
-                </button>
-                <button class="task-action" type="submit" data-task-action="osm"
-                        data-task-type="osm-city-update" data-start-label="Запустить OSM">Запустить OSM</button>
+                <div class="osm-checkpoint" id="osm-checkpoint" hidden>
+                  <div>
+                    <strong>Сохранён прогресс OSM-загрузки</strong>
+                    <p id="osm-checkpoint-summary"></p>
+                  </div>
+                  <div class="osm-checkpoint-actions">
+                    <button class="secondary" id="osm-resume" type="button">
+                      Возобновить
+                    </button>
+                    <button class="danger" id="osm-checkpoint-discard" type="button">
+                      Удалить сохранённый прогресс
+                    </button>
+                  </div>
+                </div>
+                <div class="osm-settings-actions">
+                  <button class="secondary" id="osm-defaults" type="button">Перезагрузить сохранённые</button>
+                  <button class="secondary" id="osm-settings-save" type="button">Сохранить настройки загрузки</button>
+                  <button class="task-action" type="submit" data-task-action="osm"
+                          data-task-type="osm-city-update" data-start-label="Запустить OSM">Запустить OSM</button>
+                </div>
               </form>
             </section>
 
@@ -171,23 +254,28 @@
               <div class="mode-heading">
                 <div>
                   <h4>Импорт / экспорт GeoJSON</h4>
-                  <p>Полный перенос place=city/town с OSM type/id, тегами, временем OSM и геометрией.</p>
+                  <p>Полный перенос OSM объектов, их source-тегов, admin_level, признака активности и отображаемой идентичности.</p>
                 </div>
-                <a class="secondary-link" href="/api/admin/export/cities" download>Выгрузить GeoJSON</a>
+                <div class="transfer-links">
+                  <a class="export-link" href="/api/admin/export/cities" download>↓ Экспорт GeoJSON</a>
+                  <a class="export-link" href="/api/admin/export/cities.zip" download>↓ Экспорт ZIP</a>
+                </div>
               </div>
               <p class="last-success" data-last-success="city-geojson-import">
                 <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
               </p>
               <form id="city-geojson-form" data-task-form="osm" data-task-type="city-geojson-import">
                 <div class="form-fields">
-                  <label>GeoJSON городов
-                    <input name="file" type="file" accept=".json,.geojson,application/json,application/geo+json" required>
-                    <small>Ожидается FeatureCollection с Polygon/MultiPolygon и свойствами placeType, osmType, osmId, osmName. Файл собственного экспорта принимается без преобразования.</small>
+                  <label>GeoJSON OSM-границ
+                    <input name="file" type="file"
+                           accept=".json,.geojson,.zip,application/json,application/geo+json,application/zip" required>
+                    <small>Принимается GeoJSON или ZIP/ZIP64 с одной data entry; имя и расширение entry не важны. FeatureCollection schemaVersion 2 переносит place/admin признаки, OSM type/id, active/displayName/displayType и Polygon/MultiPolygon.</small>
                   </label>
                   <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
                 </div>
                 <button class="task-action" type="submit" data-task-action="osm"
-                        data-task-type="city-geojson-import" data-start-label="Импортировать города">Импортировать города</button>
+                        data-task-type="city-geojson-import"
+                        data-start-label="Импортировать OSM">Импортировать OSM</button>
               </form>
             </section>
             <p class="notice" data-task-notice="osm" role="status"></p>
@@ -225,14 +313,21 @@
               </p>
               <form id="kml-form" data-task-form="kml" data-task-type="kml-update">
                 <div class="form-fields">
-                  <label>Источники JSON
-                    <textarea name="sources" rows="12" placeholder="Загрузка актуального примера…"></textarea>
-                    <small>Каждый слой: name + multiple (1 или 2) + необязательный type. type — исходное LINE_TYPES.NAME; сопоставление без учёта регистра и внешних пробелов. Отсутствующий NAME создаётся автоматически, CODE назначает БД.</small>
-                  </label>
-                  <label>Буфер города, м
-                    <input name="cityBufferMeters" type="number" inputmode="numeric"
-                           min="0" step="1" placeholder="из ENV">
-                  </label>
+                  <p class="osm-config-help">Без тонкой настройки используются источники и параметры из конфигурации сервера.</p>
+                  <details class="admin-advanced-settings">
+                    <summary>Тонкая настройка источника</summary>
+                    <div class="admin-advanced-settings-body">
+                      <p class="admin-advanced-settings-note">Нужно только для разового переопределения источников или геометрического буфера.</p>
+                      <label>Источники JSON
+                        <textarea name="sources" rows="12" placeholder="Загрузка актуального примера…"></textarea>
+                        <small>Каждый слой: name + multiple (1 или 2) + необязательный type. type — исходное LINE_TYPES.NAME; сопоставление без учёта регистра и внешних пробелов. Отсутствующий NAME создаётся автоматически, CODE назначает БД.</small>
+                      </label>
+                      <label>Буфер города, м
+                        <input name="cityBufferMeters" type="number" inputmode="numeric"
+                               min="0" step="1" placeholder="из ENV" data-human-unit="meters">
+                      </label>
+                    </div>
+                  </details>
                   <label class="check"><input name="dryRun" type="checkbox" checked> Только проверка (dryRun)</label>
                 </div>
                 <button class="task-action" type="submit" data-task-action="kml"
@@ -248,7 +343,10 @@
                   <h4>Импорт / экспорт GeoJSON</h4>
                   <p>Переносит свойства линий, типы, KML Placemark/name и переносимые связи с городом/OSM-полигоном.</p>
                 </div>
-                <a class="secondary-link" href="/api/admin/export/lines" download>Выгрузить GeoJSON</a>
+                <div class="transfer-links">
+                  <a class="export-link" href="/api/admin/export/lines" download>↓ Экспорт GeoJSON</a>
+                  <a class="export-link" href="/api/admin/export/lines.zip" download>↓ Экспорт ZIP</a>
+                </div>
               </div>
               <p class="last-success" data-last-success="geojson-import">
                 <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
@@ -256,8 +354,9 @@
               <form id="line-geojson-form" data-task-form="kml" data-task-type="geojson-import">
                 <div class="form-fields">
                   <label>GeoJSON линий
-                    <input name="file" type="file" accept=".json,.geojson,application/json,application/geo+json" required>
-                    <small>Канонический schemaVersion 3 переносит lineTypes и _dtpstat.businessTypeCode. Сопоставление на целевой БД идёт по NAME; локальные CODE могут отличаться.</small>
+                    <input name="file" type="file"
+                           accept=".json,.geojson,.zip,application/json,application/geo+json,application/zip" required>
+                    <small>Принимается GeoJSON или ZIP/ZIP64 с одной data entry; имя и расширение entry не важны. Канонический schemaVersion 3 переносит lineTypes и _dtpstat.businessTypeCode. Сопоставление на целевой БД идёт по NAME; локальные CODE могут отличаться.</small>
                   </label>
                 </div>
                 <button class="task-action" type="submit" data-task-action="kml"
@@ -270,7 +369,7 @@
           <article class="task-panel" id="panel-population" role="tabpanel"
                    aria-labelledby="tab-population" data-task-panel="population" hidden>
             <h3>Население</h3>
-            <p class="panel-description">Отдельный JSON-снимок населения с source/asOf/attributes и последующим пересчётом рейтинга.</p>
+            <p class="panel-description">Иерархический JSON-снимок населения по схеме «регион → города» с source/asOf и последующим пересчётом производных показателей.</p>
 
             <nav class="operation-tabs operation-tabs-single" role="tablist" aria-label="Операции с населением">
               <button class="operation-tab" id="operation-tab-population-json" type="button" role="tab"
@@ -288,21 +387,30 @@
                   <h4>Импорт / экспорт JSON</h4>
                   <p>Экспорт можно без преобразования загрузить на другой сервер.</p>
                 </div>
-                <a class="secondary-link" href="/api/admin/export/populations" download>Выгрузить JSON</a>
+                <div class="transfer-links">
+                  <a class="export-link" href="/api/admin/export/populations" download>↓ Экспорт JSON</a>
+                  <a class="export-link" href="/api/admin/export/populations.zip" download>↓ Экспорт ZIP</a>
+                </div>
               </div>
               <p class="last-success" data-last-success="population-update">
                 <span>Последнее успешное обновление</span><time>ещё не выполнялось</time>
               </p>
               <form id="population-form" data-task-form="population" data-task-type="population-update">
                 <div class="form-fields">
-                  <label>JSON-файл
-                    <input name="file" type="file" accept=".json,application/json">
-                    <small>Файл собственного экспорта принимается без преобразования, включая schemaVersion/exportedAt и индивидуальные asOf/source.</small>
+                  <label>JSON / ZIP-файл
+                    <input name="file" type="file" accept=".json,.zip,application/json,application/zip">
+                    <small>Принимается JSON или ZIP/ZIP64 с одной data entry; имя и расширение entry не важны. Файл собственного экспорта принимается без преобразования.</small>
                   </label>
-                  <label>Или данные JSON
-                    <textarea name="payload" rows="16" placeholder="Загрузка актуального примера…"></textarea>
-                    <small>Обязательны populations[].name и populations[].population. Общие asOf/source в корне используются как значения по умолчанию.</small>
-                  </label>
+                  <details class="admin-advanced-settings">
+                    <summary>Вставить JSON вручную</summary>
+                    <div class="admin-advanced-settings-body">
+                      <p class="admin-advanced-settings-note">Ручной ввод удобен для диагностики и небольших корректировок. Для штатного импорта предпочтителен файл.</p>
+                      <label>Данные JSON
+                        <textarea name="payload" rows="16" placeholder="Загрузка актуального примера…"></textarea>
+                        <small>schemaVersion 2: regions[] с name/attributes и cities[]; у города обязательны name и population (число или null). Общие asOf/source в корне используются как значения по умолчанию.</small>
+                      </label>
+                    </div>
+                  </details>
                 </div>
                 <button class="task-action" type="submit" data-task-action="population"
                         data-task-type="population-update" data-start-label="Обновить население">Обновить население</button>
@@ -337,6 +445,145 @@
             <pre id="task-result">—</pre>
           </details>
         </aside>
+      </div>
+    </section>
+
+    <section class="admin-section-panel" id="admin-section-osm-objects"
+             data-admin-section-panel="osm-objects" role="tabpanel"
+             aria-labelledby="admin-tab-osm-objects" hidden>
+      <div class="admin-layout admin-layout-single">
+        <section class="settings-card osm-boundary-section-card"
+                 aria-labelledby="osm-boundary-section-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">OSM ОБЪЕКТЫ И НАСЕЛЕНИЕ</p>
+              <h2 id="osm-boundary-section-title">Редактор объектов OSM</h2>
+            </div>
+            <button class="secondary" id="osm-boundary-refresh" type="button">Обновить дерево</button>
+          </div>
+          <p class="panel-description">
+            Иерархия строится только по полному геометрическому вложению. Здесь настраиваются
+            активность, отображаемая идентичность и данные самой территории. Население и атрибуты не зависят от активности объекта.
+          </p>
+
+          <div class="osm-boundary-workspace">
+            <div class="osm-boundary-layout">
+              <section class="osm-boundary-tree-panel" aria-label="Дерево OSM объектов">
+                <label class="osm-boundary-search-label" for="osm-boundary-search">
+                  <span>Поиск</span>
+                  <input id="osm-boundary-search" class="osm-boundary-search"
+                         type="search" autocomplete="off"
+                         placeholder="Название, тип, OSM ID…">
+                </label>
+                <div class="osm-boundary-state-legend" aria-label="Состояние веток">
+                  <span><i class="osm-boundary-active-dot is-active"></i> включена</span>
+                  <span><i class="osm-boundary-active-dot is-partial"></i> частично</span>
+                  <span><i class="osm-boundary-active-dot is-inactive"></i> выключена</span>
+                </div>
+                <div id="osm-boundary-tree" class="osm-boundary-tree">
+                  <p class="empty-state">Загружаем объекты…</p>
+                </div>
+              </section>
+
+              <section class="osm-boundary-map-panel" aria-label="Карта выбранной OSM геометрии">
+                <div id="osm-boundary-map" class="osm-boundary-map"></div>
+              </section>
+
+              <aside class="osm-boundary-details" aria-label="Атрибуты выбранного OSM объекта">
+                <header class="osm-boundary-details-header">
+                  <div class="osm-boundary-selected-title" id="osm-boundary-selected-title">
+                    Выберите объект в дереве
+                  </div>
+                  <div class="osm-boundary-primary-actions" aria-label="Основные действия с объектом">
+                    <button id="osm-boundary-save" type="submit" form="osm-boundary-form" disabled>
+                      Сохранить
+                    </button>
+                    <button class="secondary" id="osm-boundary-enable-branch"
+                            type="button" disabled>
+                      Включить ветку
+                    </button>
+                    <button class="danger" id="osm-boundary-disable-branch"
+                            type="button" disabled>
+                      Отключить ветку
+                    </button>
+                  </div>
+                </header>
+
+                <div class="osm-boundary-details-scroll">
+                  <form id="osm-boundary-form">
+                    <section class="osm-boundary-edit-group osm-boundary-edit-group-display"
+                             aria-labelledby="osm-boundary-display-title">
+                      <h4 id="osm-boundary-display-title">Отображение и активность</h4>
+                      <label class="check">
+                        <input name="active" type="checkbox" disabled>
+                        Активная геометрия
+                      </label>
+
+                      <label>Отображаемое имя
+                        <input name="displayName" type="text" maxlength="160" disabled required>
+                      </label>
+
+                      <label>Тип
+                        <select name="displayType" disabled required>
+                          <option value="city">Город</option>
+                          <option value="town">Town / малый город</option>
+                          <option value="urban_okrug">Городской округ</option>
+                          <option value="federal_city">Город федерального значения</option>
+                          <option value="settlement">Поселение</option>
+                          <option value="administrative">Административная территория</option>
+                        </select>
+                      </label>
+                    </section>
+
+                    <section class="osm-boundary-edit-group osm-boundary-edit-group-territory"
+                             aria-labelledby="osm-boundary-territory-title">
+                      <h4 id="osm-boundary-territory-title">Данные территории</h4>
+                      <label>Население
+                        <input name="population" type="number" inputmode="numeric"
+                               min="1" max="2147483647" step="1" disabled
+                               placeholder="не задано">
+                        <small>Хранится независимо от флага «Активная геометрия». Пустое значение удаляет запись населения.</small>
+                      </label>
+
+                      <label>Население на дату
+                        <input name="populationAsOf" type="date" disabled>
+                      </label>
+
+                      <label>Источник населения
+                        <input name="populationSource" type="text" maxlength="500"
+                               disabled placeholder="не задан">
+                      </label>
+
+                      <label>Атрибуты территории (JSON)
+                        <textarea name="attributes" rows="6" disabled>{}</textarea>
+                        <small>Произвольный JSON object. Атрибуты не влияют на активность OSM-объекта.</small>
+                      </label>
+
+                      <section class="osm-boundary-source-inline"
+                               aria-labelledby="osm-boundary-source-title">
+                        <h5 id="osm-boundary-source-title">Источник OSM</h5>
+                        <p class="osm-boundary-group-help">Исходная идентичность объекта. Эти значения приходят из OSM и здесь не редактируются.</p>
+                        <dl class="osm-boundary-meta" id="osm-boundary-source-meta"></dl>
+                      </section>
+                    </section>
+
+                    <section class="osm-boundary-edit-group osm-boundary-edit-group-geometry"
+                             aria-labelledby="osm-boundary-geometry-title">
+                      <h4 id="osm-boundary-geometry-title">Статистика геометрии</h4>
+                      <dl class="osm-boundary-meta" id="osm-boundary-geometry-meta"></dl>
+                    </section>
+
+                    <p class="osm-boundary-branch-hint">
+                      Включение/отключение ветки применяется к выбранному объекту и всем вложенным объектам.
+                    </p>
+                    <p class="notice" id="osm-boundary-message" role="status"></p>
+                  </form>
+                </div>
+              </aside>
+            </div>
+          </div>
+
+        </section>
       </div>
     </section>
 

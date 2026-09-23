@@ -125,6 +125,67 @@ function rangedQueryInteger(value, name, minimum, maximum, fallback) {
  * @param {any} config
  */
 export function resolveOsmCityUpdateRequest(body, query, config) {
+  const includeCity = queryBoolean(
+    query.includeCity,
+    'includeCity',
+    config.includeCity ?? true,
+  );
+  const includeTown = queryBoolean(
+    query.includeTown,
+    'includeTown',
+    config.includeTown ?? true,
+  );
+  const includeAdministrative = queryBoolean(
+    query.includeAdministrative,
+    'includeAdministrative',
+    config.includeAdministrative ?? false,
+  );
+  const adminLevelMin = rangedQueryInteger(
+    query.adminLevelMin,
+    'adminLevelMin',
+    1,
+    20,
+    config.adminLevelMin ?? 4,
+  );
+  const adminLevelMax = rangedQueryInteger(
+    query.adminLevelMax,
+    'adminLevelMax',
+    1,
+    20,
+    config.adminLevelMax ?? 8,
+  );
+  if (!includeCity && !includeTown && !includeAdministrative) {
+    throw new OsmCityUpdateValidationError(
+      'At least one OSM object class must be enabled',
+    );
+  }
+  if (adminLevelMin > adminLevelMax) {
+    throw new OsmCityUpdateValidationError(
+      'adminLevelMin must not exceed adminLevelMax',
+    );
+  }
+
+  const maxResponseBytesLimit =
+    config.maxResponseBytes ?? Math.min(config.maxBytes, 128 * 1024 * 1024);
+  const maxTotalBytesLimit = config.maxTotalBytes ?? config.maxBytes;
+  const maxResponseBytes = boundedQueryInteger(
+    query.maxResponseBytes,
+    'maxResponseBytes',
+    maxResponseBytesLimit,
+    maxResponseBytesLimit,
+  );
+  const maxTotalBytes = boundedQueryInteger(
+    query.maxTotalBytes ?? query.maxBytes,
+    query.maxTotalBytes === undefined ? 'maxBytes' : 'maxTotalBytes',
+    maxTotalBytesLimit,
+    maxTotalBytesLimit,
+  );
+  if (maxResponseBytes > maxTotalBytes) {
+    throw new OsmCityUpdateValidationError(
+      'maxResponseBytes must not exceed maxTotalBytes',
+    );
+  }
+
   const retryMaxDelayMs = rangedQueryInteger(
     query.retryMaxDelayMs,
     'retryMaxDelayMs',
@@ -147,6 +208,11 @@ export function resolveOsmCityUpdateRequest(body, query, config) {
       config.url,
     ),
     dryRun: queryBoolean(query.dryRun, 'dryRun', config.dryRun),
+    includeCity,
+    includeTown,
+    includeAdministrative,
+    adminLevelMin,
+    adminLevelMax,
     timeoutMs: boundedQueryInteger(
       query.timeoutMs,
       'timeoutMs',
@@ -157,7 +223,10 @@ export function resolveOsmCityUpdateRequest(body, query, config) {
       'queryTimeoutSeconds',
       config.queryTimeoutSeconds,
     ),
-    maxBytes: boundedQueryInteger(query.maxBytes, 'maxBytes', config.maxBytes),
+    maxResponseBytes,
+    maxTotalBytes,
+    // Deprecated compatibility alias.
+    maxBytes: maxTotalBytes,
     batchSize: boundedQueryInteger(
       query.batchSize,
       'batchSize',

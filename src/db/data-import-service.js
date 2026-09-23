@@ -1,4 +1,9 @@
-import { buildGeoJsonPlan, GeoJsonValidationError } from '../data/geojson-plan.js';
+import {
+  buildGeoJsonPlan,
+  createGeoJsonAccumulator,
+  GeoJsonValidationError,
+} from '../data/geojson-plan.js';
+import { parseStreamingJsonObject } from '../data/streaming-json.js';
 import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
 import { acquireDataImportLock } from './database-locks.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
@@ -12,8 +17,8 @@ const UPSERT_CITIES_SQL = `
     "fullName" text,
     attributes jsonb
   )
-  ON CONFLICT (name) DO UPDATE SET
-    slug = EXCLUDED.slug,
+  ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
     full_name = EXCLUDED.full_name,
     attributes = cities.attributes || EXCLUDED.attributes,
     updated_at = now()
@@ -89,6 +94,7 @@ const FIND_UNKNOWN_BOUNDARIES_SQL = `
   LEFT JOIN city_boundaries AS boundary
     ON boundary.osm_type = payload."boundaryOsmType"
    AND boundary.osm_id = payload."boundaryOsmId"
+   AND boundary.is_active
   WHERE payload."boundaryOsmId" IS NOT NULL
     AND boundary.id IS NULL
   ORDER BY osm_type, osm_id
@@ -121,6 +127,7 @@ const FIND_BOUNDARY_CITY_CONFLICTS_SQL = `
   JOIN city_boundaries AS boundary
     ON boundary.osm_type = payload."boundaryOsmType"
    AND boundary.osm_id = payload."boundaryOsmId"
+   AND boundary.is_active
   JOIN cities AS city ON city.slug = payload."citySlug"
   WHERE boundary.city_id IS NOT NULL
     AND boundary.city_id <> city.id
@@ -148,7 +155,167 @@ const LINK_BOUNDARIES_SQL = `
   JOIN cities AS city ON city.slug = payload.city_slug
   WHERE boundary.osm_type = payload.osm_type
     AND boundary.osm_id = payload.osm_id
+    AND boundary.is_active
     AND boundary.city_id IS NULL
+`;
+
+const STREAM_STAGE_BATCH_SIZE = 50;
+
+const CREATE_STREAM_RAW_SQL = `
+  CREATE TEMP TABLE line_transfer_raw (
+    seq bigint PRIMARY KEY,
+    item jsonb NOT NULL
+  ) ON COMMIT DROP
+`;
+
+const INSERT_STREAM_RAW_SQL = `
+  INSERT INTO line_transfer_raw (seq, item)
+  SELECT payload.seq, payload.item
+  FROM jsonb_to_recordset($1::jsonb) AS payload(
+    seq bigint,
+    item jsonb
+  )
+`;
+
+const CREATE_STREAM_STAGE_SQL = `
+  CREATE TEMP TABLE line_transfer_stage (
+    seq bigint PRIMARY KEY,
+    city_name text,
+    city_slug text,
+    boundary_osm_type text,
+    boundary_osm_id bigint,
+    line_type_name text NOT NULL,
+    lanes smallint NOT NULL,
+    properties jsonb NOT NULL,
+    geom geometry(Geometry, 4326) NOT NULL
+  ) ON COMMIT DROP
+`;
+
+const INSERT_STREAM_STAGE_SQL = `
+  WITH payload_rows AS (
+    SELECT *
+    FROM jsonb_to_recordset($1::jsonb) AS payload(
+      seq bigint,
+      "cityName" text,
+      "citySlug" text,
+      "boundaryOsmType" text,
+      "boundaryOsmId" bigint,
+      "lineTypeName" text,
+      lanes smallint,
+      properties jsonb,
+      geometry jsonb
+    )
+  )
+  INSERT INTO line_transfer_stage (
+    seq,
+    city_name,
+    city_slug,
+    boundary_osm_type,
+    boundary_osm_id,
+    line_type_name,
+    lanes,
+    properties,
+    geom
+  )
+  SELECT
+    seq,
+    "cityName",
+    "citySlug",
+    "boundaryOsmType",
+    "boundaryOsmId",
+    "lineTypeName",
+    lanes,
+    properties,
+    ST_SetSRID(ST_GeomFromGeoJSON(geometry::text), 4326)
+  FROM payload_rows
+`;
+
+const FIND_STREAM_UNKNOWN_BOUNDARIES_SQL = `
+  SELECT DISTINCT
+    stage.boundary_osm_type AS osm_type,
+    stage.boundary_osm_id AS osm_id
+  FROM line_transfer_stage AS stage
+  LEFT JOIN city_boundaries AS boundary
+    ON boundary.osm_type = stage.boundary_osm_type
+   AND boundary.osm_id = stage.boundary_osm_id
+   AND boundary.is_active
+  WHERE stage.boundary_osm_id IS NOT NULL
+    AND boundary.id IS NULL
+  ORDER BY osm_type, osm_id
+`;
+
+const FIND_STREAM_BOUNDARY_CITY_CONFLICTS_SQL = `
+  SELECT DISTINCT
+    boundary.osm_type,
+    boundary.osm_id,
+    boundary.city_id AS existing_city_id,
+    city.id AS imported_city_id
+  FROM line_transfer_stage AS stage
+  JOIN city_boundaries AS boundary
+    ON boundary.osm_type = stage.boundary_osm_type
+   AND boundary.osm_id = stage.boundary_osm_id
+   AND boundary.is_active
+  JOIN cities AS city ON city.slug = stage.city_slug
+  WHERE boundary.city_id IS NOT NULL
+    AND boundary.city_id <> city.id
+  ORDER BY boundary.osm_type, boundary.osm_id
+`;
+
+const LINK_STREAM_BOUNDARIES_SQL = `
+  UPDATE city_boundaries AS boundary
+  SET city_id = city.id,
+      updated_at = now()
+  FROM (
+    SELECT DISTINCT city_slug, boundary_osm_type, boundary_osm_id
+    FROM line_transfer_stage
+    WHERE city_slug IS NOT NULL
+      AND boundary_osm_id IS NOT NULL
+  ) AS stage
+  JOIN cities AS city ON city.slug = stage.city_slug
+  WHERE boundary.osm_type = stage.boundary_osm_type
+    AND boundary.osm_id = stage.boundary_osm_id
+    AND boundary.is_active
+    AND boundary.city_id IS NULL
+`;
+
+const FIND_STREAM_UNKNOWN_LINE_TYPES_SQL = `
+  SELECT DISTINCT stage.line_type_name
+  FROM line_transfer_stage AS stage
+  LEFT JOIN line_types AS line_type
+    ON LOWER(BTRIM(line_type.name)) = LOWER(BTRIM(stage.line_type_name))
+  WHERE line_type.id IS NULL
+  ORDER BY stage.line_type_name
+`;
+
+const INSERT_STREAM_GEOMETRIES_SQL = `
+  INSERT INTO city_geometries (
+    city_id,
+    boundary_id,
+    line_type_id,
+    lanes,
+    length_m,
+    lane_length_m,
+    properties,
+    geom
+  )
+  SELECT
+    city.id,
+    boundary.id,
+    line_type.id,
+    stage.lanes,
+    ST_Length(stage.geom::geography),
+    ST_Length(stage.geom::geography) * stage.lanes,
+    stage.properties,
+    stage.geom
+  FROM line_transfer_stage AS stage
+  JOIN line_types AS line_type
+    ON LOWER(BTRIM(line_type.name)) = LOWER(BTRIM(stage.line_type_name))
+  LEFT JOIN cities AS city ON city.slug = stage.city_slug
+  LEFT JOIN city_boundaries AS boundary
+    ON boundary.osm_type = stage.boundary_osm_type
+   AND boundary.osm_id = stage.boundary_osm_id
+   AND boundary.is_active
+  ORDER BY stage.seq
 `;
 
 const INSERT_GEOMETRIES_SQL = `
@@ -197,11 +364,220 @@ const INSERT_GEOMETRIES_SQL = `
   LEFT JOIN city_boundaries AS boundary
     ON boundary.osm_type = prepared."boundaryOsmType"
    AND boundary.osm_id = prepared."boundaryOsmId"
+   AND boundary.is_active
 `;
 
 /** @param {{ connect: () => Promise<any>, databaseSchema?: string }} pool */
 export function createDataImportService(pool) {
   return {
+    async replaceFromGeoJsonStream(source, operation = {}) {
+      throwIfAdminTaskCancelled(operation.signal);
+      const client = await pool.connect();
+
+      try {
+        await client.query('BEGIN');
+        await acquireDataImportLock(client, pool);
+        throwIfAdminTaskCancelled(operation.signal);
+        await client.query(CREATE_STREAM_RAW_SQL);
+
+        let rawBatch = [];
+        let rawBatches = 0;
+        const flushRaw = async () => {
+          if (rawBatch.length === 0) return;
+          const result = await client.query(
+            INSERT_STREAM_RAW_SQL,
+            [JSON.stringify(rawBatch)],
+          );
+          if (result.rowCount !== rawBatch.length) {
+            throw new Error('Not every streamed GeoJSON feature was staged');
+          }
+          rawBatches += 1;
+          operation.onProgress?.({
+            phase: 'raw-stage',
+            batch: rawBatches,
+            features: result.rowCount,
+          });
+          rawBatch = [];
+        };
+
+        const parsed = await parseStreamingJsonObject(source, {
+          arrayKey: 'features',
+          metadataKeys: new Set([
+            'type',
+            'name',
+            'schemaVersion',
+            'exportedAt',
+            'lineTypes',
+          ]),
+          maxBytes: operation.maxJsonBytes,
+          maxItemBytes: operation.maxItemBytes,
+          maxDepth: operation.maxJsonDepth,
+          maxItems: operation.maxJsonItems,
+          signal: operation.signal,
+          async onItem(item, index) {
+            throwIfAdminTaskCancelled(operation.signal);
+            rawBatch.push({ seq: index, item });
+            if (rawBatch.length >= STREAM_STAGE_BATCH_SIZE) {
+              await flushRaw();
+            }
+          },
+          onProgress(progress) {
+            operation.onProgress?.({
+              ...progress,
+              dataSet: 'lines',
+            });
+          },
+        });
+        await flushRaw();
+
+        if (parsed.metadata.type !== 'FeatureCollection') {
+          throw new GeoJsonValidationError(
+            'Request body must be a GeoJSON FeatureCollection',
+          );
+        }
+
+        const accumulator = createGeoJsonAccumulator({
+          lineTypes: parsed.metadata.lineTypes,
+        });
+        await client.query(CREATE_STREAM_STAGE_SQL);
+
+        let lastSeq = -1;
+        let stagedGeometries = 0;
+        for (;;) {
+          throwIfAdminTaskCancelled(operation.signal);
+          const rows = await client.query(
+            `SELECT seq::bigint::text AS seq, item
+             FROM line_transfer_raw
+             WHERE seq > $1
+             ORDER BY seq
+             LIMIT $2`,
+            [lastSeq, STREAM_STAGE_BATCH_SIZE],
+          );
+          if (rows.rowCount === 0) break;
+
+          const normalized = [];
+          for (const row of rows.rows) {
+            const seq = Number(row.seq);
+            const geometry = accumulator.addFeature(row.item, seq);
+            if (geometry) normalized.push({ seq, ...geometry });
+            lastSeq = seq;
+          }
+          if (normalized.length > 0) {
+            const inserted = await client.query(
+              INSERT_STREAM_STAGE_SQL,
+              [JSON.stringify(normalized)],
+            );
+            if (inserted.rowCount !== normalized.length) {
+              throw new Error('Not every normalized line geometry was staged');
+            }
+            stagedGeometries += inserted.rowCount;
+          }
+          operation.onProgress?.({
+            phase: 'normalize-stage',
+            processedFeatures: lastSeq + 1,
+            stagedGeometries,
+            parsedFeatures: parsed.itemCount,
+          });
+        }
+
+        const plan = accumulator.finish(parsed.metadata);
+        if (plan.geometryCount !== stagedGeometries) {
+          throw new Error('Not every normalized line geometry was staged');
+        }
+        operation.onProgress?.({
+          phase: 'validated',
+          cities: plan.cities.length,
+          geometries: plan.geometryCount,
+          lineTypes: plan.lineTypes.length,
+          ignoredFeatures: plan.ignoredFeatureCount,
+          decodedBytes: parsed.decodedBytes,
+        });
+
+        await client.query(UPSERT_CITIES_SQL, [JSON.stringify(plan.cities)]);
+
+        const unknownBoundaries = await client.query(
+          FIND_STREAM_UNKNOWN_BOUNDARIES_SQL,
+        );
+        if (unknownBoundaries.rows.length > 0) {
+          const objects = unknownBoundaries.rows
+            .slice(0, 30)
+            .map((row) => `${row.osm_type}/${row.osm_id}`)
+            .join(', ');
+          throw new GeoJsonValidationError(
+            `Line GeoJSON references unknown or inactive city boundaries: ${objects}. Import/activate the OSM boundary snapshot first.`,
+          );
+        }
+        const conflicts = await client.query(
+          FIND_STREAM_BOUNDARY_CITY_CONFLICTS_SQL,
+        );
+        if (conflicts.rows.length > 0) {
+          const objects = conflicts.rows
+            .slice(0, 30)
+            .map((row) => `${row.osm_type}/${row.osm_id}`)
+            .join(', ');
+          throw new GeoJsonValidationError(
+            `Line GeoJSON conflicts with existing city-boundary links: ${objects}`,
+          );
+        }
+        await client.query(LINK_STREAM_BOUNDARIES_SQL);
+
+        await client.query('DELETE FROM city_geometries');
+        if (plan.lineTypes.length > 0) {
+          const dictionary = JSON.stringify(plan.lineTypes);
+          await client.query(DELETE_OMITTED_LINE_TYPES_SQL, [dictionary]);
+          await client.query(UPDATE_LINE_TYPES_SQL, [dictionary]);
+          await client.query(INSERT_MISSING_LINE_TYPES_SQL, [dictionary]);
+        }
+
+        const unknownLineTypes = await client.query(
+          FIND_STREAM_UNKNOWN_LINE_TYPES_SQL,
+        );
+        if (unknownLineTypes.rows.length > 0) {
+          throw new GeoJsonValidationError(
+            `Line GeoJSON references unknown line type names: ${unknownLineTypes.rows.map((row) => row.line_type_name).join(', ')}`,
+          );
+        }
+
+        const geometryResult = await client.query(
+          INSERT_STREAM_GEOMETRIES_SQL,
+        );
+        const statisticsResult = await client.query(
+          RECALCULATE_CITY_STATISTICS_SQL,
+        );
+        if (geometryResult.rowCount !== plan.geometryCount) {
+          throw new Error('Not every GeoJSON geometry was inserted');
+        }
+        if (statisticsResult.rowCount < plan.cities.length) {
+          throw new Error('Not every city statistic was updated');
+        }
+
+        operation.onProgress?.({
+          phase: 'database',
+          cities: plan.cities.length,
+          geometries: plan.geometryCount,
+          lineTypes: plan.referencedLineTypes,
+        });
+        throwIfAdminTaskCancelled(operation.signal);
+
+        operation.onCommit?.();
+        await client.query('COMMIT');
+        return {
+          cities: plan.cities.length,
+          geometries: plan.geometryCount,
+          lineTypes: plan.referencedLineTypes,
+          ignoredFeatures: plan.ignoredFeatureCount,
+          decodedBytes: parsed.decodedBytes,
+          streamed: true,
+          updatedAt: new Date().toISOString(),
+        };
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
     async replaceFromGeoJson(collection, operation = {}) {
       throwIfAdminTaskCancelled(operation.signal);
       const plan = buildGeoJsonPlan(collection);
@@ -233,7 +609,7 @@ export function createDataImportService(pool) {
             .map((row) => `${row.osm_type}/${row.osm_id}`)
             .join(', ');
           throw new GeoJsonValidationError(
-            `Line GeoJSON references unknown city boundaries: ${objects}. Import the city GeoJSON snapshot first.`,
+            `Line GeoJSON references unknown or inactive city boundaries: ${objects}. Import/activate the OSM boundary snapshot first.`,
           );
         }
         const conflicts = await client.query(

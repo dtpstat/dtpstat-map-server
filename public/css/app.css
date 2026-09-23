@@ -189,6 +189,10 @@ th button:focus-visible {
   padding-top: 8px;
   padding-bottom: 8px;
   font-size: 0.74rem;
+  font-weight: 400;
+}
+
+.city-table th.is-header-bold {
   font-weight: 700;
 }
 
@@ -201,6 +205,7 @@ th button:focus-visible {
   color: inherit;
   background: none;
   cursor: pointer;
+  font: inherit;
   text-align: inherit;
 }
 
@@ -225,7 +230,7 @@ th button:focus-visible {
   border-radius: 4px;
   color: var(--accent-dark);
   background: var(--accent-soft);
-  font-weight: 850;
+  font-weight: inherit;
 }
 
 .city-table th button[data-sort-direction="asc"]::after {

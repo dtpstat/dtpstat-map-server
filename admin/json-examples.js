@@ -9,22 +9,30 @@ export const KML_SOURCES_EXAMPLE = [
 ];
 
 export const POPULATION_JSON_EXAMPLE = {
+  schemaVersion: 2,
+  exportedAt: '2026-01-01T00:00:00.000Z',
   asOf: '2026-01-01',
   source: 'Росстат',
-  populations: [
+  regions: [
     {
-      name: 'Москва',
-      population: 13274285,
-      attributes: {},
-    },
-    {
-      name: 'Санкт-Петербург',
-      population: 5655257,
-      asOf: '2025-01-01',
-      source: 'Петростат',
+      name: 'Республика Татарстан',
       attributes: {
-        comment: 'asOf/source можно переопределить для отдельного города',
+        federalDistrict: 'Приволжский федеральный округ',
       },
+      cities: [
+        {
+          name: 'Казань',
+          population: 1320000,
+          attributes: {},
+        },
+        {
+          name: 'Набережные Челны',
+          population: 544000,
+          asOf: '2025-01-01',
+          source: 'Татарстанстат',
+          attributes: {},
+        },
+      ],
     },
   ],
 };

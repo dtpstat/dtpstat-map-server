@@ -5,6 +5,8 @@ import {
 } from '../data/project-settings.js';
 import { normalizeMapboxAccessToken } from '../data/mapbox-access-token.js';
 import { normalizePublicDownloadName } from '../data/public-download-name.js';
+import { acquireDataImportLock } from './database-locks.js';
+import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
 
 const SELECT_SETTINGS_SQL = `
   SELECT
@@ -16,6 +18,8 @@ const SELECT_SETTINGS_SQL = `
     theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
     show_line_popups AS "showLinePopups",
+    large_city_population_threshold::integer AS "largeCityPopulationThreshold",
+    large_city_area_km2_threshold::double precision AS "largeCityAreaKm2Threshold",
     public_download_name AS "publicDownloadName",
     (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured",
     (city_marker_icon IS NOT NULL) AS "cityMarkerIconConfigured",
@@ -69,6 +73,8 @@ const UPDATE_SETTINGS_SQL = `
       WHEN $9::text IS NULL THEN mapbox_access_token_initialized
       ELSE TRUE
     END,
+    large_city_population_threshold = $10,
+    large_city_area_km2_threshold = $11,
     updated_at = now()
   WHERE id = 1
   RETURNING
@@ -80,6 +86,8 @@ const UPDATE_SETTINGS_SQL = `
     theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
     show_line_popups AS "showLinePopups",
+    large_city_population_threshold::integer AS "largeCityPopulationThreshold",
+    large_city_area_km2_threshold::double precision AS "largeCityAreaKm2Threshold",
     public_download_name AS "publicDownloadName",
     (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured",
     (city_marker_icon IS NOT NULL) AS "cityMarkerIconConfigured",
@@ -153,6 +161,8 @@ function splitProjectSettingsPayload(payload) {
     showLineLabels = false,
     showLinePopups: rawShowLinePopups,
     mapboxAccessToken = null,
+    largeCityPopulationThreshold = 400000,
+    largeCityAreaKm2Threshold = null,
     ...base
   } = payload;
   if (typeof showLineLabels !== 'boolean') {
@@ -160,6 +170,26 @@ function splitProjectSettingsPayload(payload) {
   }
   if (hasShowLinePopups && typeof rawShowLinePopups !== 'boolean') {
     throw new ProjectSettingsValidationError('showLinePopups must be boolean');
+  }
+  const populationThreshold = Number(largeCityPopulationThreshold);
+  if (
+    !Number.isSafeInteger(populationThreshold) ||
+    populationThreshold <= 0 ||
+    populationThreshold > 2147483647
+  ) {
+    throw new ProjectSettingsValidationError(
+      'largeCityPopulationThreshold must be a positive integer',
+    );
+  }
+  const areaThreshold = largeCityAreaKm2Threshold === null ||
+      largeCityAreaKm2Threshold === undefined ||
+      largeCityAreaKm2Threshold === ''
+    ? null
+    : Number(largeCityAreaKm2Threshold);
+  if (areaThreshold !== null && (!Number.isFinite(areaThreshold) || areaThreshold < 0)) {
+    throw new ProjectSettingsValidationError(
+      'largeCityAreaKm2Threshold must be a non-negative number or null',
+    );
   }
   return {
     plan: buildProjectSettingsPlan(base),
@@ -169,6 +199,8 @@ function splitProjectSettingsPayload(payload) {
     showLineLabels,
     showLinePopups: hasShowLinePopups ? rawShowLinePopups : null,
     mapboxAccessToken: normalizeMapboxAccessToken(mapboxAccessToken, { optional: true }),
+    largeCityPopulationThreshold: populationThreshold,
+    largeCityAreaKm2Threshold: areaThreshold,
   };
 }
 
@@ -245,8 +277,10 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
       showLineLabels,
       showLinePopups,
       mapboxAccessToken,
+      largeCityPopulationThreshold,
+      largeCityAreaKm2Threshold,
     } = splitProjectSettingsPayload(payload);
-    const result = await database.query(UPDATE_SETTINGS_SQL, [
+    const values = [
       plan.projectName,
       plan.keywords,
       plan.footerHtml,
@@ -256,11 +290,43 @@ export function createProjectSettingsRepository(database, publicMapDefaults = {}
       showLineLabels,
       showLinePopups,
       mapboxAccessToken,
-    ]);
-    if (!result.rows[0]) {
-      throw new Error('Project settings row is missing; run database migrations');
+      largeCityPopulationThreshold,
+      largeCityAreaKm2Threshold,
+    ];
+
+    // Production uses a Pool, so keep the threshold update and derived city
+    // classification in one transaction. The query-only fallback is retained
+    // for small isolated unit-test repositories.
+    if (typeof database.connect !== 'function') {
+      const result = await database.query(UPDATE_SETTINGS_SQL, values);
+      await database.query(RECALCULATE_CITY_STATISTICS_SQL);
+      if (!result.rows[0]) {
+        throw new Error(
+          'Project settings row is missing; run database migrations',
+        );
+      }
+      return result.rows[0];
     }
-    return result.rows[0];
+
+    const client = await database.connect();
+    try {
+      await client.query('BEGIN');
+      await acquireDataImportLock(client, database);
+      const result = await client.query(UPDATE_SETTINGS_SQL, values);
+      if (!result.rows[0]) {
+        throw new Error(
+          'Project settings row is missing; run database migrations',
+        );
+      }
+      await client.query(RECALCULATE_CITY_STATISTICS_SQL);
+      await client.query('COMMIT');
+      return result.rows[0];
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async function savePublicDownloadName(value) {

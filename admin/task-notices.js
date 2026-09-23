@@ -25,5 +25,14 @@ export function createTaskNotices(elements, taskNames) {
       const taskName = taskNames[taskKey] ?? taskKey;
       return this.set(taskKey, `${taskName}: ${message}`, tone);
     },
+
+    /** @param {string} taskKey */
+    clear(taskKey) {
+      const notice = notices.get(taskKey);
+      if (!notice) return false;
+      notice.textContent = '';
+      notice.className = 'notice';
+      return true;
+    },
   };
 }

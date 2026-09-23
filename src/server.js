@@ -14,14 +14,20 @@ import {createDataImportService} from './db/data-import-service.js';
 import {createKmlUpdateService} from './db/kml-update-service.js';
 import {createLineTypesRepository} from './db/line-types-repository.js';
 import {createOsmCityUpdateService} from './db/osm-city-update-service.js';
+import {createOsmCityCheckpointRepository} from './db/osm-city-checkpoint-repository.js';
+import {createOsmImportSettingsRepository} from './db/osm-import-settings-repository.js';
+import {createOsmBoundaryAdminRepository} from './db/osm-boundary-admin-repository.js';
 import {createPopulationImportService} from './db/population-import-service.js';
 import {createProjectSettingsRepository} from './db/project-settings-repository.js';
 import {createProjectSettingsTransferService} from './db/project-settings-transfer-service.js';
 import {createPublicDownloadRepository} from './db/public-download-repository.js';
 import {createReportConfigService} from './db/report-config-service.js';
 import {createPool} from './db/pool.js';
+import {migrateDatabase} from './db/migration-runner.js';
+import {verifyDatabaseMigrationState} from './db/migration-state.js';
 import {createAdminAuthorization} from './http/admin-auth.js';
 import {createAdminWebSocketGateway} from './http/admin-websocket.js';
+import {cleanupStreamUploads} from './http/stream-upload.js';
 import {closeServer, startServers} from './http/start-servers.js';
 import {
   runServiceOperation,
@@ -59,6 +65,38 @@ async function main() {
   });
 
   const pool = createPool(config.database);
+  await runServiceOperation(
+    'database.migrations.apply',
+    () => migrateDatabase(pool, {
+      projectRoot: config.projectRoot,
+      schema: config.database.schema,
+      logger(event) {
+        if (event.status !== 'applied') return;
+        serviceLog('info', 'database.migration:applied', {
+          version: event.migration.version,
+          fileName: event.migration.fileName,
+        });
+      },
+    }),
+    {
+      successDetails: (result) => ({
+        currentVersion: result.version,
+        applied: result.appliedCount,
+        known: result.totalCount,
+      }),
+    },
+  );
+  await runServiceOperation(
+    'database.migrations.verify',
+    () => verifyDatabaseMigrationState(pool, {
+      projectRoot: config.projectRoot,
+      schema: config.database.schema,
+    }),
+    {
+      successDetails: (state) => state,
+    },
+  );
+
   const repository = createCitiesRepository(pool);
   const lineTypesRepository = createLineTypesRepository(pool);
   const projectSettingsRepository = createProjectSettingsRepository(pool, config.publicMap);
@@ -75,7 +113,17 @@ async function main() {
   const cityBoundaryTransferService = createCityBoundaryTransferService(pool);
   const populationService = createPopulationImportService(pool);
   const kmlUpdateService = createKmlUpdateService(pool, config.kmlUpdate);
-  const osmCityUpdateService = createOsmCityUpdateService(pool, config.osmCityUpdate);
+  const osmImportSettingsRepository = createOsmImportSettingsRepository(pool);
+  const osmBoundaryAdminRepository = createOsmBoundaryAdminRepository(pool);
+  const osmCityCheckpointRepository = createOsmCityCheckpointRepository(pool);
+  const osmCityUpdateService = createOsmCityUpdateService(
+    pool,
+    config.osmCityUpdate,
+    {
+      settingsRepository: osmImportSettingsRepository,
+      checkpointRepository: osmCityCheckpointRepository,
+    },
+  );
   const adminTaskSuccessRepository = createAdminTaskSuccessRepository(pool);
   const adminSecurityRepository = createAdminSecurityRepository(pool);
   const securityService = createAdminSecurityService(adminSecurityRepository);
@@ -105,6 +153,23 @@ async function main() {
     'database.health',
     () => repository.health(),
     {details: {schema: config.database.schema}},
+  );
+  await runServiceOperation(
+    'portable-import-spool.cleanup',
+    () => cleanupStreamUploads(config.importApi.streamUploadDirectory),
+    {
+      successDetails: (removed) => ({
+        directory: config.importApi.streamUploadDirectory,
+        removed,
+      }),
+    },
+  );
+  await runServiceOperation(
+    'osm-import-settings.bootstrap',
+    () => osmImportSettingsRepository.bootstrap(config.osmCityUpdate),
+    {
+      successDetails: (result) => result,
+    },
   );
   await runServiceOperation(
     'admin-security.bootstrap',
@@ -174,6 +239,16 @@ async function main() {
     refreshPublicDownloads: () => refreshPublicDownloads({reason: 'report-config'}),
     refreshPublicDownloadsAfterSettingsImport: () =>
       refreshPublicDownloads({reason: 'project-settings-import'}),
+    refreshProjectDerived: async () => {
+      await refreshReportValues({reason: 'project-settings'});
+      return refreshPublicDownloads({reason: 'project-settings'});
+    },
+    refreshOsmBoundaryDerived: async () => {
+      await refreshReportValues({reason: 'osm-boundary-settings'});
+      return refreshPublicDownloads({reason: 'osm-boundary-settings'});
+    },
+    osmImportSettingsRepository,
+    osmBoundaryAdminRepository,
     exportRepository,
     importService,
     cityBoundaryTransferService,
