@@ -730,3 +730,55 @@ test('legacy report config service is only a DB composition adapter', async () =
     /INSERT INTO city_report_values/u,
   );
 });
+
+
+test('project settings module separates update policy from DB storage', async () => {
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'project', 'settings-service.js'),
+    'utf8',
+  );
+  const policy = await fs.readFile(
+    path.join(srcRoot, 'modules', 'project', 'settings-update-policy.js'),
+    'utf8',
+  );
+  const storage = await fs.readFile(
+    path.join(srcRoot, 'db', 'project-settings-storage-repository.js'),
+    'utf8',
+  );
+
+  assert.match(service, /normalizeProjectSettingsUpdate\(/u);
+  assert.match(service, /storage\.updateSettings\(/u);
+  assert.match(service, /recalculateStatistics\(/u);
+  assert.doesNotMatch(service, /UPDATE project_settings/u);
+  assert.doesNotMatch(service, /\.\.\/\.\.\/db\//u);
+
+  assert.match(policy, /buildProjectSettingsPlan\(/u);
+  assert.match(policy, /normalizePublicThemePreset\(/u);
+  assert.doesNotMatch(policy, /UPDATE project_settings/u);
+
+  assert.match(storage, /SELECT[\s\S]*FROM project_settings/u);
+  assert.match(storage, /UPDATE project_settings/u);
+  assert.doesNotMatch(storage, /buildProjectSettingsPlan/u);
+});
+
+test('legacy project settings repository is only a DB composition adapter', async () => {
+  const adapter = await fs.readFile(
+    path.join(srcRoot, 'db', 'project-settings-repository.js'),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'project', 'settings-service.js'),
+    'utf8',
+  );
+
+  assert.match(adapter, /createProjectSettingsService\(/u);
+  assert.match(adapter, /createProjectSettingsStorageRepository\(/u);
+  assert.match(adapter, /acquireDataImportLock/u);
+  assert.match(adapter, /RECALCULATE_CITY_STATISTICS_SQL/u);
+  assert.doesNotMatch(adapter, /UPDATE project_settings/u);
+  assert.doesNotMatch(adapter, /buildProjectSettingsPlan/u);
+
+  assert.match(service, /storage\.get\(database\)/u);
+  assert.match(service, /storage\.updateSettings\(/u);
+  assert.match(service, /storage\.updateCityMarkerIcon\(/u);
+});
