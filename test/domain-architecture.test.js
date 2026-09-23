@@ -88,6 +88,13 @@ test('lightweight domain modules keep dependency direction explicit', async () =
 test('legacy API file is a composition root for extracted route modules', async () => {
   const source = await fs.readFile(path.join(srcRoot, 'routes', 'api.js'), 'utf8');
 
+  assert.match(source, /createAdminTaskHttpRuntime\(/u);
+  assert.match(source, /createDataTransferRuntime\(/u);
+  assert.doesNotMatch(
+    source,
+    /^import[\s\S]*?from ['"]\.\.\/(?:data|http)\//mu,
+  );
+
   assert.match(source, /registerMapRoutes\(router,/u);
   assert.match(source, /registerDataExportRoutes\(router,/u);
   assert.match(source, /registerDataImportRoutes\(router,/u);
