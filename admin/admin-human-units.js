@@ -34,7 +34,9 @@ function formatMeters(value) {
 }
 
 function humanValue(input) {
-  const value = Number(input.value);
+  const rawValue = input.value.trim();
+  if (!rawValue) return '';
+  const value = Number(rawValue);
   if (!Number.isFinite(value)) return '';
   switch (input.dataset.humanUnit) {
     case 'bytes': return formatBytes(value);
@@ -46,8 +48,19 @@ function humanValue(input) {
   }
 }
 
+function updateHumanUnit(input, output) {
+  const formatted = humanValue(input);
+  output.textContent = formatted;
+  output.hidden = !formatted;
+}
+
 function bind(input) {
-  if (input.dataset.humanUnitBound === 'true') return;
+  if (input.dataset.humanUnitBound === 'true') {
+    const output = input.closest('.admin-human-unit-wrap')
+      ?.querySelector('.admin-human-unit');
+    if (output) updateHumanUnit(input, output);
+    return;
+  }
   input.dataset.humanUnitBound = 'true';
 
   const wrapper = document.createElement('span');
@@ -59,11 +72,7 @@ function bind(input) {
   output.className = 'admin-human-unit';
   wrapper.append(output);
 
-  const update = () => {
-    const formatted = humanValue(input);
-    output.textContent = formatted ? `≈ ${formatted}` : '';
-    output.hidden = !formatted;
-  };
+  const update = () => updateHumanUnit(input, output);
   input.addEventListener('input', update);
   input.addEventListener('change', update);
   update();
