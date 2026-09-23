@@ -48,13 +48,16 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
   assert.match(security, /if \(user\.hasAvatar\)/);
   assert.match(securityCss, /\.security-user-avatar/);
 
+  assert.match(securityCss, /\.security-audit-filter-panel/);
+  assert.match(securityCss, /\.security-audit-filter[\s\S]*grid-template-columns:\s*repeat\(4/);
   assert.match(profile, /profile-avatar-upload-label/);
   assert.match(profile, /id="profile-avatar-delete" disabled/);
   assert.match(profileCss, /\.profile-avatar-actions[\s\S]*grid-template-columns:\s*repeat\(2/);
   assert.match(profileCss, /\.profile-avatar-action/);
 
   assert.match(security, /name="passwordMinLength"/);
-  assert.match(security, /name="passwordMaxLength"/);
+  assert.match(security, /name="passwordMaxLength" type="hidden"/);
+  assert.doesNotMatch(security, />Максимум символов</);
   assert.match(security, /name="passwordRequireLowercase"/);
   assert.match(security, /name="passwordRequireUppercase"/);
   assert.match(security, /name="passwordRequireDigit"/);
