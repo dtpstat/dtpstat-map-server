@@ -345,3 +345,27 @@ test('legacy OSM DB service is only an infrastructure composition adapter', asyn
   assert.doesNotMatch(useCase, /city-boundary-hierarchy/u);
   assert.doesNotMatch(useCase, /recalculate-city-statistics/u);
 });
+
+
+test('legacy line data import delegates SQL persistence to lines repository', async () => {
+  const service = await fs.readFile(
+    path.join(srcRoot, 'db', 'data-import-service.js'),
+    'utf8',
+  );
+  const repository = await fs.readFile(
+    path.join(srcRoot, 'modules', 'lines', 'import-repository.js'),
+    'utf8',
+  );
+
+  assert.match(service, /createLineImportRepository\(/u);
+  assert.match(service, /repository\.insertRawBatch\(/u);
+  assert.match(service, /repository\.insertNormalizedBatch\(/u);
+  assert.match(service, /repository\.insertGeometries\(/u);
+  assert.doesNotMatch(service, /CREATE TEMP TABLE line_transfer_raw/u);
+  assert.doesNotMatch(service, /INSERT INTO city_geometries/u);
+  assert.doesNotMatch(service, /DELETE FROM line_types AS line_type/u);
+
+  assert.match(repository, /CREATE TEMP TABLE line_transfer_raw/u);
+  assert.match(repository, /INSERT INTO city_geometries/u);
+  assert.match(repository, /DELETE FROM line_types AS line_type/u);
+});
