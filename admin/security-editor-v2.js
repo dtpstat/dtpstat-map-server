@@ -227,6 +227,28 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   );
   bindHumanUnits(host);
   const userById = new Map();
+  const loadedAvatarUrls = new Set();
+
+  function applyAvatarBackground(avatar, fallback, url) {
+    avatar.style.backgroundImage = `url("${url}")`;
+    if (loadedAvatarUrls.has(url)) {
+      avatar.classList.add('is-image-loaded');
+      return;
+    }
+    const loader = new Image();
+    loader.decoding = 'async';
+    loader.addEventListener('load', () => {
+      loadedAvatarUrls.add(url);
+      avatar.classList.add('is-image-loaded');
+    }, { once: true });
+    loader.addEventListener('error', () => {
+      avatar.style.removeProperty('background-image');
+      avatar.classList.remove('is-image-loaded');
+      fallback.hidden = false;
+    }, { once: true });
+    loader.src = url;
+  }
+
   let selectedUserId = null;
   let auditOffset = 0;
   const auditLimit = 100;
@@ -516,9 +538,9 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     fallback.textContent = auditAvatarFallback(user.displayName ?? user.username);
     if (user.hasAvatar) {
       const avatarVersion = encodeURIComponent(user.updatedAt ?? '1');
-      avatar.classList.add('has-image');
-      avatar.style.backgroundImage =
-        `url("/api/admin/security/users/${encodeURIComponent(user.id)}/avatar?v=${avatarVersion}")`;
+      const avatarUrl =
+        `/api/admin/security/users/${encodeURIComponent(user.id)}/avatar?v=${avatarVersion}`;
+      applyAvatarBackground(avatar, fallback, avatarUrl);
     }
     button.querySelector('strong').textContent = user.displayName ?? user.username;
     button.querySelector('small').textContent = `@${user.username}${user.email ? ` · ${user.email}` : ''}`;
@@ -602,8 +624,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       const avatarUrl = currentUserRow
         ? '/api/admin/profile/avatar'
         : `/api/admin/security/users/${encodeURIComponent(entry.userId)}/avatar`;
-      avatar.classList.add('has-image');
-      avatar.style.backgroundImage = `url("${avatarUrl}")`;
+      applyAvatarBackground(avatar, fallback, avatarUrl);
     }
 
     const name = document.createElement('span');
