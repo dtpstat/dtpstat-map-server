@@ -5,15 +5,6 @@ import { pipeline } from 'node:stream/promises';
 import {
   AdminTaskAlreadyRunningError,
 } from '../data/admin-task-manager.js';
-import { adminAuditPayloadFingerprint } from '../data/admin-audit-details.js';
-import {
-  KmlUpdateValidationError,
-  resolveKmlUpdateRequest,
-} from '../data/kml-update-options.js';
-import {
-  OsmCityUpdateValidationError,
-  resolveOsmCityUpdateRequest,
-} from '../data/osm-city-update-options.js';
 import { createSingleFileZipStream } from '../data/single-file-zip.js';
 import {
   openUploadedJson,
@@ -25,6 +16,17 @@ import {
   adminClientIp,
   createAdminOperationAudit,
 } from '../http/admin-auth.js';
+import {
+  registerAdminTaskRoutes,
+} from '../application/admin-tasks/routes.js';
+import {
+  registerDataExportRoutes,
+  registerDataImportRoutes,
+  registerPopulationRoutes,
+} from '../application/data-transfer/routes.js';
+import { registerLineRoutes } from '../modules/lines/routes.js';
+import { registerMapRoutes } from '../modules/map/routes.js';
+import { registerOsmRoutes } from '../modules/osm/routes.js';
 
 /**
  * @typedef {{
@@ -372,570 +374,78 @@ export function createApiRouter({
     }
   };
 
-  router.get('/config', (_request, response) => {
-    response.set('Cache-Control', 'public, max-age=300');
-    response.json({ map: publicMap });
+  registerMapRoutes(router, {
+    repository,
+    publicMap,
+    parseCoordinates,
   });
 
-  router.get('/health', async (_request, response, next) => {
-    try {
-      await repository.health();
-      response.set('Cache-Control', 'no-store');
-      response.json({ status: 'ok', database: 'reachable' });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.get('/cities', async (_request, response, next) => {
-    try {
-      const cities = await repository.listCities();
-      // Category and rank are derived from mutable project thresholds and
-      // materialized report values. Never let a browser keep the old
-      // classification after the administrator saves new criteria.
-      response.set('Cache-Control', 'no-store');
-      response.json({ cities });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.get('/cities/:cityId/geometries', async (request, response, next) => {
-    const cityId = Number(request.params.cityId);
-    if (!Number.isSafeInteger(cityId) || cityId <= 0) {
-      response.status(400).json({ error: 'cityId must be a positive integer' });
-      return;
-    }
-    try {
-      const geojson = await repository.getCityGeometries(cityId);
-      if (!geojson) {
-        response.status(404).json({ error: 'City not found' });
-        return;
-      }
-      response.set('Cache-Control', 'public, max-age=3600');
-      response.json(geojson);
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.get('/geometries', async (request, response, next) => {
-    const bbox = parseCoordinates(request.query.bbox, 4);
-    if (
-      !bbox ||
-      bbox[0] < -180 || bbox[2] > 180 ||
-      bbox[1] < -90 || bbox[3] > 90 ||
-      bbox[0] >= bbox[2] || bbox[1] >= bbox[3] ||
-      bbox[2] - bbox[0] > 20 || bbox[3] - bbox[1] > 20
-    ) {
-      response.status(400).json({
-        error: 'bbox must be a WGS84 visible window with a maximum 20 degree span',
-      });
-      return;
-    }
-
-    const center = request.query.center === undefined
-      ? [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2]
-      : parseCoordinates(request.query.center, 2);
-    if (
-      !center ||
-      center[0] < bbox[0] || center[0] > bbox[2] ||
-      center[1] < bbox[1] || center[1] > bbox[3]
-    ) {
-      response.status(400).json({ error: 'center must be lng,lat inside bbox' });
-      return;
-    }
-
-    try {
-      const geojson = await repository.getViewportGeometries({
-        west: bbox[0],
-        south: bbox[1],
-        east: bbox[2],
-        north: bbox[3],
-        centerLng: center[0],
-        centerLat: center[1],
-      });
-      response.set('Cache-Control', 'no-store');
-      response.json(geojson);
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  const cityStream = exportRepository?.streamCityBoundaries?.bind(
+  registerDataExportRoutes(router, {
     exportRepository,
-  );
-  const lineStream = exportRepository?.streamLines?.bind(exportRepository);
-  const populationStream = exportRepository?.streamPopulations?.bind(
-    exportRepository,
-  );
+    adminAuth,
+    operationAudit,
+    streamingExportRoute,
+  });
 
-  router.get(
-    '/admin/export/cities',
-    adminAuth.requireData,
-    operationAudit('data.export.cities'),
-    streamingExportRoute(
-      'cities.geojson',
-      'application/geo+json',
-      cityStream,
-      () => exportRepository.exportCityBoundaries(),
-    ),
-  );
-  router.get(
-    '/admin/export/cities.zip',
-    adminAuth.requireData,
-    operationAudit('data.export.cities-zip'),
-    streamingExportRoute(
-      'cities.geojson',
-      'application/geo+json',
-      cityStream,
-      () => exportRepository.exportCityBoundaries(),
-      true,
-    ),
-  );
-  router.get(
-    '/admin/export/lines',
-    adminAuth.requireData,
-    operationAudit('data.export.lines'),
-    streamingExportRoute(
-      'lines.geojson',
-      'application/geo+json',
-      lineStream,
-      () => exportRepository.exportLines(),
-    ),
-  );
-  router.get(
-    '/admin/export/lines.zip',
-    adminAuth.requireData,
-    operationAudit('data.export.lines-zip'),
-    streamingExportRoute(
-      'lines.geojson',
-      'application/geo+json',
-      lineStream,
-      () => exportRepository.exportLines(),
-      true,
-    ),
-  );
-  router.get(
-    '/admin/export/populations',
-    adminAuth.requireData,
-    operationAudit('data.export.populations'),
-    streamingExportRoute(
-      'populations.json',
-      'application/json',
-      populationStream,
-      () => exportRepository.exportPopulations(),
-    ),
-  );
-  router.get(
-    '/admin/export/populations.zip',
-    adminAuth.requireData,
-    operationAudit('data.export.populations-zip'),
-    streamingExportRoute(
-      'populations.json',
-      'application/json',
-      populationStream,
-      () => exportRepository.exportPopulations(),
-      true,
-    ),
-  );
-
-  const importLines = async (request, response, next) => {
-    const upload = await receivePortableUpload(request, response, next);
-    if (!upload) return;
-    const task = startAdminTask(request, response, next, {
-      type: 'geojson-import',
-      endpoint: '/api/admin/import/lines',
-      recordsSuccessfulUpdate: true,
-      parameters: {
-        transport: upload.contentType,
-        contentEncoding: upload.contentEncoding,
-        uploadBytes: upload.bytes,
-        uploadSha256: upload.sha256,
-      },
-    }, async (context) => executePortableUpload(
-      upload,
-      context,
-      portableServiceMethod(
-        importService,
-        'replaceFromGeoJsonStream',
-      ),
-    ));
-    if (!task) await removeStreamUpload(upload).catch(() => {});
-  };
-  router.post(
-    '/admin/import',
-    adminAuth.requireData,
+  registerDataImportRoutes(router, {
+    importService,
+    cityBoundaryTransferService,
+    adminAuth,
     rejectWhileAdminTaskActive,
     clearCompletedAdminTask,
-    importLines,
-  );
-  router.post(
-    '/admin/import/lines',
-    adminAuth.requireData,
+    receivePortableUpload,
+    startAdminTask,
+    executePortableUpload,
+    portableServiceMethod,
+    removeStreamUpload,
+    parseBoolean,
+  });
+
+  registerLineRoutes(router, {
+    adminAuth,
     rejectWhileAdminTaskActive,
     clearCompletedAdminTask,
-    importLines,
-  );
+    jsonBody,
+    kmlUpdate,
+    startAdminTask,
+    kmlUpdateService,
+    progressLog,
+  });
 
-  router.post(
-    '/admin/import/cities',
-    adminAuth.requireData,
+  registerOsmRoutes(router, {
+    adminAuth,
     rejectWhileAdminTaskActive,
     clearCompletedAdminTask,
-    async (request, response, next) => {
-      const dryRun = parseBoolean(request.query.dryRun, false);
-      if (dryRun === null) {
-        response.status(400).json({ error: 'dryRun must be true or false' });
-        return;
-      }
-      const upload = await receivePortableUpload(request, response, next);
-      if (!upload) return;
-      const task = startAdminTask(request, response, next, {
-        type: 'city-geojson-import',
-        endpoint: '/api/admin/import/cities',
-        recordsSuccessfulUpdate: !dryRun,
-        parameters: {
-          dryRun,
-          transport: upload.contentType,
-          contentEncoding: upload.contentEncoding,
-          uploadBytes: upload.bytes,
-          uploadSha256: upload.sha256,
-        },
-      }, async (context) => executePortableUpload(
-        upload,
-        context,
-        portableServiceMethod(
-          cityBoundaryTransferService,
-          'replaceFromGeoJsonStream',
-        ),
-        { dryRun },
-      ));
-      if (!task) await removeStreamUpload(upload).catch(() => {});
-    },
-  );
+    operationAudit,
+    jsonBody,
+    osmCityUpdate,
+    osmCityUpdateService,
+    startAdminTask,
+    parseBoolean,
+    progressLog,
+  });
 
-  router.post(
-    '/admin/update',
-    adminAuth.requireData,
+  registerAdminTaskRoutes(router, {
+    adminAuth,
+    operationAudit,
+    adminTasks,
+    adminStatusURL,
+    streamTransfer,
+    osmCityUpdate,
+    kmlUpdate,
+  });
+
+  registerPopulationRoutes(router, {
+    populationService,
+    adminAuth,
     rejectWhileAdminTaskActive,
     clearCompletedAdminTask,
-    jsonBody(kmlUpdate.maxRequestBodyBytes, 'application/json'),
-    (request, response, next) => {
-      const hasRequestBody =
-        request.get('transfer-encoding') !== undefined ||
-        Number(request.get('content-length') ?? 0) > 0;
-      if (hasRequestBody && request.body === undefined) {
-        response.status(415).json({ error: 'Content-Type must be application/json' });
-        return;
-      }
-      try {
-        const options = resolveKmlUpdateRequest(
-          request.body,
-          request.query,
-          kmlUpdate,
-        );
-        startAdminTask(request, response, next, {
-          type: 'kml-update',
-          endpoint: '/api/admin/update',
-          recordsSuccessfulUpdate: !options.dryRun,
-          parameters: {
-            dryRun: options.dryRun,
-            sourceCount: options.sources.length,
-            cityBufferMeters: options.cityBufferMeters,
-            ...(request.body !== undefined
-              ? { payload: adminAuditPayloadFingerprint(request.body) }
-              : {}),
-          },
-        }, async (context) => kmlUpdateService.update(
-          request.body,
-          request.query,
-          {
-            signal: context.signal,
-            onCommit: () => context.beginCommit(),
-            onProgress: (progress) => progressLog(context, progress),
-          },
-        ));
-      } catch (error) {
-        if (error instanceof KmlUpdateValidationError) {
-          response.status(400).json({ error: error.message });
-          return;
-        }
-        next(error);
-      }
-    },
-  );
-
-  router.get(
-    '/admin/osm-checkpoint',
-    adminAuth.requireData,
-    async (_request, response, next) => {
-      try {
-        const checkpoint = await osmCityUpdateService.checkpointStatus();
-        response.set('Cache-Control', 'no-store');
-        response.json({ checkpoint });
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  router.delete(
-    '/admin/osm-checkpoint',
-    adminAuth.requireData,
-    rejectWhileAdminTaskActive,
-    operationAudit('data.osm-checkpoint.discard'),
-    async (_request, response, next) => {
-      try {
-        const checkpoint = await osmCityUpdateService.discardCheckpoint();
-        response.set('Cache-Control', 'no-store');
-        response.json({
-          discarded: Boolean(checkpoint),
-          checkpoint,
-        });
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  router.post(
-    '/admin/update/cities',
-    adminAuth.requireData,
-    rejectWhileAdminTaskActive,
-    clearCompletedAdminTask,
-    jsonBody(osmCityUpdate.maxRequestBodyBytes, 'application/json'),
-    (request, response, next) => {
-      const hasRequestBody =
-        request.get('transfer-encoding') !== undefined ||
-        Number(request.get('content-length') ?? 0) > 0;
-      if (hasRequestBody && request.body === undefined) {
-        response.status(415).json({ error: 'Content-Type must be application/json' });
-        return;
-      }
-      try {
-        const options = resolveOsmCityUpdateRequest(
-          request.body,
-          request.query,
-          osmCityUpdate,
-        );
-        const resume = parseBoolean(request.query.resume, false);
-        const restart = parseBoolean(request.query.restart, false);
-        if (resume === null || restart === null) {
-          response.status(400).json({
-            error: 'resume and restart must be true or false',
-          });
-          return;
-        }
-        if (resume && restart) {
-          response.status(400).json({
-            error: 'resume and restart cannot both be true',
-          });
-          return;
-        }
-        startAdminTask(request, response, next, {
-          type: 'osm-city-update',
-          endpoint: '/api/admin/update/cities',
-          recordsSuccessfulUpdate: !options.dryRun,
-          parameters: {
-            dryRun: options.dryRun,
-            resume,
-            restart,
-            batchSize: options.batchSize,
-            minDelayMs: options.minDelayMs,
-            maxRetries: options.maxRetries,
-            retryBaseDelayMs: options.retryBaseDelayMs,
-            retryMaxDelayMs: options.retryMaxDelayMs,
-            sourceURL: options.url,
-            ...(request.body !== undefined
-              ? { payload: adminAuditPayloadFingerprint(request.body) }
-              : {}),
-          },
-        }, async (context) => osmCityUpdateService.update(
-          request.body,
-          request.query,
-          {
-            signal: context.signal,
-            onCommit: () => context.beginCommit(),
-            onProgress: (progress) => progressLog(context, progress),
-          },
-        ));
-      } catch (error) {
-        if (error instanceof OsmCityUpdateValidationError) {
-          response.status(400).json({ error: error.message });
-          return;
-        }
-        next(error);
-      }
-    },
-  );
-
-  router.get(
-    '/admin/config',
-    adminAuth.requireData,
-    (_request, response) => {
-      response.set('Cache-Control', 'no-store');
-      response.json({
-        transfer: {
-          requestCompression: ['gzip', 'deflate', 'br'],
-          responseCompression: 'Accept-Encoding negotiation',
-          portableFormats: ['json', 'zip-single-file'],
-          streaming: true,
-          zip: {
-            entries: 1,
-            zip64: false,
-            compressionMethods: ['store', 'deflate'],
-          },
-          limits: {
-            uploadBytes: streamTransfer.maxUploadBytes,
-            decodedJsonBytes: streamTransfer.maxJsonBytes,
-            itemBytes: streamTransfer.maxItemBytes,
-          },
-        },
-        osmCityUpdate: {
-          allowedURLs: [...osmCityUpdate.allowedURLs],
-          defaults: {
-            URL: osmCityUpdate.url,
-            batchSize: osmCityUpdate.batchSize,
-            minDelayMs: osmCityUpdate.minDelayMs,
-            maxRetries: osmCityUpdate.maxRetries,
-            retryBaseDelayMs: osmCityUpdate.retryBaseDelayMs,
-            retryMaxDelayMs: osmCityUpdate.retryMaxDelayMs,
-          },
-          limits: {
-            batchSize: { min: 1, max: osmCityUpdate.maxBatchSize },
-            minDelayMs: { min: osmCityUpdate.minDelayMs, max: 300000 },
-            maxRetries: { min: 0, max: osmCityUpdate.maxRetries },
-            retryBaseDelayMs: {
-              min: osmCityUpdate.retryBaseDelayMs,
-              max: 3600000,
-            },
-            retryMaxDelayMs: {
-              min: osmCityUpdate.retryMaxDelayMs,
-              max: 3600000,
-            },
-          },
-        },
-        kmlUpdate: {
-          defaults: { cityBufferMeters: kmlUpdate.cityBufferMeters },
-          limits: {
-            cityBufferMeters: {
-              min: 0,
-              max: kmlUpdate.cityBufferMaxMeters,
-            },
-          },
-        },
-      });
-    },
-  );
-
-  router.get(
-    '/admin/status',
-    adminAuth.requireData,
-    (request, response) => {
-      const task = adminTasks.current();
-      response.set('Cache-Control', 'no-store');
-      response.json({
-        status: task?.status ?? 'idle',
-        taskId: task?.id ?? null,
-        task: task ? {
-          ...task,
-          statusURL: adminStatusURL(request, task.id),
-        } : null,
-        lastSuccessfulUpdates: adminTasks.successfulUpdates(),
-      });
-    },
-  );
-
-  router.get(
-    '/admin/status/:taskId',
-    adminAuth.requireData,
-    (request, response) => {
-      const task = adminTasks.get(request.params.taskId);
-      if (!task) {
-        response.status(404).json({ error: 'Admin task not found' });
-        return;
-      }
-      response.set('Cache-Control', 'no-store');
-      response.json({
-        status: task.status,
-        taskId: task.id,
-        lastSuccessfulUpdates: adminTasks.successfulUpdates(),
-        task: {
-          ...task,
-          statusURL: adminStatusURL(request, task.id),
-        },
-      });
-    },
-  );
-
-  const cancelAdminTask = (request, response) => {
-    const taskId = request.params.taskId ?? adminTasks.active()?.id;
-    if (!taskId) {
-      response.status(404).json({ error: 'Active admin task not found' });
-      return;
-    }
-    const cancellation = adminTasks.cancel(taskId);
-    if (!cancellation) {
-      response.status(404).json({ error: 'Admin task not found' });
-      return;
-    }
-    const statusURL = adminStatusURL(request, taskId);
-    response.set('Cache-Control', 'no-store');
-    if (!cancellation.accepted) {
-      response.status(409).json({
-        error: 'Admin task is not active',
-        taskId,
-        status: cancellation.task.status,
-        statusURL,
-      });
-      return;
-    }
-    response.status(202).json({ status: 'cancelling', statusURL, taskId });
-  };
-
-  router.post(
-    '/admin/cancel',
-    adminAuth.requireData,
-    operationAudit('data.task.cancel'),
-    cancelAdminTask,
-  );
-  router.post(
-    '/admin/cancel/:taskId',
-    adminAuth.requireData,
-    operationAudit('data.task.cancel'),
-    cancelAdminTask,
-  );
-
-  router.post(
-    '/admin/populations',
-    adminAuth.requireData,
-    rejectWhileAdminTaskActive,
-    clearCompletedAdminTask,
-    async (request, response, next) => {
-      const upload = await receivePortableUpload(request, response, next);
-      if (!upload) return;
-      const task = startAdminTask(request, response, next, {
-        type: 'population-update',
-        endpoint: '/api/admin/populations',
-        recordsSuccessfulUpdate: true,
-        parameters: {
-          transport: upload.contentType,
-          contentEncoding: upload.contentEncoding,
-          uploadBytes: upload.bytes,
-          uploadSha256: upload.sha256,
-        },
-      }, async (context) => executePortableUpload(
-        upload,
-        context,
-        portableServiceMethod(
-          populationService,
-          'updateFromJsonStream',
-        ),
-      ));
-      if (!task) await removeStreamUpload(upload).catch(() => {});
-    },
-  );
+    receivePortableUpload,
+    startAdminTask,
+    executePortableUpload,
+    portableServiceMethod,
+    removeStreamUpload,
+  });
 
   return router;
 }
