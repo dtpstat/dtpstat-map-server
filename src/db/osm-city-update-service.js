@@ -12,17 +12,21 @@ import {
 } from '../data/osm-city-update-options.js';
 import { createOsmBoundaryUpdateRepository } from '../modules/osm/boundary-update-repository.js';
 import { createOverpassRequestSession } from '../modules/osm/overpass-request-session.js';
-import { objectKey } from '../modules/osm/update-batch-policy.js';
 import {
-  checkpointCompletionChecksum,
-  checkpointErrorDetails,
   checkpointMode,
   checkpointSettingsFingerprint,
 } from '../modules/osm/update-checkpoint-policy.js';
+import {
+  materializeReadyOsmCheckpoint,
+  persistOsmCheckpointFailure,
+  prepareOsmCheckpoint,
+  preparePendingOsmGeometry,
+} from '../modules/osm/update-checkpoint-session.js';
 import { OsmCityGeometryError } from '../modules/osm/update-errors.js';
 import { commitOsmBoundaryUpdate } from '../modules/osm/update-commit-session.js';
 import { processOsmGeometryBatches } from '../modules/osm/update-geometry-session.js';
 import { loadOsmUpdateIndex } from '../modules/osm/update-index-session.js';
+import { createOsmRequestMetricsState } from '../modules/osm/update-request-metrics.js';
 import { acquireDataImportLock } from './database-locks.js';
 import { rebuildCityBoundaryHierarchy } from './city-boundary-hierarchy.js';
 import { RECALCULATE_CITY_STATISTICS_SQL } from './recalculate-city-statistics.js';
@@ -191,88 +195,21 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         : config;
       const options = resolveOsmCityUpdateRequest(body, query, runtimeConfig);
       const mode = checkpointMode(query);
-      if ((mode.resume || mode.restart) && !checkpointRepository) {
-        throw new OsmCityUpdateValidationError(
-          'OSM resume mode is unavailable without checkpoint storage',
-        );
-      }
-
       const settingsFingerprint = checkpointSettingsFingerprint(options);
-      if (checkpointRepository) await checkpointRepository.cleanup();
-      let checkpoint = checkpointRepository
-        ? await checkpointRepository.getResumable()
-        : null;
-
-      if (mode.resume) {
-        if (!checkpoint) {
-          throw new OsmCityUpdateValidationError(
-            'No resumable OSM checkpoint exists',
-          );
-        }
-        if (checkpoint.settingsFingerprint !== settingsFingerprint) {
-          throw new OsmCityUpdateValidationError(
-            'Saved OSM checkpoint is incompatible with current source/selectors/query/batch settings; restore those settings or start a new import explicitly',
-          );
-        }
-      } else if (checkpoint && !mode.restart) {
-        throw new OsmCityUpdateValidationError(
-          'Unfinished OSM checkpoint ' + checkpoint.id + ' contains ' +
-          checkpoint.stagedObjects + '/' + checkpoint.totalObjects +
-          ' objects; resume it or explicitly start over',
-        );
-      }
-
-      const checksumHash = crypto.createHash('sha256');
-      let downloadedBytes = mode.resume ? checkpoint.downloadedBytes : 0;
-      let requestAttemptCount = mode.resume
-        ? checkpoint.requestAttemptCount
-        : 0;
-      let retryCount = mode.resume ? checkpoint.retryCount : 0;
-      let retryWaitMs = mode.resume ? checkpoint.retryWaitMs : 0;
-      let throttleWaitMs = mode.resume ? checkpoint.throttleWaitMs : 0;
-      let persistedMetrics = {
-        downloadedBytes,
-        requestAttemptCount,
-        retryCount,
-        retryWaitMs,
-        throttleWaitMs,
-      };
-
-      const metricDelta = () => ({
-        downloadedBytes:
-          downloadedBytes - persistedMetrics.downloadedBytes,
-        requestAttemptCount:
-          requestAttemptCount - persistedMetrics.requestAttemptCount,
-        retryCount:
-          retryCount - persistedMetrics.retryCount,
-        retryWaitMs:
-          retryWaitMs - persistedMetrics.retryWaitMs,
-        throttleWaitMs:
-          throttleWaitMs - persistedMetrics.throttleWaitMs,
+      let checkpoint = await prepareOsmCheckpoint({
+        checkpointRepository,
+        mode,
+        settingsFingerprint,
       });
 
-      const rememberPersistedMetrics = () => {
-        persistedMetrics = {
-          downloadedBytes,
-          requestAttemptCount,
-          retryCount,
-          retryWaitMs,
-          throttleWaitMs,
-        };
-      };
-
-      const requestMetrics = {
-        get downloadedBytes() { return downloadedBytes; },
-        set downloadedBytes(value) { downloadedBytes = value; },
-        get requestAttemptCount() { return requestAttemptCount; },
-        set requestAttemptCount(value) { requestAttemptCount = value; },
-        get retryCount() { return retryCount; },
-        set retryCount(value) { retryCount = value; },
-        get retryWaitMs() { return retryWaitMs; },
-        set retryWaitMs(value) { retryWaitMs = value; },
-        get throttleWaitMs() { return throttleWaitMs; },
-        set throttleWaitMs(value) { throttleWaitMs = value; },
-      };
+      const checksumHash = crypto.createHash('sha256');
+      const requestMetricsState = createOsmRequestMetricsState(
+        mode.resume ? checkpoint : null,
+      );
+      const requestMetrics = requestMetricsState.metrics;
+      const metricDelta = () => requestMetricsState.delta();
+      const rememberPersistedMetrics = () =>
+        requestMetricsState.rememberPersisted();
       const requestSession = createOverpassRequestSession({
         download,
         config,
@@ -321,34 +258,24 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         rememberPersistedMetrics();
       }
 
-      const stagedKeys = checkpointRepository
-        ? await checkpointRepository.getStagedKeys(checkpoint.id)
-        : new Set();
-      let stagedPlaces = stagedKeys.size;
-      let geometryPlaces = checkpointRepository
-        ? Number(checkpoint?.geometryObjects ?? 0)
-        : stagedPlaces;
-      let unbuildableGeometryPlaces = checkpointRepository
-        ? Number(checkpoint?.unbuildableGeometryObjects ?? 0)
-        : 0;
-      const pendingObjects = checkpointRepository
-        ? index.objects.filter((object) => !stagedKeys.has(objectKey(object)))
-        : index.objects;
-
-      if (mode.resume) {
-        const progress = {
-          phase: 'resume',
-          checkpointId: checkpoint.id,
-          checkpointStatus: checkpoint.status,
-          stagedPlaces,
-          geometryPlaces,
-          unbuildableGeometryPlaces,
-          indexedPlaces: index.objects.length,
-          remainingPlaces: pendingObjects.length,
-        };
-        reportProgress(progress);
-        operation.onProgress?.(progress);
-      }
+      const pendingState = await preparePendingOsmGeometry({
+        checkpointRepository,
+        checkpoint,
+        index,
+        mode,
+        emitProgress(progress) {
+          reportProgress(progress);
+          operation.onProgress?.(progress);
+        },
+      });
+      const {
+        stagedKeys,
+        pendingObjects,
+      } = pendingState;
+      let stagedPlaces = pendingState.stagedPlaces;
+      let geometryPlaces = pendingState.geometryPlaces;
+      let unbuildableGeometryPlaces =
+        pendingState.unbuildableGeometryPlaces;
 
       const client = await pool.connect();
       try {
@@ -398,38 +325,23 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         let checksum;
 
         if (checkpointRepository) {
-          checkpoint = await checkpointRepository.getById(checkpoint.id);
-          if (checkpoint.stagedObjects !== index.objects.length) {
-            throw new Error(
-              `OSM checkpoint contains ${checkpoint.stagedObjects}/` +
-              `${index.objects.length} indexed objects`,
-            );
-          }
-          checkpoint = await checkpointRepository.mark(
-            checkpoint.id,
-            'ready',
-          );
-          await boundaryUpdateRepository.dropStage(client);
-          await boundaryUpdateRepository.materializeCheckpointStage(
+          const ready = await materializeReadyOsmCheckpoint({
+            checkpointRepository,
+            boundaryUpdateRepository,
             client,
-            checkpoint.id,
-          );
-
-          const stats = await checkpointRepository.stats(checkpoint.id);
-          geometryPlaces = Number(stats.geometryObjects ?? 0);
-          unbuildableGeometryPlaces = Number(
-            stats.unbuildableGeometryObjects ?? 0,
-          );
-          cityPlaces = Number(stats.cityPlaces ?? 0);
-          townPlaces = Number(stats.townPlaces ?? 0);
-          administrativePlaces = Number(stats.administrativePlaces ?? 0);
-          duplicateNames = Number(stats.duplicateNames ?? 0);
-          ignoredElements = checkpoint.ignoredElements;
-          batchCount = checkpoint.stagedBatchCount;
-          const checksums = await checkpointRepository.checksums(
-            checkpoint.id,
-          );
-          checksum = checkpointCompletionChecksum(checkpoint, checksums);
+            checkpoint,
+            index,
+          });
+          checkpoint = ready.checkpoint;
+          geometryPlaces = ready.geometryPlaces;
+          unbuildableGeometryPlaces = ready.unbuildableGeometryPlaces;
+          cityPlaces = ready.cityPlaces;
+          townPlaces = ready.townPlaces;
+          administrativePlaces = ready.administrativePlaces;
+          duplicateNames = ready.duplicateNames;
+          ignoredElements = ready.ignoredElements;
+          batchCount = ready.batchCount;
+          checksum = ready.checksum;
         } else {
           checksum = checksumHash.digest('hex');
         }
@@ -443,17 +355,14 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
 
         if (checkpointRepository) {
           checkpoint = await checkpointRepository.getById(checkpoint.id);
-          downloadedBytes = checkpoint.downloadedBytes;
-          requestAttemptCount = checkpoint.requestAttemptCount;
-          retryCount = checkpoint.retryCount;
-          retryWaitMs = checkpoint.retryWaitMs;
-          throttleWaitMs = checkpoint.throttleWaitMs;
+          requestMetricsState.loadPersistedCheckpoint(checkpoint);
         }
+        const requestMetricSnapshot = requestMetricsState.snapshot();
 
         const runValues = [
           options.url,
           checksum,
-          downloadedBytes,
+          requestMetricSnapshot.downloadedBytes,
           index.sourceElements,
           geometryPlaces,
           ignoredElements,
@@ -510,7 +419,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           sourceURL: options.url,
           indexFinalURLs: [...indexFinalURLs],
           indexRequestCount: indexQueries.length,
-          downloadedBytes,
+          downloadedBytes: requestMetricSnapshot.downloadedBytes,
           sourceElements: index.sourceElements,
           indexedPlaces: index.objects.length,
           importedPlaces: geometryPlaces,
@@ -527,10 +436,10 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           maxTotalBytes: options.maxTotalBytes,
           minDelayMs: options.minDelayMs,
           maxRetries: options.maxRetries,
-          requestAttemptCount,
-          retryCount,
-          retryWaitMs,
-          throttleWaitMs,
+          requestAttemptCount: requestMetricSnapshot.requestAttemptCount,
+          retryCount: requestMetricSnapshot.retryCount,
+          retryWaitMs: requestMetricSnapshot.retryWaitMs,
+          throttleWaitMs: requestMetricSnapshot.throttleWaitMs,
           restoredGeometryLinks: commitResult.restoredGeometryLinks,
           osmTimestamp: index.osmTimestamp,
           checksum,
@@ -556,24 +465,20 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           completedAt: commitResult.run.createdAt,
         };
       } catch (error) {
-        if (checkpointRepository && checkpoint) {
-          try {
-            const delta = metricDelta();
-            if (Object.values(delta).some((value) => value !== 0)) {
-              await checkpointRepository.addMetrics(checkpoint.id, delta);
-              rememberPersistedMetrics();
-            }
-            await checkpointRepository.mark(
-              checkpoint.id,
-              operation.signal?.aborted ? 'cancelled' : 'failed',
-              checkpointErrorDetails(error),
-            );
-          } catch (checkpointError) {
-            console.error(
-              'Failed to persist OSM checkpoint failure state',
-              checkpointError,
-            );
-          }
+        try {
+          await persistOsmCheckpointFailure({
+            checkpointRepository,
+            checkpoint,
+            metricDelta,
+            rememberPersistedMetrics,
+            error,
+            cancelled: Boolean(operation.signal?.aborted),
+          });
+        } catch (checkpointError) {
+          console.error(
+            'Failed to persist OSM checkpoint failure state',
+            checkpointError,
+          );
         }
         throw error;
       } finally {
