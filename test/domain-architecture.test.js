@@ -394,3 +394,77 @@ test('legacy line data import service is only a DB composition adapter', async (
   assert.doesNotMatch(service, /database-locks/u);
   assert.doesNotMatch(service, /recalculate-city-statistics/u);
 });
+
+
+test('city boundary transfer use case delegates SQL persistence to geometry repository', async () => {
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'geometry',
+      'city-boundary-transfer-service.js',
+    ),
+    'utf8',
+  );
+  const repository = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'geometry',
+      'city-boundary-transfer-repository.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(service, /createCityBoundaryTransferRepository\(/u);
+  assert.match(service, /repository\.insertStageBatch\(/u);
+  assert.match(service, /repository\.insertBoundaries\(/u);
+  assert.match(service, /repository\.restoreGeometryLinks\(/u);
+  assert.doesNotMatch(
+    service,
+    /CREATE TEMP TABLE city_boundary_transfer_stage/u,
+  );
+  assert.doesNotMatch(service, /INSERT INTO city_boundaries/u);
+  assert.doesNotMatch(service, /UPDATE city_geometries/u);
+
+  assert.match(
+    repository,
+    /CREATE TEMP TABLE city_boundary_transfer_stage/u,
+  );
+  assert.match(repository, /INSERT INTO city_boundaries/u);
+  assert.match(repository, /UPDATE city_geometries/u);
+});
+
+test('legacy city boundary transfer service is only a DB composition adapter', async () => {
+  const adapter = await fs.readFile(
+    path.join(srcRoot, 'db', 'city-boundary-transfer-service.js'),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'geometry',
+      'city-boundary-transfer-service.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(adapter, /createCityBoundaryTransferUseCase\(pool,/u);
+  assert.match(adapter, /acquireDataImportLock/u);
+  assert.match(adapter, /rebuildCityBoundaryHierarchy/u);
+  assert.match(adapter, /RECALCULATE_CITY_STATISTICS_SQL/u);
+  assert.doesNotMatch(adapter, /parseStreamingJsonObject/u);
+  assert.doesNotMatch(adapter, /buildCityBoundaryGeoJsonPlan/u);
+  assert.doesNotMatch(adapter, /repository\.insertStageBatch/u);
+
+  assert.match(service, /parseStreamingJsonObject\(/u);
+  assert.match(service, /buildCityBoundaryGeoJsonPlan\(/u);
+  assert.match(service, /repository\.insertStageBatch\(/u);
+  assert.match(service, /rebuildHierarchy\(client,/u);
+  assert.match(service, /syncDerivedData\(client\)/u);
+  assert.doesNotMatch(service, /\.\.\/\.\.\/db\//u);
+  assert.doesNotMatch(service, /database-locks/u);
+  assert.doesNotMatch(service, /city-boundary-hierarchy/u);
+  assert.doesNotMatch(service, /recalculate-city-statistics/u);
+});
