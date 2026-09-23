@@ -225,3 +225,30 @@ test('OSM update facade delegates geometry batch processing to session', async (
   assert.match(geometrySession, /boundaryUpdateRepository\.stageBatch\(/u);
   assert.match(geometrySession, /checkpointRepository\.stageBatch\(/u);
 });
+
+
+test('OSM update facade delegates atomic replacement transaction to commit session', async () => {
+  const source = await fs.readFile(
+    path.join(srcRoot, 'db', 'osm-city-update-service.js'),
+    'utf8',
+  );
+  const commitSession = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-commit-session.js'),
+    'utf8',
+  );
+  const checkpointRepository = await fs.readFile(
+    path.join(srcRoot, 'db', 'osm-city-checkpoint-repository.js'),
+    'utf8',
+  );
+
+  assert.match(source, /commitOsmBoundaryUpdate\(/u);
+  assert.doesNotMatch(source, /client\.query\('BEGIN'\)/u);
+  assert.doesNotMatch(source, /client\.query\('COMMIT'\)/u);
+  assert.doesNotMatch(source, /client\.query\('ROLLBACK'\)/u);
+  assert.doesNotMatch(source, /DELETE FROM osm_city_update_checkpoint_stage/u);
+  assert.match(commitSession, /client\.query\('BEGIN'\)/u);
+  assert.match(commitSession, /client\.query\('COMMIT'\)/u);
+  assert.match(commitSession, /client\.query\('ROLLBACK'\)/u);
+  assert.match(commitSession, /checkpointRepository\.complete\(/u);
+  assert.match(checkpointRepository, /async complete\(client, checkpointId\)/u);
+});
