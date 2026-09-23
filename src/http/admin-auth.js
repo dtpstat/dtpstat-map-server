@@ -58,6 +58,7 @@ function hasPermission(user, permission) {
   if (permission === 'any' || permission === 'profile') return true;
   if (permission === 'data') return Boolean(user.canManageData);
   if (permission === 'interface') return Boolean(user.canManageInterface);
+  if (permission === 'geometry-editor') return Boolean(user.canEditGeometries);
   if (permission === 'osm-editor') return Boolean(user.canEditOsm);
   if (permission === 'users') return Boolean(user.canManageUsers);
   if (permission === 'audit') return Boolean(user.canViewAudit);
@@ -193,6 +194,7 @@ export function createAdminAuthorization(securityService) {
     requireProfile: middleware('profile', { allowPasswordChangePending: true }),
     requireData: middleware('data'),
     requireInterface: middleware('interface'),
+    requireGeometryEditor: middleware('geometry-editor'),
     requireOsmEditor: middleware('osm-editor'),
     requireUsers: middleware('users'),
     requireAudit: middleware('audit'),
