@@ -37,39 +37,42 @@ test('audit details use external foldable modal instead of inline JSON', async (
   assert.match(styles, /body\.security-modal-open/);
 });
 
-test('current user and audit rows render profile avatars with fallback initials', async () => {
-  const [html, shell, editor, route] = await Promise.all([
+test('current user and audit rows render stable avatar URLs with fallback initials', async () => {
+  const [html, shell, editor, route, styles] = await Promise.all([
     read('admin/index.html'),
     read('admin/admin-shell.js'),
     read('admin/security-editor-v2.js'),
     read('src/routes/admin-security-api.js'),
+    read('admin/security-v2.css'),
   ]);
 
   assert.match(html, /id="admin-user-avatar-image"/);
   assert.match(html, /id="admin-user-avatar-fallback"/);
   assert.match(html, /id="admin-user-label"/);
   assert.match(html, /id="admin-user-roles"/);
-  assert.match(shell, /\/api\/admin\/profile\/avatar\?v=\$\{Date\.now\(\)\}/);
   assert.match(shell, /user\.hasAvatar/);
   assert.match(shell, /rolesHost\.replaceChildren/);
   assert.match(shell, /tag\.className = 'admin-user-role'/);
 
+  assert.match(editor, /function userListRow\(user\)/);
+  assert.match(editor, /if \(user\.hasAvatar\)/);
+  assert.match(editor, /avatarVersion = encodeURIComponent\(user\.updatedAt \?\? '1'\)/);
+  assert.match(editor, /avatar\.style\.backgroundImage/);
+  assert.doesNotMatch(editor, /image\.hidden = true/);
+  assert.doesNotMatch(editor, /image\.addEventListener\('load'/);
+
   assert.match(editor, /function auditUserCell\(entry\)/);
   assert.match(editor, /if \(entry\.userId\)/);
-  assert.match(
-    editor,
-    /String\(entry\.userId\) === String\(currentUser\?\.id \?\? ''\)/,
-  );
-  assert.match(editor, /\/api\/admin\/profile\/avatar\?v=\$\{Date\.now\(\)\}/);
+  assert.match(editor, /avatar\.classList\.add\('has-image'\)/);
   assert.match(editor, /security-audit-avatar-fallback/);
-  assert.match(editor, /image\.hidden = false/);
-  assert.match(editor, /fallback\.hidden = true/);
   assert.match(
     editor,
     /\/api\/admin\/security\/users\/\$\{encodeURIComponent\(entry\.userId\)\}\/avatar/,
   );
   assert.match(route, /\/admin\/security\/users\/:userId\/avatar/);
-  assert.match(route, /adminAuth\.requireAudit/);
+  assert.match(route, /adminAuth\.requireUsersOrAudit/);
+  assert.match(styles, /\.security-user-avatar\.has-image \.security-user-avatar-fallback/);
+  assert.match(styles, /\.security-audit-avatar\.has-image \.security-audit-avatar-fallback/);
 });
 
 test('profile avatar hides fallback only after successful image load', async () => {
@@ -86,13 +89,4 @@ test('profile avatar hides fallback only after successful image load', async () 
 });
 
 
-test('audit avatars are eager enough to load while initially hidden', async () => {
-  const editor = await read('admin/security-editor-v2.js');
 
-  assert.doesNotMatch(editor, /image\.loading = 'lazy'/);
-  assert.match(editor, /image\.decoding = 'async'/);
-  assert.match(
-    editor,
-    /\/api\/admin\/security\/users\/\$\{encodeURIComponent\(entry\.userId\)\}\/avatar\?v=\$\{Date\.now\(\)\}/,
-  );
-});
