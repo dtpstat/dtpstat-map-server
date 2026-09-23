@@ -468,3 +468,66 @@ test('legacy city boundary transfer service is only a DB composition adapter', a
   assert.doesNotMatch(service, /city-boundary-hierarchy/u);
   assert.doesNotMatch(service, /recalculate-city-statistics/u);
 });
+
+
+test('population import use case delegates SQL persistence to population repository', async () => {
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'population', 'import-service.js'),
+    'utf8',
+  );
+  const repository = await fs.readFile(
+    path.join(srcRoot, 'modules', 'population', 'import-repository.js'),
+    'utf8',
+  );
+
+  assert.match(service, /createPopulationImportRepository\(/u);
+  assert.match(service, /repository\.insertRawBatch\(/u);
+  assert.match(service, /repository\.insertStageBatch\(/u);
+  assert.match(service, /repository\.resolveStage\(/u);
+  assert.match(service, /repository\.updateCities\(/u);
+  assert.doesNotMatch(
+    service,
+    /CREATE TEMP TABLE population_transfer_raw/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /CREATE TEMP TABLE population_transfer_resolved/u,
+  );
+  assert.doesNotMatch(service, /UPDATE city_boundaries AS boundary/u);
+
+  assert.match(
+    repository,
+    /CREATE TEMP TABLE population_transfer_raw/u,
+  );
+  assert.match(
+    repository,
+    /CREATE TEMP TABLE population_transfer_resolved/u,
+  );
+  assert.match(repository, /UPDATE city_boundaries AS boundary/u);
+});
+
+test('legacy population import service is only a DB composition adapter', async () => {
+  const adapter = await fs.readFile(
+    path.join(srcRoot, 'db', 'population-import-service.js'),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'population', 'import-service.js'),
+    'utf8',
+  );
+
+  assert.match(adapter, /createPopulationImportUseCase\(pool,/u);
+  assert.match(adapter, /acquireDataImportLock/u);
+  assert.match(adapter, /RECALCULATE_CITY_STATISTICS_SQL/u);
+  assert.doesNotMatch(adapter, /parseStreamingJsonObject/u);
+  assert.doesNotMatch(adapter, /buildPopulationPlan/u);
+  assert.doesNotMatch(adapter, /repository\.resolveStage/u);
+
+  assert.match(service, /parseStreamingJsonObject\(/u);
+  assert.match(service, /buildPopulationPlan\(/u);
+  assert.match(service, /repository\.resolveStage\(/u);
+  assert.match(service, /recalculateStatistics\(client\)/u);
+  assert.doesNotMatch(service, /\.\.\/\.\.\/db\//u);
+  assert.doesNotMatch(service, /database-locks/u);
+  assert.doesNotMatch(service, /recalculate-city-statistics/u);
+});
