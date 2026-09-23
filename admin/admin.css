@@ -1,6 +1,6 @@
 :root {
   color-scheme: dark;
-  font-size: 14px;
+  font-size: 13px;
   --bg: #0b1114;
   --panel: #121b1f;
   --panel-2: #172328;
@@ -480,16 +480,16 @@ body.admin-dialog-open { overflow: hidden; }
 }
 .admin-human-unit-wrap > input {
   width: 100%;
-  padding-right: 7.5rem;
+  padding-right: 6.2rem;
 }
 .admin-human-unit {
   position: absolute;
   top: 50%;
   right: .65rem;
-  max-width: 6.4rem;
+  max-width: 5.4rem;
   overflow: hidden;
   color: #a9bcc0;
-  font-size: .66rem;
+  font-size: .64rem;
   font-variant-numeric: tabular-nums;
   line-height: 1;
   text-align: right;
