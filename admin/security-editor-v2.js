@@ -87,19 +87,22 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           <div><h3>Аудит</h3><p>Входы и административные операции с фильтрацией и быстрыми реакциями.</p></div>
           <a class="secondary-link" id="security-audit-export" href="/api/admin/security/audit/export.csv" download>Экспорт CSV</a>
         </div>
-        <form id="security-audit-filter" class="security-audit-filter">
-          <label>От <input name="from" type="datetime-local"></label>
-          <label>До <input name="to" type="datetime-local"></label>
-          <label>Тип события <select name="eventType"><option value="">Все</option></select></label>
-          <label>Операция <select name="operationType"><option value="">Все</option></select></label>
-          <label>Статус <select name="status"><option value="">Все</option></select></label>
-          <label>Пользователь <input name="username" type="text"></label>
-          <label>IP <input name="ipAddress" type="text"></label>
-          <div class="security-filter-actions">
-            <button type="submit">Применить</button>
-            <button type="button" class="secondary" id="security-audit-reset">Сбросить</button>
-          </div>
-        </form>
+        <details class="security-audit-filter-panel">
+          <summary>Фильтры аудита</summary>
+          <form id="security-audit-filter" class="security-audit-filter">
+            <label>От <input name="from" type="datetime-local"></label>
+            <label>До <input name="to" type="datetime-local"></label>
+            <label>Тип события <select name="eventType"><option value="">Все</option></select></label>
+            <label>Операция <select name="operationType"><option value="">Все</option></select></label>
+            <label>Статус <select name="status"><option value="">Все</option></select></label>
+            <label>Пользователь <input name="username" type="text"></label>
+            <label>IP <input name="ipAddress" type="text"></label>
+            <div class="security-filter-actions">
+              <button type="submit">Применить</button>
+              <button type="button" class="secondary" id="security-audit-reset">Сбросить</button>
+            </div>
+          </form>
+        </details>
         <div class="security-audit-table-wrap">
           <table class="security-audit-table">
             <thead><tr>
@@ -127,9 +130,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
                 <label>Минимум символов
                   <input name="passwordMinLength" type="number" min="1" max="4096" required>
                 </label>
-                <label>Максимум символов
-                  <input name="passwordMaxLength" type="number" min="1" max="4096" required>
-                </label>
+                <input name="passwordMaxLength" type="hidden">
               </div>
               <div class="security-password-requirements">
                 <label class="check"><input name="passwordRequireLowercase" type="checkbox"> Строчная буква</label>
@@ -226,6 +227,28 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   );
   bindHumanUnits(host);
   const userById = new Map();
+  const loadedAvatarUrls = new Set();
+
+  function applyAvatarBackground(avatar, fallback, url) {
+    avatar.style.backgroundImage = `url("${url}")`;
+    if (loadedAvatarUrls.has(url)) {
+      avatar.classList.add('is-image-loaded');
+      return;
+    }
+    const loader = new Image();
+    loader.decoding = 'async';
+    loader.addEventListener('load', () => {
+      loadedAvatarUrls.add(url);
+      avatar.classList.add('is-image-loaded');
+    }, { once: true });
+    loader.addEventListener('error', () => {
+      avatar.style.removeProperty('background-image');
+      avatar.classList.remove('is-image-loaded');
+      fallback.hidden = false;
+    }, { once: true });
+    loader.src = url;
+  }
+
   let selectedUserId = null;
   let auditOffset = 0;
   const auditLimit = 100;
@@ -320,6 +343,8 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           <div class="security-role-grid">
             ${roleCheckbox('canManageData', 'Управление данными', user.canManageData, protectedUser)}
             ${roleCheckbox('canManageInterface', 'Настройка интерфейса', user.canManageInterface, protectedUser)}
+            ${roleCheckbox('canEditGeometries', 'Редактирование геометрий', user.canEditGeometries, protectedUser)}
+            ${roleCheckbox('canEditOsm', 'Объекты OSM', user.canEditOsm, protectedUser)}
             ${roleCheckbox('canManageUsers', 'Управление пользователями', user.canManageUsers, protectedUser)}
             ${roleCheckbox('canViewAudit', 'Просмотр аудита', user.canViewAudit, protectedUser)}
             ${roleCheckbox('canManageSecurity', 'Управление безопасностью', user.canManageSecurity, protectedUser)}
@@ -362,6 +387,8 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
             email: form.elements.email.value.trim() || null,
             canManageData: form.elements.canManageData.checked,
             canManageInterface: form.elements.canManageInterface.checked,
+            canEditGeometries: form.elements.canEditGeometries.checked,
+            canEditOsm: form.elements.canEditOsm.checked,
             canManageUsers: form.elements.canManageUsers.checked,
             canViewAudit: form.elements.canViewAudit.checked,
             canManageSecurity: form.elements.canManageSecurity.checked,
@@ -456,6 +483,8 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           <div class="security-role-grid">
             ${roleCheckbox('canManageData', 'Управление данными', false, false)}
             ${roleCheckbox('canManageInterface', 'Настройка интерфейса', false, false)}
+            ${roleCheckbox('canEditGeometries', 'Редактирование геометрий', false, false)}
+            ${roleCheckbox('canEditOsm', 'Объекты OSM', false, false)}
             ${roleCheckbox('canManageUsers', 'Управление пользователями', false, false)}
             ${roleCheckbox('canViewAudit', 'Просмотр аудита', false, false)}
             ${roleCheckbox('canManageSecurity', 'Управление безопасностью', false, false)}
@@ -479,6 +508,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
             email: form.elements.email.value.trim() || null,
             canManageData: form.elements.canManageData.checked,
             canManageInterface: form.elements.canManageInterface.checked,
+            canEditOsm: form.elements.canEditOsm.checked,
             canManageUsers: form.elements.canManageUsers.checked,
             canViewAudit: form.elements.canViewAudit.checked,
             canManageSecurity: form.elements.canManageSecurity.checked,
@@ -510,27 +540,19 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     const fallback = button.querySelector('.security-user-avatar-fallback');
     fallback.textContent = auditAvatarFallback(user.displayName ?? user.username);
     if (user.hasAvatar) {
-      const image = document.createElement('img');
-      image.alt = '';
-      image.decoding = 'async';
-      image.hidden = true;
-      image.addEventListener('load', () => {
-        image.hidden = false;
-        fallback.hidden = true;
-      }, { once: true });
-      image.addEventListener('error', () => {
-        image.remove();
-        fallback.hidden = false;
-      }, { once: true });
-      image.src = `/api/admin/security/users/${encodeURIComponent(user.id)}/avatar?v=${Date.now()}`;
-      avatar.append(image);
+      const avatarVersion = encodeURIComponent(user.updatedAt ?? '1');
+      const avatarUrl =
+        `/api/admin/security/users/${encodeURIComponent(user.id)}/avatar?v=${avatarVersion}`;
+      applyAvatarBackground(avatar, fallback, avatarUrl);
     }
     button.querySelector('strong').textContent = user.displayName ?? user.username;
     button.querySelector('small').textContent = `@${user.username}${user.email ? ` · ${user.email}` : ''}`;
     button.classList.toggle('is-selected', user.id === selectedUserId);
     button.addEventListener('click', () => {
       selectedUserId = user.id;
-      renderUsersList();
+      for (const row of host.querySelectorAll('.security-user-row')) {
+        row.classList.toggle('is-selected', row.dataset.userId === String(user.id));
+      }
       renderDetail(user);
     });
     return button;
@@ -600,24 +622,12 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     avatar.append(fallback);
 
     if (entry.userId) {
-      const image = document.createElement('img');
-      image.alt = '';
-      image.decoding = 'async';
-      image.hidden = true;
-      image.addEventListener('load', () => {
-        image.hidden = false;
-        fallback.hidden = true;
-      }, { once: true });
-      image.addEventListener('error', () => {
-        image.remove();
-        fallback.hidden = false;
-      }, { once: true });
       const currentUserRow =
         String(entry.userId) === String(currentUser?.id ?? '');
-      image.src = currentUserRow
-        ? `/api/admin/profile/avatar?v=${Date.now()}`
-        : `/api/admin/security/users/${encodeURIComponent(entry.userId)}/avatar?v=${Date.now()}`;
-      avatar.append(image);
+      const avatarUrl = currentUserRow
+        ? '/api/admin/profile/avatar'
+        : `/api/admin/security/users/${encodeURIComponent(entry.userId)}/avatar`;
+      applyAvatarBackground(avatar, fallback, avatarUrl);
     }
 
     const name = document.createElement('span');
