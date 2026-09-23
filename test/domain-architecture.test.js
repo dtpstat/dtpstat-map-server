@@ -125,7 +125,7 @@ test('OSM update facade delegates Overpass request lifecycle to the module', asy
 });
 
 
-test('OSM update facade delegates checkpoint compatibility policy to the module', async () => {
+test('OSM update facade delegates checkpoint compatibility and lifecycle policy', async () => {
   const source = await fs.readFile(
     path.join(srcRoot, 'db', 'osm-city-update-service.js'),
     'utf8',
@@ -134,14 +134,35 @@ test('OSM update facade delegates checkpoint compatibility policy to the module'
     path.join(srcRoot, 'modules', 'osm', 'update-checkpoint-policy.js'),
     'utf8',
   );
+  const session = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-checkpoint-session.js'),
+    'utf8',
+  );
+  const metrics = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-request-metrics.js'),
+    'utf8',
+  );
 
   assert.match(source, /checkpointSettingsFingerprint\(options\)/u);
-  assert.match(source, /checkpointCompletionChecksum\(/u);
+  assert.match(source, /prepareOsmCheckpoint\(/u);
+  assert.match(source, /preparePendingOsmGeometry\(/u);
+  assert.match(source, /materializeReadyOsmCheckpoint\(/u);
+  assert.match(source, /persistOsmCheckpointFailure\(/u);
+  assert.match(source, /createOsmRequestMetricsState\(/u);
+  assert.doesNotMatch(source, /checkpointCompletionChecksum\(/u);
+  assert.doesNotMatch(source, /checkpointErrorDetails\(/u);
+  assert.doesNotMatch(source, /checkpointRepository\.getStagedKeys\(/u);
+  assert.doesNotMatch(source, /checkpointRepository\.addMetrics\(/u);
   assert.doesNotMatch(source, /function checkpointMode\(/u);
   assert.doesNotMatch(source, /function checkpointOptionSnapshot\(/u);
   assert.match(policy, /export function checkpointMode\(/u);
   assert.match(policy, /export function checkpointOptionSnapshot\(/u);
   assert.match(policy, /export function checkpointCompletionChecksum\(/u);
+  assert.match(session, /checkpointCompletionChecksum\(/u);
+  assert.match(session, /checkpointErrorDetails\(/u);
+  assert.match(session, /checkpointRepository\.getStagedKeys\(/u);
+  assert.match(session, /checkpointRepository\.addMetrics\(/u);
+  assert.match(metrics, /export function createOsmRequestMetricsState\(/u);
 });
 
 
