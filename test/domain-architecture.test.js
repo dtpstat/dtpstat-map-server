@@ -347,9 +347,9 @@ test('legacy OSM DB service is only an infrastructure composition adapter', asyn
 });
 
 
-test('legacy line data import delegates SQL persistence to lines repository', async () => {
+test('line import use case delegates SQL persistence to lines repository', async () => {
   const service = await fs.readFile(
-    path.join(srcRoot, 'db', 'data-import-service.js'),
+    path.join(srcRoot, 'modules', 'lines', 'import-service.js'),
     'utf8',
   );
   const repository = await fs.readFile(
@@ -368,4 +368,29 @@ test('legacy line data import delegates SQL persistence to lines repository', as
   assert.match(repository, /CREATE TEMP TABLE line_transfer_raw/u);
   assert.match(repository, /INSERT INTO city_geometries/u);
   assert.match(repository, /DELETE FROM line_types AS line_type/u);
+});
+
+test('legacy line data import service is only a DB composition adapter', async () => {
+  const adapter = await fs.readFile(
+    path.join(srcRoot, 'db', 'data-import-service.js'),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'lines', 'import-service.js'),
+    'utf8',
+  );
+
+  assert.match(adapter, /createLineImportService\(pool,/u);
+  assert.match(adapter, /acquireDataImportLock/u);
+  assert.match(adapter, /RECALCULATE_CITY_STATISTICS_SQL/u);
+  assert.doesNotMatch(adapter, /parseStreamingJsonObject/u);
+  assert.doesNotMatch(adapter, /buildGeoJsonPlan/u);
+  assert.doesNotMatch(adapter, /repository\.insertGeometries/u);
+
+  assert.match(service, /parseStreamingJsonObject\(/u);
+  assert.match(service, /buildGeoJsonPlan\(/u);
+  assert.match(service, /repository\.insertGeometries\(/u);
+  assert.doesNotMatch(service, /\.\.\/\.\.\/db\//u);
+  assert.doesNotMatch(service, /database-locks/u);
+  assert.doesNotMatch(service, /recalculate-city-statistics/u);
 });
