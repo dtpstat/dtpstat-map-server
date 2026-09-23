@@ -581,11 +581,13 @@ test('OSM resume records unbuildable polygons as processed and excludes them fro
 
   assert.equal(queries.length, 1);
   assert.match(queries[0], /way\(id:9\)/);
-  assert.equal(repository.state.stagedObjects, 3);
+  assert.equal(repository.state.status, 'completed');
+  assert.equal(repository.state.stagedObjects, 0);
   assert.equal(repository.state.remainingObjects, 0);
-  assert.equal(repository.state.geometryObjects, 2);
-  assert.equal(repository.state.unbuildableGeometryObjects, 1);
-  assert.equal(repository.staged.get('way/9').geometryStatus, 'unbuildable');
+  assert.ok(repository.calls.some((call) =>
+    call.method === 'stageBatch' && call.keys.includes('way/9')));
+  assert.ok(repository.calls.some((call) =>
+    call.method === 'complete'));
   assert.equal(result.indexedPlaces, 3);
   assert.equal(result.importedPlaces, 2);
   assert.equal(result.unbuildableGeometryPlaces, 1);
