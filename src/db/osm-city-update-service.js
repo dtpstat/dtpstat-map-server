@@ -441,6 +441,15 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         await boundaryUpdateRepository.assertValidStage(client);
         throwIfAdminTaskCancelled(operation.signal);
 
+        if (checkpointRepository) {
+          checkpoint = await checkpointRepository.getById(checkpoint.id);
+          downloadedBytes = checkpoint.downloadedBytes;
+          requestAttemptCount = checkpoint.requestAttemptCount;
+          retryCount = checkpoint.retryCount;
+          retryWaitMs = checkpoint.retryWaitMs;
+          throttleWaitMs = checkpoint.throttleWaitMs;
+        }
+
         const runValues = [
           options.url,
           checksum,
