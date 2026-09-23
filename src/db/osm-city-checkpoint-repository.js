@@ -471,6 +471,24 @@ export function createOsmCityCheckpointRepository(pool) {
       return this.getById(checkpointId);
     },
 
+    async complete(client, checkpointId) {
+      await client.query(
+        `DELETE FROM osm_city_update_checkpoint_stage
+         WHERE checkpoint_id = $1`,
+        [checkpointId],
+      );
+      await client.query(
+        `UPDATE osm_city_update_checkpoints
+         SET status = 'completed',
+             index_objects = '[]'::jsonb,
+             last_error = NULL,
+             completed_at = NOW(),
+             updated_at = NOW()
+         WHERE id = $1`,
+        [checkpointId],
+      );
+    },
+
     async discard(checkpointId) {
       const client = await pool.connect();
       try {
