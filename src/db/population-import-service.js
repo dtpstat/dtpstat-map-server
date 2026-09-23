@@ -430,15 +430,16 @@ async function applyStagedPopulation(client, plan, operation) {
 }
 
 /**
- * Population import is deliberately independent from OSM identity and active
- * state. The portable contract names regions and cities only. A region is
- * resolved by normalized display name among admin-level 4 boundaries; a city
- * is then resolved by normalized display name inside that region subtree.
+ * Population import never changes active state. Portable schema v3 may carry
+ * OSM identity for regions/cities; when both osmType and osmId are present the
+ * exact source object is resolved first. Legacy schema v2 and v3 entries that
+ * omit both identity fields keep the normalized-name fallback inside the
+ * selected region subtree.
  *
- * Invalid individual regions/cities and unresolved/ambiguous names are
- * best-effort warnings: valid staged cities are still committed. Transport,
- * document-contract, resource-limit and unexpected database errors remain
- * fatal and roll back the transaction.
+ * Invalid individual regions/cities and unresolved/ambiguous identities or
+ * names are best-effort warnings: valid staged cities are still committed.
+ * Transport, document-contract, resource-limit and unexpected database errors
+ * remain fatal and roll back the transaction.
  *
  * @param {{ connect: () => Promise<any>, databaseSchema?: string }} pool
  */
