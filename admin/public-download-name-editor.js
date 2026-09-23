@@ -45,6 +45,16 @@ if (typeof document !== 'undefined') {
     `;
     metadataPanel.append(section);
 
+    const syncVisibility = () => {
+      section.hidden = metadataPanel.hidden;
+    };
+    syncVisibility();
+    const visibilityObserver = new MutationObserver(syncVisibility);
+    visibilityObserver.observe(metadataPanel, {
+      attributes: true,
+      attributeFilter: ['hidden'],
+    });
+
     const form = externalForm;
     const input = form.elements.namedItem('publicDownloadName');
     const saveButton = form.querySelector('button[type="submit"]');
