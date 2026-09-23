@@ -123,3 +123,23 @@ test('OSM update facade delegates Overpass request lifecycle to the module', asy
   assert.match(requestSession, /GEOMETRY_504_RETRIES_BEFORE_SPLIT/u);
   assert.match(requestSession, /async downloadQuery\(/u);
 });
+
+
+test('OSM update facade delegates checkpoint compatibility policy to the module', async () => {
+  const source = await fs.readFile(
+    path.join(srcRoot, 'db', 'osm-city-update-service.js'),
+    'utf8',
+  );
+  const policy = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-checkpoint-policy.js'),
+    'utf8',
+  );
+
+  assert.match(source, /checkpointSettingsFingerprint\(options\)/u);
+  assert.match(source, /checkpointCompletionChecksum\(/u);
+  assert.doesNotMatch(source, /function checkpointMode\(/u);
+  assert.doesNotMatch(source, /function checkpointOptionSnapshot\(/u);
+  assert.match(policy, /export function checkpointMode\(/u);
+  assert.match(policy, /export function checkpointOptionSnapshot\(/u);
+  assert.match(policy, /export function checkpointCompletionChecksum\(/u);
+});
