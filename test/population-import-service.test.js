@@ -512,3 +512,66 @@ test('mixed exact and name-only entries resolving to one boundary skip duplicate
   assert.ok(result.warnings.some((item) =>
     item.code === 'city-duplicate-target'));
 });
+
+
+test('streaming population import preserves schema v3 OSM identity', async () => {
+  const payload = {
+    schemaVersion: 3,
+    regions: [{
+      name: 'Регион',
+      osmType: 'relation',
+      osmId: '9001',
+      cities: [{
+        name: 'Город',
+        osmType: 'way',
+        osmId: '9002',
+        population: 4321,
+        asOf: '2026-09-01',
+        source: 'manual',
+        attributes: { edited: true },
+      }],
+    }],
+  };
+  const document = JSON.stringify(payload);
+  async function* source() {
+    const buffer = Buffer.from(document);
+    for (let offset = 0; offset < buffer.length; offset += 23) {
+      yield buffer.subarray(offset, offset + 23);
+    }
+  }
+
+  const pool = createFakePool();
+  const service = createPopulationImportService(pool);
+  const result = await service.updateFromJsonStream(source(), {
+    maxJsonBytes: Buffer.byteLength(document) + 1,
+    maxItemBytes: 1024 * 1024,
+    maxJsonItems: 1000,
+    maxJsonDepth: 128,
+  });
+
+  assert.equal(result.cities, 1);
+  assert.equal(result.partial, false);
+  assert.equal(pool.stageRows.length, 1);
+  assert.deepEqual(
+    {
+      regionOsmType: pool.stageRows[0].regionOsmType,
+      regionOsmId: pool.stageRows[0].regionOsmId,
+      cityOsmType: pool.stageRows[0].cityOsmType,
+      cityOsmId: pool.stageRows[0].cityOsmId,
+      population: pool.stageRows[0].population,
+      asOf: pool.stageRows[0].asOf,
+      source: pool.stageRows[0].source,
+      attributes: pool.stageRows[0].attributes,
+    },
+    {
+      regionOsmType: 'relation',
+      regionOsmId: '9001',
+      cityOsmType: 'way',
+      cityOsmId: '9002',
+      population: 4321,
+      asOf: '2026-09-01',
+      source: 'manual',
+      attributes: { edited: true },
+    },
+  );
+});
