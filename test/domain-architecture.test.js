@@ -104,3 +104,22 @@ test('legacy API file is a composition root for extracted route modules', async 
   assert.match(source, /registerPopulationRoutes\(router,/u);
   assert.doesNotMatch(source, /\brouter\.(?:get|post|put|patch|delete)\s*\(/u);
 });
+
+
+test('OSM update facade delegates Overpass request lifecycle to the module', async () => {
+  const source = await fs.readFile(
+    path.join(srcRoot, 'db', 'osm-city-update-service.js'),
+    'utf8',
+  );
+  const requestSession = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'overpass-request-session.js'),
+    'utf8',
+  );
+
+  assert.match(source, /createOverpassRequestSession\(/u);
+  assert.doesNotMatch(source, /RETRYABLE_HTTP_STATUS_CODES/u);
+  assert.doesNotMatch(source, /GEOMETRY_504_RETRIES_BEFORE_SPLIT/u);
+  assert.match(requestSession, /RETRYABLE_HTTP_STATUS_CODES/u);
+  assert.match(requestSession, /GEOMETRY_504_RETRIES_BEFORE_SPLIT/u);
+  assert.match(requestSession, /async downloadQuery\(/u);
+});
