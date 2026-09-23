@@ -531,3 +531,61 @@ test('legacy population import service is only a DB composition adapter', async 
   assert.doesNotMatch(service, /database-locks/u);
   assert.doesNotMatch(service, /recalculate-city-statistics/u);
 });
+
+
+test('KML update use case delegates SQL persistence to lines repository', async () => {
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'lines', 'kml-update-service.js'),
+    'utf8',
+  );
+  const repository = await fs.readFile(
+    path.join(srcRoot, 'modules', 'lines', 'kml-update-repository.js'),
+    'utf8',
+  );
+
+  assert.match(service, /createKmlUpdateRepository\(/u);
+  assert.match(service, /repository\.loadLineTypes\(/u);
+  assert.match(service, /repository\.matchGeometries\(/u);
+  assert.match(service, /repository\.insertGeometries\(/u);
+  assert.match(service, /repository\.insertUpdateRun\(/u);
+  assert.doesNotMatch(
+    service,
+    /CREATE TEMP TABLE kml_place_match_geometries/u,
+  );
+  assert.doesNotMatch(service, /INSERT INTO city_geometries/u);
+  assert.doesNotMatch(service, /INSERT INTO geometry_update_runs/u);
+
+  assert.match(
+    repository,
+    /CREATE TEMP TABLE kml_place_match_geometries/u,
+  );
+  assert.match(repository, /INSERT INTO city_geometries/u);
+  assert.match(repository, /INSERT INTO geometry_update_runs/u);
+});
+
+test('legacy KML update service is only a DB composition adapter', async () => {
+  const adapter = await fs.readFile(
+    path.join(srcRoot, 'db', 'kml-update-service.js'),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'lines', 'kml-update-service.js'),
+    'utf8',
+  );
+
+  assert.match(adapter, /createKmlUpdateUseCase\(pool, config,/u);
+  assert.match(adapter, /acquireDataImportLock/u);
+  assert.match(adapter, /RECALCULATE_CITY_STATISTICS_SQL/u);
+  assert.match(adapter, /export \{ KmlUpdateMatchError \}/u);
+  assert.doesNotMatch(adapter, /downloadKml/u);
+  assert.doesNotMatch(adapter, /parseKmlSource/u);
+  assert.doesNotMatch(adapter, /repository\.matchGeometries/u);
+
+  assert.match(service, /downloadKml/u);
+  assert.match(service, /parseKmlSource/u);
+  assert.match(service, /repository\.matchGeometries\(/u);
+  assert.match(service, /recalculateStatistics\(client\)/u);
+  assert.doesNotMatch(service, /\.\.\/\.\.\/db\//u);
+  assert.doesNotMatch(service, /database-locks/u);
+  assert.doesNotMatch(service, /recalculate-city-statistics/u);
+});
