@@ -82,7 +82,7 @@ const UPDATE_SETTINGS_SQL = `
     (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured",
     (city_marker_icon IS NOT NULL) AS "cityMarkerIconConfigured",
     city_marker_icon_width::integer AS "cityMarkerIconWidth",
-    city_marker_icon_height::integer AS "cityMarkerIconIconHeight",
+    city_marker_icon_height::integer AS "cityMarkerIconHeight",
     updated_at AS "updatedAt"
 `;
 
