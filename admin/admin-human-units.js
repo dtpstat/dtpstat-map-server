@@ -49,9 +49,16 @@ function humanValue(input) {
 function bind(input) {
   if (input.dataset.humanUnitBound === 'true') return;
   input.dataset.humanUnitBound = 'true';
-  const output = document.createElement('small');
+
+  const wrapper = document.createElement('span');
+  wrapper.className = 'admin-human-unit-wrap';
+  input.before(wrapper);
+  wrapper.append(input);
+
+  const output = document.createElement('span');
   output.className = 'admin-human-unit';
-  input.insertAdjacentElement('afterend', output);
+  wrapper.append(output);
+
   const update = () => {
     const formatted = humanValue(input);
     output.textContent = formatted ? `≈ ${formatted}` : '';
