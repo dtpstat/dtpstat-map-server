@@ -18,6 +18,7 @@ if (typeof document !== 'undefined') {
     const externalForm = document.createElement('form');
     externalForm.id = 'public-download-name-form';
     externalForm.className = 'project-download-name-form-proxy';
+    externalForm.hidden = true;
     operation.insertBefore(externalForm, projectMessage);
 
     const section = document.createElement('section');
