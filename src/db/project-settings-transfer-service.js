@@ -1,4 +1,7 @@
-import { normalizeAdminSecuritySettings } from '../data/admin-security.js';
+import {
+  DEFAULT_ADMIN_PASSWORD_POLICY,
+  normalizeAdminSecuritySettings,
+} from '../data/admin-security.js';
 import { buildLineTypesPlan } from '../data/line-types.js';
 import { normalizeMapboxAccessToken } from '../data/mapbox-access-token.js';
 import { buildProjectSettingsPlan, ProjectSettingsValidationError } from '../data/project-settings.js';
@@ -14,7 +17,7 @@ import {
   compileReportRankQuery,
 } from './report-config-service.js';
 
-const SETTINGS_TRANSFER_SCHEMA_VERSION = 7;
+const SETTINGS_TRANSFER_SCHEMA_VERSION = 8;
 const SETTINGS_TRANSFER_KIND = 'project-settings';
 const LEGACY_SECURITY_DEFAULTS = Object.freeze({
   ipMaxFailedAttempts: 20,
@@ -55,9 +58,9 @@ function validateEnvelope(payload) {
   if (metadata.kind !== SETTINGS_TRANSFER_KIND) {
     throw new ProjectSettingsTransferValidationError(`_dtpstat.kind must be ${SETTINGS_TRANSFER_KIND}`);
   }
-  if (![1, 2, 3, 4, 5, 6, SETTINGS_TRANSFER_SCHEMA_VERSION].includes(metadata.schemaVersion)) {
+  if (![1, 2, 3, 4, 5, 6, 7, SETTINGS_TRANSFER_SCHEMA_VERSION].includes(metadata.schemaVersion)) {
     throw new ProjectSettingsTransferValidationError(
-      `_dtpstat.schemaVersion must be 1, 2, 3, 4, 5, 6 or ${SETTINGS_TRANSFER_SCHEMA_VERSION}`,
+      `_dtpstat.schemaVersion must be 1, 2, 3, 4, 5, 6, 7 or ${SETTINGS_TRANSFER_SCHEMA_VERSION}`,
     );
   }
   return { input, schemaVersion: metadata.schemaVersion };
@@ -123,9 +126,12 @@ function normalizeProjectSettings(payload) {
 
 function normalizeTransferredSecurity(payload, schemaVersion) {
   const input = object(payload, 'securitySettings');
-  return normalizeAdminSecuritySettings(
-    schemaVersion === 1 ? { ...LEGACY_SECURITY_DEFAULTS, ...input } : input,
-  );
+  const defaults = schemaVersion === 1
+    ? { ...LEGACY_SECURITY_DEFAULTS, ...DEFAULT_ADMIN_PASSWORD_POLICY }
+    : schemaVersion < 8
+      ? DEFAULT_ADMIN_PASSWORD_POLICY
+      : {};
+  return normalizeAdminSecuritySettings({ ...defaults, ...input });
 }
 
 const EXPORT_PROJECT_SETTINGS_SQL = `
@@ -164,7 +170,13 @@ const EXPORT_SECURITY_SETTINGS_SQL = `
     ip_lockout_seconds AS "ipLockoutSeconds",
     session_idle_seconds AS "sessionIdleSeconds",
     session_absolute_seconds AS "sessionAbsoluteSeconds",
-    audit_retention_days AS "auditRetentionDays"
+    audit_retention_days AS "auditRetentionDays",
+    password_min_length AS "passwordMinLength",
+    password_max_length AS "passwordMaxLength",
+    password_require_lowercase AS "passwordRequireLowercase",
+    password_require_uppercase AS "passwordRequireUppercase",
+    password_require_digit AS "passwordRequireDigit",
+    password_require_special AS "passwordRequireSpecial"
   FROM admin_security_settings WHERE id = 1
 `;
 
@@ -243,6 +255,12 @@ const UPDATE_SECURITY_SETTINGS_SQL = `
     session_idle_seconds=$7,
     session_absolute_seconds=$8,
     audit_retention_days=$9,
+    password_min_length=$10,
+    password_max_length=$11,
+    password_require_lowercase=$12,
+    password_require_uppercase=$13,
+    password_require_digit=$14,
+    password_require_special=$15,
     updated_at=NOW()
   WHERE id=1
 `;
@@ -261,7 +279,10 @@ async function materializeReport(client, config) {
     )
       AND EXISTS (
         SELECT 1
-        FROM effective_city_geometries AS geometry_presence
+        FROM city_geometries AS geometry_presence
+        JOIN city_boundaries AS geometry_boundary
+          ON geometry_boundary.id = geometry_presence.boundary_id
+         AND geometry_boundary.is_active
         WHERE geometry_presence.city_id = city.id
       )
     ORDER BY city.id
@@ -404,6 +425,12 @@ export function createProjectSettingsTransferService(pool) {
           securitySettings.sessionIdleSeconds,
           securitySettings.sessionAbsoluteSeconds,
           securitySettings.auditRetentionDays,
+          securitySettings.passwordMinLength,
+          securitySettings.passwordMaxLength,
+          securitySettings.passwordRequireLowercase,
+          securitySettings.passwordRequireUppercase,
+          securitySettings.passwordRequireDigit,
+          securitySettings.passwordRequireSpecial,
         ]);
 
         await client.query(RECALCULATE_CITY_STATISTICS_SQL);
