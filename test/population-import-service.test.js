@@ -497,22 +497,10 @@ test('v2+ name fallback uses OSM aliases and linked application city names', asy
     "boundary.tags ->> 'alt_name:ru'",
     "boundary.tags ->> 'alt_name'",
   ]) {
-    assert.match(resolutionSql, new RegExp(
-      alias.replace(/[.*+?^$\{\}()|[\]\\]/g, '\\test('legacy schema v2 without OSM identity remains supported', async () => {
-  const pool = createFakePool();
-  const service = createPopulationImportService(pool);
-
-  const result = await service.updateFromJson(upload);
-
-  assert.equal(result.cities, 1);
-  assert.equal(result.partial, false);
-  assert.equal(pool.stageRows[0].regionOsmType, null);
-  assert.equal(pool.stageRows[0].regionOsmId, null);
-  assert.equal(pool.stageRows[0].cityOsmType, null);
-  assert.equal(pool.stageRows[0].cityOsmId, null);
-});
-'),
-    ));
+    assert.ok(
+      resolutionSql.includes(alias),
+      `resolution SQL must include alias ${alias}`,
+    );
   }
 
   assert.match(resolutionSql, /boundary\.tags \? 'ISO3166-2'/);
