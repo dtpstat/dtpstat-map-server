@@ -314,3 +314,201 @@ test('streamed population import rolls back when JSON fails late', async () => {
   assert.equal(pool.queries.includes('COMMIT'), false);
   assert.equal(pool.released, true);
 });
+
+
+test('schema v3 stages OSM identity and resolution keeps name fallback optional', async () => {
+  const pool = createFakePool();
+  const service = createPopulationImportService(pool);
+  const payload = {
+    schemaVersion: 3,
+    regions: [{
+      name: 'Тестовая область',
+      osmType: 'relation',
+      osmId: '1001',
+      attributes: { source: 'manual' },
+      cities: [
+        {
+          name: 'Тестоград',
+          osmType: 'relation',
+          osmId: '2001',
+          population: 1234,
+          asOf: '2026-01-01',
+          source: 'ручная правка',
+          attributes: { note: 'exact' },
+        },
+        {
+          name: 'Город старого формата',
+          population: 5678,
+          attributes: { note: 'fallback' },
+        },
+      ],
+    }],
+  };
+
+  const result = await service.updateFromJson(payload);
+
+  assert.equal(result.cities, 2);
+  assert.equal(result.skippedCount, 0);
+  assert.deepEqual(
+    pool.stageRows.map((row) => ({
+      regionOsmType: row.regionOsmType,
+      regionOsmId: row.regionOsmId,
+      cityOsmType: row.cityOsmType,
+      cityOsmId: row.cityOsmId,
+      population: row.population,
+      asOf: row.asOf,
+      source: row.source,
+      attributes: row.attributes,
+    })),
+    [
+      {
+        regionOsmType: 'relation',
+        regionOsmId: '1001',
+        cityOsmType: 'relation',
+        cityOsmId: '2001',
+        population: 1234,
+        asOf: '2026-01-01',
+        source: 'ручная правка',
+        attributes: { note: 'exact' },
+      },
+      {
+        regionOsmType: 'relation',
+        regionOsmId: '1001',
+        cityOsmType: null,
+        cityOsmId: null,
+        population: 5678,
+        asOf: null,
+        source: null,
+        attributes: { note: 'fallback' },
+      },
+    ],
+  );
+
+  const resolutionSql = pool.queries.find((query) =>
+    query.startsWith('CREATE TEMP TABLE population_transfer_resolved'));
+  assert.match(
+    resolutionSql,
+    /boundary\.osm_type = stage_region\.region_osm_type/,
+  );
+  assert.match(
+    resolutionSql,
+    /stage_region\.region_osm_type IS NULL[\s\S]*NORMALIZE_NAME_SQL|stage_region\.region_osm_type IS NULL[\s\S]*regexp_replace/u,
+  );
+  assert.match(
+    resolutionSql,
+    /boundary\.osm_type = stage\.city_osm_type/,
+  );
+  assert.match(
+    resolutionSql,
+    /stage\.city_osm_type IS NULL[\s\S]*stage\.city_name/u,
+  );
+});
+
+test('same names with different OSM identities are not collapsed during import', async () => {
+  const pool = createFakePool({
+    updatedRegions: 2,
+    updatedCities: 2,
+  });
+  const service = createPopulationImportService(pool);
+  const payload = {
+    schemaVersion: 3,
+    regions: [
+      {
+        name: 'Севастополь',
+        osmType: 'relation',
+        osmId: '100',
+        cities: [{
+          name: 'Алексеевка',
+          osmType: 'relation',
+          osmId: '200',
+          population: 1000,
+        }],
+      },
+      {
+        name: 'Севастополь',
+        osmType: 'relation',
+        osmId: '101',
+        cities: [{
+          name: 'Алексеевка',
+          osmType: 'relation',
+          osmId: '201',
+          population: 2000,
+        }],
+      },
+    ],
+  };
+
+  const result = await service.updateFromJson(payload);
+
+  assert.equal(result.requestedRegions, 2);
+  assert.equal(result.uniqueRegions, 2);
+  assert.equal(result.requestedCities, 2);
+  assert.equal(result.normalizedCities, 2);
+  assert.equal(result.cities, 2);
+  assert.equal(result.warningCount, 0);
+  assert.equal(result.partial, false);
+  assert.equal(pool.stageRows.length, 2);
+});
+
+test('legacy schema v2 without OSM identity remains supported', async () => {
+  const pool = createFakePool();
+  const service = createPopulationImportService(pool);
+
+  const result = await service.updateFromJson(upload);
+
+  assert.equal(result.cities, 1);
+  assert.equal(result.partial, false);
+  assert.equal(pool.stageRows[0].regionOsmType, null);
+  assert.equal(pool.stageRows[0].regionOsmId, null);
+  assert.equal(pool.stageRows[0].cityOsmType, null);
+  assert.equal(pool.stageRows[0].cityOsmId, null);
+});
+
+test('mixed exact and name-only entries resolving to one boundary skip duplicate target', async () => {
+  const statuses = [
+    {
+      regionName: 'Тестовая область',
+      cityName: 'Тестоград',
+      status: 'matched',
+    },
+    {
+      regionName: 'Тестовая область',
+      cityName: 'Тестоград',
+      status: 'city-duplicate-target',
+    },
+  ];
+  const pool = createFakePool({
+    statuses,
+    updatedRegions: 1,
+    updatedCities: 1,
+  });
+  const service = createPopulationImportService(pool);
+  const payload = {
+    schemaVersion: 3,
+    regions: [{
+      name: 'Тестовая область',
+      osmType: 'relation',
+      osmId: '1001',
+      cities: [
+        {
+          name: 'Тестоград',
+          osmType: 'relation',
+          osmId: '2001',
+          population: 1000,
+        },
+        {
+          name: 'Тестоград',
+          population: 2000,
+        },
+      ],
+    }],
+  };
+
+  const result = await service.updateFromJson(payload);
+
+  assert.equal(result.cities, 1);
+  assert.equal(result.skippedCount, 1);
+  assert.equal(result.partial, true);
+  assert.ok(result.warnings.some((item) =>
+    item.code === 'city-duplicate-target'));
+});
