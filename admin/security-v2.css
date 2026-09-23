@@ -360,3 +360,92 @@ body.security-modal-open { overflow: hidden; }
   .security-inline-block-form { grid-template-columns: 1fr; }
   .security-user-detail-heading,.security-section-heading { flex-direction: column; }
 }
+
+
+/* Compact security UX: keep data tables and actions dominant over filters/forms. */
+.security-user-avatar,
+.security-audit-avatar {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+.security-user-avatar.has-image .security-user-avatar-fallback,
+.security-audit-avatar.has-image .security-audit-avatar-fallback {
+  opacity: 0;
+}
+
+.security-settings-form,
+.security-ip-panel {
+  padding: .75rem;
+}
+.security-settings-form {
+  gap: .55rem;
+}
+.security-settings-form fieldset,
+.security-detail-form fieldset {
+  padding: .48rem .55rem;
+}
+.security-settings-form input,
+.security-settings-form select,
+.security-detail-form input,
+.security-detail-form select,
+.security-ip-block-form input,
+.security-ip-block-form select {
+  min-height: 2.15rem;
+  padding-top: .34rem;
+  padding-bottom: .34rem;
+  font-size: .72rem;
+}
+.security-password-lengths {
+  grid-template-columns: minmax(7rem, 9rem);
+}
+.security-password-requirements {
+  margin-top: .35rem;
+  gap: .25rem .75rem;
+}
+.security-password-requirements .check {
+  font-size: .7rem;
+}
+.security-info {
+  margin: .35rem 0 0;
+}
+
+.security-audit-filter-panel {
+  margin: .3rem 0;
+}
+.security-audit-filter-panel > summary {
+  padding: .34rem .5rem;
+  font-size: .66rem;
+}
+.security-audit-filter {
+  padding: .42rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .35rem .45rem;
+}
+.security-audit-filter label {
+  font-size: .65rem;
+}
+.security-audit-filter input,
+.security-audit-filter select {
+  min-height: 2rem;
+  padding: .3rem .4rem;
+  font-size: .68rem;
+}
+.security-filter-actions {
+  grid-column: span 1;
+}
+.security-filter-actions button {
+  min-height: 2rem;
+  padding: .34rem .5rem;
+  font-size: .68rem;
+}
+.security-section-heading h3 {
+  margin-bottom: .15rem;
+}
+.security-section-heading p {
+  font-size: .7rem;
+}
+
+@media (max-width: 1180px) {
+  .security-audit-filter { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
