@@ -57,13 +57,17 @@ test('current user and audit rows render stable avatar URLs with fallback initia
   assert.match(editor, /function userListRow\(user\)/);
   assert.match(editor, /if \(user\.hasAvatar\)/);
   assert.match(editor, /avatarVersion = encodeURIComponent\(user\.updatedAt \?\? '1'\)/);
+  assert.match(editor, /loadedAvatarUrls = new Set\(\)/);
+  assert.match(editor, /function applyAvatarBackground\(avatar, fallback, url\)/);
   assert.match(editor, /avatar\.style\.backgroundImage/);
+  assert.match(editor, /avatar\.classList\.add\('is-image-loaded'\)/);
+  assert.match(editor, /loadedAvatarUrls\.add\(url\)/);
   assert.doesNotMatch(editor, /image\.hidden = true/);
   assert.doesNotMatch(editor, /image\.addEventListener\('load'/);
 
   assert.match(editor, /function auditUserCell\(entry\)/);
   assert.match(editor, /if \(entry\.userId\)/);
-  assert.match(editor, /avatar\.classList\.add\('has-image'\)/);
+  assert.match(editor, /applyAvatarBackground\(avatar, fallback, avatarUrl\)/);
   assert.match(editor, /security-audit-avatar-fallback/);
   assert.match(
     editor,
@@ -71,8 +75,11 @@ test('current user and audit rows render stable avatar URLs with fallback initia
   );
   assert.match(route, /\/admin\/security\/users\/:userId\/avatar/);
   assert.match(route, /adminAuth\.requireUsersOrAudit/);
-  assert.match(styles, /\.security-user-avatar\.has-image \.security-user-avatar-fallback/);
-  assert.match(styles, /\.security-audit-avatar\.has-image \.security-audit-avatar-fallback/);
+  assert.match(styles, /\.security-user-avatar\.is-image-loaded \.security-user-avatar-fallback/);
+  assert.match(styles, /\.security-audit-avatar\.is-image-loaded \.security-audit-avatar-fallback/);
+  assert.match(editor, /security-password-policy-row/);
+  assert.match(styles, /\.security-password-policy-row\s*\{/);
+  assert.match(styles, /\.security-password-minimum\s*\{/);
 });
 
 test('profile avatar hides fallback only after successful image load', async () => {
