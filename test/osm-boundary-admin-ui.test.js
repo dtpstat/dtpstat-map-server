@@ -162,7 +162,15 @@ test('OSM object editor is a top-level admin section with population editing', a
   assert.doesNotMatch(editor, /globalThis\.L|tile\.openstreetmap\.org|Leaflet/);
   assert.match(
     styles,
-    /grid-template-columns:\s*minmax\(19rem, \.72fr\)[\s\S]*minmax\(30rem, 1\.8fr\)[\s\S]*minmax\(20rem, \.82fr\)/,
+    /grid-template-columns:\s*minmax\(18rem, \.68fr\)[\s\S]*minmax\(28rem, 1\.65fr\)[\s\S]*minmax\(24rem, 1fr\)/,
+  );
+  assert.ok(
+    html.indexOf('Данные территории') < html.indexOf('Источник OSM'),
+    'editable territory data must stay above read-only OSM metadata',
+  );
+  assert.ok(
+    html.indexOf('Источник OSM') < html.indexOf('Статистика геометрии'),
+    'OSM source metadata must stay next to geometry statistics',
   );
   assert.match(styles, /#osm-boundary-form[\s\S]*flex-direction:\s*column/);
   assert.match(styles, /\.osm-boundary-tree-panel[\s\S]*flex-direction:\s*column/);
