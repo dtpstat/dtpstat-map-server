@@ -230,9 +230,17 @@
   border-color: #315d59;
   background: rgb(18 45 44 / 42%);
 }
-.osm-boundary-edit-group-source {
-  border-color: #334953;
-  background: rgb(14 27 32 / 78%);
+.osm-boundary-source-inline {
+  margin-top: .15rem;
+  padding-top: .5rem;
+  display: grid;
+  gap: .38rem;
+  border-top: 1px solid #3b4230;
+}
+.osm-boundary-source-inline h5 {
+  margin: 0;
+  color: #d5e0e2;
+  font-size: .68rem;
 }
 .osm-boundary-edit-group-territory {
   border-color: #4c4731;
