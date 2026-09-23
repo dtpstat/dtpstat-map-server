@@ -98,6 +98,9 @@ test('technical settings are collapsed and raw values get human-readable compani
   assert.match(human, /formatBytes/);
   assert.match(human, /formatSeconds/);
   assert.match(human, /formatMeters/);
+  assert.match(human, /admin-human-unit-wrap/);
+  assert.match(css, /\.admin-human-unit-wrap/);
+  assert.match(css, /position:\s*absolute/);
   assert.match(css, /\.admin-human-unit/);
   assert.match(css, /\.admin-advanced-settings/);
 });
