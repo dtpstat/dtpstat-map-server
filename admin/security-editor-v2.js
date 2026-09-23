@@ -126,19 +126,20 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           <form id="security-settings-form" class="security-settings-form">
             <h3>Защита входа и сессии</h3>
             <fieldset><legend>Политика паролей</legend>
-              <div class="security-password-lengths">
-                <label>Минимум символов
+              <div class="security-password-policy-row">
+                <label class="security-password-minimum">
+                  Минимум символов
                   <input name="passwordMinLength" type="number" min="1" max="4096" required>
                 </label>
                 <input name="passwordMaxLength" type="hidden">
+                <div class="security-password-requirements">
+                  <label class="check"><input name="passwordRequireLowercase" type="checkbox"> Строчная буква</label>
+                  <label class="check"><input name="passwordRequireUppercase" type="checkbox"> Прописная буква</label>
+                  <label class="check"><input name="passwordRequireDigit" type="checkbox"> Цифра</label>
+                  <label class="check"><input name="passwordRequireSpecial" type="checkbox"> Спецсимвол</label>
+                </div>
+                <p class="security-info">Требования показываются пользователю при смене пароля.</p>
               </div>
-              <div class="security-password-requirements">
-                <label class="check"><input name="passwordRequireLowercase" type="checkbox"> Строчная буква</label>
-                <label class="check"><input name="passwordRequireUppercase" type="checkbox"> Прописная буква</label>
-                <label class="check"><input name="passwordRequireDigit" type="checkbox"> Цифра</label>
-                <label class="check"><input name="passwordRequireSpecial" type="checkbox"> Спецсимвол</label>
-              </div>
-              <p class="security-info">Эти требования видит пользователь при смене временного или обычного пароля.</p>
             </fieldset>
 
             <details class="admin-advanced-settings">
