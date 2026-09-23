@@ -589,3 +589,70 @@ test('legacy KML update service is only a DB composition adapter', async () => {
   assert.doesNotMatch(service, /database-locks/u);
   assert.doesNotMatch(service, /recalculate-city-statistics/u);
 });
+
+
+test('project settings transfer application service delegates policy and persistence', async () => {
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'project-settings-service.js',
+    ),
+    'utf8',
+  );
+  const policy = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'project',
+      'settings-transfer-policy.js',
+    ),
+    'utf8',
+  );
+  const repository = await fs.readFile(
+    path.join(srcRoot, 'db', 'project-settings-transfer-repository.js'),
+    'utf8',
+  );
+
+  assert.match(service, /validateProjectSettingsTransferEnvelope\(/u);
+  assert.match(service, /normalizeTransferredProjectSettings\(/u);
+  assert.match(service, /repository\.replaceLineTypes\(/u);
+  assert.match(service, /repository\.materializeReport\(/u);
+  assert.doesNotMatch(service, /UPDATE project_settings SET/u);
+  assert.doesNotMatch(service, /CREATE TEMP TABLE project_settings_line_types_stage/u);
+
+  assert.match(policy, /PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION = 8/u);
+  assert.match(policy, /normalizeTransferredSecuritySettings/u);
+  assert.match(repository, /UPDATE project_settings SET/u);
+  assert.match(repository, /CREATE TEMP TABLE project_settings_line_types_stage/u);
+});
+
+test('legacy project settings transfer service is only a DB composition adapter', async () => {
+  const adapter = await fs.readFile(
+    path.join(srcRoot, 'db', 'project-settings-transfer-service.js'),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'project-settings-service.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(adapter, /createProjectSettingsTransferUseCase\(pool,/u);
+  assert.match(adapter, /createProjectSettingsTransferRepository\(/u);
+  assert.match(adapter, /acquireDataImportLock/u);
+  assert.doesNotMatch(adapter, /validateProjectSettingsTransferEnvelope/u);
+  assert.doesNotMatch(adapter, /validateReportConfig/u);
+  assert.doesNotMatch(adapter, /UPDATE project_settings SET/u);
+
+  assert.match(service, /validateProjectSettingsTransferEnvelope\(/u);
+  assert.match(service, /validateReportConfig\(/u);
+  assert.doesNotMatch(service, /database-locks/u);
+  assert.doesNotMatch(service, /recalculate-city-statistics/u);
+  assert.doesNotMatch(service, /report-config-service/u);
+});
