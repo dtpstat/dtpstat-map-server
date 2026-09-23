@@ -279,3 +279,35 @@ test('OSM update facade delegates atomic replacement transaction to commit sessi
   assert.match(commitSession, /checkpointRepository\.complete\(/u);
   assert.match(checkpointRepository, /async complete\(client, checkpointId\)/u);
 });
+
+
+test('OSM update facade delegates runtime options progress and result assembly', async () => {
+  const source = await fs.readFile(
+    path.join(srcRoot, 'db', 'osm-city-update-service.js'),
+    'utf8',
+  );
+  const runtimeOptions = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-runtime-options.js'),
+    'utf8',
+  );
+  const progressReporter = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-progress-reporter.js'),
+    'utf8',
+  );
+  const resultBuilder = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-result.js'),
+    'utf8',
+  );
+
+  assert.match(source, /resolveOsmUpdateRuntimeOptions\(/u);
+  assert.match(source, /reportOsmUpdateProgress/u);
+  assert.match(source, /buildOsmUpdateRunValues\(/u);
+  assert.match(source, /buildOsmUpdateResult\(/u);
+  assert.match(source, /finalizeOsmUpdateResult\(/u);
+  assert.doesNotMatch(source, /Saved OSM URL is no longer allowed/u);
+  assert.doesNotMatch(source, /OSM city update index \$\{/u);
+  assert.doesNotMatch(source, /indexRequestCount:/u);
+  assert.match(runtimeOptions, /Saved OSM URL is no longer allowed/u);
+  assert.match(progressReporter, /OSM city update index \$\{/u);
+  assert.match(resultBuilder, /indexRequestCount:/u);
+});
