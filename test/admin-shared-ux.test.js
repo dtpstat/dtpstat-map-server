@@ -138,7 +138,7 @@ test('task result panel copies the complete rendered JSON for results and errors
   );
   assert.match(
     admin,
-    /task\.error !== undefined[\s\S]*Копировать JSON ошибки/,
+    /task\?\.error !== undefined[\s\S]*Копировать JSON ошибки/,
   );
   assert.match(clipboard, /clipboard\.writeText\(value\)/);
   assert.match(clipboard, /documentRef\.execCommand\('copy'\)/);
