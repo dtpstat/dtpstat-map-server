@@ -91,10 +91,10 @@ if (host) {
             <input name="currentPassword" type="password" required autocomplete="current-password">
           </label>
           <label>Новый пароль
-            <input name="newPassword" type="password" minlength="12" maxlength="1024" required autocomplete="new-password">
+            <input name="newPassword" type="password" minlength="12" required autocomplete="new-password">
           </label>
           <label>Повторите новый пароль
-            <input name="repeatPassword" type="password" minlength="12" maxlength="1024" required autocomplete="new-password">
+            <input name="repeatPassword" type="password" minlength="12" required autocomplete="new-password">
           </label>
           <button type="submit">Сменить пароль</button>
         </form>
@@ -156,7 +156,7 @@ if (host) {
       passwordForm.elements.repeatPassword,
     ]) {
       input.minLength = policy.passwordMinLength;
-      input.maxLength = policy.passwordMaxLength;
+      input.removeAttribute('maxlength');
     }
     const requirements = [
       `минимум ${policy.passwordMinLength} символов`,
