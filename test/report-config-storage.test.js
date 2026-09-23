@@ -21,16 +21,16 @@ test('V033 migrates the report singleton into vertical key-value rows', async ()
 });
 
 test('runtime report storage uses config keys instead of widening the table', async () => {
-  const [service, transferRepository, downloads] = await Promise.all([
-    source('src/db/report-config-service.js'),
+  const [repository, transferRepository, downloads] = await Promise.all([
+    source('src/db/report-config-repository.js'),
     source('src/db/project-settings-transfer-repository.js'),
     source('src/db/public-download-repository.js'),
   ]);
 
-  assert.match(service, /jsonb_object_agg\(config_key, config_value\)/i);
-  assert.match(service, /ON CONFLICT \(config_key\)/i);
-  assert.match(service, /'rank', \$4::jsonb/i);
-  assert.doesNotMatch(service, /rank_metric_key|rank_direction|WHERE id = 1/i);
+  assert.match(repository, /jsonb_object_agg\(config_key, config_value\)/i);
+  assert.match(repository, /ON CONFLICT \(config_key\)/i);
+  assert.match(repository, /'rank', \$4::jsonb/i);
+  assert.doesNotMatch(repository, /rank_metric_key|rank_direction|WHERE id = 1/i);
 
   assert.match(transferRepository, /jsonb_object_agg\(config_key, config_value\)/i);
   assert.match(transferRepository, /ON CONFLICT\(config_key\)/i);
