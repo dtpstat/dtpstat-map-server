@@ -186,6 +186,12 @@ function testSecuritySettings() {
     sessionIdleSeconds: 1800,
     sessionAbsoluteSeconds: 43200,
     auditRetentionDays: 365,
+    passwordMinLength: 12,
+    passwordMaxLength: 1024,
+    passwordRequireLowercase: false,
+    passwordRequireUppercase: false,
+    passwordRequireDigit: false,
+    passwordRequireSpecial: false,
   };
 }
 
@@ -286,7 +292,17 @@ function testSecurity(config) {
     async revokeSession() { return true; },
     async revokeOtherSessions() { return 0; },
     async getSecuritySettings() { return testSecuritySettings(); },
-    async getPasswordPolicy() { return testSecuritySettings(); },
+    async getPasswordPolicy() {
+      const settings = testSecuritySettings();
+      return {
+        passwordMinLength: settings.passwordMinLength,
+        passwordMaxLength: settings.passwordMaxLength,
+        passwordRequireLowercase: settings.passwordRequireLowercase,
+        passwordRequireUppercase: settings.passwordRequireUppercase,
+        passwordRequireDigit: settings.passwordRequireDigit,
+        passwordRequireSpecial: settings.passwordRequireSpecial,
+      };
+    },
     async saveSecuritySettings(payload) { return payload; },
     async listIpBlocks() { return []; },
     async createIpBlock(payload) { return { id: 1, ...payload }; },
