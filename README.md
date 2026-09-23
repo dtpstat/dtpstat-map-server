@@ -112,8 +112,10 @@ HTTP_PORT=3002
 | `V031` | диагностика OSM-объектов без построенной geometry в resumable checkpoint |
 | `V032` | population/asOf/source/attributes на `CITY_BOUNDARIES` и активная проекция в `CITY_POPULATIONS` |
 | `V033` | вертикальное key/value-хранилище `REPORT_CONFIG` вместо растущей singleton-строки |
+| `V034` | настраиваемая политика паролей администраторов |
+| `V035` | отдельное право редактора OSM-дерева |
 
-Следующая migration: **V034+**. Уже опубликованные migrations не редактируются задним числом.
+Следующая migration: **V036+**. Уже опубликованные migrations не редактируются задним числом.
 
 История хранится в:
 
