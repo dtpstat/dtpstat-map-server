@@ -98,6 +98,13 @@ test('technical settings are collapsed and raw values get human-readable compani
   assert.match(human, /formatBytes/);
   assert.match(human, /formatSeconds/);
   assert.match(human, /formatMeters/);
+  assert.match(human, /rawValue = input\.value\.trim\(\)/);
+  assert.match(human, /function updateHumanUnit\(input, output\)/);
+  assert.match(
+    human,
+    /humanUnitBound === 'true'[\s\S]*updateHumanUnit\(input, output\)/,
+  );
+  assert.doesNotMatch(human, /≈/);
   assert.match(human, /admin-human-unit-wrap/);
   assert.match(css, /\.admin-human-unit-wrap/);
   assert.match(css, /position:\s*absolute/);
