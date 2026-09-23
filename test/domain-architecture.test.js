@@ -143,3 +143,23 @@ test('OSM update facade delegates checkpoint compatibility policy to the module'
   assert.match(policy, /export function checkpointOptionSnapshot\(/u);
   assert.match(policy, /export function checkpointCompletionChecksum\(/u);
 });
+
+
+test('OSM update facade delegates boundary persistence to repository', async () => {
+  const source = await fs.readFile(
+    path.join(srcRoot, 'db', 'osm-city-update-service.js'),
+    'utf8',
+  );
+  const repository = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'boundary-update-repository.js'),
+    'utf8',
+  );
+
+  assert.match(source, /createOsmBoundaryUpdateRepository\(/u);
+  assert.match(source, /boundaryUpdateRepository\.stageBatch\(/u);
+  assert.match(source, /boundaryUpdateRepository\.insertBoundaries\(/u);
+  assert.doesNotMatch(source, /INSERT INTO city_boundaries/u);
+  assert.doesNotMatch(source, /osm_city_boundary_stage/u);
+  assert.match(repository, /INSERT INTO city_boundaries/u);
+  assert.match(repository, /osm_city_boundary_stage/u);
+});
