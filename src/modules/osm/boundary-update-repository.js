@@ -274,12 +274,14 @@ export function createOsmBoundaryUpdateRepository() {
       await client.query(MATERIALIZE_CHECKPOINT_STAGE_SQL, [checkpointId]);
     },
 
-    async stageBatch(client, places) {
+    async stageBatch(client, places, batchNumber) {
       const result = await client.query(INSERT_STAGE_SQL, [
         JSON.stringify(places),
       ]);
       if (result.rowCount !== places.length) {
-        throw new Error('Not every OSM place in batch was staged');
+        throw new Error(
+          `Not every OSM place in batch ${batchNumber} was staged`,
+        );
       }
       await assertValidStage(client);
       return result.rowCount ?? 0;
