@@ -299,6 +299,30 @@ function createCheckpointRepositoryMock({
       checkpoint.updatedAt = '2026-09-20T11:00:00.000Z';
       return snapshot();
     },
+    async complete(client, id) {
+      calls.push({ method: 'complete', id });
+      await client.query(
+        'DELETE FROM osm_city_update_checkpoint_stage WHERE checkpoint_id = $1',
+        [id],
+      );
+      await client.query(
+        `UPDATE osm_city_update_checkpoints
+         SET status = 'completed',
+             index_objects = '[]'::jsonb,
+             last_error = NULL,
+             completed_at = NOW(),
+             updated_at = NOW()
+         WHERE id = $1`,
+        [id],
+      );
+      checkpoint.status = 'completed';
+      checkpoint.indexObjects = [];
+      checkpoint.totalObjects = 0;
+      checkpoint.lastError = null;
+      checkpoint.completedAt = '2026-09-20T13:00:00.000Z';
+      checkpoint.updatedAt = checkpoint.completedAt;
+      staged.clear();
+    },
     async discard(id) {
       calls.push({ method: 'discard', id });
       checkpoint.status = 'discarded';
