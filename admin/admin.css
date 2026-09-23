@@ -1,5 +1,6 @@
 :root {
   color-scheme: dark;
+  font-size: 13px;
   --bg: #0b1114;
   --panel: #121b1f;
   --panel-2: #172328;
@@ -161,7 +162,7 @@ form { min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; ove
 label { display: grid; gap: .35rem; color: var(--muted); font-size: .78rem; }
 label.check { display: flex; align-items: center; gap: .5rem; }
 label.check small { flex-basis: 100%; margin-left: 1.55rem; }
-input, select, textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: .68rem; color: var(--text); background: #0c1417; }
+input, select, textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: .52rem .58rem; color: var(--text); background: #0c1417; }
 label.check input { width: auto; }
 textarea { resize: vertical; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .76rem; }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-dark); border-color: var(--accent); }
@@ -472,11 +473,30 @@ body.admin-dialog-open { overflow: hidden; }
 }
 .admin-dirty-indicator[hidden] { display: none; }
 
+.admin-human-unit-wrap {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+.admin-human-unit-wrap > input {
+  width: 100%;
+  padding-right: 6.2rem;
+}
 .admin-human-unit {
-  margin-top: -.15rem;
-  color: #b2c2c6;
-  font-size: .67rem;
+  position: absolute;
+  top: 50%;
+  right: .65rem;
+  max-width: 5.4rem;
+  overflow: hidden;
+  color: #a9bcc0;
+  font-size: .64rem;
   font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 .admin-human-unit[hidden] { display: none; }
 
