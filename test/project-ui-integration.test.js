@@ -112,6 +112,8 @@ test('admin interface loads editors and helpers explicitly without transitive si
   assert.match(downloadEditor, /\/api\/admin\/project-settings\/public-download-name/);
   assert.match(downloadEditor, /#project-settings-metadata/);
   assert.match(downloadEditor, /metadataPanel\.append\(section\)/);
+  assert.match(downloadEditor, /section\.hidden = metadataPanel\.hidden/);
+  assert.match(downloadEditor, /attributeFilter: \['hidden'\]/);
   assert.match(downloadEditor, /form="public-download-name-form"/);
   assert.match(downloadEditor, /Сохранить имя файлов/);
   assert.match(downloadCss, /\.project-download-name-form/);
