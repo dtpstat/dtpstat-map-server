@@ -302,7 +302,7 @@ export function createPopulationImportService(pool, dependencies = {}) {
         await client.query('BEGIN');
         await acquireDataImportLock(client, pool);
         throwIfAdminTaskCancelled(operation.signal);
-        await client.query(CREATE_STREAM_STAGE_SQL);
+        await repository.createStage(client);
 
         let staged = 0;
         for (
