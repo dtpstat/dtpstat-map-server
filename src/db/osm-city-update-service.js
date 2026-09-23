@@ -20,6 +20,7 @@ import {
   checkpointSettingsFingerprint,
 } from '../modules/osm/update-checkpoint-policy.js';
 import { OsmCityGeometryError } from '../modules/osm/update-errors.js';
+import { commitOsmBoundaryUpdate } from '../modules/osm/update-commit-session.js';
 import { processOsmGeometryBatches } from '../modules/osm/update-geometry-session.js';
 import { loadOsmUpdateIndex } from '../modules/osm/update-index-session.js';
 import { acquireDataImportLock } from './database-locks.js';
@@ -350,7 +351,6 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
       }
 
       const client = await pool.connect();
-      let inTransaction = false;
       try {
         throwIfAdminTaskCancelled(operation.signal);
         await boundaryUpdateRepository.dropStage(client);
@@ -441,46 +441,60 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
         await boundaryUpdateRepository.assertValidStage(client);
         throwIfAdminTaskCancelled(operation.signal);
 
-        await client.query('BEGIN');
-        inTransaction = true;
-        await acquireDataImportLock(client, pool);
-        await boundaryUpdateRepository.preserveLinks(client);
-        throwIfAdminTaskCancelled(operation.signal);
-        await boundaryUpdateRepository.deleteBoundaries(client);
-        const boundaryResult = await boundaryUpdateRepository.insertBoundaries(
-          client,
+        const runValues = [
+          options.url,
+          checksum,
+          downloadedBytes,
+          index.sourceElements,
+          geometryPlaces,
+          ignoredElements,
           index.osmTimestamp,
-        );
-        if (boundaryResult.rowCount !== geometryPlaces) {
-          throw new Error('Not every buildable OSM boundary was inserted');
-        }
-        await boundaryUpdateRepository.activateNewPlaces(client);
-        await rebuildCityBoundaryHierarchy(client, {
-          signal: operation.signal,
-          onProgress(progress) {
+          cityPlaces,
+          townPlaces,
+          duplicateNames,
+          administrativePlaces,
+          index.duplicateIndexObjects,
+          options.batchSize,
+          batchCount,
+        ];
+
+        const commitResult = await commitOsmBoundaryUpdate({
+          client,
+          pool,
+          boundaryUpdateRepository,
+          checkpointRepository,
+          checkpoint,
+          osmTimestamp: index.osmTimestamp,
+          geometryPlaces,
+          dryRun: options.dryRun,
+          runValues,
+          acquireLock: acquireDataImportLock,
+          rebuildHierarchy(boundaryClient, { onProgress }) {
+            return rebuildCityBoundaryHierarchy(boundaryClient, {
+              signal: operation.signal,
+              onProgress,
+            });
+          },
+          async syncDerivedData(boundaryClient) {
+            // DELETE FROM city_boundaries temporarily clears boundary_id
+            // through ON DELETE SET NULL. Restore exact OSM links before
+            // synchronizing city_id so renamed/reassigned active boundaries
+            // realign existing line rows in the same transaction.
+            await boundaryClient.query('SELECT sync_active_boundary_cities()');
+            await boundaryClient.query(
+              'SELECT sync_active_boundary_populations()',
+            );
+            await boundaryClient.query(RECALCULATE_CITY_STATISTICS_SQL);
+          },
+          assertNotCancelled() {
+            throwIfAdminTaskCancelled(operation.signal);
+          },
+          emitProgress(progress) {
             reportProgress(progress);
             operation.onProgress?.(progress);
           },
+          onCommit: operation.onCommit,
         });
-        const restoredLinksResult =
-          await boundaryUpdateRepository.restoreGeometryLinks(client);
-        // DELETE FROM city_boundaries temporarily clears boundary_id through
-        // ON DELETE SET NULL. Restore exact OSM links before synchronizing
-        // city_id so renamed/reassigned active boundaries can realign existing
-        // line rows as part of the same transaction.
-        await client.query('SELECT sync_active_boundary_cities()');
-        await client.query('SELECT sync_active_boundary_populations()');
-        await client.query(RECALCULATE_CITY_STATISTICS_SQL);
-        throwIfAdminTaskCancelled(operation.signal);
-
-        if (checkpointRepository) {
-          checkpoint = await checkpointRepository.getById(checkpoint.id);
-          downloadedBytes = checkpoint.downloadedBytes;
-          requestAttemptCount = checkpoint.requestAttemptCount;
-          retryCount = checkpoint.retryCount;
-          retryWaitMs = checkpoint.retryWaitMs;
-          throttleWaitMs = checkpoint.throttleWaitMs;
-        }
 
         const result = {
           dryRun: options.dryRun,
@@ -508,7 +522,7 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           retryCount,
           retryWaitMs,
           throttleWaitMs,
-          restoredGeometryLinks: restoredLinksResult.rowCount,
+          restoredGeometryLinks: commitResult.restoredGeometryLinks,
           osmTimestamp: index.osmTimestamp,
           checksum,
           checkpointId: checkpoint?.id ?? null,
@@ -516,9 +530,8 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           reusedObjects: stagedKeys.size,
           completedAt: new Date().toISOString(),
         };
-        if (options.dryRun) {
-          await client.query('ROLLBACK');
-          inTransaction = false;
+
+        if (!commitResult.committed) {
           return {
             ...result,
             checkpointStatus: checkpointRepository ? 'ready' : null,
@@ -526,54 +539,14 @@ export function createOsmCityUpdateService(pool, config, dependencies = {}) {
           };
         }
 
-        const runResult = await boundaryUpdateRepository.insertRun(client, [
-          options.url,
-          checksum,
-          downloadedBytes,
-          index.sourceElements,
-          geometryPlaces,
-          ignoredElements,
-          index.osmTimestamp,
-          cityPlaces,
-          townPlaces,
-          duplicateNames,
-          administrativePlaces,
-          index.duplicateIndexObjects,
-          options.batchSize,
-          batchCount,
-        ]);
-
-        if (checkpointRepository) {
-          await client.query(
-            `DELETE FROM osm_city_update_checkpoint_stage
-             WHERE checkpoint_id = $1`,
-            [checkpoint.id],
-          );
-          await client.query(
-            `UPDATE osm_city_update_checkpoints
-             SET status = 'completed',
-                 index_objects = '[]'::jsonb,
-                 last_error = NULL,
-                 completed_at = NOW(),
-                 updated_at = NOW()
-             WHERE id = $1`,
-            [checkpoint.id],
-          );
-        }
-
-        throwIfAdminTaskCancelled(operation.signal);
-        operation.onCommit?.();
-        await client.query('COMMIT');
-        inTransaction = false;
         return {
           ...result,
           checkpointStatus: checkpointRepository ? 'completed' : null,
           resumable: false,
-          updateRunId: runResult.rows[0].id,
-          completedAt: runResult.rows[0].createdAt,
+          updateRunId: commitResult.run.id,
+          completedAt: commitResult.run.createdAt,
         };
       } catch (error) {
-        if (inTransaction) await client.query('ROLLBACK');
         if (checkpointRepository && checkpoint) {
           try {
             const delta = metricDelta();
