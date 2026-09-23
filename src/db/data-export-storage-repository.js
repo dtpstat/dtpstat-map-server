@@ -272,15 +272,6 @@ async function* cursorItems(client, cursorName, sql, fetchSize = 100) {
   }
 }
 
-async function* jsonArray(items) {
-  let first = true;
-  for await (const item of items) {
-    if (!first) yield ',';
-    first = false;
-    yield item;
-  }
-}
-
 export function createDataExportStorageRepository() {
   async function payload(queryable, sql) {
     const result = await queryable.query(sql);
