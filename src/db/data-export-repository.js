@@ -226,9 +226,13 @@ const POPULATION_REGIONS_SQL = `
   SELECT
     region.id::integer AS "regionId",
     region.display_name AS "regionName",
+    region.osm_type AS "regionOsmType",
+    region.osm_id::text AS "regionOsmId",
     region.attributes AS "regionAttributes",
     city.id::integer AS "cityId",
     city.display_name AS "cityName",
+    city.osm_type AS "cityOsmType",
+    city.osm_id::text AS "cityOsmId",
     city.population::integer AS population,
     city.population_as_of AS "asOf",
     city.population_source AS source,
@@ -286,6 +290,8 @@ function dateOnly(value) {
 function populationCity(row) {
   return {
     name: row.cityName,
+    osmType: row.cityOsmType,
+    osmId: row.cityOsmId,
     population: row.population ?? null,
     asOf: dateOnly(row.asOf),
     source: row.source ?? null,
@@ -302,6 +308,8 @@ function buildPopulationRegions(rows) {
         id: row.regionId,
         value: {
           name: row.regionName,
+          osmType: row.regionOsmType,
+          osmId: row.regionOsmId,
           attributes: row.regionAttributes ?? {},
           cities: [],
         },
@@ -328,6 +336,8 @@ async function* streamPopulationRegions(rows) {
 
       const region = JSON.stringify({
         name: row.regionName,
+        osmType: row.regionOsmType,
+        osmId: row.regionOsmId,
         attributes: row.regionAttributes ?? {},
       });
       yield region.slice(0, -1);
@@ -427,7 +437,7 @@ export function createDataExportRepository(database) {
         const timestamp = await client.query(
           'SELECT now() AS "exportedAt"',
         );
-        yield '{"schemaVersion":2,"exportedAt":';
+        yield '{"schemaVersion":3,"exportedAt":';
         yield JSON.stringify(timestamp.rows[0]?.exportedAt ?? new Date());
         yield ',"regions":[';
         yield* streamPopulationRegions(
@@ -458,7 +468,7 @@ export function createDataExportRepository(database) {
         database.query(POPULATION_REGIONS_SQL),
       ]);
       return {
-        schemaVersion: 2,
+        schemaVersion: 3,
         exportedAt: timestamp.rows[0]?.exportedAt ?? new Date(),
         regions: buildPopulationRegions(rows.rows),
       };

@@ -72,12 +72,72 @@ function normalizeAttributes(value, field) {
 
 function normalizeSchemaVersion(value) {
   const version = Number(value);
-  if (version !== 2) {
+  if (version !== 2 && version !== 3) {
     throw new PopulationValidationError(
-      'Population hierarchy schemaVersion must equal 2',
+      'Population hierarchy schemaVersion must equal 2 or 3',
     );
   }
   return version;
+}
+
+function normalizeOsmIdentity(value, label) {
+  const hasType =
+    Object.hasOwn(value, 'osmType') &&
+    value.osmType !== null &&
+    value.osmType !== '';
+  const hasId =
+    Object.hasOwn(value, 'osmId') &&
+    value.osmId !== null &&
+    value.osmId !== '';
+
+  if (!hasType && !hasId) {
+    return { osmType: null, osmId: null };
+  }
+  if (!hasType || !hasId) {
+    throw new PopulationValidationError(
+      `${label} osmType and osmId must be provided together`,
+    );
+  }
+
+  const osmType = typeof value.osmType === 'string'
+    ? value.osmType.trim().toLocaleLowerCase('en-US')
+    : '';
+  if (!['way', 'relation'].includes(osmType)) {
+    throw new PopulationValidationError(
+      `${label} osmType must be way or relation`,
+    );
+  }
+
+  let osmId;
+  if (typeof value.osmId === 'number') {
+    if (!Number.isSafeInteger(value.osmId) || value.osmId <= 0) {
+      throw new PopulationValidationError(
+        `${label} osmId must be a positive integer`,
+      );
+    }
+    osmId = String(value.osmId);
+  } else if (
+    typeof value.osmId === 'string' &&
+    /^[1-9][0-9]*$/.test(value.osmId.trim())
+  ) {
+    osmId = value.osmId.trim();
+  } else {
+    throw new PopulationValidationError(
+      `${label} osmId must be a positive integer or decimal string`,
+    );
+  }
+
+  if (BigInt(osmId) > 9223372036854775807n) {
+    throw new PopulationValidationError(
+      `${label} osmId exceeds PostgreSQL bigint range`,
+    );
+  }
+
+  return { osmType, osmId };
+}
+
+function osmIdentityKey({ osmType, osmId }) {
+  return osmType && osmId ? `osm:${osmType}/${osmId}` : null;
 }
 
 function object(value, label) {
@@ -155,7 +215,13 @@ export function createPopulationHierarchyAccumulator({
         return { regionName: null, regionAttributes: {}, rows: [] };
       }
 
-      const allowedRegion = new Set(['name', 'attributes', 'cities']);
+      const allowedRegion = new Set([
+        'name',
+        'osmType',
+        'osmId',
+        'attributes',
+        'cities',
+      ]);
       const unknownRegion = Object.keys(region)
         .filter((key) => !allowedRegion.has(key));
       if (unknownRegion.length > 0) {
@@ -197,8 +263,37 @@ export function createPopulationHierarchyAccumulator({
         return { regionName: null, regionAttributes: {}, rows: [] };
       }
 
+      let regionOsm;
+      try {
+        regionOsm = normalizeOsmIdentity(
+          region,
+          `Region regions[${regionIndex}]`,
+        );
+      } catch (error) {
+        const skippedCities = Array.isArray(region.cities)
+          ? region.cities.length
+          : 0;
+        encounteredCityCount += skippedCities;
+        skippedCityCount += skippedCities;
+        skippedRegionCount += 1;
+        addWarning(warning(
+          'invalid-region-osm-identity',
+          error.message,
+          {
+            scope: 'region',
+            regionIndex,
+            regionName,
+            skippedCities,
+            skipped: true,
+          },
+        ));
+        return { regionName, regionAttributes: {}, rows: [] };
+      }
+
       const regionKey = nameKey(regionName);
-      const existingRegionName = seenRegions.get(regionKey);
+      const regionIdentity =
+        osmIdentityKey(regionOsm) ?? `name:${regionKey}`;
+      const existingRegionName = seenRegions.get(regionIdentity);
       const canonicalRegionName = existingRegionName ?? regionName;
       if (existingRegionName) {
         addWarning(warning(
@@ -212,7 +307,7 @@ export function createPopulationHierarchyAccumulator({
           },
         ));
       } else {
-        seenRegions.set(regionKey, regionName);
+        seenRegions.set(regionIdentity, regionName);
         uniqueRegionCount += 1;
       }
 
@@ -288,6 +383,8 @@ export function createPopulationHierarchyAccumulator({
 
         const allowedCity = new Set([
           'name',
+          'osmType',
+          'osmId',
           'population',
           'asOf',
           'source',
@@ -346,7 +443,29 @@ export function createPopulationHierarchyAccumulator({
           continue;
         }
 
-        const cityIdentity = `${regionKey}/${nameKey(cityName)}`;
+        let cityOsm;
+        try {
+          cityOsm = normalizeOsmIdentity(city, label);
+        } catch (error) {
+          skippedCityCount += 1;
+          addWarning(warning(
+            'invalid-city-osm-identity',
+            error.message,
+            {
+              scope: 'city',
+              regionIndex,
+              cityIndex,
+              regionName: canonicalRegionName,
+              cityName,
+              skipped: true,
+            },
+          ));
+          continue;
+        }
+
+        const cityIdentity =
+          `${regionIdentity}/` +
+          (osmIdentityKey(cityOsm) ?? `name:${nameKey(cityName)}`);
         if (seenCities.has(cityIdentity)) {
           skippedCityCount += 1;
           addWarning(warning(
@@ -367,8 +486,12 @@ export function createPopulationHierarchyAccumulator({
         try {
           const row = {
             regionName: canonicalRegionName,
+            regionOsmType: regionOsm.osmType,
+            regionOsmId: regionOsm.osmId,
             regionAttributes,
             cityName,
+            cityOsmType: cityOsm.osmType,
+            cityOsmId: cityOsm.osmId,
             population: normalizePopulation(
               city.population,
               `${label} population`,
@@ -410,14 +533,13 @@ export function createPopulationHierarchyAccumulator({
 
     finish(metadata = {}) {
       // Schema mismatch and an empty document are document-level failures.
-      normalizeSchemaVersion(metadata.schemaVersion);
       if (regionCount === 0) {
         throw new PopulationValidationError(
           'Request body must contain a non-empty regions array',
         );
       }
       return {
-        schemaVersion: 2,
+        schemaVersion: normalizeSchemaVersion(metadata.schemaVersion),
         asOf: defaults.asOf,
         source: defaults.source,
         regionCount,

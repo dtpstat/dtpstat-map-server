@@ -276,6 +276,22 @@ button.danger { color: #210608; background: var(--danger); }
 .result-panel { max-height: 9rem; margin-top: .9rem; padding: .8rem; flex: 0 1 auto; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; }
 .result-panel[open] { min-height: 0; display: flex; flex-direction: column; }
 .result-panel summary { color: var(--muted); cursor: pointer; }
+.result-panel-actions {
+  margin-top: .45rem;
+  display: flex;
+  justify-content: flex-end;
+}
+.result-panel-actions:has(.result-copy[hidden]) { display: none; }
+.result-copy {
+  width: auto;
+  padding: .38rem .58rem;
+  font-size: .68rem;
+  line-height: 1.2;
+}
+.result-copy.result-copy-failed {
+  color: #210608;
+  background: var(--danger);
+}
 .result-panel[open] pre { min-height: 0; max-height: 5.5rem; flex: 1 1 auto; overflow: auto; }
 .result-success { border-color: #437b4b; }
 .result-success summary { color: var(--success); }

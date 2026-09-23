@@ -407,7 +407,7 @@
                       <p class="admin-advanced-settings-note">Ручной ввод удобен для диагностики и небольших корректировок. Для штатного импорта предпочтителен файл.</p>
                       <label>Данные JSON
                         <textarea name="payload" rows="16" placeholder="Загрузка актуального примера…"></textarea>
-                        <small>schemaVersion 2: regions[] с name/attributes и cities[]; у города обязательны name и population (число или null). Общие asOf/source в корне используются как значения по умолчанию.</small>
+                        <small>schemaVersion 2+: regions[] с name/attributes и cities[]; у города обязательны name и population (число или null). В v3 osmType/osmId необязательны; без них используется совместимый name fallback. Общие asOf/source в корне используются как значения по умолчанию.</small>
                       </label>
                     </div>
                   </details>
@@ -442,6 +442,10 @@
 
           <details class="result-panel" id="result-panel">
             <summary>Результат / ошибка</summary>
+            <div class="result-panel-actions">
+              <button class="secondary result-copy" id="result-copy"
+                      type="button" hidden>Копировать</button>
+            </div>
             <pre id="task-result">—</pre>
           </details>
         </aside>

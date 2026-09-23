@@ -1,3 +1,4 @@
+import { copyTextToClipboard } from './admin-clipboard.js';
 import { createTaskNotices } from './task-notices.js';
 import { adminConfirm } from './admin-dialog.js';
 import { trackDirtyForm } from './admin-dirty-state.js';
@@ -73,6 +74,7 @@ const elements = {
   logCount: document.querySelector('#log-count'),
   result: document.querySelector('#task-result'),
   resultPanel: document.querySelector('#result-panel'),
+  resultCopy: document.querySelector('#result-copy'),
   notices: [...document.querySelectorAll('[data-task-notice]')],
   refresh: document.querySelector('#refresh-task'),
   tabs: [...document.querySelectorAll('[data-task-tab]')],
@@ -96,6 +98,11 @@ const elements = {
   populationForm: document.querySelector('#population-form'),
 };
 const taskNotices = createTaskNotices(elements.notices, taskNames);
+if (elements.resultCopy) {
+  elements.resultCopy.addEventListener('click', () => {
+    void copyTaskResult();
+  });
+}
 const transferOverlay = createTransferOverlay();
 const osmSettingsDirty = trackDirtyForm(elements.osmForm, {
   label: 'Настройки OSM-загрузки',
@@ -693,6 +700,31 @@ function pretty(value) {
   return JSON.stringify(value, null, 2);
 }
 
+function taskResultPayload(task) {
+  if (!task) return undefined;
+  if (task.error !== undefined) return { error: task.error };
+  if (task.result !== undefined) return task.result;
+  return undefined;
+}
+
+let resultCopyFeedbackTimer = null;
+
+async function copyTaskResult() {
+  const payload = taskResultPayload(state.task);
+  if (payload === undefined || !elements.resultCopy) return;
+
+  const copied = await copyTextToClipboard(pretty(payload));
+  elements.resultCopy.textContent = copied ? 'Скопировано' : 'Не удалось';
+  elements.resultCopy.classList.toggle('result-copy-failed', !copied);
+
+  if (resultCopyFeedbackTimer) clearTimeout(resultCopyFeedbackTimer);
+  resultCopyFeedbackTimer = setTimeout(() => {
+    elements.resultCopy.textContent = 'Копировать';
+    elements.resultCopy.classList.remove('result-copy-failed');
+    resultCopyFeedbackTimer = null;
+  }, 1800);
+}
+
 function setNotice(message, tone = 'warning', taskKey = state.selected) {
   taskNotices.set(taskKey, message, tone);
 }
@@ -801,23 +833,34 @@ function renderLog(log) {
 function renderResult(task) {
   elements.resultPanel.className = 'result-panel';
   elements.resultPanel.open = false;
-  if (!task) {
+
+  const payload = taskResultPayload(task);
+  if (elements.resultCopy) {
+    elements.resultCopy.hidden = payload === undefined;
+    elements.resultCopy.textContent = 'Копировать';
+    elements.resultCopy.classList.remove('result-copy-failed');
+    elements.resultCopy.setAttribute(
+      'aria-label',
+      task?.error !== undefined
+        ? 'Копировать JSON ошибки'
+        : 'Копировать JSON результата',
+    );
+  }
+
+  if (payload === undefined) {
     elements.result.textContent = '—';
     return;
   }
+
   if (task.error !== undefined) {
     elements.resultPanel.classList.add('result-error');
-    elements.resultPanel.open = true;
-    elements.result.textContent = pretty({ error: task.error });
-  } else if (task.result !== undefined) {
+  } else {
     elements.resultPanel.classList.add(
       task.result?.partial ? 'result-warning' : 'result-success',
     );
-    elements.resultPanel.open = true;
-    elements.result.textContent = pretty(task.result);
-  } else {
-    elements.result.textContent = '—';
   }
+  elements.resultPanel.open = true;
+  elements.result.textContent = pretty(payload);
 }
 
 function setFormTaskLock(form, locked) {

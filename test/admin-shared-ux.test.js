@@ -111,3 +111,37 @@ test('technical settings are collapsed and raw values get human-readable compani
   assert.match(css, /\.admin-human-unit/);
   assert.match(css, /\.admin-advanced-settings/);
 });
+
+
+test('task result panel copies the complete rendered JSON for results and errors', async () => {
+  const [html, admin, clipboard, css] = await Promise.all([
+    read('admin/index.html'),
+    read('admin/admin.js'),
+    read('admin/admin-clipboard.js'),
+    read('admin/admin.css'),
+  ]);
+
+  assert.match(html, /id="result-copy"[^>]*>Копировать<\/button>/);
+  assert.match(html, /id="result-copy"[\s\S]*hidden/);
+  assert.match(admin, /import \{ copyTextToClipboard \}/);
+  assert.match(
+    admin,
+    /function taskResultPayload\(task\)[\s\S]*\{ error: task\.error \}[\s\S]*task\.result/,
+  );
+  assert.match(
+    admin,
+    /copyTextToClipboard\(pretty\(payload\)\)/,
+  );
+  assert.match(
+    admin,
+    /elements\.resultCopy\.hidden = payload === undefined/,
+  );
+  assert.match(
+    admin,
+    /task\?\.error !== undefined[\s\S]*Копировать JSON ошибки/,
+  );
+  assert.match(clipboard, /clipboard\.writeText\(value\)/);
+  assert.match(clipboard, /documentRef\.execCommand\('copy'\)/);
+  assert.match(css, /\.result-copy/);
+  assert.doesNotMatch(admin, /\b(?:confirm|alert|prompt)\s*\(/);
+});
