@@ -782,3 +782,58 @@ test('legacy project settings repository is only a DB composition adapter', asyn
   assert.match(service, /storage\.updateSettings\(/u);
   assert.match(service, /storage\.updateCityMarkerIcon\(/u);
 });
+
+
+test('portable export application service separates JSON framing from DB storage', async () => {
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'export-service.js',
+    ),
+    'utf8',
+  );
+  const storage = await fs.readFile(
+    path.join(srcRoot, 'db', 'data-export-storage-repository.js'),
+    'utf8',
+  );
+
+  assert.match(service, /streamCityBoundaries/u);
+  assert.match(service, /streamPopulationRegions/u);
+  assert.match(service, /storage\.streamLineItems\(/u);
+  assert.match(service, /schemaVersion\\":3/u);
+  assert.doesNotMatch(service, /DECLARE portable_/u);
+  assert.doesNotMatch(service, /ST_AsGeoJSON/u);
+  assert.doesNotMatch(service, /WITH RECURSIVE ancestry/u);
+
+  assert.match(storage, /DECLARE \$\{cursorName\} NO SCROLL CURSOR/u);
+  assert.match(storage, /ST_AsGeoJSON/u);
+  assert.match(storage, /WITH RECURSIVE ancestry/u);
+  assert.doesNotMatch(storage, /createDataExportService/u);
+});
+
+test('legacy data export repository is only a DB composition adapter', async () => {
+  const adapter = await fs.readFile(
+    path.join(srcRoot, 'db', 'data-export-repository.js'),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'export-service.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(adapter, /createDataExportService\(database,/u);
+  assert.match(adapter, /createDataExportStorageRepository\(/u);
+  assert.doesNotMatch(adapter, /ST_AsGeoJSON/u);
+  assert.doesNotMatch(adapter, /WITH RECURSIVE ancestry/u);
+  assert.doesNotMatch(adapter, /streamPopulationRegions/u);
+
+  assert.match(service, /storage\.exportCityBoundaries\(/u);
+  assert.match(service, /storage\.populationRows\(/u);
+});
