@@ -9,6 +9,10 @@ function canManageInterface(user) {
   return Boolean(user?.isSuperuser || user?.canManageInterface);
 }
 
+function canEditOsm(user) {
+  return Boolean(user?.isSuperuser || user?.canEditOsm);
+}
+
 function canAccessSecurity(user) {
   return Boolean(
     user?.isSuperuser || user?.canManageUsers || user?.canViewAudit || user?.canManageSecurity,
@@ -245,7 +249,6 @@ async function loadDataEditors() {
   await import('./json-examples.js');
   await import('./kml-transfer-editor.js');
   await import('./admin.js');
-  await import('./osm-boundary-editor.js');
   setupDataSectionLockExtensions();
 }
 
@@ -254,7 +257,7 @@ function setupPrimarySections(user) {
   const dataAccess = !mustChangePassword && canManageData(user);
   const permissions = {
     data: dataAccess,
-    'osm-objects': dataAccess,
+    'osm-objects': !mustChangePassword && canEditOsm(user),
     interface: !mustChangePassword && canManageInterface(user),
     security: !mustChangePassword && canAccessSecurity(user),
     profile: true,
@@ -305,6 +308,7 @@ function updateUserBadge(user) {
   const roles = [
     user.isSuperuser ? 'superuser' : null,
     user.canManageData ? 'данные' : null,
+    user.canEditOsm ? 'OSM' : null,
     user.canManageInterface ? 'интерфейс' : null,
     user.canManageUsers ? 'пользователи' : null,
     user.canViewAudit ? 'аудит' : null,
@@ -361,6 +365,7 @@ async function startAdminShell() {
     await import('./profile-editor.js');
     if (!user.mustChangePassword) {
       if (canManageData(user)) await loadDataEditors();
+      if (canEditOsm(user)) await import('./osm-boundary-editor.js');
       if (canManageInterface(user)) await loadInterfaceEditors(user);
       if (canAccessSecurity(user)) await import('./security-editor-v2.js');
     }
