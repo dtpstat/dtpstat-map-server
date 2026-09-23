@@ -226,30 +226,42 @@ GET /api/admin/export/populations
 - `GET /api/admin/export/populations` → `populations.json`;
 - `GET /api/admin/export/populations.zip` → `populations.zip`, внутри ровно один `populations.json`.
 
-Canonical format — `schemaVersion: 2`. Population snapshot содержит только
-человекочитаемую hierarchy `регион → города`; OSM type/id в этом формате
-отсутствуют намеренно.
+Canonical format — `schemaVersion: 3`. Он сохраняет переносимую source
+identity `osmType + osmId` для региона и города, но локальный
+`CITY_BOUNDARIES.ID` никогда не экспортируется.
+
+Import остаётся обратно совместим с `schemaVersion: 2` и с v3-записями, где
+`osmType/osmId` отсутствуют целиком. В таком случае используется прежнее
+сопоставление по нормализованным именам. Если identity присутствует, exact
+`osmType + osmId` имеет приоритет и name fallback для этой записи не
+используется.
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "exportedAt": "2026-09-22T12:00:00.000Z",
   "asOf": "2026-01-01",
   "source": "Росстат",
   "regions": [
     {
       "name": "Республика Татарстан",
+      "osmType": "relation",
+      "osmId": "79374",
       "attributes": {
         "federalDistrict": "Приволжский федеральный округ"
       },
       "cities": [
         {
           "name": "Казань",
+          "osmType": "relation",
+          "osmId": "337422",
           "population": 1320000,
           "attributes": {}
         },
         {
           "name": "Набережные Челны",
+          "osmType": "relation",
+          "osmId": "308525",
           "population": 544000,
           "asOf": "2025-01-01",
           "source": "Татарстанстат",
@@ -262,12 +274,14 @@ Canonical format — `schemaVersion: 2`. Population snapshot содержит т
 ```
 
 На уровне региона обязательны `name` и непустой `cities[]`; `attributes`
-необязателен и по умолчанию равен `{}`.
+необязателен и по умолчанию равен `{}`. Поля `osmType/osmId` необязательны,
+но должны либо присутствовать парой, либо отсутствовать оба.
 
 У города обязательны `name` и `population`. `population` может быть
 `null`, что очищает население найденного города. `asOf/source` могут
 наследоваться от top-level значений или переопределяться для конкретного
 города. `attributes` необязателен и по умолчанию равен `{}`.
+`osmType/osmId` также являются необязательной парой.
 
 Поле `active` в population format отсутствует намеренно.
 
@@ -285,14 +299,19 @@ Content-Type: application/zip
 Import:
 
 1. потоково читает top-level `regions[]`;
-2. нормализует имена без учёта регистра, `ё/е`, пробелов и пунктуации;
-3. повторные блоки одного региона объединяет; повторный город внутри того же
-   региона пропускает с warning;
+2. если у записи есть пара `osmType + osmId`, сопоставляет exact OSM object;
+   если пары нет — использует legacy name matching без учёта регистра, `ё/е`,
+   пробелов и пунктуации;
+3. duplicate detection использует OSM identity, когда она есть, поэтому разные
+   OSM objects с одинаковым именем не схлопываются; для legacy записей без
+   identity сохраняется name-based duplicate detection;
 4. невалидный отдельный регион/город пропускает с warning, не отменяя
    корректную часть файла;
-5. находит регион по имени среди региональных boundaries;
-6. ищет город по имени только внутри поддерева найденного региона;
-7. отсутствующие **и неоднозначные** регионы/города пропускает с warning;
+5. exact identity региона ищется среди `admin_level=4` boundaries; без
+   identity регион ищется по имени;
+6. exact identity города ищется только внутри поддерева найденного региона; без
+   identity город ищется там же по имени;
+7. отсутствующие и неоднозначные fallback-сопоставления пропускаются с warning;
 8. обновляет `population/asOf/source/attributes` только успешно
    сопоставленных городов и `attributes` успешно найденных регионов;
 9. не изменяет `IS_ACTIVE`;
