@@ -36,7 +36,7 @@ test('project settings transfer policy preserves legacy popup and threshold defa
   const settings = normalizeTransferredProjectSettings({
     projectName: 'Test',
     keywords: [],
-    footerHtml: '',
+    footerHtml: '<p>Test</p>',
     yandexMetrikaId: null,
     googleAnalyticsId: null,
     themePreset: 'modern',
