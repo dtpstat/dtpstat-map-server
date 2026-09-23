@@ -231,10 +231,11 @@ identity `osmType + osmId` для региона и города, но лока�
 `CITY_BOUNDARIES.ID` никогда не экспортируется.
 
 Import остаётся обратно совместим с `schemaVersion: 2` и с v3-записями, где
-`osmType/osmId` отсутствуют целиком. В таком случае используется прежнее
-сопоставление по нормализованным именам. Если identity присутствует, exact
-`osmType + osmId` имеет приоритет и name fallback для этой записи не
-используется.
+`osmType/osmId` отсутствуют целиком. Такие записи используют v2+ name
+fallback: структура `region.name → cities[].name` остаётся authority входного
+формата, а target boundary ищется по display/OSM aliases и текущей hierarchy.
+Если identity присутствует, exact `osmType + osmId` имеет приоритет и name
+fallback для этой записи не используется.
 
 ```json
 {
@@ -300,18 +301,25 @@ Import:
 
 1. потоково читает top-level `regions[]`;
 2. если у записи есть пара `osmType + osmId`, сопоставляет exact OSM object;
-   если пары нет — использует legacy name matching без учёта регистра, `ё/е`,
-   пробелов и пунктуации;
+   если пары нет — использует v2+ name fallback без учёта регистра, `ё/е`,
+   пробелов и пунктуации. Для boundary учитываются `DISPLAY_NAME`,
+   `OSM_NAME`, OSM `name/name:ru`, `official_name`, `short_name`,
+   `loc_name`, `alt_name`; для города дополнительно учитываются
+   `CITIES.NAME/FULL_NAME`, когда boundary уже связан с application city;
 3. duplicate detection использует OSM identity, когда она есть, поэтому разные
    OSM objects с одинаковым именем не схлопываются; для legacy записей без
    identity сохраняется name-based duplicate detection;
 4. невалидный отдельный регион/город пропускает с warning, не отменяя
    корректную часть файла;
-5. exact identity региона ищется среди `admin_level=4` boundaries; без
-   identity регион ищется по имени;
-6. exact identity города ищется только внутри поддерева найденного региона; без
-   identity город ищется там же по имени;
-7. отсутствующие и неоднозначные fallback-сопоставления пропускаются с warning;
+5. exact identity региона ищется среди `admin_level=4` boundaries; для v2+
+   fallback при нескольких alias-match предпочтение получает canonical
+   regional boundary с `ISO3166-2`, затем точный `DISPLAY_NAME`;
+6. exact identity города ищется только внутри поддерева найденного региона; для
+   v2+ fallback кандидатами являются `city/town` boundaries и boundaries,
+   уже связанные через `CITY_ID`. При нескольких совпадениях приоритет:
+   linked application city → active boundary → точный `DISPLAY_NAME`;
+7. если после этих приоритетов остаётся несколько равнозначных кандидатов,
+   запись не выбирается произвольно и пропускается как ambiguous warning;
 8. обновляет `population/asOf/source/attributes` только успешно
    сопоставленных городов и `attributes` успешно найденных регионов;
 9. не изменяет `IS_ACTIVE`;
