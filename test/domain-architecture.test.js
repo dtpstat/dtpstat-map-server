@@ -163,3 +163,28 @@ test('OSM update facade delegates boundary persistence to repository', async () 
   assert.match(repository, /INSERT INTO city_boundaries/u);
   assert.match(repository, /osm_city_boundary_stage/u);
 });
+
+
+test('OSM update facade delegates index composition and batch policy', async () => {
+  const source = await fs.readFile(
+    path.join(srcRoot, 'db', 'osm-city-update-service.js'),
+    'utf8',
+  );
+  const indexSession = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-index-session.js'),
+    'utf8',
+  );
+  const batchPolicy = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-batch-policy.js'),
+    'utf8',
+  );
+
+  assert.match(source, /loadOsmUpdateIndex\(/u);
+  assert.match(source, /createObjectBatches\(/u);
+  assert.doesNotMatch(source, /function combineIndexParts\(/u);
+  assert.doesNotMatch(source, /buildRussianPlaceIdOverpassQueries/u);
+  assert.match(indexSession, /buildRussianPlaceIdOverpassQueries\(/u);
+  assert.match(indexSession, /combineIndexParts\(/u);
+  assert.match(batchPolicy, /export function assertCompleteBatch\(/u);
+  assert.match(batchPolicy, /export function createObjectBatches\(/u);
+});
