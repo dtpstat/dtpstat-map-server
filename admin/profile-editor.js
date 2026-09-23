@@ -128,11 +128,11 @@ if (host) {
 
   function passwordPolicyError(value) {
     if (!passwordPolicy) return null;
-    if (
-      value.length < passwordPolicy.passwordMinLength
-      || value.length > passwordPolicy.passwordMaxLength
-    ) {
-      return `Пароль должен содержать от ${passwordPolicy.passwordMinLength} до ${passwordPolicy.passwordMaxLength} символов.`;
+    if (value.length < passwordPolicy.passwordMinLength) {
+      return `Пароль должен содержать минимум ${passwordPolicy.passwordMinLength} символов.`;
+    }
+    if (value.length > passwordPolicy.passwordMaxLength) {
+      return 'Пароль слишком длинный.';
     }
     if (passwordPolicy.passwordRequireLowercase && !/\p{Ll}/u.test(value)) {
       return 'Добавьте хотя бы одну строчную букву.';
@@ -159,7 +159,7 @@ if (host) {
       input.maxLength = policy.passwordMaxLength;
     }
     const requirements = [
-      `От ${policy.passwordMinLength} до ${policy.passwordMaxLength} символов`,
+      `минимум ${policy.passwordMinLength} символов`,
       policy.passwordRequireLowercase ? 'минимум одна строчная буква' : null,
       policy.passwordRequireUppercase ? 'минимум одна прописная буква' : null,
       policy.passwordRequireDigit ? 'минимум одна цифра' : null,
@@ -195,7 +195,8 @@ if (host) {
         image.hidden = true;
         fallback.hidden = false;
       };
-      image.src = `/api/admin/profile/avatar?v=${Date.now()}`;
+      const avatarVersion = encodeURIComponent(user.updatedAt ?? '1');
+      image.src = `/api/admin/profile/avatar?v=${avatarVersion}`;
     } else {
       image.removeAttribute('src');
       image.hidden = true;
