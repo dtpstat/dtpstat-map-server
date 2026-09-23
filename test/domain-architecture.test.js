@@ -45,8 +45,12 @@ test('lightweight domain modules keep dependency direction explicit', async () =
     for (const specifier of importSpecifiers(source)) {
       const resolved = resolveRelativeImport(file, specifier);
       assert.ok(
-        !resolved || !resolved.startsWith(path.join(srcRoot, 'routes') + path.sep),
-        `${path.relative(root, file)} must not depend on legacy src/routes`,
+        !resolved ||
+          (
+            !resolved.startsWith(path.join(srcRoot, 'routes') + path.sep) &&
+            !resolved.startsWith(path.join(srcRoot, 'db') + path.sep)
+          ),
+        `${path.relative(root, file)} must not depend on legacy src/routes or src/db`,
       );
     }
   }
@@ -108,7 +112,7 @@ test('legacy API file is a composition root for extracted route modules', async 
 
 test('OSM update facade delegates Overpass request lifecycle to the module', async () => {
   const source = await fs.readFile(
-    path.join(srcRoot, 'db', 'osm-city-update-service.js'),
+    path.join(srcRoot, 'modules', 'osm', 'update-service.js'),
     'utf8',
   );
   const requestSession = await fs.readFile(
@@ -127,7 +131,7 @@ test('OSM update facade delegates Overpass request lifecycle to the module', asy
 
 test('OSM update facade delegates checkpoint compatibility and lifecycle policy', async () => {
   const source = await fs.readFile(
-    path.join(srcRoot, 'db', 'osm-city-update-service.js'),
+    path.join(srcRoot, 'modules', 'osm', 'update-service.js'),
     'utf8',
   );
   const policy = await fs.readFile(
@@ -168,7 +172,7 @@ test('OSM update facade delegates checkpoint compatibility and lifecycle policy'
 
 test('OSM update facade delegates boundary persistence to repository', async () => {
   const source = await fs.readFile(
-    path.join(srcRoot, 'db', 'osm-city-update-service.js'),
+    path.join(srcRoot, 'modules', 'osm', 'update-service.js'),
     'utf8',
   );
   const geometrySession = await fs.readFile(
@@ -201,7 +205,7 @@ test('OSM update facade delegates boundary persistence to repository', async () 
 
 test('OSM update facade delegates index composition and batch policy', async () => {
   const source = await fs.readFile(
-    path.join(srcRoot, 'db', 'osm-city-update-service.js'),
+    path.join(srcRoot, 'modules', 'osm', 'update-service.js'),
     'utf8',
   );
   const indexSession = await fs.readFile(
@@ -231,7 +235,7 @@ test('OSM update facade delegates index composition and batch policy', async () 
 
 test('OSM update facade delegates geometry batch processing to session', async () => {
   const source = await fs.readFile(
-    path.join(srcRoot, 'db', 'osm-city-update-service.js'),
+    path.join(srcRoot, 'modules', 'osm', 'update-service.js'),
     'utf8',
   );
   const geometrySession = await fs.readFile(
@@ -256,7 +260,7 @@ test('OSM update facade delegates geometry batch processing to session', async (
 
 test('OSM update facade delegates atomic replacement transaction to commit session', async () => {
   const source = await fs.readFile(
-    path.join(srcRoot, 'db', 'osm-city-update-service.js'),
+    path.join(srcRoot, 'modules', 'osm', 'update-service.js'),
     'utf8',
   );
   const commitSession = await fs.readFile(
@@ -283,7 +287,7 @@ test('OSM update facade delegates atomic replacement transaction to commit sessi
 
 test('OSM update facade delegates runtime options progress and result assembly', async () => {
   const source = await fs.readFile(
-    path.join(srcRoot, 'db', 'osm-city-update-service.js'),
+    path.join(srcRoot, 'modules', 'osm', 'update-service.js'),
     'utf8',
   );
   const runtimeOptions = await fs.readFile(
@@ -310,4 +314,34 @@ test('OSM update facade delegates runtime options progress and result assembly',
   assert.match(runtimeOptions, /Saved OSM URL is no longer allowed/u);
   assert.match(progressReporter, /OSM city update index \$\{/u);
   assert.match(resultBuilder, /indexRequestCount:/u);
+});
+
+
+test('legacy OSM DB service is only an infrastructure composition adapter', async () => {
+  const adapter = await fs.readFile(
+    path.join(srcRoot, 'db', 'osm-city-update-service.js'),
+    'utf8',
+  );
+  const useCase = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-service.js'),
+    'utf8',
+  );
+
+  assert.match(adapter, /createOsmCityUpdateUseCase\(pool, config,/u);
+  assert.match(adapter, /acquireDataImportLock/u);
+  assert.match(adapter, /rebuildCityBoundaryHierarchy/u);
+  assert.match(adapter, /RECALCULATE_CITY_STATISTICS_SQL/u);
+  assert.doesNotMatch(adapter, /createOverpassRequestSession/u);
+  assert.doesNotMatch(adapter, /processOsmGeometryBatches/u);
+  assert.doesNotMatch(adapter, /loadOsmUpdateIndex/u);
+  assert.doesNotMatch(adapter, /prepareOsmCheckpoint/u);
+
+  assert.match(useCase, /createOverpassRequestSession\(/u);
+  assert.match(useCase, /processOsmGeometryBatches\(/u);
+  assert.match(useCase, /loadOsmUpdateIndex\(/u);
+  assert.match(useCase, /prepareOsmCheckpoint\(/u);
+  assert.doesNotMatch(useCase, /\.\.\/\.\.\/db\//u);
+  assert.doesNotMatch(useCase, /database-locks/u);
+  assert.doesNotMatch(useCase, /city-boundary-hierarchy/u);
+  assert.doesNotMatch(useCase, /recalculate-city-statistics/u);
 });
