@@ -21,6 +21,14 @@ test('geometry editor is an independent top-level role-protected admin section',
   assert.match(shell, /geometries:[\s\S]*canEditGeometries/);
   assert.match(shell, /if \(canEditGeometries\(user\)\) await import\('\.\/geometry-editor\.js'\)/);
   assert.match(shell, /dtpstat:geometry-editor-open/);
+  const [securityEditor, auth] = await Promise.all([
+    read('admin/security-editor-v2.js'),
+    read('src/http/admin-auth.js'),
+  ]);
+  assert.match(securityEditor, /canEditGeometries/);
+  assert.match(securityEditor, /Редактирование геометрий/);
+  assert.match(auth, /requireGeometryEditor:\s*middleware\('geometry-editor'\)/);
+  assert.match(auth, /user\.canEditGeometries/);
 
   assert.match(editor, /geometry-editor\/cities/);
   assert.match(editor, /geometry-editor\/geometries/);
