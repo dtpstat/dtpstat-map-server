@@ -656,3 +656,77 @@ test('legacy project settings transfer service is only a DB composition adapter'
   assert.doesNotMatch(service, /recalculate-city-statistics/u);
   assert.doesNotMatch(service, /report-config-service/u);
 });
+
+
+test('reporting module separates config use case from query compiler and DB storage', async () => {
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'reporting', 'config-service.js'),
+    'utf8',
+  );
+  const compiler = await fs.readFile(
+    path.join(srcRoot, 'modules', 'reporting', 'query-compiler.js'),
+    'utf8',
+  );
+  const repository = await fs.readFile(
+    path.join(srcRoot, 'db', 'report-config-repository.js'),
+    'utf8',
+  );
+  const materializer = await fs.readFile(
+    path.join(srcRoot, 'db', 'report-materialization-repository.js'),
+    'utf8',
+  );
+
+  assert.match(service, /repository\.load\(/u);
+  assert.match(service, /repository\.save\(/u);
+  assert.match(service, /materialize\(client,/u);
+  assert.doesNotMatch(service, /jsonb_object_agg\(config_key/u);
+  assert.doesNotMatch(service, /INSERT INTO city_report_values/u);
+
+  assert.match(compiler, /compileReportMetricQuery/u);
+  assert.match(compiler, /compileReportRankQuery/u);
+  assert.doesNotMatch(compiler, /\.\.\/\.\.\/db\//u);
+
+  assert.match(repository, /jsonb_object_agg\(config_key, config_value\)/u);
+  assert.match(repository, /ON CONFLICT \(config_key\)/u);
+
+  assert.match(materializer, /INSERT INTO city_report_values/u);
+  assert.match(materializer, /compileReportMetricQuery\(/u);
+  assert.match(materializer, /compileReportRankQuery\(/u);
+});
+
+test('legacy report config service is only a DB composition adapter', async () => {
+  const adapter = await fs.readFile(
+    path.join(srcRoot, 'db', 'report-config-service.js'),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'reporting', 'config-service.js'),
+    'utf8',
+  );
+  const transferRepository = await fs.readFile(
+    path.join(srcRoot, 'db', 'project-settings-transfer-repository.js'),
+    'utf8',
+  );
+
+  assert.match(adapter, /createReportConfigUseCase\(pool,/u);
+  assert.match(adapter, /createReportConfigRepository\(/u);
+  assert.match(adapter, /materializeReportValues/u);
+  assert.match(adapter, /acquireDataImportLock/u);
+  assert.match(adapter, /compileReportMetricQuery/u);
+  assert.match(adapter, /compileReportRankQuery/u);
+  assert.doesNotMatch(adapter, /jsonb_object_agg\(config_key/u);
+  assert.doesNotMatch(adapter, /INSERT INTO city_report_values/u);
+
+  assert.match(service, /validateReportConfig\(/u);
+  assert.doesNotMatch(service, /database-locks/u);
+  assert.doesNotMatch(service, /report-config-repository/u);
+
+  assert.match(
+    transferRepository,
+    /materializeReportValues\(client, config\)/u,
+  );
+  assert.doesNotMatch(
+    transferRepository,
+    /INSERT INTO city_report_values/u,
+  );
+});
