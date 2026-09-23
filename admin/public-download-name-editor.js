@@ -68,7 +68,10 @@ if (typeof document !== 'undefined') {
       csvPreview.textContent = `/${name}.csv`;
     }
 
-    input.addEventListener('input', renderPreview);
+    input.addEventListener('input', () => {
+      renderPreview();
+      dirtyState?.markDirty();
+    });
 
     async function load() {
       try {
