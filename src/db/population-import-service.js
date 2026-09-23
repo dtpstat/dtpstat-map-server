@@ -30,12 +30,24 @@ const CREATE_STREAM_STAGE_SQL = `
   CREATE TEMP TABLE population_transfer_stage (
     seq bigint PRIMARY KEY,
     region_name text NOT NULL,
+    region_osm_type text,
+    region_osm_id bigint,
     region_attributes jsonb NOT NULL,
     city_name text NOT NULL,
+    city_osm_type text,
+    city_osm_id bigint,
     population integer,
     as_of text,
     source text,
-    attributes jsonb NOT NULL
+    attributes jsonb NOT NULL,
+    CHECK (
+      (region_osm_type IS NULL AND region_osm_id IS NULL) OR
+      (region_osm_type IN ('way', 'relation') AND region_osm_id > 0)
+    ),
+    CHECK (
+      (city_osm_type IS NULL AND city_osm_id IS NULL) OR
+      (city_osm_type IN ('way', 'relation') AND city_osm_id > 0)
+    )
   ) ON COMMIT DROP
 `;
 
@@ -43,8 +55,12 @@ const INSERT_STREAM_STAGE_SQL = `
   INSERT INTO population_transfer_stage (
     seq,
     region_name,
+    region_osm_type,
+    region_osm_id,
     region_attributes,
     city_name,
+    city_osm_type,
+    city_osm_id,
     population,
     as_of,
     source,
@@ -53,8 +69,12 @@ const INSERT_STREAM_STAGE_SQL = `
   SELECT
     payload.seq,
     payload."regionName",
+    payload."regionOsmType",
+    payload."regionOsmId",
     payload."regionAttributes",
     payload."cityName",
+    payload."cityOsmType",
+    payload."cityOsmId",
     payload.population,
     payload."asOf",
     payload.source,
@@ -62,8 +82,12 @@ const INSERT_STREAM_STAGE_SQL = `
   FROM jsonb_to_recordset($1::jsonb) AS payload(
     seq bigint,
     "regionName" text,
+    "regionOsmType" text,
+    "regionOsmId" bigint,
     "regionAttributes" jsonb,
     "cityName" text,
+    "cityOsmType" text,
+    "cityOsmId" bigint,
     population integer,
     "asOf" text,
     source text,
@@ -88,32 +112,60 @@ const RESOLVE_STAGE_SQL = `
   stage_regions AS (
     SELECT DISTINCT
       stage.region_name,
+      stage.region_osm_type,
+      stage.region_osm_id,
       ${NORMALIZE_NAME_SQL('stage.region_name')} AS region_key
     FROM population_transfer_stage AS stage
   ),
   region_candidates AS (
     SELECT
       stage_region.region_name,
+      stage_region.region_osm_type,
+      stage_region.region_osm_id,
       boundary.id AS region_id
     FROM stage_regions AS stage_region
     JOIN city_boundaries AS boundary
       ON boundary.admin_level = 4
-     AND ${NORMALIZE_NAME_SQL('boundary.display_name')} =
-         stage_region.region_key
+     AND (
+       (
+         stage_region.region_osm_type IS NOT NULL
+         AND stage_region.region_osm_id IS NOT NULL
+         AND boundary.osm_type = stage_region.region_osm_type
+         AND boundary.osm_id = stage_region.region_osm_id
+       )
+       OR
+       (
+         stage_region.region_osm_type IS NULL
+         AND stage_region.region_osm_id IS NULL
+         AND ${NORMALIZE_NAME_SQL('boundary.display_name')} =
+             stage_region.region_key
+       )
+     )
   ),
   region_counts AS (
     SELECT
       stage_region.region_name,
+      stage_region.region_osm_type,
+      stage_region.region_osm_id,
       COUNT(region_candidate.region_id)::integer AS match_count,
       MIN(region_candidate.region_id) AS region_id
     FROM stage_regions AS stage_region
     LEFT JOIN region_candidates AS region_candidate
       ON region_candidate.region_name = stage_region.region_name
-    GROUP BY stage_region.region_name
+     AND region_candidate.region_osm_type IS NOT DISTINCT FROM
+         stage_region.region_osm_type
+     AND region_candidate.region_osm_id IS NOT DISTINCT FROM
+         stage_region.region_osm_id
+    GROUP BY
+      stage_region.region_name,
+      stage_region.region_osm_type,
+      stage_region.region_osm_id
   ),
   descendants AS (
     SELECT
       region_candidate.region_name,
+      region_candidate.region_osm_type,
+      region_candidate.region_osm_id,
       region_candidate.region_id,
       region_candidate.region_id AS boundary_id
     FROM region_candidates AS region_candidate
@@ -122,6 +174,8 @@ const RESOLVE_STAGE_SQL = `
 
     SELECT
       parent.region_name,
+      parent.region_osm_type,
+      parent.region_osm_id,
       parent.region_id,
       child.id
     FROM descendants AS parent
@@ -135,15 +189,32 @@ const RESOLVE_STAGE_SQL = `
     FROM population_transfer_stage AS stage
     JOIN region_counts AS region_count
       ON region_count.region_name = stage.region_name
+     AND region_count.region_osm_type IS NOT DISTINCT FROM stage.region_osm_type
+     AND region_count.region_osm_id IS NOT DISTINCT FROM stage.region_osm_id
      AND region_count.match_count = 1
     JOIN descendants AS descendant
       ON descendant.region_name = stage.region_name
+     AND descendant.region_osm_type IS NOT DISTINCT FROM stage.region_osm_type
+     AND descendant.region_osm_id IS NOT DISTINCT FROM stage.region_osm_id
      AND descendant.region_id = region_count.region_id
     JOIN city_boundaries AS boundary
       ON boundary.id = descendant.boundary_id
      AND boundary.place_type IN ('city', 'town')
-     AND ${NORMALIZE_NAME_SQL('boundary.display_name')} =
-         ${NORMALIZE_NAME_SQL('stage.city_name')}
+     AND (
+       (
+         stage.city_osm_type IS NOT NULL
+         AND stage.city_osm_id IS NOT NULL
+         AND boundary.osm_type = stage.city_osm_type
+         AND boundary.osm_id = stage.city_osm_id
+       )
+       OR
+       (
+         stage.city_osm_type IS NULL
+         AND stage.city_osm_id IS NULL
+         AND ${NORMALIZE_NAME_SQL('boundary.display_name')} =
+             ${NORMALIZE_NAME_SQL('stage.city_name')}
+       )
+     )
   ),
   city_counts AS (
     SELECT
@@ -154,25 +225,54 @@ const RESOLVE_STAGE_SQL = `
     LEFT JOIN city_candidates AS candidate
       ON candidate.seq = stage.seq
     GROUP BY stage.seq
+  ),
+  base_resolution AS (
+    SELECT
+      stage.seq,
+      stage.region_name,
+      stage.city_name,
+      region_count.region_id,
+      city_count.boundary_id,
+      CASE
+        WHEN region_count.match_count = 0 THEN 'region-missing'
+        WHEN region_count.match_count > 1 THEN 'region-ambiguous'
+        WHEN city_count.match_count = 0 THEN 'city-missing'
+        WHEN city_count.match_count > 1 THEN 'city-ambiguous'
+        ELSE 'matched'
+      END AS status
+    FROM population_transfer_stage AS stage
+    JOIN region_counts AS region_count
+      ON region_count.region_name = stage.region_name
+     AND region_count.region_osm_type IS NOT DISTINCT FROM stage.region_osm_type
+     AND region_count.region_osm_id IS NOT DISTINCT FROM stage.region_osm_id
+    JOIN city_counts AS city_count
+      ON city_count.seq = stage.seq
+  ),
+  ranked AS (
+    SELECT
+      base_resolution.*,
+      CASE
+        WHEN base_resolution.status = 'matched'
+        THEN ROW_NUMBER() OVER (
+          PARTITION BY base_resolution.boundary_id
+          ORDER BY base_resolution.seq
+        )
+        ELSE 1
+      END AS target_rank
+    FROM base_resolution
   )
   SELECT
-    stage.seq,
-    stage.region_name,
-    stage.city_name,
-    region_count.region_id,
-    city_count.boundary_id,
+    ranked.seq,
+    ranked.region_name,
+    ranked.city_name,
+    ranked.region_id,
+    ranked.boundary_id,
     CASE
-      WHEN region_count.match_count = 0 THEN 'region-missing'
-      WHEN region_count.match_count > 1 THEN 'region-ambiguous'
-      WHEN city_count.match_count = 0 THEN 'city-missing'
-      WHEN city_count.match_count > 1 THEN 'city-ambiguous'
-      ELSE 'matched'
+      WHEN ranked.status = 'matched' AND ranked.target_rank > 1
+      THEN 'city-duplicate-target'
+      ELSE ranked.status
     END AS status
-  FROM population_transfer_stage AS stage
-  JOIN region_counts AS region_count
-    ON region_count.region_name = stage.region_name
-  JOIN city_counts AS city_count
-    ON city_count.seq = stage.seq
+  FROM ranked
 `;
 
 const RESOLUTION_STATUS_SQL = `
@@ -190,7 +290,7 @@ const UPDATE_REGIONS_SQL = `
   SET attributes = source.region_attributes,
       updated_at = now()
   FROM (
-    SELECT DISTINCT ON (stage.region_name)
+    SELECT DISTINCT ON (resolved.region_id)
       resolved.region_id,
       stage.region_attributes
     FROM population_transfer_stage AS stage
@@ -198,7 +298,7 @@ const UPDATE_REGIONS_SQL = `
       ON resolved.seq = stage.seq
     WHERE resolved.region_id IS NOT NULL
       AND resolved.status NOT IN ('region-missing', 'region-ambiguous')
-    ORDER BY stage.region_name, stage.seq
+    ORDER BY resolved.region_id, stage.seq
   ) AS source
   WHERE boundary.id = source.region_id
   RETURNING boundary.id
@@ -241,6 +341,7 @@ function resolutionWarning(row) {
     'region-ambiguous': 'region name is ambiguous',
     'city-missing': 'city not found inside region',
     'city-ambiguous': 'city name is ambiguous inside region',
+    'city-duplicate-target': 'city resolves to a boundary already targeted by another entry',
   }[row.status] ?? row.status;
 
   return {
