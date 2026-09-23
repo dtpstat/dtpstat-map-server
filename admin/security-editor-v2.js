@@ -515,21 +515,10 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     const fallback = button.querySelector('.security-user-avatar-fallback');
     fallback.textContent = auditAvatarFallback(user.displayName ?? user.username);
     if (user.hasAvatar) {
-      const image = document.createElement('img');
-      image.alt = '';
-      image.decoding = 'async';
-      image.hidden = true;
-      image.addEventListener('load', () => {
-        image.hidden = false;
-        fallback.hidden = true;
-      }, { once: true });
-      image.addEventListener('error', () => {
-        image.remove();
-        fallback.hidden = false;
-      }, { once: true });
       const avatarVersion = encodeURIComponent(user.updatedAt ?? '1');
-      image.src = `/api/admin/security/users/${encodeURIComponent(user.id)}/avatar?v=${avatarVersion}`;
-      avatar.append(image);
+      avatar.classList.add('has-image');
+      avatar.style.backgroundImage =
+        `url("/api/admin/security/users/${encodeURIComponent(user.id)}/avatar?v=${avatarVersion}")`;
     }
     button.querySelector('strong').textContent = user.displayName ?? user.username;
     button.querySelector('small').textContent = `@${user.username}${user.email ? ` · ${user.email}` : ''}`;
@@ -608,24 +597,13 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     avatar.append(fallback);
 
     if (entry.userId) {
-      const image = document.createElement('img');
-      image.alt = '';
-      image.decoding = 'async';
-      image.hidden = true;
-      image.addEventListener('load', () => {
-        image.hidden = false;
-        fallback.hidden = true;
-      }, { once: true });
-      image.addEventListener('error', () => {
-        image.remove();
-        fallback.hidden = false;
-      }, { once: true });
       const currentUserRow =
         String(entry.userId) === String(currentUser?.id ?? '');
-      image.src = currentUserRow
+      const avatarUrl = currentUserRow
         ? '/api/admin/profile/avatar'
         : `/api/admin/security/users/${encodeURIComponent(entry.userId)}/avatar`;
-      avatar.append(image);
+      avatar.classList.add('has-image');
+      avatar.style.backgroundImage = `url("${avatarUrl}")`;
     }
 
     const name = document.createElement('span');
