@@ -196,7 +196,7 @@ function testSettingsTransferService() {
       return {
         _dtpstat: {
           kind: 'project-settings',
-          schemaVersion: 7,
+          schemaVersion: 8,
           exportedAt: '2026-01-01T00:00:00.000Z',
         },
         projectSettings: TEST_PROJECT_SETTINGS,
@@ -254,6 +254,7 @@ function testSecurity(config) {
     requireOsmEditor: requireAuth,
     requireUsers: requireAuth,
     requireAudit: requireAuth,
+    requireUsersOrAudit: requireAuth,
     requireSecurity: requireAuth,
     requireSuperuser: requireAuth,
   };
@@ -288,6 +289,7 @@ function testSecurity(config) {
     async revokeSession() { return true; },
     async revokeOtherSessions() { return 0; },
     async getSecuritySettings() { return testSecuritySettings(); },
+    async getPasswordPolicy() { return testSecuritySettings(); },
     async saveSecuritySettings(payload) { return payload; },
     async listIpBlocks() { return []; },
     async createIpBlock(payload) { return { id: 1, ...payload }; },
