@@ -1,6 +1,6 @@
 import express, { Router } from 'express';
-import { adminAuditPayloadFingerprint } from '../data/admin-audit-details.js';
-import { AdminTaskAlreadyRunningError } from '../data/admin-task-manager.js';
+import { adminAuditPayloadFingerprint } from '../shared/logging/admin-audit-details.js';
+import { AdminTaskAlreadyRunningError } from '../shared/tasks/admin-task-manager.js';
 import {
   KmlTransferValidationError,
   parseLinesKml,
@@ -19,7 +19,7 @@ import {
  * @param {{
  *   exportRepository: { exportLines: () => Promise<object> },
  *   importService: { replaceFromGeoJson: (collection: unknown, operation?: object) => Promise<object> },
- *   adminTasks: ReturnType<import('../data/admin-task-manager.js').createAdminTaskManager>,
+ *   adminTasks: ReturnType<import('../shared/tasks/admin-task-manager.js').createAdminTaskManager>,
  *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
  *   securityService: ReturnType<import('../data/admin-security.js').createAdminSecurityService>,
  *   maxBodyBytes: number
