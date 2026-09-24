@@ -22,7 +22,7 @@ test('OSM editor role crosses persistence service authorization and UI boundarie
     read('src/modules/security/account-service.js'),
     read('src/modules/security/authorization-policy.js'),
     read('src/http/admin-auth.js'),
-    read('src/routes/osm-boundaries-api.js'),
+    read('src/routes/osm/boundary-routes.js'),
     read('admin/admin-shell.js'),
     read('admin/security-editor-v2.js'),
   ]);
