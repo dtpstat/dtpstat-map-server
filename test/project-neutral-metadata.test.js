@@ -14,21 +14,53 @@ async function source(relativePath) {
 }
 
 test('runtime metadata and admin download names are project-neutral', async () => {
-  const [packageJson, transferApi, kmlApi, compose] = await Promise.all([
+  const [
+    packageJson,
+    transferRoutes,
+    transferExports,
+    kmlApi,
+    compose,
+  ] = await Promise.all([
     source('package.json'),
-    source('src/application/data-transfer/routes.js'),
+    source(
+      'src/application/data-transfer/routes.js',
+    ),
+    source(
+      'src/application/data-transfer/export-routes.js',
+    ),
     source('src/routes/kml/export-routes.js'),
     source('compose.yaml'),
   ]);
 
   assert.equal(JSON.parse(packageJson).name, 'dtpstat-map-server');
   assert.doesNotMatch(
-    transferApi,
+    transferRoutes,
     /dtpstat-buslines-(?:cities|lines|populations)/,
   );
-  assert.match(transferApi, /'cities\.geojson'/);
-  assert.match(transferApi, /'lines\.geojson'/);
-  assert.match(transferApi, /'populations\.json'/);
+  assert.doesNotMatch(
+    transferExports,
+    /dtpstat-buslines-(?:cities|lines|populations)/,
+  );
+  assert.doesNotMatch(
+    transferRoutes,
+    /'cities\.geojson'|'lines\.geojson'|'populations\.json'/,
+  );
+  assert.match(
+    transferRoutes,
+    /from '\.\/export-routes\.js'/,
+  );
+  assert.match(
+    transferExports,
+    /'cities\.geojson'/,
+  );
+  assert.match(
+    transferExports,
+    /'lines\.geojson'/,
+  );
+  assert.match(
+    transferExports,
+    /'populations\.json'/,
+  );
   assert.doesNotMatch(kmlApi, /dtpstat-buslines-lines\.kml/);
   assert.match(kmlApi, /filename="lines\.kml"/);
   assert.doesNotMatch(compose, /buslines-postgres/);
