@@ -9,7 +9,7 @@ import {
   createInflate,
 } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
-import { openSingleFileZip } from '../data/single-file-zip.js';
+import { openSingleFileZip } from '../shared/streaming/single-file-zip.js';
 
 export class StreamUploadError extends Error {
   constructor(message, statusCode = 400) {
