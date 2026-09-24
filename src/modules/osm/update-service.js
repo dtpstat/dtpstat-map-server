@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { throwIfAdminTaskCancelled } from '../../data/admin-task-manager.js';
+import { throwIfAdminTaskCancelled } from '../../shared/tasks/admin-task-manager.js';
 import { downloadOsmCities } from '../../data/osm-city-downloader.js';
 import {
   parseOsmCityResponse,

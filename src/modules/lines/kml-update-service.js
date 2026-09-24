@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { throwIfAdminTaskCancelled } from '../../data/admin-task-manager.js';
+import { throwIfAdminTaskCancelled } from '../../shared/tasks/admin-task-manager.js';
 import { downloadKml } from '../../data/kml-downloader.js';
 import { parseKmlSource } from '../../data/kml-parser.js';
 import { comparableLineTypeName } from './type-policy.js';

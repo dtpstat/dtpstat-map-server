@@ -1,4 +1,4 @@
-import { adminAuditPayloadFingerprint } from '../../data/admin-audit-details.js';
+import { adminAuditPayloadFingerprint } from '../../shared/logging/admin-audit-details.js';
 import {
   OsmCityUpdateValidationError,
   resolveOsmCityUpdateRequest,
