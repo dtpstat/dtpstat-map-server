@@ -120,9 +120,9 @@ test('admin interface loads editors and helpers explicitly without transitive si
 });
 
 test('public page derives metadata, theme stylesheet, analytics and download links from project settings', async () => {
-  const [html, app, middleware, page, metrics, contentCss, retroCss, classicCss, modernCss] = await Promise.all([
+  const [html, publicSite, middleware, page, metrics, contentCss, retroCss, classicCss, modernCss] = await Promise.all([
     source('index.html'),
-    source('src/app.js'),
+    source('src/http/public-site.js'),
     source('src/http/app-middleware.js'),
     source('src/http/project-page.js'),
     source('public/js/metrics.js'),
@@ -144,7 +144,7 @@ test('public page derives metadata, theme stylesheet, analytics and download lin
     assert.ok(html.includes(marker), marker);
   }
   assert.doesNotMatch(html, /bus-lanes\.jpeg/);
-  assert.doesNotMatch(app, /bus-lanes\.jpeg/);
+  assert.doesNotMatch(publicSite, /bus-lanes\.jpeg/);
   assert.match(html, /name="twitter:card" content="summary"/);
   assert.match(html, /data-theme="\{\{PROJECT_THEME_NAME\}\}"/);
   assert.match(html, /\{\{PROJECT_THEME_STYLESHEET\}\}/);
@@ -154,8 +154,8 @@ test('public page derives metadata, theme stylesheet, analytics and download lin
   assert.match(html, /\{\{YANDEX_METRIKA_NOSCRIPT\}\}/);
   assert.match(html, /\{\{PROJECT_FOOTER_HTML\}\}/);
   assert.match(html, /\/css\/project-content\.css/);
-  assert.match(app, /projectManifest\(settings\)/);
-  assert.match(app, /renderProjectPage\(publicPageTemplate, settings\)/);
+  assert.match(publicSite, /projectManifest\(\s*settings,?\s*\)/s);
+  assert.match(publicSite, /renderProjectPage\(\s*publicPageTemplate,\s*settings,?\s*\)/s);
   assert.match(middleware, /https:\/\/mc\.yandex\.ru/);
   assert.match(middleware, /https:\/\/mc\.yandex\.com/);
   assert.match(middleware, /wss:\/\/mc\.webvisor\.org/);
