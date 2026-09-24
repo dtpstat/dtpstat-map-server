@@ -1114,3 +1114,63 @@ test('legacy admin security data module is only a compatibility export surface',
   assert.doesNotMatch(facade, /repository\.findUserByUsername/u);
   assert.doesNotMatch(facade, /function normalizeAdminUsername/u);
 });
+
+
+test('shared admin task runtime separates lifecycle policy from audit sanitization', async () => {
+  const manager = await fs.readFile(
+    path.join(srcRoot, 'shared', 'tasks', 'admin-task-manager.js'),
+    'utf8',
+  );
+  const policy = await fs.readFile(
+    path.join(srcRoot, 'shared', 'tasks', 'admin-task-policy.js'),
+    'utf8',
+  );
+  const audit = await fs.readFile(
+    path.join(srcRoot, 'shared', 'logging', 'admin-audit-details.js'),
+    'utf8',
+  );
+
+  assert.match(manager, /adminTaskSnapshot\(/u);
+  assert.match(manager, /isAdminTaskActiveStatus\(/u);
+  assert.match(manager, /sanitizeAdminAuditData/u);
+  assert.match(manager, /sanitizeAdminAuditLog/u);
+  assert.match(manager, /recordSuccessfulUpdate/u);
+  assert.match(manager, /afterSuccessfulUpdate/u);
+  assert.doesNotMatch(manager, /\.\.\/\.\.\/data\//u);
+
+  assert.match(policy, /AdminTaskAlreadyRunningError/u);
+  assert.match(policy, /AdminTaskCancelledError/u);
+  assert.match(policy, /throwIfAdminTaskCancelled/u);
+  assert.match(policy, /adminTaskSnapshot/u);
+  assert.doesNotMatch(policy, /sanitizeAdminAuditData/u);
+  assert.doesNotMatch(policy, /serviceLog/u);
+
+  assert.match(audit, /sanitizeAdminAuditData/u);
+  assert.match(audit, /adminAuditPayloadFingerprint/u);
+  assert.doesNotMatch(audit, /adminTaskSnapshot/u);
+});
+
+test('legacy admin task and audit data modules are only compatibility exports', async () => {
+  const taskFacade = await fs.readFile(
+    path.join(srcRoot, 'data', 'admin-task-manager.js'),
+    'utf8',
+  );
+  const auditFacade = await fs.readFile(
+    path.join(srcRoot, 'data', 'admin-audit-details.js'),
+    'utf8',
+  );
+
+  assert.match(
+    taskFacade,
+    /from '\.\.\/shared\/tasks\/admin-task-manager\.js'/u,
+  );
+  assert.doesNotMatch(taskFacade, /new AbortController\(/u);
+  assert.doesNotMatch(taskFacade, /recordSuccessfulUpdate/u);
+
+  assert.match(
+    auditFacade,
+    /from '\.\.\/shared\/logging\/admin-audit-details\.js'/u,
+  );
+  assert.doesNotMatch(auditFacade, /crypto\.createHash/u);
+  assert.doesNotMatch(auditFacade, /function sanitize/u);
+});
