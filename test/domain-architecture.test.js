@@ -1687,3 +1687,65 @@ test('stream upload HTTP adapter delegates transport policy and spool persistenc
     /\.\.\/\.\.\/data\/single-file-zip\.js/u,
   );
 });
+
+
+test('application composition delegates test-only defaults to the testing module', async () => {
+  const app = await fs.readFile(
+    path.join(srcRoot, 'app.js'),
+    'utf8',
+  );
+  const defaults = await fs.readFile(
+    path.join(srcRoot, 'testing', 'app-defaults.js'),
+    'utf8',
+  );
+
+  assert.match(
+    app,
+    /createTestAppDefaults\(/u,
+  );
+  assert.match(
+    app,
+    /config\.environment === 'test'/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /TEST_PROJECT_SETTINGS/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /function testSecurity/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /createBasicAuth\(/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /Temp-Password-1234/u,
+  );
+
+  assert.match(
+    defaults,
+    /TEST_PROJECT_SETTINGS/u,
+  );
+  assert.match(
+    defaults,
+    /createBasicAuth\(/u,
+  );
+  assert.match(
+    defaults,
+    /createTestAppDefaults/u,
+  );
+  assert.match(
+    defaults,
+    /environment|importApi/u,
+  );
+  assert.doesNotMatch(
+    defaults,
+    /express\(/u,
+  );
+  assert.doesNotMatch(
+    defaults,
+    /createApp\(/u,
+  );
+});
