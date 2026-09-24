@@ -8,7 +8,7 @@ import {
   createAdminOperationAudit,
   recordAdminOperationChanges,
   recordAdminOperationDetails,
-} from '../http/admin-auth.js';
+} from '../http/admin-operation-audit.js';
 
 function object(value) {
   return value && typeof value === 'object' && !Array.isArray(value);
