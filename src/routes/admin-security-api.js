@@ -4,8 +4,10 @@ import {
   adminClientIp,
   adminSessionCookieName,
   adminSessionToken,
-  createAdminOperationAudit,
 } from '../http/admin-auth.js';
+import {
+  createAdminOperationAudit,
+} from '../http/admin-operation-audit.js';
 
 function parsePositiveInteger(value) {
   const number = Number(value);
