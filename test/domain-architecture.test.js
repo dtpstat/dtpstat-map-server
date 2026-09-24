@@ -1931,6 +1931,39 @@ test('application composition delegates CSP compression and static asset middlew
 });
 
 
+test('server composition root uses canonical security and upload staging modules', async () => {
+  const server = await fs.readFile(
+    path.join(srcRoot, 'server.js'),
+    'utf8',
+  );
+
+  assert.match(
+    server,
+    /modules\/security\/service\.js/u,
+  );
+  assert.match(
+    server,
+    /shared\/files\/upload-staging\.js/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /data\/admin-security\.js/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /http\/stream-upload\.js/u,
+  );
+  assert.match(
+    server,
+    /cleanupStagedUploads\(/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /cleanupStreamUploads\(/u,
+  );
+});
+
+
 test('server composition root delegates process shutdown lifecycle', async () => {
   const server = await fs.readFile(
     path.join(srcRoot, 'server.js'),

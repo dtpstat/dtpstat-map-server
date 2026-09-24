@@ -2,7 +2,7 @@ import 'dotenv/config';
 import path from 'node:path';
 import {createApp} from './app.js';
 import {loadConfig} from './config.js';
-import {createAdminSecurityService} from './data/admin-security.js';
+import {createAdminSecurityService} from './modules/security/service.js';
 import {createAdminTaskManager} from './shared/tasks/admin-task-manager.js';
 import {createPublicDownloadService} from './application/public-downloads/service.js';
 import {createAdminSecurityRepository} from './db/admin-security-repository.js';
@@ -27,7 +27,7 @@ import {migrateDatabase} from './db/migration-runner.js';
 import {verifyDatabaseMigrationState} from './db/migration-state.js';
 import {createAdminAuthorization} from './http/admin-auth.js';
 import {createAdminWebSocketGateway} from './http/admin-websocket.js';
-import {cleanupStreamUploads} from './http/stream-upload.js';
+import {cleanupStagedUploads} from './shared/files/upload-staging.js';
 import {startServers} from './http/start-servers.js';
 import {
   createServerShutdown,
@@ -160,7 +160,7 @@ async function main() {
   );
   await runServiceOperation(
     'portable-import-spool.cleanup',
-    () => cleanupStreamUploads(config.importApi.streamUploadDirectory),
+    () => cleanupStagedUploads(config.importApi.streamUploadDirectory),
     {
       successDetails: (removed) => ({
         directory: config.importApi.streamUploadDirectory,
