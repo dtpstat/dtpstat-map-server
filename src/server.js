@@ -3,7 +3,7 @@ import path from 'node:path';
 import {createApp} from './app.js';
 import {loadConfig} from './config.js';
 import {createAdminSecurityService} from './data/admin-security.js';
-import {createAdminTaskManager} from './data/admin-task-manager.js';
+import {createAdminTaskManager} from './shared/tasks/admin-task-manager.js';
 import {createPublicDownloadService} from './data/public-download-service.js';
 import {createAdminSecurityRepository} from './db/admin-security-repository.js';
 import {createAdminTaskSuccessRepository} from './db/admin-task-success-repository.js';
