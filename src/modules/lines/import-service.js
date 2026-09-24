@@ -3,8 +3,8 @@ import {
   createGeoJsonAccumulator,
   GeoJsonValidationError,
 } from '../../data/geojson-plan.js';
-import { parseStreamingJsonObject } from '../../data/streaming-json.js';
-import { throwIfAdminTaskCancelled } from '../../data/admin-task-manager.js';
+import { parseStreamingJsonObject } from '../../shared/streaming/streaming-json.js';
+import { throwIfAdminTaskCancelled } from '../../shared/tasks/admin-task-manager.js';
 import { createLineImportRepository } from './import-repository.js';
 const STREAM_STAGE_BATCH_SIZE = 50;
 
