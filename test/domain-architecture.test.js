@@ -1023,7 +1023,7 @@ test('legacy OSM boundary admin repository is only a DB composition adapter', as
 });
 
 
-test('security module separates policy credential primitives and orchestration', async () => {
+test('security module separates policy credentials and focused use cases', async () => {
   const policy = await fs.readFile(
     path.join(srcRoot, 'modules', 'security', 'policy.js'),
     'utf8',
@@ -1032,7 +1032,23 @@ test('security module separates policy credential primitives and orchestration',
     path.join(srcRoot, 'modules', 'security', 'credentials.js'),
     'utf8',
   );
-  const service = await fs.readFile(
+  const auth = await fs.readFile(
+    path.join(srcRoot, 'modules', 'security', 'auth-service.js'),
+    'utf8',
+  );
+  const accounts = await fs.readFile(
+    path.join(srcRoot, 'modules', 'security', 'account-service.js'),
+    'utf8',
+  );
+  const administration = await fs.readFile(
+    path.join(srcRoot, 'modules', 'security', 'admin-service.js'),
+    'utf8',
+  );
+  const audit = await fs.readFile(
+    path.join(srcRoot, 'modules', 'security', 'audit-service.js'),
+    'utf8',
+  );
+  const facade = await fs.readFile(
     path.join(srcRoot, 'modules', 'security', 'service.js'),
     'utf8',
   );
@@ -1049,12 +1065,30 @@ test('security module separates policy credential primitives and orchestration',
   assert.match(credentials, /generateAdminSessionToken/u);
   assert.doesNotMatch(credentials, /repository\./u);
 
-  assert.match(service, /repository\.findUserByUsername\(/u);
-  assert.match(service, /repository\.createSession\(/u);
-  assert.match(service, /repository\.saveSecuritySettings\(/u);
-  assert.match(service, /publicAdminUser\(/u);
-  assert.doesNotMatch(service, /crypto\.scrypt/u);
-  assert.doesNotMatch(service, /\.\.\/\.\.\/db\//u);
+  assert.match(auth, /repository\.findUserByUsername\(/u);
+  assert.match(auth, /repository\.createSession\(/u);
+  assert.match(auth, /authenticateSession/u);
+  assert.doesNotMatch(auth, /createIpBlock/u);
+
+  assert.match(accounts, /repository\.createUser\(/u);
+  assert.match(accounts, /canEditOsm/u);
+  assert.match(accounts, /changeOwnPassword/u);
+  assert.doesNotMatch(accounts, /findSession/u);
+
+  assert.match(administration, /repository\.saveSecuritySettings\(/u);
+  assert.match(administration, /repository\.createIpBlock\(/u);
+  assert.doesNotMatch(administration, /createSession/u);
+
+  assert.match(audit, /repository\.appendAudit\(/u);
+  assert.match(audit, /repository\.listAudit\(/u);
+
+  assert.match(facade, /createSecurityAuthService/u);
+  assert.match(facade, /createSecurityAccountService/u);
+  assert.match(facade, /createSecurityAdministrationService/u);
+  assert.match(facade, /createSecurityAuditService/u);
+  assert.doesNotMatch(facade, /repository\.findUserByUsername/u);
+  assert.doesNotMatch(facade, /repository\.saveSecuritySettings/u);
+  assert.doesNotMatch(facade, /\.\.\/\.\.\/db\//u);
 });
 
 test('legacy admin security data module is only a compatibility export surface', async () => {
