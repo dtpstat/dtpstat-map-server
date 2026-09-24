@@ -1,9 +1,9 @@
-import { throwIfAdminTaskCancelled } from '../../data/admin-task-manager.js';
+import { throwIfAdminTaskCancelled } from '../../shared/tasks/admin-task-manager.js';
 import {
   buildCityBoundaryGeoJsonPlan,
   createCityBoundaryGeoJsonAccumulator,
 } from '../../data/city-boundary-geojson-plan.js';
-import { parseStreamingJsonObject } from '../../data/streaming-json.js';
+import { parseStreamingJsonObject } from '../../shared/streaming/streaming-json.js';
 import {
   createCityBoundaryTransferRepository,
 } from './city-boundary-transfer-repository.js';
