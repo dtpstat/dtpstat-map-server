@@ -28,7 +28,11 @@ import {verifyDatabaseMigrationState} from './db/migration-state.js';
 import {createAdminAuthorization} from './http/admin-auth.js';
 import {createAdminWebSocketGateway} from './http/admin-websocket.js';
 import {cleanupStreamUploads} from './http/stream-upload.js';
-import {closeServer, startServers} from './http/start-servers.js';
+import {startServers} from './http/start-servers.js';
+import {
+  createServerShutdown,
+  installProcessShutdownHandlers,
+} from './application/server-lifecycle.js';
 import {
   runServiceOperation,
   serviceErrorDetails,
@@ -275,53 +279,14 @@ async function main() {
     instance: config.database.schema,
     servers: servers.length,
   });
-  let shuttingDown = false;
-
-  async function shutdown(signal) {
-    if (shuttingDown) {
-      serviceLog('warning', 'shutdown:duplicate', {signal});
-      return;
-    }
-    shuttingDown = true;
-    const startedAt = Date.now();
-    serviceLog('info', 'shutdown:start', {signal});
-
-    await runServiceOperation(
-      'admin-websocket.close',
-      () => adminWebSocket.close(),
-    );
-    const closeResults = await Promise.allSettled(
-      servers.map((server) => closeServer(server)),
-    );
-    const failedServers = closeResults.filter((result) => result.status === 'rejected');
-    if (failedServers.length > 0) {
-      serviceLog('warning', 'http-servers.close:partial', {
-        failed: failedServers.length,
-        total: closeResults.length,
-      });
-    } else {
-      serviceLog('info', 'http-servers.close:ok', {servers: closeResults.length});
-    }
-    await runServiceOperation('database.pool.close', () => pool.end());
-    serviceLog('info', 'shutdown:ok', {
-      signal,
-      durationMs: Date.now() - startedAt,
-    });
-  }
-
-  for (const signal of ['SIGINT', 'SIGTERM']) {
-    process.once(signal, () => {
-      shutdown(signal)
-        .then(() => process.exit(0))
-        .catch((error) => {
-          serviceLog('error', 'shutdown:error', {
-            signal,
-            ...serviceErrorDetails(error),
-          });
-          process.exit(1);
-        });
-    });
-  }
+  const shutdown = createServerShutdown({
+    servers,
+    adminWebSocket,
+    pool,
+  });
+  installProcessShutdownHandlers({
+    shutdown,
+  });
 }
 
 main().catch((error) => {

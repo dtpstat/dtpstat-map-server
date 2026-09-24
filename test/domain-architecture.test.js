@@ -1931,6 +1931,68 @@ test('application composition delegates CSP compression and static asset middlew
 });
 
 
+test('server composition root delegates process shutdown lifecycle', async () => {
+  const server = await fs.readFile(
+    path.join(srcRoot, 'server.js'),
+    'utf8',
+  );
+  const lifecycle = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'server-lifecycle.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    server,
+    /createServerShutdown\(/u,
+  );
+  assert.match(
+    server,
+    /installProcessShutdownHandlers\(/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /process\.once\(/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /Promise\.allSettled\(/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /shutdown:duplicate/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /database\.pool\.close/u,
+  );
+
+  assert.match(
+    lifecycle,
+    /processRuntime\.once\(/u,
+  );
+  assert.match(
+    lifecycle,
+    /Promise\.allSettled\(/u,
+  );
+  assert.match(
+    lifecycle,
+    /shutdown:duplicate/u,
+  );
+  assert.match(
+    lifecycle,
+    /database\.pool\.close/u,
+  );
+  assert.match(
+    lifecycle,
+    /admin-websocket\.close/u,
+  );
+});
+
+
 test('app composition root delegates API public-site and terminal HTTP assembly', async () => {
   const app = await fs.readFile(
     path.join(srcRoot, 'app.js'),
