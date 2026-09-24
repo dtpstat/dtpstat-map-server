@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { CITY_MARKER_ICON } from '../public/js/city-marker-icon.js';
-import { createAdminTaskManager } from './data/admin-task-manager.js';
+import { createAdminTaskManager } from './shared/tasks/admin-task-manager.js';
 import {
   DEFAULT_PUBLIC_DOWNLOAD_NAME,
   publicDownloadFiles,
