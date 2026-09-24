@@ -22,20 +22,6 @@ export {
   recordAdminOperationDetails,
 } from './admin-operation-audit.js';
 
-export {
-  adminSessionCookieName,
-  adminSessionToken,
-} from './admin-session-http.js';
-
-/**
- * Compatibility name used by security routes and websocket auth.
- *
- * @param {import('express').Request | import('node:http').IncomingMessage} request
- */
-export function adminClientIp(request) {
-  return requestClientIp(request);
-}
-
 /**
  * Session cookies are preferred for the interactive web admin. DB-backed Basic
  * Auth remains accepted for scripts and compatibility clients.

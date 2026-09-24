@@ -1336,6 +1336,18 @@ test('admin HTTP auth delegates session CSRF response permission and audit conce
   assert.doesNotMatch(auth, /WWW-Authenticate/u);
   assert.doesNotMatch(auth, /canManageData/u);
   assert.doesNotMatch(auth, /canEditOsm/u);
+  assert.doesNotMatch(
+    auth,
+    /adminSessionCookieName/u,
+  );
+  assert.doesNotMatch(
+    auth,
+    /export function adminClientIp/u,
+  );
+  assert.doesNotMatch(
+    auth,
+    /export\s*\{[\s\S]*?adminSessionToken[\s\S]*?\}\s*from '\.\/admin-session-http\.js'/u,
+  );
 
   assert.match(session, /SESSION_COOKIE/u);
   assert.match(session, /parseCookies/u);
