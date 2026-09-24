@@ -1355,6 +1355,20 @@ test('removed compatibility facades stay absent from source tests and scripts', 
     path.join(srcRoot, 'data', 'streaming-json.js'),
   ]);
 
+  const removedReferences = [
+    'src/application/data-transfer/routes.js',
+    'src/application/data-transfer/runtime.js',
+    'src/data/admin-security.js',
+    'src/data/line-types.js',
+    'src/data/mapbox-access-token.js',
+    'src/data/project-settings.js',
+    'src/data/public-download-name.js',
+    'src/data/public-download-service.js',
+    'src/data/report-config.js',
+    'src/data/single-file-zip.js',
+    'src/data/streaming-json.js',
+  ];
+
   const sourceFiles = (
     await Promise.all([
       jsFiles(srcRoot),
@@ -1366,6 +1380,13 @@ test('removed compatibility facades stay absent from source tests and scripts', 
       ),
     ])
   ).flat();
+
+  const architectureTest =
+    path.join(
+      root,
+      'test',
+      'domain-architecture.test.js',
+    );
 
   for (const file of sourceFiles) {
     const source = await fs.readFile(
@@ -1383,6 +1404,28 @@ test('removed compatibility facades stay absent from source tests and scripts', 
           !removedFacades.has(resolved),
         `${path.relative(root, file)} must import the canonical module instead of a removed compatibility facade`,
       );
+    }
+
+    if (file !== architectureTest) {
+      for (const reference of removedReferences) {
+        assert.doesNotMatch(
+          source,
+          new RegExp(
+            reference
+              .replace(/[.*+?^$\{\}()|[\]\\]/gu, '\\      assert.ok(
+        !resolved ||
+          !removedFacades.has(resolved),
+        `${path.relative(root, file)} must import the canonical module instead of a removed compatibility facade`,
+      );
+    }
+  }
+
+  for (const facade of removedFacades) {'),
+            'u',
+          ),
+          `${path.relative(root, file)} must not reference removed compatibility path ${reference}`,
+        );
+      }
     }
   }
 

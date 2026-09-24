@@ -16,15 +16,13 @@ async function source(relativePath) {
 test('runtime metadata and admin download names are project-neutral', async () => {
   const [
     packageJson,
-    transferRoutes,
+    apiRoutes,
     transferExports,
     kmlApi,
     compose,
   ] = await Promise.all([
     source('package.json'),
-    source(
-      'src/application/data-transfer/routes.js',
-    ),
+    source('src/routes/api.js'),
     source(
       'src/application/data-transfer/export-routes.js',
     ),
@@ -34,7 +32,7 @@ test('runtime metadata and admin download names are project-neutral', async () =
 
   assert.equal(JSON.parse(packageJson).name, 'dtpstat-map-server');
   assert.doesNotMatch(
-    transferRoutes,
+    apiRoutes,
     /dtpstat-buslines-(?:cities|lines|populations)/,
   );
   assert.doesNotMatch(
@@ -42,12 +40,12 @@ test('runtime metadata and admin download names are project-neutral', async () =
     /dtpstat-buslines-(?:cities|lines|populations)/,
   );
   assert.doesNotMatch(
-    transferRoutes,
+    apiRoutes,
     /'cities\.geojson'|'lines\.geojson'|'populations\.json'/,
   );
   assert.match(
-    transferRoutes,
-    /from '\.\/export-routes\.js'/,
+    apiRoutes,
+    /data-transfer\/export-routes\.js/,
   );
   assert.match(
     transferExports,
