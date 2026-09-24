@@ -1598,3 +1598,54 @@ test('portable KML HTTP separates export from task-backed import orchestration',
     /from '\.\.\/\.\.\/http\/admin-auth\.js'/u,
   );
 });
+
+
+test('stream upload HTTP adapter delegates transport policy and spool persistence', async () => {
+  const adapter = await fs.readFile(
+    path.join(srcRoot, 'http', 'stream-upload.js'),
+    'utf8',
+  );
+  const policy = await fs.readFile(
+    path.join(srcRoot, 'shared', 'http', 'upload-policy.js'),
+    'utf8',
+  );
+  const staging = await fs.readFile(
+    path.join(srcRoot, 'shared', 'files', 'upload-staging.js'),
+    'utf8',
+  );
+  const transferRuntime = await fs.readFile(
+    path.join(srcRoot, 'application', 'data-transfer', 'runtime.js'),
+    'utf8',
+  );
+
+  assert.match(adapter, /validateStreamUploadTransport\(/u);
+  assert.match(adapter, /stageUploadStream\(/u);
+  assert.match(adapter, /openSingleFileZip\(/u);
+  assert.match(adapter, /createGunzip\(/u);
+  assert.doesNotMatch(adapter, /crypto\.createHash/u);
+  assert.doesNotMatch(adapter, /randomUUID/u);
+  assert.doesNotMatch(adapter, /createWriteStream/u);
+  assert.doesNotMatch(adapter, /fsp\.readdir/u);
+
+  assert.match(policy, /validateStreamUploadTransport/u);
+  assert.match(policy, /supportedEncodings/u);
+  assert.match(policy, /application\/zip/u);
+  assert.doesNotMatch(policy, /node:fs/u);
+  assert.doesNotMatch(policy, /createWriteStream/u);
+
+  assert.match(staging, /stageUploadStream/u);
+  assert.match(staging, /crypto\.createHash\('sha256'\)/u);
+  assert.match(staging, /createWriteStream/u);
+  assert.match(staging, /cleanupStagedUploads/u);
+  assert.doesNotMatch(staging, /createGunzip/u);
+  assert.doesNotMatch(staging, /openSingleFileZip/u);
+
+  assert.match(
+    transferRuntime,
+    /\.\.\/\.\.\/shared\/streaming\/single-file-zip\.js/u,
+  );
+  assert.doesNotMatch(
+    transferRuntime,
+    /\.\.\/\.\.\/data\/single-file-zip\.js/u,
+  );
+});
