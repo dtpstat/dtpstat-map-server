@@ -4,7 +4,7 @@ import {createApp} from './app.js';
 import {loadConfig} from './config.js';
 import {createAdminSecurityService} from './data/admin-security.js';
 import {createAdminTaskManager} from './shared/tasks/admin-task-manager.js';
-import {createPublicDownloadService} from './data/public-download-service.js';
+import {createPublicDownloadService} from './application/public-downloads/service.js';
 import {createAdminSecurityRepository} from './db/admin-security-repository.js';
 import {createAdminTaskSuccessRepository} from './db/admin-task-success-repository.js';
 import {createCitiesRepository} from './db/cities-repository.js';
