@@ -2271,7 +2271,7 @@ test('application composition delegates CSP compression and static asset middlew
 });
 
 
-test('server composition root delegates startup and derived-state orchestration', async () => {
+test('server composition root delegates startup runtime and derived-state orchestration', async () => {
   const server = await fs.readFile(
     path.join(srcRoot, 'server.js'),
     'utf8',
@@ -2281,6 +2281,14 @@ test('server composition root delegates startup and derived-state orchestration'
       srcRoot,
       'application',
       'server-bootstrap.js',
+    ),
+    'utf8',
+  );
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'server-runtime.js',
     ),
     'utf8',
   );
@@ -2295,7 +2303,7 @@ test('server composition root delegates startup and derived-state orchestration'
 
   assert.match(
     server,
-    /modules\/security\/service\.js/u,
+    /createServerRuntime\(/u,
   );
   assert.match(
     server,
@@ -2303,11 +2311,11 @@ test('server composition root delegates startup and derived-state orchestration'
   );
   assert.match(
     server,
-    /bootstrapServerApplication\(/u,
+    /bootstrapServerApplication\(\s*runtime\.bootstrapDependencies/u,
   );
   assert.match(
     server,
-    /createDerivedStateRefresh\(/u,
+    /\.\.\.runtime\.appDependencies/u,
   );
   assert.match(
     server,
@@ -2316,7 +2324,23 @@ test('server composition root delegates startup and derived-state orchestration'
 
   assert.doesNotMatch(
     server,
-    /data\/admin-security\.js/u,
+    /node:path/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /modules\/security\/service\.js/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /createDerivedStateRefresh\(/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /from '\.\/db\/(?!pool\.js)[^']+\.js'/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /http\/admin-auth\.js/u,
   );
   assert.doesNotMatch(
     server,
@@ -2346,9 +2370,42 @@ test('server composition root delegates startup and derived-state orchestration'
     server,
     /portable-import-spool\.cleanup/u,
   );
-  assert.doesNotMatch(
-    server,
-    /PUBLIC_DOWNLOAD_TASK_TYPES/u,
+
+  assert.match(
+    runtime,
+    /db\/cities-repository\.js/u,
+  );
+  assert.match(
+    runtime,
+    /db\/project-settings-repository\.js/u,
+  );
+  assert.match(
+    runtime,
+    /db\/osm-city-update-service\.js/u,
+  );
+  assert.match(
+    runtime,
+    /modules\/security\/service\.js/u,
+  );
+  assert.match(
+    runtime,
+    /http\/admin-auth\.js/u,
+  );
+  assert.match(
+    runtime,
+    /createDerivedStateRefresh\(/u,
+  );
+  assert.match(
+    runtime,
+    /bootstrapDependencies/u,
+  );
+  assert.match(
+    runtime,
+    /appDependencies/u,
+  );
+  assert.match(
+    runtime,
+    /public-downloads/u,
   );
 
   assert.match(
