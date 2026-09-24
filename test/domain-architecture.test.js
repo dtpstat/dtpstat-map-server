@@ -1884,7 +1884,7 @@ test('app composition root delegates API public-site and terminal HTTP assembly'
 });
 
 
-test('PostgreSQL integration harness is opt-in and isolates compose runs in a temporary database', async () => {
+test('PostgreSQL integration harness uses the configured database and an isolated temporary schema', async () => {
   const script = await fs.readFile(
     path.join(
       root,
@@ -1896,15 +1896,11 @@ test('PostgreSQL integration harness is opt-in and isolates compose runs in a te
 
   assert.match(
     script,
-    /DTPSTAT_INTEGRATION_USE_COMPOSE/u,
+    /loadAdminDatabaseConnection/u,
   );
   assert.match(
     script,
-    /DTPSTAT_INTEGRATION_DATABASE_URL/u,
-  );
-  assert.match(
-    script,
-    /DTPSTAT_INTEGRATION_ALLOW_REMOTE/u,
+    /process\.env[\s\S]*DATABASE_NAME/u,
   );
   assert.match(
     script,
@@ -1917,18 +1913,6 @@ test('PostgreSQL integration harness is opt-in and isolates compose runs in a te
   assert.match(
     script,
     /PostGIS_Version\(\)/u,
-  );
-  assert.match(
-    script,
-    /CREATE DATABASE/u,
-  );
-  assert.match(
-    script,
-    /CREATE EXTENSION IF NOT EXISTS POSTGIS WITH SCHEMA PUBLIC/u,
-  );
-  assert.match(
-    script,
-    /DROP DATABASE IF EXISTS/u,
   );
   assert.match(
     script,
@@ -1945,7 +1929,15 @@ test('PostgreSQL integration harness is opt-in and isolates compose runs in a te
 
   assert.doesNotMatch(
     script,
-    /loadApplicationDatabaseConnection/u,
+    /CREATE DATABASE/u,
+  );
+  assert.doesNotMatch(
+    script,
+    /DROP DATABASE/u,
+  );
+  assert.doesNotMatch(
+    script,
+    /CREATE EXTENSION/u,
   );
   assert.doesNotMatch(
     script,
@@ -1953,10 +1945,7 @@ test('PostgreSQL integration harness is opt-in and isolates compose runs in a te
   );
   assert.doesNotMatch(
     script,
-    /process\.env\.DATABASE_NAME/u,
-  );
-  assert.doesNotMatch(
-    script,
     /process\.env\.DATABASE_SCHEMA/u,
   );
 });
+
