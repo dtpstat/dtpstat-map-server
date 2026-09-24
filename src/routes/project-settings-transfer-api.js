@@ -15,7 +15,7 @@ import {
  *     importSettings: (payload: unknown) => Promise<object>
  *   },
  *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
- *   securityService: ReturnType<import('../data/admin-security.js').createAdminSecurityService>,
+ *   securityService: ReturnType<import('../modules/security/service.js').createAdminSecurityService>,
  *   maxBodyBytes: number,
  *   afterImport?: (result: object) => Promise<object | void>
  * }} dependencies

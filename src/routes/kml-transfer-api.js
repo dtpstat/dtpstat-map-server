@@ -26,7 +26,7 @@ import {
  *   },
  *   adminTasks: ReturnType<import('../shared/tasks/admin-task-manager.js').createAdminTaskManager>,
  *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
- *   securityService: ReturnType<import('../data/admin-security.js').createAdminSecurityService>,
+ *   securityService: ReturnType<import('../modules/security/service.js').createAdminSecurityService>,
  *   maxBodyBytes: number
  * }} dependencies
  */
