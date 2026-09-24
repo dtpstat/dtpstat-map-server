@@ -42,7 +42,7 @@ test('current user and audit rows render stable avatar URLs with fallback initia
     read('admin/index.html'),
     read('admin/admin-shell.js'),
     read('admin/security-editor-v2.js'),
-    read('src/routes/admin-security-api.js'),
+    read('src/routes/security/user-routes.js'),
     read('admin/security-v2.css'),
   ]);
 
