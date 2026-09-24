@@ -40,7 +40,7 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
     read('admin/security-v2.css'),
     read('admin/profile-editor.js'),
     read('admin/profile.css'),
-    read('src/data/admin-security.js'),
+    read('src/modules/security/policy.js'),
   ]);
 
   assert.match(security, /function userListRow\(user\)/);
