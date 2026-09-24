@@ -1882,3 +1882,69 @@ test('app composition root delegates API public-site and terminal HTTP assembly'
   assert.doesNotMatch(terminal, /projectManifest/u);
   assert.doesNotMatch(terminal, /createApiRouter/u);
 });
+
+
+test('PostgreSQL integration harness is opt-in and isolated in a temporary schema', async () => {
+  const script = await fs.readFile(
+    path.join(
+      projectRoot,
+      'scripts',
+      'test-postgres-integration.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    script,
+    /DTPSTAT_INTEGRATION_USE_COMPOSE/u,
+  );
+  assert.match(
+    script,
+    /DTPSTAT_INTEGRATION_DATABASE_URL/u,
+  );
+  assert.match(
+    script,
+    /DTPSTAT_INTEGRATION_ALLOW_REMOTE/u,
+  );
+  assert.match(
+    script,
+    /dtpstat_it_/u,
+  );
+  assert.match(
+    script,
+    /applyMigrations\(/u,
+  );
+  assert.match(
+    script,
+    /PostGIS_Version\(\)/u,
+  );
+  assert.match(
+    script,
+    /DROP SCHEMA IF EXISTS/u,
+  );
+  assert.match(
+    script,
+    /createProjectSettingsTransferRepository\(/u,
+  );
+  assert.match(
+    script,
+    /createDataExportStorageRepository\(/u,
+  );
+
+  assert.doesNotMatch(
+    script,
+    /loadApplicationDatabaseConnection/u,
+  );
+  assert.doesNotMatch(
+    script,
+    /loadDatabaseSchema/u,
+  );
+  assert.doesNotMatch(
+    script,
+    /process\.env\.DATABASE_NAME/u,
+  );
+  assert.doesNotMatch(
+    script,
+    /process\.env\.DATABASE_SCHEMA/u,
+  );
+});
