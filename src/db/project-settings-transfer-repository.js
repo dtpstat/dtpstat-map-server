@@ -137,12 +137,29 @@ const UPDATE_SECURITY_SETTINGS_SQL = `
 export function createProjectSettingsTransferRepository() {
   return {
     async exportSnapshot(client) {
-      const [project, lineTypes, report, security] = await Promise.all([
-        client.query(EXPORT_PROJECT_SETTINGS_SQL),
-        client.query(EXPORT_LINE_TYPES_SQL),
-        client.query(EXPORT_REPORT_CONFIG_SQL),
-        client.query(EXPORT_SECURITY_SETTINGS_SQL),
-      ]);
+      // pg Client queries must not overlap. Besides avoiding the pg@8
+      // deprecation, sequential reads remain one consistent snapshot because
+      // the application service wraps this repository call in REPEATABLE READ.
+      const project =
+        await client.query(
+          EXPORT_PROJECT_SETTINGS_SQL,
+        );
+
+      const lineTypes =
+        await client.query(
+          EXPORT_LINE_TYPES_SQL,
+        );
+
+      const report =
+        await client.query(
+          EXPORT_REPORT_CONFIG_SQL,
+        );
+
+      const security =
+        await client.query(
+          EXPORT_SECURITY_SETTINGS_SQL,
+        );
+
       return {
         projectSettings: project.rows[0],
         lineTypes: lineTypes.rows,
