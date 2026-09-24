@@ -19,7 +19,7 @@ test('OSM editor role crosses persistence service authorization and UI boundarie
   const [repository, securityPolicy, securityService, auth, router, shell, editor] = await Promise.all([
     read('src/db/admin-user-repository.js'),
     read('src/modules/security/policy.js'),
-    read('src/modules/security/service.js'),
+    read('src/modules/security/account-service.js'),
     read('src/http/admin-auth.js'),
     read('src/routes/osm-boundaries-api.js'),
     read('admin/admin-shell.js'),
