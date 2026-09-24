@@ -109,11 +109,45 @@ test('public ranking headers, metric cells and conditional formats are generated
 });
 
 test('server refreshes report materialization before public snapshots', async () => {
-  const server = await source('src/server.js');
-  const reportPosition = server.indexOf("await refreshReportValues({reason: 'startup'})");
-  const snapshotsPosition = server.indexOf("await refreshPublicDownloads({reason: 'startup'})");
+  const [
+    server,
+    bootstrap,
+    derivedState,
+  ] = await Promise.all([
+    source('src/server.js'),
+    source(
+      'src/application/server-bootstrap.js',
+    ),
+    source(
+      'src/application/derived-state-refresh.js',
+    ),
+  ]);
+
+  assert.match(
+    server,
+    /createDerivedStateRefresh\(\{/,
+  );
+  assert.match(
+    server,
+    /bootstrapServerApplication\(\{[\s\S]*derivedState/,
+  );
+  assert.match(
+    bootstrap,
+    /await derivedState\.refreshAll\(\{\s*reason: 'startup',?\s*\}\)/s,
+  );
+
+  const reportPosition =
+    derivedState.indexOf(
+      'await refreshReportValues(details)',
+    );
+  const snapshotsPosition =
+    derivedState.indexOf(
+      'return refreshPublicDownloads(',
+    );
 
   assert.ok(reportPosition >= 0);
-  assert.ok(snapshotsPosition > reportPosition);
-  assert.match(server, /await refreshReportValues\(details\);\s*return refreshPublicDownloads\(details\);/s);
+  assert.ok(
+    snapshotsPosition >
+      reportPosition,
+  );
 });
