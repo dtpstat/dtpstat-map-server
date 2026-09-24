@@ -1388,39 +1388,31 @@ test('removed compatibility facades stay absent from source tests and scripts', 
       'domain-architecture.test.js',
     );
 
-  for (const file of sourceFiles) {
-    const source = await fs.readFile(
-      file,
+  for (const filePath of sourceFiles) {
+    const fileSource = await fs.readFile(
+      filePath,
       'utf8',
     );
-    for (const specifier of importSpecifiers(source)) {
+
+    for (const specifier of importSpecifiers(fileSource)) {
       const resolved =
         resolveRelativeImport(
-          file,
+          filePath,
           specifier,
         );
       assert.ok(
         !resolved ||
           !removedFacades.has(resolved),
-        `${path.relative(root, file)} must import the canonical module instead of a removed compatibility facade`,
+        `${path.relative(root, filePath)} must import the canonical module instead of a removed compatibility facade`,
       );
     }
 
-    if (file !== architectureTest) {
+    if (filePath !== architectureTest) {
       for (const reference of removedReferences) {
         assert.equal(
-          source.includes(reference),
+          fileSource.includes(reference),
           false,
-          `${path.relative(root, file)} must not reference removed compatibility path ${reference}`,
-        );
-      }
-    }
-  }
-
-  for (const facade of removedFacades) {'),
-            'u',
-          ),
-          `${path.relative(root, file)} must not reference removed compatibility path ${reference}`,
+          `${path.relative(root, filePath)} must not reference removed compatibility path ${reference}`,
         );
       }
     }
@@ -1434,6 +1426,7 @@ test('removed compatibility facades stay absent from source tests and scripts', 
     );
   }
 });
+
 
 test('public download application separates report CSV rendering from filesystem publication', async () => {
   const service = await fs.readFile(
