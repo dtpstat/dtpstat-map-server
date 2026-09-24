@@ -901,3 +901,66 @@ test('legacy admin security repository is only a persistence composition facade'
   assert.doesNotMatch(facade, /admin_login_ip_state/u);
   assert.doesNotMatch(facade, /admin_audit_log/u);
 });
+
+
+test('OSM checkpoint persistence separates record state from staged geometry', async () => {
+  const record = await fs.readFile(
+    path.join(srcRoot, 'db', 'osm-checkpoint-record-repository.js'),
+    'utf8',
+  );
+  const stage = await fs.readFile(
+    path.join(srcRoot, 'db', 'osm-checkpoint-stage-repository.js'),
+    'utf8',
+  );
+
+  assert.match(record, /osm_city_update_checkpoints/u);
+  assert.match(record, /settings_fingerprint/u);
+  assert.match(record, /request_attempt_count/u);
+  assert.doesNotMatch(record, /ST_BuildArea/u);
+  assert.doesNotMatch(record, /ST_GeomFromGeoJSON/u);
+
+  assert.match(stage, /osm_city_update_checkpoint_stage/u);
+  assert.match(stage, /ST_BuildArea/u);
+  assert.match(stage, /content_checksum/u);
+  assert.doesNotMatch(stage, /settings_fingerprint/u);
+  assert.doesNotMatch(stage, /source_url/u);
+});
+
+test('legacy OSM checkpoint repository only orchestrates atomic persistence slices', async () => {
+  const facade = await fs.readFile(
+    path.join(srcRoot, 'db', 'osm-city-checkpoint-repository.js'),
+    'utf8',
+  );
+
+  assert.match(
+    facade,
+    /createOsmCheckpointRecordRepository\(pool\)/u,
+  );
+  assert.match(
+    facade,
+    /createOsmCheckpointStageRepository\(pool\)/u,
+  );
+  assert.match(
+    facade,
+    /records\.lockResumable\(/u,
+  );
+  assert.match(
+    facade,
+    /stage\.stageBatch\(/u,
+  );
+  assert.match(
+    facade,
+    /records\.addBatchMetrics\(/u,
+  );
+  assert.match(
+    facade,
+    /stage\.deleteByCheckpoint\(/u,
+  );
+
+  assert.doesNotMatch(facade, /ST_BuildArea/u);
+  assert.doesNotMatch(facade, /settings_fingerprint/u);
+  assert.doesNotMatch(
+    facade,
+    /INSERT INTO osm_city_update_checkpoint_stage/u,
+  );
+});
