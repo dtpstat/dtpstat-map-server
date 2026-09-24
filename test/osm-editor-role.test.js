@@ -16,9 +16,10 @@ test('V035 introduces a dedicated OSM editor role without geometry permissions',
 });
 
 test('OSM editor role crosses persistence service authorization and UI boundaries', async () => {
-  const [repository, security, auth, router, shell, editor] = await Promise.all([
+  const [repository, securityPolicy, securityService, auth, router, shell, editor] = await Promise.all([
     read('src/db/admin-user-repository.js'),
-    read('src/data/admin-security.js'),
+    read('src/modules/security/policy.js'),
+    read('src/modules/security/service.js'),
     read('src/http/admin-auth.js'),
     read('src/routes/osm-boundaries-api.js'),
     read('admin/admin-shell.js'),
@@ -27,8 +28,8 @@ test('OSM editor role crosses persistence service authorization and UI boundarie
 
   assert.match(repository, /can_edit_osm AS "canEditOsm"/);
   assert.match(repository, /can_edit_osm = \$6/);
-  assert.match(security, /canEditOsm: Boolean\(user\.canEditOsm\)/);
-  assert.match(security, /'canEditOsm'/);
+  assert.match(securityPolicy, /canEditOsm: Boolean\(user\.canEditOsm\)/);
+  assert.match(securityService, /'canEditOsm'/);
   assert.match(auth, /permission === 'osm-editor'/);
   assert.match(auth, /requireOsmEditor: middleware\('osm-editor'\)/);
   assert.match(router, /adminAuth\.requireOsmEditor/);
