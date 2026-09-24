@@ -146,6 +146,7 @@ export function createProjectSettingsTransferRepository() {
       return {
         projectSettings: project.rows[0],
         lineTypes: lineTypes.rows,
+        reportConfigPresent: Boolean(report.rows[0]),
         reportConfig: report.rows[0]?.config,
         securitySettings: security.rows[0],
       };
