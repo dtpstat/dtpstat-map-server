@@ -194,10 +194,9 @@ export function createAdminAuthorization(
           request.get?.(
             'user-agent',
           ) ??
-          request.headers
-            ?.[
-              'user-agent'
-            ],
+          request.headers?.[
+            'user-agent'
+          ],
       });
 
   const middleware =
