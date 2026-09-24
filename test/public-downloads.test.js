@@ -7,7 +7,7 @@ import { createAdminTaskManager } from '../src/shared/tasks/admin-task-manager.j
 import {
   createPublicDownloadService,
   serializePublicCsv,
-} from '../src/data/public-download-service.js';
+} from '../src/application/public-downloads/service.js';
 import { createPublicDownloadRepository } from '../src/db/public-download-repository.js';
 
 const nextTurn = () => new Promise((resolve) => setImmediate(resolve));

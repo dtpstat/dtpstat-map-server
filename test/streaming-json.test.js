@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   parseStreamingJsonObject,
   StreamingJsonError,
-} from '../src/data/streaming-json.js';
+} from '../src/shared/streaming/streaming-json.js';
 
 async function* chunked(buffer, sizes = [1, 2, 3, 5, 8]) {
   let offset = 0;

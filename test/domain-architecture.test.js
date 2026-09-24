@@ -89,70 +89,64 @@ test('lightweight domain modules keep dependency direction explicit', async () =
   }
 });
 
-test('domain validation policies live in canonical modules instead of data', async () => {
-  const legacyPolicies = new Set([
-    path.join(srcRoot, 'data', 'line-types.js'),
-    path.join(srcRoot, 'data', 'report-config.js'),
-    path.join(srcRoot, 'data', 'project-settings.js'),
-    path.join(srcRoot, 'data', 'public-download-name.js'),
-    path.join(srcRoot, 'data', 'mapbox-access-token.js'),
-  ]);
+test('domain validation policies live in canonical modules without legacy data facades', async () => {
+  const canonicalPolicies = [
+    [
+      path.join(srcRoot, 'modules', 'lines', 'type-policy.js'),
+      /LineTypeValidationError/u,
+    ],
+    [
+      path.join(srcRoot, 'modules', 'reporting', 'config-policy.js'),
+      /ReportConfigValidationError/u,
+    ],
+    [
+      path.join(srcRoot, 'modules', 'project', 'settings-policy.js'),
+      /ProjectSettingsValidationError/u,
+    ],
+    [
+      path.join(srcRoot, 'modules', 'project', 'public-download-policy.js'),
+      /normalizePublicDownloadName/u,
+    ],
+    [
+      path.join(srcRoot, 'modules', 'project', 'mapbox-token-policy.js'),
+      /normalizeMapboxAccessToken/u,
+    ],
+  ];
 
-  const sourceFiles = await jsFiles(srcRoot);
-  for (const file of sourceFiles) {
-    if (
-      file.startsWith(
-        path.join(srcRoot, 'data') + path.sep,
-      )
-    ) {
-      continue;
-    }
-
+  for (const [file, marker] of canonicalPolicies) {
     const source = await fs.readFile(
       file,
       'utf8',
     );
-    for (const specifier of importSpecifiers(source)) {
-      const resolved =
-        resolveRelativeImport(
-          file,
-          specifier,
-        );
-
-      assert.ok(
-        !resolved ||
-          !legacyPolicies.has(resolved),
-        `${path.relative(root, file)} must import canonical validation policy modules instead of src/data`,
-      );
-    }
+    assert.match(
+      source,
+      marker,
+      path.relative(root, file),
+    );
   }
 
-  const facades = [
-    ['line-types.js', '../modules/lines/type-policy.js'],
-    ['report-config.js', '../modules/reporting/config-policy.js'],
-    ['project-settings.js', '../modules/project/settings-policy.js'],
-    ['public-download-name.js', '../modules/project/public-download-policy.js'],
-    ['mapbox-access-token.js', '../modules/project/mapbox-token-policy.js'],
+  const legacyPolicies = [
+    'line-types.js',
+    'report-config.js',
+    'project-settings.js',
+    'public-download-name.js',
+    'mapbox-access-token.js',
   ];
 
-  for (const [fileName, target] of facades) {
-    const facade = await fs.readFile(
-      path.join(
-        srcRoot,
-        'data',
-        fileName,
+  for (const fileName of legacyPolicies) {
+    await assert.rejects(
+      fs.access(
+        path.join(
+          srcRoot,
+          'data',
+          fileName,
+        ),
       ),
-      'utf8',
-    );
-
-    assert.equal(
-      facade.trim(),
-      `export * from '${target}';`,
-      fileName,
+      (error) =>
+        error?.code === 'ENOENT',
     );
   }
 });
-
 
 test('legacy API file is a composition root for extracted route modules', async () => {
   const source = await fs.readFile(path.join(srcRoot, 'routes', 'api.js'), 'utf8');
@@ -1173,30 +1167,60 @@ test('security module separates policy credentials and focused use cases', async
   assert.doesNotMatch(facade, /\.\.\/\.\.\/db\//u);
 });
 
-test('legacy admin security data module is only a compatibility export surface', async () => {
-  const facade = await fs.readFile(
-    path.join(srcRoot, 'data', 'admin-security.js'),
+test('admin security uses canonical policy credential and service modules', async () => {
+  const policy = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'security',
+      'policy.js',
+    ),
+    'utf8',
+  );
+  const credentials = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'security',
+      'credentials.js',
+    ),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'security',
+      'service.js',
+    ),
     'utf8',
   );
 
   assert.match(
-    facade,
-    /from '\.\.\/modules\/security\/policy\.js'/u,
+    policy,
+    /normalizeAdminUsername/u,
   );
   assert.match(
-    facade,
-    /from '\.\.\/modules\/security\/credentials\.js'/u,
+    credentials,
+    /hashAdminPassword/u,
   );
   assert.match(
-    facade,
-    /from '\.\.\/modules\/security\/service\.js'/u,
+    service,
+    /createAdminSecurityService/u,
   );
 
-  assert.doesNotMatch(facade, /crypto\.scrypt/u);
-  assert.doesNotMatch(facade, /repository\.findUserByUsername/u);
-  assert.doesNotMatch(facade, /function normalizeAdminUsername/u);
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'data',
+        'admin-security.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
 });
-
 
 test('shared admin task runtime separates lifecycle policy from audit sanitization', async () => {
   const manager = await fs.readFile(
@@ -1306,31 +1330,70 @@ test('shared streaming owns ZIP transport and streaming JSON parsing', async () 
   assert.doesNotMatch(json, /\.\.\/\.\.\/data\//u);
 });
 
-test('legacy streaming data modules are only compatibility exports', async () => {
-  const zipFacade = await fs.readFile(
+test('removed compatibility facades stay absent from source tests and scripts', async () => {
+  const removedFacades = new Set([
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'routes.js',
+    ),
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'runtime.js',
+    ),
+    path.join(srcRoot, 'data', 'admin-security.js'),
+    path.join(srcRoot, 'data', 'line-types.js'),
+    path.join(srcRoot, 'data', 'mapbox-access-token.js'),
+    path.join(srcRoot, 'data', 'project-settings.js'),
+    path.join(srcRoot, 'data', 'public-download-name.js'),
+    path.join(srcRoot, 'data', 'public-download-service.js'),
+    path.join(srcRoot, 'data', 'report-config.js'),
     path.join(srcRoot, 'data', 'single-file-zip.js'),
-    'utf8',
-  );
-  const jsonFacade = await fs.readFile(
     path.join(srcRoot, 'data', 'streaming-json.js'),
-    'utf8',
-  );
+  ]);
 
-  assert.match(
-    zipFacade,
-    /from '\.\.\/shared\/streaming\/single-file-zip\.js'/u,
-  );
-  assert.doesNotMatch(zipFacade, /createInflateRaw/u);
-  assert.doesNotMatch(zipFacade, /createDeflateRaw/u);
+  const sourceFiles = (
+    await Promise.all([
+      jsFiles(srcRoot),
+      jsFiles(
+        path.join(root, 'test'),
+      ),
+      jsFiles(
+        path.join(root, 'scripts'),
+      ),
+    ])
+  ).flat();
 
-  assert.match(
-    jsonFacade,
-    /from '\.\.\/shared\/streaming\/streaming-json\.js'/u,
-  );
-  assert.doesNotMatch(jsonFacade, /class AsyncCharReader/u);
-  assert.doesNotMatch(jsonFacade, /TextDecoder/u);
+  for (const file of sourceFiles) {
+    const source = await fs.readFile(
+      file,
+      'utf8',
+    );
+    for (const specifier of importSpecifiers(source)) {
+      const resolved =
+        resolveRelativeImport(
+          file,
+          specifier,
+        );
+      assert.ok(
+        !resolved ||
+          !removedFacades.has(resolved),
+        `${path.relative(root, file)} must import the canonical module instead of a removed compatibility facade`,
+      );
+    }
+  }
+
+  for (const facade of removedFacades) {
+    await assert.rejects(
+      fs.access(facade),
+      (error) =>
+        error?.code === 'ENOENT',
+    );
+  }
 });
-
 
 test('public download application separates report CSV rendering from filesystem publication', async () => {
   const service = await fs.readFile(
@@ -1365,21 +1428,38 @@ test('public download application separates report CSV rendering from filesystem
   assert.doesNotMatch(files, /serializePublicCsv/u);
 });
 
-test('legacy public download data service is only a compatibility export surface', async () => {
-  const facade = await fs.readFile(
-    path.join(srcRoot, 'data', 'public-download-service.js'),
+test('public download service has no legacy data compatibility facade', async () => {
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'public-downloads',
+      'service.js',
+    ),
     'utf8',
   );
 
   assert.match(
-    facade,
-    /from '\.\.\/application\/public-downloads\/service\.js'/u,
+    service,
+    /createPublicDownloadService/u,
   );
-  assert.doesNotMatch(facade, /fs\.writeFile/u);
-  assert.doesNotMatch(facade, /function csvValue/u);
-  assert.doesNotMatch(facade, /publicDownloadFiles\(/u);
-});
+  assert.match(
+    service,
+    /serializePublicCsv/u,
+  );
 
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'data',
+        'public-download-service.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
+});
 
 test('admin HTTP auth delegates session CSRF response permission and audit concerns', async () => {
   const auth = await fs.readFile(
@@ -1906,25 +1986,21 @@ test('portable KML HTTP separates export from task-backed import orchestration',
 });
 
 
-test('portable data transfer separates export import runtimes and route families', async () => {
-  const runtimeFacade = await fs.readFile(
+test('portable data transfer uses focused runtimes and route families without compatibility facades', async () => {
+  const legacyFacades = [
     path.join(
       srcRoot,
       'application',
       'data-transfer',
       'runtime.js',
     ),
-    'utf8',
-  );
-  const routesFacade = await fs.readFile(
     path.join(
       srcRoot,
       'application',
       'data-transfer',
       'routes.js',
     ),
-    'utf8',
-  );
+  ];
   const exportRuntime = await fs.readFile(
     path.join(
       srcRoot,
@@ -1971,39 +2047,13 @@ test('portable data transfer separates export import runtimes and route families
     'utf8',
   );
 
-  assert.match(
-    runtimeFacade,
-    /createPortableImportRuntime/u,
-  );
-  assert.match(
-    runtimeFacade,
-    /createStreamingExportRoute/u,
-  );
-  assert.doesNotMatch(
-    runtimeFacade,
-    /node:stream/u,
-  );
-  assert.doesNotMatch(
-    runtimeFacade,
-    /openUploadedJson/u,
-  );
-
-  assert.match(
-    routesFacade,
-    /from '\.\/export-routes\.js'/u,
-  );
-  assert.match(
-    routesFacade,
-    /from '\.\/import-routes\.js'/u,
-  );
-  assert.match(
-    routesFacade,
-    /from '\.\/population-routes\.js'/u,
-  );
-  assert.doesNotMatch(
-    routesFacade,
-    /router\.(?:get|post)\(/u,
-  );
+  for (const legacyFacade of legacyFacades) {
+    await assert.rejects(
+      fs.access(legacyFacade),
+      (error) =>
+        error?.code === 'ENOENT',
+    );
+  }
 
   assert.match(
     exportRuntime,
