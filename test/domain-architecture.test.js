@@ -1391,6 +1391,63 @@ test('admin HTTP auth delegates session CSRF response permission and audit conce
   assert.doesNotMatch(clientIp, /securityService/u);
 });
 
+test('security routes use canonical session and client IP HTTP helpers', async () => {
+  const profile = await fs.readFile(
+    path.join(
+      srcRoot,
+      'routes',
+      'security',
+      'profile-routes.js',
+    ),
+    'utf8',
+  );
+  const controls = await fs.readFile(
+    path.join(
+      srcRoot,
+      'routes',
+      'security',
+      'control-routes.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    profile,
+    /shared\/http\/client-ip\.js/u,
+  );
+  assert.match(
+    profile,
+    /http\/admin-session-http\.js/u,
+  );
+  assert.match(
+    controls,
+    /shared\/http\/client-ip\.js/u,
+  );
+
+  assert.doesNotMatch(
+    profile,
+    /http\/admin-auth\.js/u,
+  );
+  assert.doesNotMatch(
+    controls,
+    /http\/admin-auth\.js/u,
+  );
+
+  assert.match(
+    profile,
+    /requestClientIp\(request\)/u,
+  );
+  assert.match(
+    profile,
+    /adminSessionToken\(request\)/u,
+  );
+  assert.match(
+    controls,
+    /requestClientIp\(request\)/u,
+  );
+});
+
+
 test('admin mutating routes import operation audit from its dedicated HTTP module', async () => {
   const paths = [
     'line-types-api.js',

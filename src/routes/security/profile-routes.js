@@ -1,8 +1,10 @@
 import {
-  adminClientIp,
+  requestClientIp,
+} from '../../shared/http/client-ip.js';
+import {
   adminSessionCookieName,
   adminSessionToken,
-} from '../../http/admin-auth.js';
+} from '../../http/admin-session-http.js';
 import {
   createAdminOperationAudit,
 } from '../../http/admin-operation-audit.js';
@@ -60,7 +62,7 @@ export function registerAdminProfileRoutes(
             request.body,
             {
               ipAddress:
-                adminClientIp(request),
+                requestClientIp(request),
               userAgent:
                 request.get('user-agent'),
             },

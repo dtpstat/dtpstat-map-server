@@ -1,6 +1,6 @@
 import {
-  adminClientIp,
-} from '../../http/admin-auth.js';
+  requestClientIp,
+} from '../../shared/http/client-ip.js';
 import {
   createAdminOperationAudit,
 } from '../../http/admin-operation-audit.js';
@@ -113,7 +113,7 @@ export function registerAdminSecurityControlRoutes(
             .createIpBlock(
               request.body,
               request.adminUser,
-              adminClientIp(request),
+              requestClientIp(request),
             );
 
         response
