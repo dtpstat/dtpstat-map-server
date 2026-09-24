@@ -16,7 +16,7 @@ import { PUBLIC_DOWNLOAD_NAME_MAX_LENGTH } from '../data/public-download-name.js
 import {
   createAdminOperationAudit,
   recordAdminOperationChanges,
-} from '../http/admin-auth.js';
+} from '../http/admin-operation-audit.js';
 
 const DEFAULT_CITY_MARKER_PNG = Buffer.from(CITY_MARKER_ICON.split(',')[1], 'base64');
 
