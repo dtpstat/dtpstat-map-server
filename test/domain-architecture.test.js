@@ -1276,7 +1276,7 @@ test('legacy public download data service is only a compatibility export surface
 });
 
 
-test('admin HTTP auth delegates permission policy and keeps operation audit separate', async () => {
+test('admin HTTP auth delegates session CSRF response permission and audit concerns', async () => {
   const auth = await fs.readFile(
     path.join(srcRoot, 'http', 'admin-auth.js'),
     'utf8',
@@ -1294,6 +1294,18 @@ test('admin HTTP auth delegates permission policy and keeps operation audit sepa
     path.join(srcRoot, 'http', 'admin-operation-audit.js'),
     'utf8',
   );
+  const session = await fs.readFile(
+    path.join(srcRoot, 'http', 'admin-session-http.js'),
+    'utf8',
+  );
+  const csrf = await fs.readFile(
+    path.join(srcRoot, 'http', 'admin-csrf.js'),
+    'utf8',
+  );
+  const authResponse = await fs.readFile(
+    path.join(srcRoot, 'http', 'admin-auth-response.js'),
+    'utf8',
+  );
   const clientIp = await fs.readFile(
     path.join(srcRoot, 'shared', 'http', 'client-ip.js'),
     'utf8',
@@ -1301,7 +1313,9 @@ test('admin HTTP auth delegates permission policy and keeps operation audit sepa
 
   assert.match(auth, /adminHasPermission\(/u);
   assert.match(auth, /requestClientIp\(/u);
-  assert.match(auth, /csrfAllowed/u);
+  assert.match(auth, /adminCsrfAllowed\(/u);
+  assert.match(auth, /respondAdminAuthenticationFailure\(/u);
+  assert.match(auth, /applyAdminSessionContext\(/u);
   assert.match(auth, /authenticateUpgrade/u);
   assert.match(
     auth,
@@ -1309,8 +1323,32 @@ test('admin HTTP auth delegates permission policy and keeps operation audit sepa
   );
   assert.doesNotMatch(auth, /serviceLog\(/u);
   assert.doesNotMatch(auth, /createAdminAuditChangeSet/u);
+  assert.doesNotMatch(auth, /SESSION_COOKIE/u);
+  assert.doesNotMatch(auth, /sec-fetch-site/u);
+  assert.doesNotMatch(auth, /WWW-Authenticate/u);
   assert.doesNotMatch(auth, /canManageData/u);
   assert.doesNotMatch(auth, /canEditOsm/u);
+
+  assert.match(session, /SESSION_COOKIE/u);
+  assert.match(session, /parseCookies/u);
+  assert.match(session, /adminSessionToken/u);
+  assert.match(session, /X-DTPStat-Admin-Session-Expires-At/u);
+  assert.doesNotMatch(session, /adminHasPermission/u);
+  assert.doesNotMatch(session, /sec-fetch-site/u);
+
+  assert.match(csrf, /adminCsrfAllowed/u);
+  assert.match(csrf, /sec-fetch-site/u);
+  assert.match(csrf, /same-origin/u);
+  assert.match(csrf, /new URL\(origin\)/u);
+  assert.doesNotMatch(csrf, /adminHasPermission/u);
+  assert.doesNotMatch(csrf, /WWW-Authenticate/u);
+
+  assert.match(authResponse, /respondAdminAuthenticationFailure/u);
+  assert.match(authResponse, /WWW-Authenticate/u);
+  assert.match(authResponse, /Retry-After/u);
+  assert.match(authResponse, /Too many failed login attempts/u);
+  assert.doesNotMatch(authResponse, /request\.get/u);
+  assert.doesNotMatch(authResponse, /adminHasPermission/u);
 
   assert.match(
     authorizationPolicy,
