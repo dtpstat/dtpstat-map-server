@@ -8,7 +8,7 @@ import {
   createAdminOperationAudit,
   recordAdminOperationChanges,
   recordAdminOperationDetails,
-} from '../http/admin-auth.js';
+} from '../http/admin-operation-audit.js';
 
 function isValidationError(error) {
   return error instanceof ProjectSettingsTransferValidationError ||
