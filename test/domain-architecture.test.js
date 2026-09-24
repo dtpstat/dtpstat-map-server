@@ -1749,3 +1749,81 @@ test('application composition delegates test-only defaults to the testing module
     /createApp\(/u,
   );
 });
+
+
+test('application composition delegates CSP compression and static asset middleware', async () => {
+  const app = await fs.readFile(
+    path.join(srcRoot, 'app.js'),
+    'utf8',
+  );
+  const middleware = await fs.readFile(
+    path.join(srcRoot, 'http', 'app-middleware.js'),
+    'utf8',
+  );
+
+  assert.match(
+    app,
+    /installAppHttpMiddleware\(/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /helmet\(/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /compression\(/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /YANDEX_METRIKA_HTTPS_ORIGINS/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /CITY_MARKER_PNG/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /express\.static\(/u,
+  );
+
+  assert.match(
+    middleware,
+    /helmet\(/u,
+  );
+  assert.match(
+    middleware,
+    /compression\(\)/u,
+  );
+  assert.match(
+    middleware,
+    /YANDEX_METRIKA_HTTPS_ORIGINS/u,
+  );
+  assert.match(
+    middleware,
+    /YANDEX_METRIKA_WSS_ORIGINS/u,
+  );
+  assert.match(
+    middleware,
+    /YANDEX_METRIKA_FRAME_ANCESTORS/u,
+  );
+  assert.match(
+    middleware,
+    /express\.static\(/u,
+  );
+  assert.match(
+    middleware,
+    /requireAdminEntry/u,
+  );
+  assert.match(
+    middleware,
+    /\/images\/city-marker\.png/u,
+  );
+  assert.doesNotMatch(
+    middleware,
+    /createApiRouter/u,
+  );
+  assert.doesNotMatch(
+    middleware,
+    /createProjectSettingsRouter/u,
+  );
+});
