@@ -1,6 +1,6 @@
 import {
   validateReportConfig,
-} from '../../data/report-config.js';
+} from './config-policy.js';
 
 function normalizeStoredConfig(row) {
   const stored = row?.config;

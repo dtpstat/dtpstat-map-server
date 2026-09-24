@@ -1,14 +1,14 @@
 import {
   buildLineTypesPlan,
   LineTypeValidationError,
-} from '../../data/line-types.js';
+} from '../../modules/lines/type-policy.js';
 import {
   ReportConfigValidationError,
   validateReportConfig,
-} from '../../data/report-config.js';
+} from '../../modules/reporting/config-policy.js';
 import {
   ProjectSettingsValidationError,
-} from '../../data/project-settings.js';
+} from '../../modules/project/settings-policy.js';
 import {
   AdminSecurityValidationError,
 } from '../../modules/security/policy.js';

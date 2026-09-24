@@ -1,7 +1,7 @@
 import path from 'node:path';
 import {
   publicDownloadFiles,
-} from '../../data/public-download-name.js';
+} from '../../modules/project/public-download-policy.js';
 import {
   replaceAtomicSnapshotFiles,
 } from '../../shared/files/atomic-snapshot.js';

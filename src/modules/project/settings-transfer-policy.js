@@ -5,9 +5,9 @@ import {
 import {
   buildProjectSettingsPlan,
   ProjectSettingsValidationError,
-} from '../../data/project-settings.js';
-import { normalizeMapboxAccessToken } from '../../data/mapbox-access-token.js';
-import { normalizePublicDownloadName } from '../../data/public-download-name.js';
+} from './settings-policy.js';
+import { normalizeMapboxAccessToken } from './mapbox-token-policy.js';
+import { normalizePublicDownloadName } from './public-download-policy.js';
 
 export const PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION = 8;
 export const PROJECT_SETTINGS_TRANSFER_KIND = 'project-settings';

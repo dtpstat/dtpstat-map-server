@@ -2,8 +2,8 @@ import {
   buildProjectSettingsPlan,
   normalizePublicThemePreset,
   ProjectSettingsValidationError,
-} from '../../data/project-settings.js';
-import { normalizeMapboxAccessToken } from '../../data/mapbox-access-token.js';
+} from './settings-policy.js';
+import { normalizeMapboxAccessToken } from './mapbox-token-policy.js';
 
 export function normalizeProjectSettingsUpdate(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
