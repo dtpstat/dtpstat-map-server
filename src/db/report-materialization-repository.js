@@ -1,6 +1,6 @@
 import {
   orderReportMetricsByDependencies,
-} from '../data/report-config.js';
+} from '../modules/reporting/config-policy.js';
 import {
   compileReportMetricQuery,
   compileReportRankQuery,

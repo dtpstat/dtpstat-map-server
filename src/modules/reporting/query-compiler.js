@@ -1,7 +1,7 @@
 import {
   reportMetricToRpn,
   ReportConfigValidationError,
-} from '../../data/report-config.js';
+} from './config-policy.js';
 
 const FIELD_SQL = Object.freeze({
   'city.population': 'population.population::double precision',

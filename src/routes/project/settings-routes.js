@@ -3,16 +3,16 @@ import {
 } from '../../data/city-marker-icon.js';
 import {
   MapboxAccessTokenValidationError,
-} from '../../data/mapbox-access-token.js';
+} from '../../modules/project/mapbox-token-policy.js';
 import {
   PROJECT_CONTENT_CLASSES,
   PROJECT_CONTENT_TAGS,
   PUBLIC_THEME_PRESETS,
   ProjectSettingsValidationError,
-} from '../../data/project-settings.js';
+} from '../../modules/project/settings-policy.js';
 import {
   PUBLIC_DOWNLOAD_NAME_MAX_LENGTH,
-} from '../../data/public-download-name.js';
+} from '../../modules/project/public-download-policy.js';
 import {
   createAdminOperationAudit,
   recordAdminOperationChanges,

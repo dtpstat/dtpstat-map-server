@@ -1,10 +1,10 @@
 import {
   DEFAULT_PUBLIC_DOWNLOAD_NAME,
-} from '../data/public-download-name.js';
+} from '../modules/project/public-download-policy.js';
 import {
   DEFAULT_REPORT_CONFIG,
   validateReportConfig,
-} from '../data/report-config.js';
+} from '../modules/reporting/config-policy.js';
 import {
   createBasicAuth,
 } from '../http/basic-auth.js';

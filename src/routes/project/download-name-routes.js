@@ -1,6 +1,6 @@
 import {
   ProjectSettingsValidationError,
-} from '../../data/project-settings.js';
+} from '../../modules/project/settings-policy.js';
 import {
   createAdminOperationAudit,
   recordAdminOperationChanges,

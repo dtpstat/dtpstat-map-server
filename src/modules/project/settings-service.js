@@ -1,5 +1,5 @@
-import { normalizeMapboxAccessToken } from '../../data/mapbox-access-token.js';
-import { normalizePublicDownloadName } from '../../data/public-download-name.js';
+import { normalizeMapboxAccessToken } from './mapbox-token-policy.js';
+import { normalizePublicDownloadName } from './public-download-policy.js';
 import {
   normalizeProjectSettingsUpdate,
 } from './settings-update-policy.js';
