@@ -1,10 +1,12 @@
 import {
   AdminTaskAlreadyRunningError,
-} from '../../data/admin-task-manager.js';
+} from '../../shared/tasks/admin-task-manager.js';
 import {
-  adminClientIp,
+  requestClientIp,
+} from '../../shared/http/client-ip.js';
+import {
   createAdminOperationAudit,
-} from '../../http/admin-auth.js';
+} from '../../http/admin-operation-audit.js';
 
 export function createAdminTaskHttpRuntime({
   adminTasks,
@@ -49,7 +51,7 @@ export function createAdminTaskHttpRuntime({
     ? {
         userId: request.adminUser.id,
         username: request.adminUser.username,
-        ipAddress: adminClientIp(request),
+        ipAddress: requestClientIp(request),
       }
     : undefined;
 
