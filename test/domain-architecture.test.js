@@ -837,3 +837,67 @@ test('legacy data export repository is only a DB composition adapter', async () 
   assert.match(service, /storage\.exportCityBoundaries\(/u);
   assert.match(service, /storage\.populationRows\(/u);
 });
+
+
+test('admin security persistence is split by bounded responsibility', async () => {
+  const users = await fs.readFile(
+    path.join(srcRoot, 'db', 'admin-user-repository.js'),
+    'utf8',
+  );
+  const sessions = await fs.readFile(
+    path.join(srcRoot, 'db', 'admin-session-repository.js'),
+    'utf8',
+  );
+  const accessControl = await fs.readFile(
+    path.join(srcRoot, 'db', 'admin-access-control-repository.js'),
+    'utf8',
+  );
+  const audit = await fs.readFile(
+    path.join(srcRoot, 'db', 'admin-audit-repository.js'),
+    'utf8',
+  );
+
+  assert.match(users, /FROM admin_users/u);
+  assert.match(users, /can_edit_osm = \$6/u);
+  assert.doesNotMatch(users, /FROM admin_sessions/u);
+  assert.doesNotMatch(users, /FROM admin_audit_log/u);
+
+  assert.match(sessions, /FROM admin_sessions/u);
+  assert.match(sessions, /JOIN admin_users AS users/u);
+  assert.doesNotMatch(sessions, /admin_security_settings/u);
+  assert.doesNotMatch(sessions, /admin_audit_log/u);
+
+  assert.match(accessControl, /admin_security_settings/u);
+  assert.match(accessControl, /admin_login_ip_state/u);
+  assert.match(accessControl, /admin_blocked_ips/u);
+  assert.doesNotMatch(accessControl, /admin_audit_log/u);
+
+  assert.match(audit, /admin_audit_log/u);
+  assert.match(audit, /admin_user\.avatar_data IS NOT NULL/u);
+  assert.doesNotMatch(audit, /admin_sessions/u);
+  assert.doesNotMatch(audit, /admin_security_settings/u);
+});
+
+test('legacy admin security repository is only a persistence composition facade', async () => {
+  const facade = await fs.readFile(
+    path.join(srcRoot, 'db', 'admin-security-repository.js'),
+    'utf8',
+  );
+
+  assert.match(facade, /createAdminUserRepository\(database\)/u);
+  assert.match(facade, /createAdminSessionRepository\(database\)/u);
+  assert.match(
+    facade,
+    /createAdminAccessControlRepository\(database\)/u,
+  );
+  assert.match(facade, /createAdminAuditRepository\(database\)/u);
+  assert.match(facade, /\.\.\.users/u);
+  assert.match(facade, /\.\.\.sessions/u);
+  assert.match(facade, /\.\.\.accessControl/u);
+  assert.match(facade, /\.\.\.audit/u);
+
+  assert.doesNotMatch(facade, /SELECT .*admin_users/u);
+  assert.doesNotMatch(facade, /INSERT INTO admin_sessions/u);
+  assert.doesNotMatch(facade, /admin_login_ip_state/u);
+  assert.doesNotMatch(facade, /admin_audit_log/u);
+});
