@@ -1345,7 +1345,7 @@ test('admin HTTP auth delegates permission policy and keeps operation audit sepa
   assert.doesNotMatch(clientIp, /securityService/u);
 });
 
-test('admin routes import operation audit from its dedicated HTTP module', async () => {
+test('admin mutating routes import operation audit from its dedicated HTTP module', async () => {
   const paths = [
     'line-types-api.js',
     'report-config-api.js',
@@ -1353,7 +1353,9 @@ test('admin routes import operation audit from its dedicated HTTP module', async
     'project-settings-transfer-api.js',
     'osm-boundaries-api.js',
     'kml-transfer-api.js',
-    'admin-security-api.js',
+    'security/profile-routes.js',
+    'security/user-routes.js',
+    'security/control-routes.js',
   ];
 
   for (const file of paths) {
