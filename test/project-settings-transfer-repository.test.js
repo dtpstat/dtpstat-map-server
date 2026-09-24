@@ -92,3 +92,54 @@ test('project settings transfer repository owns line-type staging and settings S
     /^UPDATE project_settings SET/u,
   );
 });
+
+
+test('project settings transfer repository preserves report row presence separately from config value', async () => {
+  const repository = createProjectSettingsTransferRepository();
+
+  const withNullConfig = {
+    async query(text) {
+      const normalized = text.trim();
+      if (normalized.includes('FROM project_settings')) {
+        return { rows: [{ projectName: 'Test' }], rowCount: 1 };
+      }
+      if (normalized.includes('FROM line_types')) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (normalized.includes('FROM report_config')) {
+        return { rows: [{ config: null }], rowCount: 1 };
+      }
+      if (normalized.includes('FROM admin_security_settings')) {
+        return { rows: [{ maxFailedAttempts: 5 }], rowCount: 1 };
+      }
+      throw new Error(`Unexpected SQL: ${normalized}`);
+    },
+  };
+
+  const present = await repository.exportSnapshot(withNullConfig);
+  assert.equal(present.reportConfigPresent, true);
+  assert.equal(present.reportConfig, null);
+
+  const withoutReportRow = {
+    async query(text) {
+      const normalized = text.trim();
+      if (normalized.includes('FROM project_settings')) {
+        return { rows: [{ projectName: 'Test' }], rowCount: 1 };
+      }
+      if (normalized.includes('FROM line_types')) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (normalized.includes('FROM report_config')) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (normalized.includes('FROM admin_security_settings')) {
+        return { rows: [{ maxFailedAttempts: 5 }], rowCount: 1 };
+      }
+      throw new Error(`Unexpected SQL: ${normalized}`);
+    },
+  };
+
+  const missing = await repository.exportSnapshot(withoutReportRow);
+  assert.equal(missing.reportConfigPresent, false);
+  assert.equal(missing.reportConfig, undefined);
+});
