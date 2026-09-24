@@ -49,6 +49,126 @@ test('project settings transfer repository exports one consistent snapshot', asy
   assert.equal(client.queries.length, 4);
 });
 
+test('project settings transfer repository never overlaps queries on one client', async () => {
+  const repository = createProjectSettingsTransferRepository();
+
+  let active = false;
+  const sequence = [];
+
+  const client = {
+    async query(text) {
+      assert.equal(
+        active,
+        false,
+        'query started before the previous query completed',
+      );
+
+      active = true;
+
+      try {
+        await new Promise(
+          (resolve) =>
+            setImmediate(resolve),
+        );
+
+        const normalized =
+          text.trim();
+
+        sequence.push(
+          normalized,
+        );
+
+        if (
+          normalized.includes(
+            'FROM project_settings',
+          )
+        ) {
+          return {
+            rows: [
+              {
+                projectName:
+                  'Test',
+              },
+            ],
+            rowCount: 1,
+          };
+        }
+
+        if (
+          normalized.includes(
+            'FROM line_types',
+          )
+        ) {
+          return {
+            rows: [],
+            rowCount: 0,
+          };
+        }
+
+        if (
+          normalized.includes(
+            'FROM report_config',
+          )
+        ) {
+          return {
+            rows: [
+              {
+                config: {},
+              },
+            ],
+            rowCount: 1,
+          };
+        }
+
+        if (
+          normalized.includes(
+            'FROM admin_security_settings',
+          )
+        ) {
+          return {
+            rows: [
+              {
+                maxFailedAttempts: 5,
+              },
+            ],
+            rowCount: 1,
+          };
+        }
+
+        throw new Error(
+          `Unexpected SQL: ${normalized}`,
+        );
+      } finally {
+        active = false;
+      }
+    },
+  };
+
+  await repository
+    .exportSnapshot(client);
+
+  assert.equal(
+    sequence.length,
+    4,
+  );
+  assert.match(
+    sequence[0],
+    /FROM project_settings/u,
+  );
+  assert.match(
+    sequence[1],
+    /FROM line_types/u,
+  );
+  assert.match(
+    sequence[2],
+    /FROM report_config/u,
+  );
+  assert.match(
+    sequence[3],
+    /FROM admin_security_settings/u,
+  );
+});
+
 test('project settings transfer repository owns line-type staging and settings SQL', async () => {
   const repository = createProjectSettingsTransferRepository();
   const client = createClient();
