@@ -120,9 +120,10 @@ test('admin interface loads editors and helpers explicitly without transitive si
 });
 
 test('public page derives metadata, theme stylesheet, analytics and download links from project settings', async () => {
-  const [html, app, page, metrics, contentCss, retroCss, classicCss, modernCss] = await Promise.all([
+  const [html, app, middleware, page, metrics, contentCss, retroCss, classicCss, modernCss] = await Promise.all([
     source('index.html'),
     source('src/app.js'),
+    source('src/http/app-middleware.js'),
     source('src/http/project-page.js'),
     source('public/js/metrics.js'),
     source('public/css/project-content.css'),
@@ -155,12 +156,12 @@ test('public page derives metadata, theme stylesheet, analytics and download lin
   assert.match(html, /\/css\/project-content\.css/);
   assert.match(app, /projectManifest\(settings\)/);
   assert.match(app, /renderProjectPage\(publicPageTemplate, settings\)/);
-  assert.match(app, /https:\/\/mc\.yandex\.ru/);
-  assert.match(app, /https:\/\/mc\.yandex\.com/);
-  assert.match(app, /wss:\/\/mc\.webvisor\.org/);
-  assert.match(app, /YANDEX_METRIKA_FRAME_ANCESTORS/);
-  assert.match(app, /frameAncestors/);
-  assert.match(app, /https:\/\/\*\.googletagmanager\.com/);
+  assert.match(middleware, /https:\/\/mc\.yandex\.ru/);
+  assert.match(middleware, /https:\/\/mc\.yandex\.com/);
+  assert.match(middleware, /wss:\/\/mc\.webvisor\.org/);
+  assert.match(middleware, /YANDEX_METRIKA_FRAME_ANCESTORS/);
+  assert.match(middleware, /frameAncestors/);
+  assert.match(middleware, /https:\/\/\*\.googletagmanager\.com/);
   assert.match(page, /publicDownloadFiles\(settings\.publicDownloadName\)/);
   assert.match(page, /replaceAll\('\{\{PUBLIC_GEOJSON_URL\}\}', files\.geoJsonUrl\)/);
   assert.match(page, /replaceAll\('\{\{PUBLIC_CSV_URL\}\}', files\.csvUrl\)/);
