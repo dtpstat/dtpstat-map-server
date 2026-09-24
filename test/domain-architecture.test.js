@@ -1889,7 +1889,7 @@ test('PostgreSQL integration harness is opt-in and isolated in a temporary schem
     path.join(
       root,
       'scripts',
-      'test-postgres-integration.js',
+      'postgres-integration.js',
     ),
     'utf8',
   );
