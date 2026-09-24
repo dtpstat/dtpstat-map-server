@@ -1349,7 +1349,9 @@ test('admin mutating routes import operation audit from its dedicated HTTP modul
   const paths = [
     'line-types-api.js',
     'report-config-api.js',
-    'project-settings-api.js',
+    'project/settings-routes.js',
+    'project/download-name-routes.js',
+    'project/city-marker-routes.js',
     'project-settings-transfer-api.js',
     'osm-boundaries-api.js',
     'kml-transfer-api.js',
@@ -1435,4 +1437,57 @@ test('admin security HTTP routes are split by profile users controls and audit',
   assert.match(audit, /parseAuditFilters/u);
   assert.doesNotMatch(audit, /createIpBlock/u);
   assert.doesNotMatch(audit, /changeOwnPassword/u);
+});
+
+
+test('project settings HTTP routes separate public reads settings downloads and marker upload', async () => {
+  const composition = await fs.readFile(
+    path.join(srcRoot, 'routes', 'project-settings-api.js'),
+    'utf8',
+  );
+  const publicRoutes = await fs.readFile(
+    path.join(srcRoot, 'routes', 'project', 'public-routes.js'),
+    'utf8',
+  );
+  const settingsRoutes = await fs.readFile(
+    path.join(srcRoot, 'routes', 'project', 'settings-routes.js'),
+    'utf8',
+  );
+  const downloadRoutes = await fs.readFile(
+    path.join(srcRoot, 'routes', 'project', 'download-name-routes.js'),
+    'utf8',
+  );
+  const markerRoutes = await fs.readFile(
+    path.join(srcRoot, 'routes', 'project', 'city-marker-routes.js'),
+    'utf8',
+  );
+
+  assert.match(composition, /registerProjectPublicRoutes\(/u);
+  assert.match(composition, /registerProjectSettingsAdminRoutes\(/u);
+  assert.match(composition, /registerProjectDownloadNameRoutes\(/u);
+  assert.match(composition, /registerProjectCityMarkerRoutes\(/u);
+  assert.doesNotMatch(composition, /router\.get\(\s*'\/project'/u);
+  assert.doesNotMatch(composition, /recordAdminOperationChanges/u);
+
+  assert.match(publicRoutes, /'\/config'/u);
+  assert.match(publicRoutes, /'\/project'/u);
+  assert.match(publicRoutes, /'\/city-marker-icon'/u);
+  assert.doesNotMatch(publicRoutes, /requireInterface/u);
+  assert.doesNotMatch(publicRoutes, /createAdminOperationAudit/u);
+
+  assert.match(settingsRoutes, /'\/admin\/project-settings'/u);
+  assert.match(settingsRoutes, /PROJECT_CONTENT_TAGS/u);
+  assert.match(settingsRoutes, /afterSettingsSave/u);
+  assert.doesNotMatch(settingsRoutes, /savePublicDownloadName/u);
+  assert.doesNotMatch(settingsRoutes, /validateCityMarkerIcon/u);
+
+  assert.match(downloadRoutes, /public-download-name/u);
+  assert.match(downloadRoutes, /savePublicDownloadName/u);
+  assert.match(downloadRoutes, /afterPublicDownloadNameSave/u);
+  assert.doesNotMatch(downloadRoutes, /validateCityMarkerIcon/u);
+
+  assert.match(markerRoutes, /city-marker-icon/u);
+  assert.match(markerRoutes, /validateCityMarkerIcon/u);
+  assert.match(markerRoutes, /clearCityMarkerIcon/u);
+  assert.doesNotMatch(markerRoutes, /savePublicDownloadName/u);
 });
