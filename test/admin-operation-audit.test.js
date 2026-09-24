@@ -5,7 +5,7 @@ import {
   createAdminOperationAudit,
   recordAdminOperationChanges,
   recordAdminOperationDetails,
-} from '../src/http/admin-auth.js';
+} from '../src/http/admin-operation-audit.js';
 
 class FakeResponse extends EventEmitter {
   constructor(statusCode = 200) {
