@@ -399,10 +399,14 @@ DTPSTAT_INTEGRATION_DATABASE_URL='postgresql://user:password@127.0.0.1:5432/test
   npm run test:integration
 ```
 
-Harness не использует `DATABASE_NAME` или `DATABASE_SCHEMA` приложения. Он создаёт
-случайную schema `dtpstat_it_*`, применяет в неё все migrations и удаляет её в
-`finally`. Remote URL по умолчанию отклоняется; для отдельной удалённой test DB
-нужен дополнительный `DTPSTAT_INTEGRATION_ALLOW_REMOTE=1`.
+Harness не использует `DATABASE_NAME` или `DATABASE_SCHEMA` приложения.
+В compose-режиме он создаёт отдельную одноразовую БД `dtpstat_it_db_*`,
+устанавливает в неё `postgis`, затем создаёт случайную schema `dtpstat_it_*`
+и применяет все migrations. В `finally` удаляются и schema, и временная БД.
+Для явного `DTPSTAT_INTEGRATION_DATABASE_URL` harness не создаёт/не удаляет
+саму БД, а использует только временную schema; PostGIS в такой выделенной test DB
+должен быть установлен заранее. Remote URL по умолчанию отклоняется; для отдельной
+удалённой test DB нужен `DTPSTAT_INTEGRATION_ALLOW_REMOTE=1`.
 
 
 Импорт и перенос application data выполняются через административные API/UI. Отдельного repository-snapshot import script нет.
