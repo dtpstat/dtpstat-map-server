@@ -183,9 +183,10 @@ test('public page derives metadata, theme stylesheet, analytics and download lin
 });
 
 test('public GeoJSON and CSV routes and disk files are fully derived from the configured base name', async () => {
-  const [app, service] = await Promise.all([
+  const [app, service, atomicFiles] = await Promise.all([
     source('src/app.js'),
-    source('src/data/public-download-service.js'),
+    source('src/application/public-downloads/service.js'),
+    source('src/shared/files/atomic-snapshot.js'),
   ]);
 
   assert.match(app, /app\.get\('\/:publicDownloadFile'/);
@@ -197,12 +198,13 @@ test('public GeoJSON and CSV routes and disk files are fully derived from the co
   assert.doesNotMatch(app, /\['\/bus-lanes\.csv', 'bus-lanes\.csv'\]/);
   assert.doesNotMatch(app, /\['\/bus-lanes\.geojson', 'bus-lanes\.geojson'\]/);
 
-  assert.match(service, /files = publicDownloadFiles\(settings\?\.publicDownloadName\)/);
-  assert.match(service, /path\.join\(directory, files\.geoJsonFileName\)/);
-  assert.match(service, /path\.join\(directory, files\.csvFileName\)/);
-  assert.match(service, /removeObsoleteSnapshots/);
-  assert.match(service, /await Promise\.all\(entries/);
-  assert.doesNotMatch(service, /Promise\.allSettled\(entries/);
+  assert.match(service, /files = publicDownloadFiles\(/);
+  assert.match(service, /files\.geoJsonFileName/);
+  assert.match(service, /files\.csvFileName/);
+  assert.match(service, /replaceFiles\(\{/);
+  assert.match(atomicFiles, /removeObsoleteFiles/);
+  assert.match(atomicFiles, /await Promise\.all\(/);
+  assert.match(atomicFiles, /await fs\.rename\(/);
 });
 
 test('public map reloads independent line display settings without a page refresh', async () => {
