@@ -964,3 +964,60 @@ test('legacy OSM checkpoint repository only orchestrates atomic persistence slic
     /INSERT INTO osm_city_update_checkpoint_stage/u,
   );
 });
+
+
+test('OSM boundary admin module separates policy use case and DB storage', async () => {
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'boundary-admin-service.js'),
+    'utf8',
+  );
+  const policy = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'boundary-admin-policy.js'),
+    'utf8',
+  );
+  const storage = await fs.readFile(
+    path.join(srcRoot, 'db', 'osm-boundary-admin-storage.js'),
+    'utf8',
+  );
+
+  assert.match(service, /normalizeOsmBoundaryChanges\(/u);
+  assert.match(service, /storage\.lockSubtree\(/u);
+  assert.match(service, /storage\.updateBoundary\(/u);
+  assert.match(service, /syncDerivedData\(client\)/u);
+  assert.doesNotMatch(service, /WITH RECURSIVE subtree/u);
+  assert.doesNotMatch(service, /UPDATE city_boundaries/u);
+  assert.doesNotMatch(service, /\.\.\/\.\.\/db\//u);
+
+  assert.match(policy, /normalizeOsmBoundaryChanges/u);
+  assert.match(policy, /normalizeOsmBoundaryId/u);
+  assert.doesNotMatch(policy, /city_boundaries/u);
+
+  assert.match(storage, /WITH RECURSIVE subtree/u);
+  assert.match(storage, /UPDATE city_boundaries/u);
+  assert.match(storage, /ST_AsGeoJSON/u);
+  assert.doesNotMatch(storage, /OsmBoundaryAdminValidationError/u);
+});
+
+test('legacy OSM boundary admin repository is only a DB composition adapter', async () => {
+  const adapter = await fs.readFile(
+    path.join(srcRoot, 'db', 'osm-boundary-admin-repository.js'),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'boundary-admin-service.js'),
+    'utf8',
+  );
+
+  assert.match(adapter, /createOsmBoundaryAdminService\(pool,/u);
+  assert.match(adapter, /createOsmBoundaryAdminStorage\(pool\)/u);
+  assert.match(adapter, /acquireDataImportLock/u);
+  assert.match(adapter, /RECALCULATE_CITY_STATISTICS_SQL/u);
+  assert.match(adapter, /export \{ OsmBoundaryAdminValidationError \}/u);
+  assert.doesNotMatch(adapter, /WITH RECURSIVE subtree/u);
+  assert.doesNotMatch(adapter, /UPDATE city_boundaries/u);
+  assert.doesNotMatch(adapter, /ST_AsGeoJSON/u);
+
+  assert.match(service, /storage\.getGeometry\(/u);
+  assert.match(service, /storage\.getBoundary\(/u);
+  assert.match(service, /storage\.updateSubtreeActive\(/u);
+});
