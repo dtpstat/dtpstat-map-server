@@ -17,7 +17,7 @@ test('runtime metadata and admin download names are project-neutral', async () =
   const [packageJson, transferApi, kmlApi, compose] = await Promise.all([
     source('package.json'),
     source('src/application/data-transfer/routes.js'),
-    source('src/routes/kml-transfer-api.js'),
+    source('src/routes/kml/export-routes.js'),
     source('compose.yaml'),
   ]);
 
