@@ -1887,7 +1887,7 @@ test('app composition root delegates API public-site and terminal HTTP assembly'
 test('PostgreSQL integration harness is opt-in and isolated in a temporary schema', async () => {
   const script = await fs.readFile(
     path.join(
-      projectRoot,
+      root,
       'scripts',
       'test-postgres-integration.js',
     ),
