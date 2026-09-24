@@ -497,58 +497,64 @@ async function main() {
 
   let connection;
   let composeAdmin;
+  let composeAdminConnected =
+    false;
   let composeDatabase;
+  let admin;
+  let adminConnected = false;
   let pool;
 
-  if (
-    configuration.mode ===
-    'compose'
-  ) {
-    composeDatabase =
-      temporaryDatabase();
+  try {
+    if (
+      configuration.mode ===
+      'compose'
+    ) {
+      composeDatabase =
+        temporaryDatabase();
 
-    composeAdmin =
-      new Client(
-        configuration
-          .adminConnection,
+      composeAdmin =
+        new Client(
+          configuration
+            .adminConnection,
+        );
+
+      await composeAdmin.connect();
+      composeAdminConnected = true;
+
+      await createComposeDatabase(
+        composeAdmin,
+        composeDatabase,
       );
 
-    await composeAdmin.connect();
+      connection = {
+        ...configuration
+          .adminConnection,
+        database:
+          composeDatabase,
+      };
 
-    await createComposeDatabase(
-      composeAdmin,
-      composeDatabase,
-    );
+      await installPostgis(
+        connection,
+      );
 
-    connection = {
-      ...configuration
-        .adminConnection,
-      database:
-        composeDatabase,
-    };
+      console.log(
+        `Integration database: ${composeDatabase}`,
+      );
+    } else {
+      connection =
+        configuration.connection;
+    }
 
-    await installPostgis(
-      connection,
-    );
+    admin =
+      new Client(connection);
 
     console.log(
-      `Integration database: ${composeDatabase}`,
+      `Integration schema: ${schema}`,
     );
-  } else {
-    connection =
-      configuration.connection;
-  }
 
-  const admin =
-    new Client(connection);
+    await admin.connect();
+    adminConnected = true;
 
-  console.log(
-    `Integration schema: ${schema}`,
-  );
-
-  await admin.connect();
-
-  try {
     const postgis =
       await verifyPostgis(
         admin,
@@ -617,19 +623,27 @@ async function main() {
         .catch(() => {});
     }
 
-    await admin.query(
-      `DROP SCHEMA IF EXISTS ${schema} CASCADE`,
-    ).catch((error) => {
-      console.error(
-        `Failed to remove integration schema ${schema}: ${error.message}`,
-      );
-    });
+    if (
+      admin &&
+      adminConnected
+    ) {
+      await admin.query(
+        `DROP SCHEMA IF EXISTS ${schema} CASCADE`,
+      ).catch((error) => {
+        console.error(
+          `Failed to remove integration schema ${schema}: ${error.message}`,
+        );
+      });
+    }
 
-    await admin.end()
-      .catch(() => {});
+    if (admin) {
+      await admin.end()
+        .catch(() => {});
+    }
 
     if (
       composeAdmin &&
+      composeAdminConnected &&
       composeDatabase
     ) {
       await dropComposeDatabase(
@@ -640,7 +654,9 @@ async function main() {
           `Failed to remove integration database ${composeDatabase}: ${error.message}`,
         );
       });
+    }
 
+    if (composeAdmin) {
       await composeAdmin.end()
         .catch(() => {});
     }
