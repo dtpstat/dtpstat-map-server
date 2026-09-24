@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { createSingleFileZipStream } from '../../data/single-file-zip.js';
+import { createSingleFileZipStream } from '../../shared/streaming/single-file-zip.js';
 import {
   openUploadedJson,
   receiveStreamUpload,
