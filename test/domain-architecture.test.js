@@ -1174,3 +1174,54 @@ test('legacy admin task and audit data modules are only compatibility exports', 
   assert.doesNotMatch(auditFacade, /crypto\.createHash/u);
   assert.doesNotMatch(auditFacade, /function sanitize/u);
 });
+
+
+test('shared streaming owns ZIP transport and streaming JSON parsing', async () => {
+  const zip = await fs.readFile(
+    path.join(srcRoot, 'shared', 'streaming', 'single-file-zip.js'),
+    'utf8',
+  );
+  const json = await fs.readFile(
+    path.join(srcRoot, 'shared', 'streaming', 'streaming-json.js'),
+    'utf8',
+  );
+
+  assert.match(zip, /openSingleFileZip/u);
+  assert.match(zip, /createSingleFileZipStream/u);
+  assert.match(zip, /createInflateRaw/u);
+  assert.match(zip, /createDeflateRaw/u);
+  assert.doesNotMatch(zip, /\.\.\/\.\.\/data\//u);
+
+  assert.match(json, /parseStreamingJsonObject/u);
+  assert.match(json, /TextDecoder/u);
+  assert.match(
+    json,
+    /\.\.\/tasks\/admin-task-manager\.js/u,
+  );
+  assert.doesNotMatch(json, /\.\.\/\.\.\/data\//u);
+});
+
+test('legacy streaming data modules are only compatibility exports', async () => {
+  const zipFacade = await fs.readFile(
+    path.join(srcRoot, 'data', 'single-file-zip.js'),
+    'utf8',
+  );
+  const jsonFacade = await fs.readFile(
+    path.join(srcRoot, 'data', 'streaming-json.js'),
+    'utf8',
+  );
+
+  assert.match(
+    zipFacade,
+    /from '\.\.\/shared\/streaming\/single-file-zip\.js'/u,
+  );
+  assert.doesNotMatch(zipFacade, /createInflateRaw/u);
+  assert.doesNotMatch(zipFacade, /createDeflateRaw/u);
+
+  assert.match(
+    jsonFacade,
+    /from '\.\.\/shared\/streaming\/streaming-json\.js'/u,
+  );
+  assert.doesNotMatch(jsonFacade, /class AsyncCharReader/u);
+  assert.doesNotMatch(jsonFacade, /TextDecoder/u);
+});
