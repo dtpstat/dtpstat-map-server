@@ -1,5 +1,5 @@
 import express, { Router } from 'express';
-import { LineTypeValidationError } from '../data/line-types.js';
+import { LineTypeValidationError } from '../modules/lines/type-policy.js';
 import {
   createAdminOperationAudit,
   recordAdminOperationChanges,

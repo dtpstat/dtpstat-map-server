@@ -3,7 +3,7 @@ import {
   publicReportConfig,
   REPORT_CONFIG_CATALOG,
   ReportConfigValidationError,
-} from '../data/report-config.js';
+} from '../modules/reporting/config-policy.js';
 import {
   createAdminOperationAudit,
   recordAdminOperationChanges,

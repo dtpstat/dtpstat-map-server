@@ -14,7 +14,7 @@ test('admin report builder is catalog-driven, four-tabbed and has no free-form e
     source('admin/report-range-ui.js'),
     source('admin/report-config.css'),
     source('db/migrations/V014__configurable_city_reports.sql'),
-    source('src/data/report-config.js'),
+    source('src/modules/reporting/config-policy.js'),
   ]);
 
   assert.match(shell, /await import\('\.\/report-config-editor\.js'\)/);

@@ -1,7 +1,7 @@
 import {
   buildLineTypeSettingsPlan,
   LineTypeValidationError,
-} from '../data/line-types.js';
+} from '../modules/lines/type-policy.js';
 import { acquireDataImportLock } from './database-locks.js';
 
 const LIST_LINE_TYPES_SQL = `

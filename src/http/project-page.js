@@ -1,4 +1,4 @@
-import { publicDownloadFiles } from '../data/public-download-name.js';
+import { publicDownloadFiles } from '../modules/project/public-download-policy.js';
 
 function escapeHtml(value) {
   return String(value)
