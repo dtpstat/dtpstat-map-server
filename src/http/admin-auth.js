@@ -1,7 +1,7 @@
 import {
   createAdminAuditChangeSet,
   sanitizeAdminAuditData,
-} from '../data/admin-audit-details.js';
+} from '../shared/logging/admin-audit-details.js';
 import { serviceLog } from '../service-log.js';
 
 const SESSION_COOKIE = 'dtpstat_admin_session';
