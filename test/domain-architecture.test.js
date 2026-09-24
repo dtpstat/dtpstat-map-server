@@ -1884,7 +1884,7 @@ test('app composition root delegates API public-site and terminal HTTP assembly'
 });
 
 
-test('PostgreSQL integration harness is opt-in and isolated in a temporary schema', async () => {
+test('PostgreSQL integration harness is opt-in and isolates compose runs in a temporary database', async () => {
   const script = await fs.readFile(
     path.join(
       root,
@@ -1917,6 +1917,18 @@ test('PostgreSQL integration harness is opt-in and isolated in a temporary schem
   assert.match(
     script,
     /PostGIS_Version\(\)/u,
+  );
+  assert.match(
+    script,
+    /CREATE DATABASE/u,
+  );
+  assert.match(
+    script,
+    /CREATE EXTENSION IF NOT EXISTS POSTGIS WITH SCHEMA PUBLIC/u,
+  );
+  assert.match(
+    script,
+    /DROP DATABASE IF EXISTS/u,
   );
   assert.match(
     script,
