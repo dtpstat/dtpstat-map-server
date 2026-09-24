@@ -68,15 +68,25 @@ export function createProjectSettingsTransferService(
           projectSettings,
           lineTypes,
           reportConfig: storedReportConfig,
+          reportConfigPresent =
+            storedReportConfig !== undefined,
           securitySettings,
         } = snapshot;
 
-        if (!projectSettings || !storedReportConfig || !securitySettings) {
+        if (
+          !projectSettings ||
+          !reportConfigPresent ||
+          !securitySettings
+        ) {
           throw new Error(
             'Project settings are incomplete; run database migrations',
           );
         }
+
+        await client.query('COMMIT');
+
         if (
+          !storedReportConfig ||
           typeof storedReportConfig !== 'object' ||
           Array.isArray(storedReportConfig)
         ) {
@@ -84,8 +94,6 @@ export function createProjectSettingsTransferService(
             'Report configuration is incomplete; run database migrations',
           );
         }
-
-        await client.query('COMMIT');
         return {
           _dtpstat: {
             kind: PROJECT_SETTINGS_TRANSFER_KIND,
