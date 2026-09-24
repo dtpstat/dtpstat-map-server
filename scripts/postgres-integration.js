@@ -11,6 +11,7 @@ import {
   createDataExportStorageRepository,
 } from '../src/db/data-export-storage-repository.js';
 import {
+  loadAdminDatabaseConnection,
   normalizeDatabaseSchema,
 } from '../src/db/database-environment.js';
 import {
@@ -36,114 +37,22 @@ const projectRoot =
     '..',
   );
 
-function localHost(hostname) {
-  return [
-    '127.0.0.1',
-    'localhost',
-    '::1',
-  ].includes(hostname);
-}
-
-function integerPort(
-  value,
-  fallback,
-) {
-  const port =
-    value === undefined ||
-    value === ''
-      ? fallback
-      : Number(value);
-
-  if (
-    !Number.isInteger(port) ||
-    port < 1 ||
-    port > 65535
-  ) {
-    throw new Error(
-      'Integration database port is invalid',
-    );
-  }
-
-  return port;
-}
-
-function integrationConfiguration() {
-  const explicit =
+function integrationConnection() {
+  const database =
     process.env
-      .DTPSTAT_INTEGRATION_DATABASE_URL
+      .DATABASE_NAME
       ?.trim();
 
-  if (explicit) {
-    const parsed =
-      new URL(explicit);
-
-    if (
-      !localHost(parsed.hostname) &&
-      process.env
-        .DTPSTAT_INTEGRATION_ALLOW_REMOTE !==
-        '1'
-    ) {
-      throw new Error(
-        'Remote integration database is disabled by default; set DTPSTAT_INTEGRATION_ALLOW_REMOTE=1 only for a dedicated test database',
-      );
-    }
-
-    return {
-      mode: 'explicit',
-      connection: {
-        connectionString:
-          explicit,
-      },
-    };
-  }
-
-  if (
-    process.env
-      .DTPSTAT_INTEGRATION_USE_COMPOSE !==
-    '1'
-  ) {
+  if (!database) {
     throw new Error(
-      'Set DTPSTAT_INTEGRATION_USE_COMPOSE=1 for local compose PostgreSQL or provide DTPSTAT_INTEGRATION_DATABASE_URL',
-    );
-  }
-
-  const password =
-    process.env
-      .POSTGRES_ADMIN_PASSWORD;
-
-  if (
-    !password ||
-    !password.trim()
-  ) {
-    throw new Error(
-      'POSTGRES_ADMIN_PASSWORD is required for compose integration testing',
+      'DATABASE_NAME is required for PostgreSQL integration testing',
     );
   }
 
   return {
-    mode: 'compose',
-    adminConnection: {
-      host: '127.0.0.1',
-      port:
-        integerPort(
-          process.env
-            .DATABASE_PORT,
-          5432,
-        ),
-      database: 'postgres',
-      user: 'postgres',
-      password,
-      ssl: false,
-    },
+    ...loadAdminDatabaseConnection(),
+    database,
   };
-}
-
-function temporaryDatabase() {
-  return normalizeDatabaseSchema(
-    `dtpstat_it_db_${process.pid}_${crypto
-      .randomBytes(4)
-      .toString('hex')}`,
-  );
 }
 
 function temporarySchema() {
@@ -152,41 +61,6 @@ function temporarySchema() {
       .randomBytes(5)
       .toString('hex')}`,
   );
-}
-
-async function createComposeDatabase(
-  admin,
-  database,
-) {
-  await admin.query(
-    `CREATE DATABASE ${database}`,
-  );
-}
-
-async function dropComposeDatabase(
-  admin,
-  database,
-) {
-  await admin.query(
-    `DROP DATABASE IF EXISTS ${database} WITH (FORCE)`,
-  );
-}
-
-async function installPostgis(
-  connection,
-) {
-  const client =
-    new Client(connection);
-
-  await client.connect();
-
-  try {
-    await client.query(
-      'CREATE EXTENSION IF NOT EXISTS POSTGIS WITH SCHEMA PUBLIC',
-    );
-  } finally {
-    await client.end();
-  }
 }
 
 async function verifyPostgis(
@@ -489,72 +363,28 @@ async function verifySpatialExports(
 }
 
 async function main() {
-  const configuration =
-    integrationConfiguration();
+  const connection =
+    integrationConnection();
 
   const schema =
     temporarySchema();
 
-  let connection;
-  let composeAdmin;
-  let composeAdminConnected =
-    false;
-  let composeDatabase;
-  let admin;
-  let adminConnected = false;
+  const admin =
+    new Client(connection);
+
   let pool;
 
+  console.log(
+    `Integration database: ${connection.database}`,
+  );
+
+  console.log(
+    `Integration schema: ${schema}`,
+  );
+
+  await admin.connect();
+
   try {
-    if (
-      configuration.mode ===
-      'compose'
-    ) {
-      composeDatabase =
-        temporaryDatabase();
-
-      composeAdmin =
-        new Client(
-          configuration
-            .adminConnection,
-        );
-
-      await composeAdmin.connect();
-      composeAdminConnected = true;
-
-      await createComposeDatabase(
-        composeAdmin,
-        composeDatabase,
-      );
-
-      connection = {
-        ...configuration
-          .adminConnection,
-        database:
-          composeDatabase,
-      };
-
-      await installPostgis(
-        connection,
-      );
-
-      console.log(
-        `Integration database: ${composeDatabase}`,
-      );
-    } else {
-      connection =
-        configuration.connection;
-    }
-
-    admin =
-      new Client(connection);
-
-    console.log(
-      `Integration schema: ${schema}`,
-    );
-
-    await admin.connect();
-    adminConnected = true;
-
     const postgis =
       await verifyPostgis(
         admin,
@@ -623,43 +453,16 @@ async function main() {
         .catch(() => {});
     }
 
-    if (
-      admin &&
-      adminConnected
-    ) {
-      await admin.query(
-        `DROP SCHEMA IF EXISTS ${schema} CASCADE`,
-      ).catch((error) => {
-        console.error(
-          `Failed to remove integration schema ${schema}: ${error.message}`,
-        );
-      });
-    }
+    await admin.query(
+      `DROP SCHEMA IF EXISTS ${schema} CASCADE`,
+    ).catch((error) => {
+      console.error(
+        `Failed to remove integration schema ${schema}: ${error.message}`,
+      );
+    });
 
-    if (admin) {
-      await admin.end()
-        .catch(() => {});
-    }
-
-    if (
-      composeAdmin &&
-      composeAdminConnected &&
-      composeDatabase
-    ) {
-      await dropComposeDatabase(
-        composeAdmin,
-        composeDatabase,
-      ).catch((error) => {
-        console.error(
-          `Failed to remove integration database ${composeDatabase}: ${error.message}`,
-        );
-      });
-    }
-
-    if (composeAdmin) {
-      await composeAdmin.end()
-        .catch(() => {});
-    }
+    await admin.end()
+      .catch(() => {});
   }
 }
 
