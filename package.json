@@ -16,7 +16,8 @@
     "admin:set-superuser": "node scripts/set-superuser-credentials.js",
     "lint": "eslint .",
     "test": "node --test",
-    "check": "npm run lint && npm test"
+    "check": "npm run lint && npm test",
+    "test:integration": "node scripts/test-postgres-integration.js"
   },
   "dependencies": {
     "compression": "^1.8.1",
