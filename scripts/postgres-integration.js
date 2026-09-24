@@ -67,7 +67,7 @@ function integerPort(
   return port;
 }
 
-function integrationConnection() {
+function integrationConfiguration() {
   const explicit =
     process.env
       .DTPSTAT_INTEGRATION_DATABASE_URL
@@ -89,8 +89,11 @@ function integrationConnection() {
     }
 
     return {
-      connectionString:
-        explicit,
+      mode: 'explicit',
+      connection: {
+        connectionString:
+          explicit,
+      },
     };
   }
 
@@ -118,18 +121,29 @@ function integrationConnection() {
   }
 
   return {
-    host: '127.0.0.1',
-    port:
-      integerPort(
-        process.env
-          .DATABASE_PORT,
-        5432,
-      ),
-    database: 'postgres',
-    user: 'postgres',
-    password,
-    ssl: false,
+    mode: 'compose',
+    adminConnection: {
+      host: '127.0.0.1',
+      port:
+        integerPort(
+          process.env
+            .DATABASE_PORT,
+          5432,
+        ),
+      database: 'postgres',
+      user: 'postgres',
+      password,
+      ssl: false,
+    },
   };
+}
+
+function temporaryDatabase() {
+  return normalizeDatabaseSchema(
+    `dtpstat_it_db_${process.pid}_${crypto
+      .randomBytes(4)
+      .toString('hex')}`,
+  );
 }
 
 function temporarySchema() {
@@ -138,6 +152,41 @@ function temporarySchema() {
       .randomBytes(5)
       .toString('hex')}`,
   );
+}
+
+async function createComposeDatabase(
+  admin,
+  database,
+) {
+  await admin.query(
+    `CREATE DATABASE ${database}`,
+  );
+}
+
+async function dropComposeDatabase(
+  admin,
+  database,
+) {
+  await admin.query(
+    `DROP DATABASE IF EXISTS ${database} WITH (FORCE)`,
+  );
+}
+
+async function installPostgis(
+  connection,
+) {
+  const client =
+    new Client(connection);
+
+  await client.connect();
+
+  try {
+    await client.query(
+      'CREATE EXTENSION IF NOT EXISTS POSTGIS WITH SCHEMA PUBLIC',
+    );
+  } finally {
+    await client.end();
+  }
 }
 
 async function verifyPostgis(
@@ -440,16 +489,58 @@ async function verifySpatialExports(
 }
 
 async function main() {
-  const connection =
-    integrationConnection();
+  const configuration =
+    integrationConfiguration();
 
   const schema =
     temporarySchema();
 
+  let connection;
+  let composeAdmin;
+  let composeDatabase;
+  let pool;
+
+  if (
+    configuration.mode ===
+    'compose'
+  ) {
+    composeDatabase =
+      temporaryDatabase();
+
+    composeAdmin =
+      new Client(
+        configuration
+          .adminConnection,
+      );
+
+    await composeAdmin.connect();
+
+    await createComposeDatabase(
+      composeAdmin,
+      composeDatabase,
+    );
+
+    connection = {
+      ...configuration
+        .adminConnection,
+      database:
+        composeDatabase,
+    };
+
+    await installPostgis(
+      connection,
+    );
+
+    console.log(
+      `Integration database: ${composeDatabase}`,
+    );
+  } else {
+    connection =
+      configuration.connection;
+  }
+
   const admin =
     new Client(connection);
-
-  let pool;
 
   console.log(
     `Integration schema: ${schema}`,
@@ -536,6 +627,23 @@ async function main() {
 
     await admin.end()
       .catch(() => {});
+
+    if (
+      composeAdmin &&
+      composeDatabase
+    ) {
+      await dropComposeDatabase(
+        composeAdmin,
+        composeDatabase,
+      ).catch((error) => {
+        console.error(
+          `Failed to remove integration database ${composeDatabase}: ${error.message}`,
+        );
+      });
+
+      await composeAdmin.end()
+        .catch(() => {});
+    }
   }
 }
 
