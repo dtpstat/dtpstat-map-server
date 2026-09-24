@@ -1,5 +1,17 @@
-import { buildLineTypesPlan } from '../../data/line-types.js';
-import { validateReportConfig } from '../../data/report-config.js';
+import {
+  buildLineTypesPlan,
+  LineTypeValidationError,
+} from '../../data/line-types.js';
+import {
+  ReportConfigValidationError,
+  validateReportConfig,
+} from '../../data/report-config.js';
+import {
+  ProjectSettingsValidationError,
+} from '../../data/project-settings.js';
+import {
+  AdminSecurityValidationError,
+} from '../../modules/security/policy.js';
 import {
   normalizeTransferredProjectSettings,
   normalizeTransferredSecuritySettings,
@@ -13,6 +25,23 @@ export {
   PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION,
   ProjectSettingsTransferValidationError,
 };
+
+export function isProjectSettingsTransferInputValidationError(
+  error,
+) {
+  return (
+    error instanceof
+      ProjectSettingsTransferValidationError ||
+    error instanceof
+      ProjectSettingsValidationError ||
+    error instanceof
+      LineTypeValidationError ||
+    error instanceof
+      ReportConfigValidationError ||
+    error instanceof
+      AdminSecurityValidationError
+  );
+}
 
 async function rollbackQuietly(client) {
   try {

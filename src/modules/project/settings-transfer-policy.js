@@ -1,7 +1,7 @@
 import {
   DEFAULT_ADMIN_PASSWORD_POLICY,
   normalizeAdminSecuritySettings,
-} from '../../data/admin-security.js';
+} from '../security/policy.js';
 import {
   buildProjectSettingsPlan,
   ProjectSettingsValidationError,

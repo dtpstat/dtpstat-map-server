@@ -624,6 +624,14 @@ test('project settings transfer application service delegates policy and persist
 
   assert.match(policy, /PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION = 8/u);
   assert.match(policy, /normalizeTransferredSecuritySettings/u);
+  assert.doesNotMatch(
+    policy,
+    /data\/admin-security\.js/u,
+  );
+  assert.match(
+    policy,
+    /\.\.\/security\/policy\.js/u,
+  );
   assert.match(repository, /UPDATE project_settings SET/u);
   assert.match(repository, /CREATE TEMP TABLE project_settings_line_types_stage/u);
 });
@@ -1390,7 +1398,8 @@ test('admin mutating routes import operation audit from its dedicated HTTP modul
     'project/settings-routes.js',
     'project/download-name-routes.js',
     'project/city-marker-routes.js',
-    'project-settings-transfer-api.js',
+    'project/transfer-export-routes.js',
+    'project/transfer-import-routes.js',
     'osm/settings-routes.js',
     'osm/boundary-routes.js',
     'kml/export-routes.js',
@@ -1529,6 +1538,99 @@ test('project settings HTTP routes separate public reads settings downloads and 
   assert.match(markerRoutes, /validateCityMarkerIcon/u);
   assert.match(markerRoutes, /clearCityMarkerIcon/u);
   assert.doesNotMatch(markerRoutes, /savePublicDownloadName/u);
+});
+
+
+test('project settings transfer HTTP separates export and import orchestration', async () => {
+  const composition = await fs.readFile(
+    path.join(srcRoot, 'routes', 'project-settings-transfer-api.js'),
+    'utf8',
+  );
+  const exportRoutes = await fs.readFile(
+    path.join(
+      srcRoot,
+      'routes',
+      'project',
+      'transfer-export-routes.js',
+    ),
+    'utf8',
+  );
+  const importRoutes = await fs.readFile(
+    path.join(
+      srcRoot,
+      'routes',
+      'project',
+      'transfer-import-routes.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    composition,
+    /registerProjectSettingsTransferExportRoutes\(/u,
+  );
+  assert.match(
+    composition,
+    /registerProjectSettingsTransferImportRoutes\(/u,
+  );
+  assert.doesNotMatch(
+    composition,
+    /router\.(?:get|post)\(/u,
+  );
+  assert.doesNotMatch(
+    composition,
+    /express\.json/u,
+  );
+
+  assert.match(
+    exportRoutes,
+    /'\/admin\/settings\/export'/u,
+  );
+  assert.match(
+    exportRoutes,
+    /settings\.export/u,
+  );
+  assert.doesNotMatch(
+    exportRoutes,
+    /importSettings/u,
+  );
+
+  assert.match(
+    importRoutes,
+    /'\/admin\/settings\/import'/u,
+  );
+  assert.match(
+    importRoutes,
+    /settings\.import/u,
+  );
+  assert.match(
+    importRoutes,
+    /recordAdminOperationChanges\(/u,
+  );
+  assert.match(
+    importRoutes,
+    /recordAdminOperationDetails\(/u,
+  );
+  assert.match(
+    importRoutes,
+    /afterImport/u,
+  );
+  assert.match(
+    importRoutes,
+    /application\/data-transfer\/project-settings-service\.js/u,
+  );
+  assert.doesNotMatch(
+    importRoutes,
+    /db\/project-settings-transfer-service\.js/u,
+  );
+  assert.doesNotMatch(
+    importRoutes,
+    /\.\.\/\.\.\/data\//u,
+  );
+  assert.doesNotMatch(
+    importRoutes,
+    /Content-Disposition/u,
+  );
 });
 
 
