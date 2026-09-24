@@ -1353,7 +1353,8 @@ test('admin mutating routes import operation audit from its dedicated HTTP modul
     'project/download-name-routes.js',
     'project/city-marker-routes.js',
     'project-settings-transfer-api.js',
-    'osm-boundaries-api.js',
+    'osm/settings-routes.js',
+    'osm/boundary-routes.js',
     'kml-transfer-api.js',
     'security/profile-routes.js',
     'security/user-routes.js',
@@ -1490,4 +1491,50 @@ test('project settings HTTP routes separate public reads settings downloads and 
   assert.match(markerRoutes, /validateCityMarkerIcon/u);
   assert.match(markerRoutes, /clearCityMarkerIcon/u);
   assert.doesNotMatch(markerRoutes, /savePublicDownloadName/u);
+});
+
+
+test('OSM admin HTTP separates import settings policy from boundary editing routes', async () => {
+  const composition = await fs.readFile(
+    path.join(srcRoot, 'routes', 'osm-boundaries-api.js'),
+    'utf8',
+  );
+  const settingsRoutes = await fs.readFile(
+    path.join(srcRoot, 'routes', 'osm', 'settings-routes.js'),
+    'utf8',
+  );
+  const boundaryRoutes = await fs.readFile(
+    path.join(srcRoot, 'routes', 'osm', 'boundary-routes.js'),
+    'utf8',
+  );
+  const settingsPolicy = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'import-settings-policy.js'),
+    'utf8',
+  );
+
+  assert.match(composition, /registerOsmSettingsRoutes\(/u);
+  assert.match(composition, /registerOsmBoundaryRoutes\(/u);
+  assert.doesNotMatch(composition, /normalizeOsmUpdateUrl/u);
+  assert.doesNotMatch(composition, /recordAdminOperationChanges/u);
+  assert.doesNotMatch(composition, /router\.patch\(/u);
+
+  assert.match(settingsRoutes, /'\/admin\/osm-settings'/u);
+  assert.match(settingsRoutes, /normalizeOsmImportSettingsPayload\(/u);
+  assert.match(settingsRoutes, /requireOsmEditor/u);
+  assert.doesNotMatch(settingsRoutes, /setSubtreeActive/u);
+  assert.doesNotMatch(settingsRoutes, /getGeometry/u);
+
+  assert.match(boundaryRoutes, /'\/admin\/osm-boundaries'/u);
+  assert.match(boundaryRoutes, /setSubtreeActive/u);
+  assert.match(boundaryRoutes, /getGeometry/u);
+  assert.match(boundaryRoutes, /afterBoundaryChange/u);
+  assert.doesNotMatch(boundaryRoutes, /normalizeOsmUpdateUrl/u);
+  assert.doesNotMatch(boundaryRoutes, /allowedURLs/u);
+
+  assert.match(settingsPolicy, /normalizeOsmUpdateUrl\(/u);
+  assert.match(settingsPolicy, /maxResponseBytes/u);
+  assert.match(settingsPolicy, /retryBaseDelayMs/u);
+  assert.match(settingsPolicy, /At least one OSM object class must be enabled/u);
+  assert.doesNotMatch(settingsPolicy, /router\./u);
+  assert.doesNotMatch(settingsPolicy, /response\./u);
 });
