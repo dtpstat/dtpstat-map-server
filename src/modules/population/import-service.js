@@ -2,8 +2,8 @@ import {
   buildPopulationPlan,
   createPopulationHierarchyAccumulator,
 } from '../../data/population-plan.js';
-import { parseStreamingJsonObject } from '../../data/streaming-json.js';
-import { throwIfAdminTaskCancelled } from '../../data/admin-task-manager.js';
+import { parseStreamingJsonObject } from '../../shared/streaming/streaming-json.js';
+import { throwIfAdminTaskCancelled } from '../../shared/tasks/admin-task-manager.js';
 import {
   createPopulationImportRepository,
 } from './import-repository.js';
