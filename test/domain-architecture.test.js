@@ -93,7 +93,16 @@ test('legacy API file is a composition root for extracted route modules', async 
   const source = await fs.readFile(path.join(srcRoot, 'routes', 'api.js'), 'utf8');
 
   assert.match(source, /createAdminTaskHttpRuntime\(/u);
-  assert.match(source, /createDataTransferRuntime\(/u);
+  assert.match(source, /createPortableImportRuntime\(/u);
+  assert.match(source, /createStreamingExportRoute/u);
+  assert.doesNotMatch(
+    source,
+    /createDataTransferRuntime\(/u,
+  );
+  assert.doesNotMatch(
+    source,
+    /data-transfer\/(?:runtime|routes)\.js/u,
+  );
   assert.doesNotMatch(
     source,
     /^import[\s\S]*?from ['"]\.\.\/(?:data|http)\//mu,
@@ -1809,6 +1818,168 @@ test('portable KML HTTP separates export from task-backed import orchestration',
 });
 
 
+test('portable data transfer separates export import runtimes and route families', async () => {
+  const runtimeFacade = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'runtime.js',
+    ),
+    'utf8',
+  );
+  const routesFacade = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'routes.js',
+    ),
+    'utf8',
+  );
+  const exportRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'export-http-runtime.js',
+    ),
+    'utf8',
+  );
+  const importRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'import-runtime.js',
+    ),
+    'utf8',
+  );
+  const exportRoutes = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'export-routes.js',
+    ),
+    'utf8',
+  );
+  const importRoutes = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'import-routes.js',
+    ),
+    'utf8',
+  );
+  const populationRoutes = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'population-routes.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    runtimeFacade,
+    /createPortableImportRuntime/u,
+  );
+  assert.match(
+    runtimeFacade,
+    /createStreamingExportRoute/u,
+  );
+  assert.doesNotMatch(
+    runtimeFacade,
+    /node:stream/u,
+  );
+  assert.doesNotMatch(
+    runtimeFacade,
+    /openUploadedJson/u,
+  );
+
+  assert.match(
+    routesFacade,
+    /from '\.\/export-routes\.js'/u,
+  );
+  assert.match(
+    routesFacade,
+    /from '\.\/import-routes\.js'/u,
+  );
+  assert.match(
+    routesFacade,
+    /from '\.\/population-routes\.js'/u,
+  );
+  assert.doesNotMatch(
+    routesFacade,
+    /router\.(?:get|post)\(/u,
+  );
+
+  assert.match(
+    exportRuntime,
+    /createSingleFileZipStream/u,
+  );
+  assert.match(
+    exportRuntime,
+    /pipeline\(/u,
+  );
+  assert.doesNotMatch(
+    exportRuntime,
+    /receiveStreamUpload/u,
+  );
+
+  assert.match(
+    importRuntime,
+    /receiveStreamUpload/u,
+  );
+  assert.match(
+    importRuntime,
+    /openUploadedJson/u,
+  );
+  assert.match(
+    importRuntime,
+    /removeStreamUpload/u,
+  );
+  assert.doesNotMatch(
+    importRuntime,
+    /createSingleFileZipStream/u,
+  );
+
+  assert.match(
+    exportRoutes,
+    /router\.get\(/u,
+  );
+  assert.doesNotMatch(
+    exportRoutes,
+    /startAdminTask/u,
+  );
+
+  assert.match(
+    importRoutes,
+    /geojson-import/u,
+  );
+  assert.match(
+    importRoutes,
+    /city-geojson-import/u,
+  );
+  assert.doesNotMatch(
+    importRoutes,
+    /population-update/u,
+  );
+
+  assert.match(
+    populationRoutes,
+    /population-update/u,
+  );
+  assert.doesNotMatch(
+    populationRoutes,
+    /city-geojson-import/u,
+  );
+});
+
+
 test('stream upload HTTP adapter delegates transport policy and spool persistence', async () => {
   const adapter = await fs.readFile(
     path.join(srcRoot, 'http', 'stream-upload.js'),
@@ -1822,8 +1993,22 @@ test('stream upload HTTP adapter delegates transport policy and spool persistenc
     path.join(srcRoot, 'shared', 'files', 'upload-staging.js'),
     'utf8',
   );
-  const transferRuntime = await fs.readFile(
-    path.join(srcRoot, 'application', 'data-transfer', 'runtime.js'),
+  const importRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'import-runtime.js',
+    ),
+    'utf8',
+  );
+  const exportRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'export-http-runtime.js',
+    ),
     'utf8',
   );
 
@@ -1850,11 +2035,32 @@ test('stream upload HTTP adapter delegates transport policy and spool persistenc
   assert.doesNotMatch(staging, /openSingleFileZip/u);
 
   assert.match(
-    transferRuntime,
+    exportRuntime,
     /\.\.\/\.\.\/shared\/streaming\/single-file-zip\.js/u,
   );
+  assert.match(
+    exportRuntime,
+    /createSingleFileZipStream/u,
+  );
   assert.doesNotMatch(
-    transferRuntime,
+    exportRuntime,
+    /openUploadedJson/u,
+  );
+
+  assert.match(
+    importRuntime,
+    /\.\.\/\.\.\/http\/stream-upload\.js/u,
+  );
+  assert.match(
+    importRuntime,
+    /openUploadedJson/u,
+  );
+  assert.doesNotMatch(
+    importRuntime,
+    /createSingleFileZipStream/u,
+  );
+  assert.doesNotMatch(
+    importRuntime,
     /\.\.\/\.\.\/data\/single-file-zip\.js/u,
   );
 });

@@ -9,13 +9,20 @@ import {
   registerAdminTaskRoutes,
 } from '../application/admin-tasks/routes.js';
 import {
-  createDataTransferRuntime,
-} from '../application/data-transfer/runtime.js';
+  createStreamingExportRoute,
+} from '../application/data-transfer/export-http-runtime.js';
 import {
   registerDataExportRoutes,
+} from '../application/data-transfer/export-routes.js';
+import {
+  createPortableImportRuntime,
+} from '../application/data-transfer/import-runtime.js';
+import {
   registerDataImportRoutes,
+} from '../application/data-transfer/import-routes.js';
+import {
   registerPopulationRoutes,
-} from '../application/data-transfer/routes.js';
+} from '../application/data-transfer/population-routes.js';
 import { registerLineRoutes } from '../modules/lines/routes.js';
 import { registerMapRoutes } from '../modules/map/routes.js';
 import { registerOsmRoutes } from '../modules/osm/routes.js';
@@ -59,7 +66,7 @@ import {
  *   osmCityUpdateService: OsmCityUpdateService,
  *   adminTasks: ReturnType<import('../shared/tasks/admin-task-manager.js').createAdminTaskManager>,
  *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
- *   securityService: ReturnType<import('../data/admin-security.js').createAdminSecurityService>,
+ *   securityService: ReturnType<import('../modules/security/service.js').createAdminSecurityService>,
  *   publicMap: object,
  *   importApi: {
  *     maxBodyBytes: number,
@@ -111,8 +118,7 @@ export function createApiRouter({
     receivePortableUpload,
     removeStreamUpload,
     streamTransfer,
-    streamingExportRoute,
-  } = createDataTransferRuntime({
+  } = createPortableImportRuntime({
     importApi,
     progressLog: logAdminTaskProgress,
   });
@@ -127,7 +133,7 @@ export function createApiRouter({
     exportRepository,
     adminAuth,
     operationAudit,
-    streamingExportRoute,
+    streamingExportRoute: createStreamingExportRoute,
   });
 
   registerDataImportRoutes(router, {
