@@ -1274,3 +1274,109 @@ test('legacy public download data service is only a compatibility export surface
   assert.doesNotMatch(facade, /function csvValue/u);
   assert.doesNotMatch(facade, /publicDownloadFiles\(/u);
 });
+
+
+test('admin HTTP auth delegates permission policy and keeps operation audit separate', async () => {
+  const auth = await fs.readFile(
+    path.join(srcRoot, 'http', 'admin-auth.js'),
+    'utf8',
+  );
+  const authorizationPolicy = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'security',
+      'authorization-policy.js',
+    ),
+    'utf8',
+  );
+  const audit = await fs.readFile(
+    path.join(srcRoot, 'http', 'admin-operation-audit.js'),
+    'utf8',
+  );
+  const clientIp = await fs.readFile(
+    path.join(srcRoot, 'shared', 'http', 'client-ip.js'),
+    'utf8',
+  );
+
+  assert.match(auth, /adminHasPermission\(/u);
+  assert.match(auth, /requestClientIp\(/u);
+  assert.match(auth, /csrfAllowed/u);
+  assert.match(auth, /authenticateUpgrade/u);
+  assert.match(
+    auth,
+    /from '\.\/admin-operation-audit\.js'/u,
+  );
+  assert.doesNotMatch(auth, /serviceLog\(/u);
+  assert.doesNotMatch(auth, /createAdminAuditChangeSet/u);
+  assert.doesNotMatch(auth, /canManageData/u);
+  assert.doesNotMatch(auth, /canEditOsm/u);
+
+  assert.match(
+    authorizationPolicy,
+    /permission === 'osm-editor'/u,
+  );
+  assert.match(
+    authorizationPolicy,
+    /user\.canManageData/u,
+  );
+  assert.match(
+    authorizationPolicy,
+    /user\.canManageSecurity/u,
+  );
+  assert.doesNotMatch(
+    authorizationPolicy,
+    /request\.get/u,
+  );
+  assert.doesNotMatch(
+    authorizationPolicy,
+    /response\./u,
+  );
+
+  assert.match(audit, /createAdminAuditChangeSet/u);
+  assert.match(audit, /sanitizeAdminAuditData/u);
+  assert.match(audit, /serviceLog\(/u);
+  assert.match(audit, /securityService[\s\S]*appendAudit/u);
+  assert.doesNotMatch(audit, /authenticateRequest/u);
+  assert.doesNotMatch(audit, /adminHasPermission/u);
+
+  assert.match(clientIp, /request\.ip/u);
+  assert.match(clientIp, /remoteAddress/u);
+  assert.doesNotMatch(clientIp, /securityService/u);
+});
+
+test('admin routes import operation audit from its dedicated HTTP module', async () => {
+  const paths = [
+    'line-types-api.js',
+    'report-config-api.js',
+    'project-settings-api.js',
+    'project-settings-transfer-api.js',
+    'osm-boundaries-api.js',
+    'kml-transfer-api.js',
+    'admin-security-api.js',
+  ];
+
+  for (const file of paths) {
+    const source = await fs.readFile(
+      path.join(srcRoot, 'routes', file),
+      'utf8',
+    );
+
+    assert.match(
+      source,
+      /admin-operation-audit\.js/u,
+      file,
+    );
+
+    const auditImportBlock =
+      source.match(
+        /import \{[\s\S]*?createAdminOperationAudit[\s\S]*?\} from '[^']+';/u,
+      )?.[0] ?? '';
+
+    assert.match(
+      auditImportBlock,
+      /admin-operation-audit\.js/u,
+      file,
+    );
+  }
+});
