@@ -377,7 +377,33 @@ npm run admin:set-superuser
 npm run lint
 npm test
 npm run check
+npm run test:integration
 ```
+
+### PostgreSQL/PostGIS integration regression
+
+Обычный `npm test` не подключается к PostgreSQL. Для проверки реальных migrations,
+PostGIS SQL, project-settings transfer repository/service, временного line-type
+staging и spatial/cursor export используется отдельный opt-in harness.
+
+С локальной БД из `compose.yaml`:
+
+```bash
+DTPSTAT_INTEGRATION_USE_COMPOSE=1 npm run test:integration
+```
+
+С явно выделенной тестовой БД:
+
+```bash
+DTPSTAT_INTEGRATION_DATABASE_URL='postgresql://user:password@127.0.0.1:5432/testdb' \
+  npm run test:integration
+```
+
+Harness не использует `DATABASE_NAME` или `DATABASE_SCHEMA` приложения. Он создаёт
+случайную schema `dtpstat_it_*`, применяет в неё все migrations и удаляет её в
+`finally`. Remote URL по умолчанию отклоняется; для отдельной удалённой test DB
+нужен дополнительный `DTPSTAT_INTEGRATION_ALLOW_REMOTE=1`.
+
 
 Импорт и перенос application data выполняются через административные API/UI. Отдельного repository-snapshot import script нет.
 
