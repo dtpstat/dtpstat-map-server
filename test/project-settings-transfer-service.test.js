@@ -164,3 +164,86 @@ test('settings import rejects unsupported schema versions before touching the da
   );
   assert.equal(connected, false);
 });
+
+function exportServiceWithSnapshot(snapshot, queries) {
+  const client = {
+    async query(text) {
+      queries.push(text.trim());
+      return { rows: [] };
+    },
+    release() {},
+  };
+
+  return createProjectSettingsTransferService(
+    {
+      async connect() {
+        return client;
+      },
+    },
+    {
+      repository: {
+        async exportSnapshot() {
+          return snapshot;
+        },
+      },
+      acquireLock: async () => {},
+    },
+  );
+}
+
+test('settings export treats a missing report row as incomplete project settings before commit', async () => {
+  const queries = [];
+  const service = exportServiceWithSnapshot(
+    {
+      projectSettings: { projectName: 'Test' },
+      lineTypes: [],
+      reportConfigPresent: false,
+      reportConfig: undefined,
+      securitySettings: { maxFailedAttempts: 5 },
+    },
+    queries,
+  );
+
+  await assert.rejects(
+    service.exportSettings(),
+    /Project settings are incomplete; run database migrations/u,
+  );
+
+  assert.equal(
+    queries.some((query) => /^COMMIT$/iu.test(query)),
+    false,
+  );
+  assert.equal(
+    queries.at(-1),
+    'ROLLBACK',
+  );
+});
+
+test('settings export validates a present null report config after committing the read snapshot', async () => {
+  const queries = [];
+  const service = exportServiceWithSnapshot(
+    {
+      projectSettings: { projectName: 'Test' },
+      lineTypes: [],
+      reportConfigPresent: true,
+      reportConfig: null,
+      securitySettings: { maxFailedAttempts: 5 },
+    },
+    queries,
+  );
+
+  await assert.rejects(
+    service.exportSettings(),
+    /Report configuration is incomplete; run database migrations/u,
+  );
+
+  const commitIndex = queries.findIndex(
+    (query) => /^COMMIT$/iu.test(query),
+  );
+  const rollbackIndex = queries.findIndex(
+    (query) => /^ROLLBACK$/iu.test(query),
+  );
+
+  assert.ok(commitIndex > 0);
+  assert.ok(rollbackIndex > commitIndex);
+});
