@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import test from 'node:test';
 import { WebSocket } from 'ws';
-import { createAdminTaskManager } from '../src/data/admin-task-manager.js';
+import { createAdminTaskManager } from '../src/shared/tasks/admin-task-manager.js';
 import { createAdminWebSocketGateway } from '../src/http/admin-websocket.js';
 
 const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;

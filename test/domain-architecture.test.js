@@ -1232,29 +1232,52 @@ test('shared admin task runtime separates lifecycle policy from audit sanitizati
   assert.doesNotMatch(audit, /adminTaskSnapshot/u);
 });
 
-test('legacy admin task and audit data modules are only compatibility exports', async () => {
-  const taskFacade = await fs.readFile(
-    path.join(srcRoot, 'data', 'admin-task-manager.js'),
-    'utf8',
-  );
-  const auditFacade = await fs.readFile(
-    path.join(srcRoot, 'data', 'admin-audit-details.js'),
-    'utf8',
-  );
+test('admin task and audit helpers use canonical shared modules without legacy data facades', async () => {
+  const legacyFacades = [
+    path.join(
+      srcRoot,
+      'data',
+      'admin-task-manager.js',
+    ),
+    path.join(
+      srcRoot,
+      'data',
+      'admin-audit-details.js',
+    ),
+  ];
 
-  assert.match(
-    taskFacade,
-    /from '\.\.\/shared\/tasks\/admin-task-manager\.js'/u,
+  const sourceFiles = await jsFiles(
+    srcRoot,
   );
-  assert.doesNotMatch(taskFacade, /new AbortController\(/u);
-  assert.doesNotMatch(taskFacade, /recordSuccessfulUpdate/u);
+  for (const file of sourceFiles) {
+    const source = await fs.readFile(
+      file,
+      'utf8',
+    );
+    for (const specifier of importSpecifiers(source)) {
+      const resolved =
+        resolveRelativeImport(
+          file,
+          specifier,
+        );
 
-  assert.match(
-    auditFacade,
-    /from '\.\.\/shared\/logging\/admin-audit-details\.js'/u,
-  );
-  assert.doesNotMatch(auditFacade, /crypto\.createHash/u);
-  assert.doesNotMatch(auditFacade, /function sanitize/u);
+      assert.ok(
+        !resolved ||
+          !legacyFacades.includes(
+            resolved,
+          ),
+        `${path.relative(root, file)} must import canonical admin task/audit modules`,
+      );
+    }
+  }
+
+  for (const facade of legacyFacades) {
+    await assert.rejects(
+      fs.access(facade),
+      (error) =>
+        error?.code === 'ENOENT',
+    );
+  }
 });
 
 

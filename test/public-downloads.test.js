@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { createAdminTaskManager } from '../src/data/admin-task-manager.js';
+import { createAdminTaskManager } from '../src/shared/tasks/admin-task-manager.js';
 import {
   createPublicDownloadService,
   serializePublicCsv,

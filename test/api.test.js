@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createApp } from '../src/app.js';
-import { createAdminTaskManager } from '../src/data/admin-task-manager.js';
+import { createAdminTaskManager } from '../src/shared/tasks/admin-task-manager.js';
 
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

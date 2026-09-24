@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   AdminTaskAlreadyRunningError,
   createAdminTaskManager,
-} from '../src/data/admin-task-manager.js';
+} from '../src/shared/tasks/admin-task-manager.js';
 
 const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
 
