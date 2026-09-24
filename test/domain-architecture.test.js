@@ -2000,9 +2000,25 @@ test('application composition delegates CSP compression and static asset middlew
 });
 
 
-test('server composition root uses canonical security and upload staging modules', async () => {
+test('server composition root delegates startup and derived-state orchestration', async () => {
   const server = await fs.readFile(
     path.join(srcRoot, 'server.js'),
+    'utf8',
+  );
+  const bootstrap = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'server-bootstrap.js',
+    ),
+    'utf8',
+  );
+  const derived = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'derived-state-refresh.js',
+    ),
     'utf8',
   );
 
@@ -2012,8 +2028,21 @@ test('server composition root uses canonical security and upload staging modules
   );
   assert.match(
     server,
-    /shared\/files\/upload-staging\.js/u,
+    /prepareServerDatabase\(/u,
   );
+  assert.match(
+    server,
+    /bootstrapServerApplication\(/u,
+  );
+  assert.match(
+    server,
+    /createDerivedStateRefresh\(/u,
+  );
+  assert.match(
+    server,
+    /createAdminTaskDerivedRefresh\(/u,
+  );
+
   assert.doesNotMatch(
     server,
     /data\/admin-security\.js/u,
@@ -2022,13 +2051,75 @@ test('server composition root uses canonical security and upload staging modules
     server,
     /http\/stream-upload\.js/u,
   );
-  assert.match(
+  assert.doesNotMatch(
     server,
-    /cleanupStagedUploads\(/u,
+    /shared\/files\/upload-staging\.js/u,
   );
   assert.doesNotMatch(
     server,
-    /cleanupStreamUploads\(/u,
+    /migrateDatabase/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /verifyDatabaseMigrationState/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /cleanupStagedUploads/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /database\.migrations\.apply/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /portable-import-spool\.cleanup/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /PUBLIC_DOWNLOAD_TASK_TYPES/u,
+  );
+
+  assert.match(
+    bootstrap,
+    /db\/migration-runner\.js/u,
+  );
+  assert.match(
+    bootstrap,
+    /db\/migration-state\.js/u,
+  );
+  assert.match(
+    bootstrap,
+    /shared\/files\/upload-staging\.js/u,
+  );
+  assert.match(
+    bootstrap,
+    /database\.migrations\.apply/u,
+  );
+  assert.match(
+    bootstrap,
+    /portable-import-spool\.cleanup/u,
+  );
+  assert.match(
+    bootstrap,
+    /derivedState\.refreshAll/u,
+  );
+
+  assert.match(
+    derived,
+    /city-report\.refresh/u,
+  );
+  assert.match(
+    derived,
+    /public-downloads\.refresh/u,
+  );
+  assert.match(
+    derived,
+    /DERIVED_REFRESH_TASK_TYPES/u,
+  );
+  assert.doesNotMatch(
+    derived,
+    /createApp\(/u,
   );
 });
 

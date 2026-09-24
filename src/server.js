@@ -23,12 +23,17 @@ import {createProjectSettingsTransferService} from './db/project-settings-transf
 import {createPublicDownloadRepository} from './db/public-download-repository.js';
 import {createReportConfigService} from './db/report-config-service.js';
 import {createPool} from './db/pool.js';
-import {migrateDatabase} from './db/migration-runner.js';
-import {verifyDatabaseMigrationState} from './db/migration-state.js';
 import {createAdminAuthorization} from './http/admin-auth.js';
 import {createAdminWebSocketGateway} from './http/admin-websocket.js';
-import {cleanupStagedUploads} from './shared/files/upload-staging.js';
 import {startServers} from './http/start-servers.js';
+import {
+  createAdminTaskDerivedRefresh,
+  createDerivedStateRefresh,
+} from './application/derived-state-refresh.js';
+import {
+  bootstrapServerApplication,
+  prepareServerDatabase,
+} from './application/server-bootstrap.js';
 import {
   createServerShutdown,
   installProcessShutdownHandlers,
@@ -38,14 +43,6 @@ import {
   serviceErrorDetails,
   serviceLog,
 } from './service-log.js';
-
-const PUBLIC_DOWNLOAD_TASK_TYPES = new Set([
-  'geojson-import',
-  'city-geojson-import',
-  'kml-update',
-  'osm-city-update',
-  'population-update',
-]);
 
 async function main() {
   const config = loadConfig();
@@ -69,37 +66,10 @@ async function main() {
   });
 
   const pool = createPool(config.database);
-  await runServiceOperation(
-    'database.migrations.apply',
-    () => migrateDatabase(pool, {
-      projectRoot: config.projectRoot,
-      schema: config.database.schema,
-      logger(event) {
-        if (event.status !== 'applied') return;
-        serviceLog('info', 'database.migration:applied', {
-          version: event.migration.version,
-          fileName: event.migration.fileName,
-        });
-      },
-    }),
-    {
-      successDetails: (result) => ({
-        currentVersion: result.version,
-        applied: result.appliedCount,
-        known: result.totalCount,
-      }),
-    },
-  );
-  await runServiceOperation(
-    'database.migrations.verify',
-    () => verifyDatabaseMigrationState(pool, {
-      projectRoot: config.projectRoot,
-      schema: config.database.schema,
-    }),
-    {
-      successDetails: (state) => state,
-    },
-  );
+  await prepareServerDatabase({
+    config,
+    pool,
+  });
 
   const repository = createCitiesRepository(pool);
   const lineTypesRepository = createLineTypesRepository(pool);
@@ -133,101 +103,26 @@ async function main() {
   const securityService = createAdminSecurityService(adminSecurityRepository);
   const adminAuth = createAdminAuthorization(securityService);
 
-  const refreshPublicDownloads = (details = {}) => runServiceOperation(
-    'public-downloads.refresh',
-    () => publicDownloadService.refresh(),
-    {
-      details: {
-        directory: publicDownloadService.directory,
-        ...details,
-      },
-      successDetails: (result) => result,
-    },
-  );
-  const refreshReportValues = (details = {}) => runServiceOperation(
-    'city-report.refresh',
-    () => reportConfigService.refresh(),
-    {
-      details,
-      successDetails: (result) => result,
-    },
-  );
-
-  await runServiceOperation(
-    'database.health',
-    () => repository.health(),
-    {details: {schema: config.database.schema}},
-  );
-  await runServiceOperation(
-    'portable-import-spool.cleanup',
-    () => cleanupStagedUploads(config.importApi.streamUploadDirectory),
-    {
-      successDetails: (removed) => ({
-        directory: config.importApi.streamUploadDirectory,
-        removed,
-      }),
-    },
-  );
-  await runServiceOperation(
-    'osm-import-settings.bootstrap',
-    () => osmImportSettingsRepository.bootstrap(config.osmCityUpdate),
-    {
-      successDetails: (result) => result,
-    },
-  );
-  await runServiceOperation(
-    'admin-security.bootstrap',
-    () => securityService.bootstrap({
-      username: config.importApi.bootstrapUsername,
-      password: config.importApi.bootstrapPassword,
-    }),
-    {
-      successDetails: (result) => ({created: result.created}),
-    },
-  );
-  await runServiceOperation(
-    'project-settings.mapbox.bootstrap',
-    () => projectSettingsRepository.bootstrapMapboxAccessToken(
-      config.publicMap.bootstrapAccessToken,
-    ),
-    {
-      successDetails: (result) => ({
-        initializedFromEnvironment: result.initialized,
-        configured: result.configured,
-      }),
-    },
-  );
-  await runServiceOperation(
-    'project-settings.load',
-    () => projectSettingsRepository.get(),
-    {
-      successDetails: (settings) => ({projectName: settings.projectName}),
-    },
-  );
-  await refreshReportValues({reason: 'startup'});
-  await refreshPublicDownloads({reason: 'startup'});
-  const initialSuccessfulUpdates = await runServiceOperation(
-    'admin-success-state.load',
-    () => adminTaskSuccessRepository.list(),
-    {
-      successDetails: (updates) => ({records: updates.length}),
-    },
-  );
+  const derivedState = createDerivedStateRefresh({
+    publicDownloadService,
+    reportConfigService,
+  });
+  const {initialSuccessfulUpdates} = await bootstrapServerApplication({
+    config,
+    repository,
+    osmImportSettingsRepository,
+    securityService,
+    projectSettingsRepository,
+    adminTaskSuccessRepository,
+    derivedState,
+  });
 
   const adminTasks = createAdminTaskManager({
     initialSuccessfulUpdates,
     recordSuccessfulUpdate: (update) => adminTaskSuccessRepository.record(update),
     recordTaskAudit: (entry) => securityService.appendAudit(entry),
-    afterSuccessfulUpdate: async (update) => {
-      if (!PUBLIC_DOWNLOAD_TASK_TYPES.has(update.taskType)) return undefined;
-      const details = {
-        reason: 'admin-update',
-        taskType: update.taskType,
-        taskId: update.taskId,
-      };
-      await refreshReportValues(details);
-      return refreshPublicDownloads(details);
-    },
+    afterSuccessfulUpdate:
+      createAdminTaskDerivedRefresh(derivedState),
   });
   const adminWebSocket = createAdminWebSocketGateway({
     adminTasks,
@@ -240,17 +135,14 @@ async function main() {
     projectSettingsRepository,
     settingsTransferService,
     reportConfigService,
-    refreshPublicDownloads: () => refreshPublicDownloads({reason: 'report-config'}),
+    refreshPublicDownloads: () =>
+      derivedState.refreshPublicDownloads({reason: 'report-config'}),
     refreshPublicDownloadsAfterSettingsImport: () =>
-      refreshPublicDownloads({reason: 'project-settings-import'}),
-    refreshProjectDerived: async () => {
-      await refreshReportValues({reason: 'project-settings'});
-      return refreshPublicDownloads({reason: 'project-settings'});
-    },
-    refreshOsmBoundaryDerived: async () => {
-      await refreshReportValues({reason: 'osm-boundary-settings'});
-      return refreshPublicDownloads({reason: 'osm-boundary-settings'});
-    },
+      derivedState.refreshPublicDownloads({reason: 'project-settings-import'}),
+    refreshProjectDerived: () =>
+      derivedState.refreshAll({reason: 'project-settings'}),
+    refreshOsmBoundaryDerived: () =>
+      derivedState.refreshAll({reason: 'osm-boundary-settings'}),
     osmImportSettingsRepository,
     osmBoundaryAdminRepository,
     exportRepository,
