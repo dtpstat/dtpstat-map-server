@@ -17,7 +17,7 @@
     "lint": "eslint .",
     "test": "node --test",
     "check": "npm run lint && npm test",
-    "test:integration": "node scripts/test-postgres-integration.js"
+    "test:integration": "node scripts/postgres-integration.js"
   },
   "dependencies": {
     "compression": "^1.8.1",
