@@ -1355,7 +1355,7 @@ test('admin mutating routes import operation audit from its dedicated HTTP modul
     'project-settings-transfer-api.js',
     'osm/settings-routes.js',
     'osm/boundary-routes.js',
-    'kml-transfer-api.js',
+    'kml/export-routes.js',
     'security/profile-routes.js',
     'security/user-routes.js',
     'security/control-routes.js',
@@ -1537,4 +1537,64 @@ test('OSM admin HTTP separates import settings policy from boundary editing rout
   assert.match(settingsPolicy, /At least one OSM object class must be enabled/u);
   assert.doesNotMatch(settingsPolicy, /router\./u);
   assert.doesNotMatch(settingsPolicy, /response\./u);
+});
+
+
+test('portable KML HTTP separates export from task-backed import orchestration', async () => {
+  const composition = await fs.readFile(
+    path.join(srcRoot, 'routes', 'kml-transfer-api.js'),
+    'utf8',
+  );
+  const exportRoutes = await fs.readFile(
+    path.join(srcRoot, 'routes', 'kml', 'export-routes.js'),
+    'utf8',
+  );
+  const importRoutes = await fs.readFile(
+    path.join(srcRoot, 'routes', 'kml', 'import-routes.js'),
+    'utf8',
+  );
+  const taskHttp = await fs.readFile(
+    path.join(srcRoot, 'application', 'admin-tasks', 'http-runtime.js'),
+    'utf8',
+  );
+
+  assert.match(composition, /createAdminTaskHttpRuntime\(/u);
+  assert.match(composition, /registerKmlExportRoutes\(/u);
+  assert.match(composition, /registerKmlImportRoutes\(/u);
+  assert.doesNotMatch(composition, /AdminTaskAlreadyRunningError/u);
+  assert.doesNotMatch(composition, /Another data-management task/u);
+  assert.doesNotMatch(composition, /router\.(?:get|post)\(/u);
+
+  assert.match(exportRoutes, /serializeLinesKml\(/u);
+  assert.match(exportRoutes, /data\.export\.lines-kml/u);
+  assert.doesNotMatch(exportRoutes, /startAdminTask/u);
+  assert.doesNotMatch(exportRoutes, /parseLinesKml/u);
+
+  assert.match(importRoutes, /parseLinesKml\(/u);
+  assert.match(importRoutes, /rejectWhileAdminTaskActive/u);
+  assert.match(importRoutes, /startAdminTask\(/u);
+  assert.match(importRoutes, /adminAuditPayloadFingerprint\(/u);
+  assert.doesNotMatch(importRoutes, /AdminTaskAlreadyRunningError/u);
+  assert.doesNotMatch(importRoutes, /Another data-management task/u);
+
+  assert.match(
+    taskHttp,
+    /\.\.\/\.\.\/shared\/tasks\/admin-task-manager\.js/u,
+  );
+  assert.match(
+    taskHttp,
+    /\.\.\/\.\.\/shared\/http\/client-ip\.js/u,
+  );
+  assert.match(
+    taskHttp,
+    /\.\.\/\.\.\/http\/admin-operation-audit\.js/u,
+  );
+  assert.doesNotMatch(
+    taskHttp,
+    /\.\.\/\.\.\/data\/admin-task-manager\.js/u,
+  );
+  assert.doesNotMatch(
+    taskHttp,
+    /from '\.\.\/\.\.\/http\/admin-auth\.js'/u,
+  );
 });
