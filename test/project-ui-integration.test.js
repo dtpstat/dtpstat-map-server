@@ -184,20 +184,35 @@ test('public page derives metadata, theme stylesheet, analytics and download lin
 });
 
 test('public GeoJSON and CSV routes and disk files are fully derived from the configured base name', async () => {
-  const [app, service, atomicFiles] = await Promise.all([
-    source('src/app.js'),
+  const [publicSite, service, atomicFiles] = await Promise.all([
+    source('src/http/public-site.js'),
     source('src/application/public-downloads/service.js'),
     source('src/shared/files/atomic-snapshot.js'),
   ]);
 
-  assert.match(app, /app\.get\('\/:publicDownloadFile'/);
-  assert.match(app, /publicDownloadFiles\(settings\.publicDownloadName\)/);
-  assert.match(app, /\[files\.csvFileName, 'text\/csv; charset=utf-8'\]/);
-  assert.match(app, /\[files\.geoJsonFileName, 'application\/geo\+json; charset=utf-8'\]/);
-  assert.match(app, /response\.sendFile\(requestedFile, \{ root: publicDownloadDirectory \}/);
-  assert.doesNotMatch(app, /const PUBLIC_DOWNLOADS/);
-  assert.doesNotMatch(app, /\['\/bus-lanes\.csv', 'bus-lanes\.csv'\]/);
-  assert.doesNotMatch(app, /\['\/bus-lanes\.geojson', 'bus-lanes\.geojson'\]/);
+  assert.match(
+    publicSite,
+    /app\.get\(\s*'\/:publicDownloadFile'/s,
+  );
+  assert.match(
+    publicSite,
+    /publicDownloadFiles\(\s*settings\s*\.publicDownloadName,?\s*\)/s,
+  );
+  assert.match(
+    publicSite,
+    /files\.csvFileName,[\s\S]*?'text\/csv; charset=utf-8'/,
+  );
+  assert.match(
+    publicSite,
+    /files\.geoJsonFileName,[\s\S]*?'application\/geo\+json; charset=utf-8'/,
+  );
+  assert.match(
+    publicSite,
+    /response\.sendFile\([\s\S]*?requestedFile,[\s\S]*?root:\s*publicDownloadDirectory/s,
+  );
+  assert.doesNotMatch(publicSite, /const PUBLIC_DOWNLOADS/);
+  assert.doesNotMatch(publicSite, /bus-lanes\.csv/);
+  assert.doesNotMatch(publicSite, /bus-lanes\.geojson/);
 
   assert.match(service, /files = publicDownloadFiles\(/);
   assert.match(service, /files\.geoJsonFileName/);
