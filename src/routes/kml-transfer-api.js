@@ -8,8 +8,10 @@ import {
 } from '../data/kml-transfer.js';
 import {
   adminClientIp,
-  createAdminOperationAudit,
 } from '../http/admin-auth.js';
+import {
+  createAdminOperationAudit,
+} from '../http/admin-operation-audit.js';
 
 /**
  * Portable KML transfer is deliberately separate from the external Google My
