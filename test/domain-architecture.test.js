@@ -89,6 +89,71 @@ test('lightweight domain modules keep dependency direction explicit', async () =
   }
 });
 
+test('domain validation policies live in canonical modules instead of data', async () => {
+  const legacyPolicies = new Set([
+    path.join(srcRoot, 'data', 'line-types.js'),
+    path.join(srcRoot, 'data', 'report-config.js'),
+    path.join(srcRoot, 'data', 'project-settings.js'),
+    path.join(srcRoot, 'data', 'public-download-name.js'),
+    path.join(srcRoot, 'data', 'mapbox-access-token.js'),
+  ]);
+
+  const sourceFiles = await jsFiles(srcRoot);
+  for (const file of sourceFiles) {
+    if (
+      file.startsWith(
+        path.join(srcRoot, 'data') + path.sep,
+      )
+    ) {
+      continue;
+    }
+
+    const source = await fs.readFile(
+      file,
+      'utf8',
+    );
+    for (const specifier of importSpecifiers(source)) {
+      const resolved =
+        resolveRelativeImport(
+          file,
+          specifier,
+        );
+
+      assert.ok(
+        !resolved ||
+          !legacyPolicies.has(resolved),
+        `${path.relative(root, file)} must import canonical validation policy modules instead of src/data`,
+      );
+    }
+  }
+
+  const facades = [
+    ['line-types.js', '../modules/lines/type-policy.js'],
+    ['report-config.js', '../modules/reporting/config-policy.js'],
+    ['project-settings.js', '../modules/project/settings-policy.js'],
+    ['public-download-name.js', '../modules/project/public-download-policy.js'],
+    ['mapbox-access-token.js', '../modules/project/mapbox-token-policy.js'],
+  ];
+
+  for (const [fileName, target] of facades) {
+    const facade = await fs.readFile(
+      path.join(
+        srcRoot,
+        'data',
+        fileName,
+      ),
+      'utf8',
+    );
+
+    assert.equal(
+      facade.trim(),
+      `export * from '${target}';`,
+      fileName,
+    );
+  }
+});
+
+
 test('legacy API file is a composition root for extracted route modules', async () => {
   const source = await fs.readFile(path.join(srcRoot, 'routes', 'api.js'), 'utf8');
 
