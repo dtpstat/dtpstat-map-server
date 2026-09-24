@@ -57,7 +57,7 @@ import {
  *   populationService: PopulationImportService,
  *   kmlUpdateService: KmlUpdateService,
  *   osmCityUpdateService: OsmCityUpdateService,
- *   adminTasks: ReturnType<import('../data/admin-task-manager.js').createAdminTaskManager>,
+ *   adminTasks: ReturnType<import('../shared/tasks/admin-task-manager.js').createAdminTaskManager>,
  *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
  *   securityService: ReturnType<import('../data/admin-security.js').createAdminSecurityService>,
  *   publicMap: object,
