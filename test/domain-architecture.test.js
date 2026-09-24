@@ -1408,15 +1408,12 @@ test('removed compatibility facades stay absent from source tests and scripts', 
 
     if (file !== architectureTest) {
       for (const reference of removedReferences) {
-        assert.doesNotMatch(
-          source,
-          new RegExp(
-            reference
-              .replace(/[.*+?^$\{\}()|[\]\\]/gu, '\\      assert.ok(
-        !resolved ||
-          !removedFacades.has(resolved),
-        `${path.relative(root, file)} must import the canonical module instead of a removed compatibility facade`,
-      );
+        assert.equal(
+          source.includes(reference),
+          false,
+          `${path.relative(root, file)} must not reference removed compatibility path ${reference}`,
+        );
+      }
     }
   }
 
