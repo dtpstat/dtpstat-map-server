@@ -4,6 +4,17 @@ import {
 import {
   requestClientIp,
 } from '../shared/http/client-ip.js';
+import {
+  sendAdminAuthorizationError,
+  respondAdminAuthenticationFailure,
+} from './admin-auth-response.js';
+import {
+  adminCsrfAllowed,
+} from './admin-csrf.js';
+import {
+  adminSessionToken,
+  applyAdminSessionContext,
+} from './admin-session-http.js';
 
 export {
   createAdminOperationAudit,
@@ -11,94 +22,10 @@ export {
   recordAdminOperationDetails,
 } from './admin-operation-audit.js';
 
-const SESSION_COOKIE =
-  'dtpstat_admin_session';
-
-function authorizationError(
-  response,
-  status,
-  error,
-  options = {},
-) {
-  response.set(
-    'Cache-Control',
-    'no-store',
-  );
-
-  if (options.challenge) {
-    response.set(
-      'WWW-Authenticate',
-      'Basic realm="dtpstat-admin", charset="UTF-8"',
-    );
-  }
-
-  if (options.retryAfterSeconds) {
-    response.set(
-      'Retry-After',
-      String(options.retryAfterSeconds),
-    );
-  }
-
-  response
-    .status(status)
-    .json({
-      error,
-      ...(options.code
-        ? { code: options.code }
-        : {}),
-      ...(options.retryAfterSeconds
-        ? {
-          retryAfterSeconds:
-            options.retryAfterSeconds,
-        }
-        : {}),
-    });
-}
-
-function parseCookies(header) {
-  const cookies = new Map();
-
-  for (
-    const part of
-    String(header ?? '').split(';')
-  ) {
-    const separator =
-      part.indexOf('=');
-
-    if (separator <= 0) continue;
-
-    const name =
-      part.slice(0, separator).trim();
-    const value =
-      part.slice(separator + 1).trim();
-
-    if (!name) continue;
-
-    try {
-      cookies.set(
-        name,
-        decodeURIComponent(value),
-      );
-    } catch {
-      cookies.set(name, value);
-    }
-  }
-
-  return cookies;
-}
-
-export function adminSessionToken(request) {
-  return (
-    parseCookies(
-      request.headers?.cookie,
-    ).get(SESSION_COOKIE) ??
-    null
-  );
-}
-
-export function adminSessionCookieName() {
-  return SESSION_COOKIE;
-}
+export {
+  adminSessionCookieName,
+  adminSessionToken,
+} from './admin-session-http.js';
 
 /**
  * Compatibility name used by security routes and websocket auth.
@@ -107,67 +34,6 @@ export function adminSessionCookieName() {
  */
 export function adminClientIp(request) {
   return requestClientIp(request);
-}
-
-function csrfAllowed(
-  request,
-  authMethod,
-) {
-  if (
-    authMethod !== 'session' ||
-    ['GET', 'HEAD', 'OPTIONS']
-      .includes(request.method)
-  ) {
-    return true;
-  }
-
-  const fetchSite =
-    request.get?.('sec-fetch-site');
-
-  if (
-    fetchSite &&
-    ![
-      'same-origin',
-      'same-site',
-      'none',
-    ].includes(fetchSite)
-  ) {
-    return false;
-  }
-
-  const origin =
-    request.get?.('origin');
-
-  if (!origin) {
-    return true;
-  }
-
-  try {
-    const expected =
-      `${request.protocol}://${request.get('host')}`;
-
-    return (
-      new URL(origin).origin ===
-      expected
-    );
-  } catch {
-    return false;
-  }
-}
-
-function applySessionExpiry(
-  response,
-  result,
-) {
-  if (
-    result?.authMethod === 'session' &&
-    result.sessionEffectiveExpiresAt
-  ) {
-    response.set(
-      'X-DTPStat-Admin-Session-Expires-At',
-      result.sessionEffectiveExpiresAt,
-    );
-  }
 }
 
 /**
@@ -216,111 +82,29 @@ export function createAdminAuthorization(
             );
 
           if (
-            result.status ===
-              'missing' ||
-            result.status ===
-              'invalid' ||
-            result.status ===
-              'expired'
-          ) {
-            authorizationError(
+            respondAdminAuthenticationFailure(
               response,
-              401,
-              'Authentication required',
+              result,
               {
-                challenge:
+                challengeOnMissing:
                   Boolean(
                     request.get?.(
                       'authorization',
                     ),
                   ),
               },
-            );
-            return;
-          }
-
-          if (
-            result.status ===
-            'ip-blocked'
+            )
           ) {
-            authorizationError(
-              response,
-              403,
-              'This IP address is blocked by an administrator',
-            );
             return;
           }
 
           if (
-            result.status ===
-            'ip-locked'
-          ) {
-            authorizationError(
-              response,
-              429,
-              'Too many failed login attempts from this IP address',
-              {
-                retryAfterSeconds:
-                  result.retryAfterSeconds,
-              },
-            );
-            return;
-          }
-
-          if (
-            result.status ===
-            'blocked'
-          ) {
-            authorizationError(
-              response,
-              403,
-              'Administrator account is blocked',
-              {
-                retryAfterSeconds:
-                  result.retryAfterSeconds,
-              },
-            );
-            return;
-          }
-
-          if (
-            result.status ===
-            'locked'
-          ) {
-            authorizationError(
-              response,
-              423,
-              'Administrator account is temporarily locked',
-              {
-                retryAfterSeconds:
-                  result.retryAfterSeconds,
-              },
-            );
-            return;
-          }
-
-          if (
-            result.status !==
-            'success'
-          ) {
-            authorizationError(
-              response,
-              401,
-              'Invalid username or password',
-              {
-                challenge: true,
-              },
-            );
-            return;
-          }
-
-          if (
-            !csrfAllowed(
+            !adminCsrfAllowed(
               request,
               result.authMethod,
             )
           ) {
-            authorizationError(
+            sendAdminAuthorizationError(
               response,
               403,
               'Cross-site administrative request rejected',
@@ -336,7 +120,7 @@ export function createAdminAuthorization(
             !options
               .allowPasswordChangePending
           ) {
-            authorizationError(
+            sendAdminAuthorizationError(
               response,
               428,
               'Password change required',
@@ -354,7 +138,7 @@ export function createAdminAuthorization(
               permission,
             )
           ) {
-            authorizationError(
+            sendAdminAuthorizationError(
               response,
               403,
               'Administrator permission is required',
@@ -362,17 +146,8 @@ export function createAdminAuthorization(
             return;
           }
 
-          request.adminUser = user;
-          request.adminSessionId =
-            result.sessionId ?? null;
-          request.adminAuthMethod =
-            result.authMethod ?? 'basic';
-          request.adminSessionExpiresAt =
-            result
-              .sessionEffectiveExpiresAt ??
-            null;
-
-          applySessionExpiry(
+          applyAdminSessionContext(
+            request,
             response,
             result,
           );
@@ -406,18 +181,8 @@ export function createAdminAuthorization(
           return;
         }
 
-        request.adminUser =
-          result.user;
-        request.adminSessionId =
-          result.sessionId ?? null;
-        request.adminAuthMethod =
-          result.authMethod ?? 'basic';
-        request.adminSessionExpiresAt =
-          result
-            .sessionEffectiveExpiresAt ??
-          null;
-
-        applySessionExpiry(
+        applyAdminSessionContext(
+          request,
           response,
           result,
         );
