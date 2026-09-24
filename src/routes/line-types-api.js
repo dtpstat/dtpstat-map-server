@@ -3,7 +3,7 @@ import { LineTypeValidationError } from '../data/line-types.js';
 import {
   createAdminOperationAudit,
   recordAdminOperationChanges,
-} from '../http/admin-auth.js';
+} from '../http/admin-operation-audit.js';
 
 /**
  * @param {{
