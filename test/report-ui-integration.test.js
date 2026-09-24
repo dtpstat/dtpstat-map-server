@@ -111,10 +111,14 @@ test('public ranking headers, metric cells and conditional formats are generated
 test('server refreshes report materialization before public snapshots', async () => {
   const [
     server,
+    runtime,
     bootstrap,
     derivedState,
   ] = await Promise.all([
     source('src/server.js'),
+    source(
+      'src/application/server-runtime.js',
+    ),
     source(
       'src/application/server-bootstrap.js',
     ),
@@ -125,11 +129,19 @@ test('server refreshes report materialization before public snapshots', async ()
 
   assert.match(
     server,
-    /createDerivedStateRefresh\(\{/,
+    /createServerRuntime\(\{/,
   );
   assert.match(
     server,
-    /bootstrapServerApplication\(\{[\s\S]*derivedState/,
+    /bootstrapServerApplication\(\s*runtime\.bootstrapDependencies/s,
+  );
+  assert.match(
+    runtime,
+    /createDerivedStateRefresh\(\{/,
+  );
+  assert.match(
+    runtime,
+    /bootstrapDependencies:\s*\{[\s\S]*derivedState/s,
   );
   assert.match(
     bootstrap,
