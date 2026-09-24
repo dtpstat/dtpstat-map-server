@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DEFAULT_REPORT_CONFIG } from '../src/data/report-config.js';
+import { DEFAULT_REPORT_CONFIG } from '../src/modules/reporting/config-policy.js';
 import { createReportConfigService } from '../src/db/report-config-service.js';
 
 function configRow() {

@@ -4,8 +4,8 @@ import {
   DEFAULT_PUBLIC_DOWNLOAD_NAME,
   normalizePublicDownloadName,
   publicDownloadFiles,
-} from '../src/data/public-download-name.js';
-import { ProjectSettingsValidationError } from '../src/data/project-settings.js';
+} from '../src/modules/project/public-download-policy.js';
+import { ProjectSettingsValidationError } from '../src/modules/project/settings-policy.js';
 
 test('public download name defaults and normalizes a base file name without extension', () => {
   assert.equal(normalizePublicDownloadName(undefined), DEFAULT_PUBLIC_DOWNLOAD_NAME);

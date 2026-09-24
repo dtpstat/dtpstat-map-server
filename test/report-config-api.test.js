@@ -5,7 +5,7 @@ import express from 'express';
 import {
   DEFAULT_REPORT_CONFIG,
   validateReportConfig,
-} from '../src/data/report-config.js';
+} from '../src/modules/reporting/config-policy.js';
 import { createReportConfigRouter } from '../src/routes/report-config-api.js';
 
 const authorization = `Basic ${Buffer.from('admin:test-secret').toString('base64')}`;

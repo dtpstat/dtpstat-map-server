@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   AdminSecurityValidationError,
+} from '../src/modules/security/policy.js';
+import {
   createAdminSecurityService,
-} from '../src/data/admin-security.js';
+} from '../src/modules/security/service.js';
 
 function fakeRepository() {
   let user = null;

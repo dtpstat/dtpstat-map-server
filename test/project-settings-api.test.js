@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import express from 'express';
 import test from 'node:test';
-import { buildProjectSettingsPlan } from '../src/data/project-settings.js';
-import { normalizePublicDownloadName } from '../src/data/public-download-name.js';
+import { buildProjectSettingsPlan } from '../src/modules/project/settings-policy.js';
+import { normalizePublicDownloadName } from '../src/modules/project/public-download-policy.js';
 import { createProjectSettingsRouter } from '../src/routes/project-settings-api.js';
 
 const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;

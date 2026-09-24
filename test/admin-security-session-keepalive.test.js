@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createAdminSecurityService } from '../src/data/admin-security.js';
+import { createAdminSecurityService } from '../src/modules/security/service.js';
 
 function sessionRepository({ idleSeconds, lastSeenAt }) {
   const touched = [];

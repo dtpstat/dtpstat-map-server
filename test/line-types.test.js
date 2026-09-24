@@ -5,7 +5,7 @@ import {
   buildLineTypeSettingsPlan,
   LineTypeValidationError,
   normalizeLineTypeCode,
-} from '../src/data/line-types.js';
+} from '../src/modules/lines/type-policy.js';
 import { createLineTypesRepository } from '../src/db/line-types-repository.js';
 
 const dictionary = {

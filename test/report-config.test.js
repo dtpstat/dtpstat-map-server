@@ -7,7 +7,7 @@ import {
   reportMetricToRpn,
   ReportConfigValidationError,
   validateReportConfig,
-} from '../src/data/report-config.js';
+} from '../src/modules/reporting/config-policy.js';
 
 test('default bus-lane report configuration is valid', () => {
   const config = validateReportConfig(structuredClone(DEFAULT_REPORT_CONFIG));
