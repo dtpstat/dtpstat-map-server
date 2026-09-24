@@ -1021,3 +1021,62 @@ test('legacy OSM boundary admin repository is only a DB composition adapter', as
   assert.match(service, /storage\.getBoundary\(/u);
   assert.match(service, /storage\.updateSubtreeActive\(/u);
 });
+
+
+test('security module separates policy credential primitives and orchestration', async () => {
+  const policy = await fs.readFile(
+    path.join(srcRoot, 'modules', 'security', 'policy.js'),
+    'utf8',
+  );
+  const credentials = await fs.readFile(
+    path.join(srcRoot, 'modules', 'security', 'credentials.js'),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'security', 'service.js'),
+    'utf8',
+  );
+
+  assert.match(policy, /normalizeAdminSecuritySettings/u);
+  assert.match(policy, /publicAdminUser/u);
+  assert.match(policy, /canEditOsm: Boolean\(user\.canEditOsm\)/u);
+  assert.doesNotMatch(policy, /crypto\.scrypt/u);
+  assert.doesNotMatch(policy, /repository\./u);
+
+  assert.match(credentials, /promisify\(crypto\.scrypt\)/u);
+  assert.match(credentials, /hashAdminPassword/u);
+  assert.match(credentials, /verifyAdminPassword/u);
+  assert.match(credentials, /generateAdminSessionToken/u);
+  assert.doesNotMatch(credentials, /repository\./u);
+
+  assert.match(service, /repository\.findUserByUsername\(/u);
+  assert.match(service, /repository\.createSession\(/u);
+  assert.match(service, /repository\.saveSecuritySettings\(/u);
+  assert.match(service, /publicAdminUser\(/u);
+  assert.doesNotMatch(service, /crypto\.scrypt/u);
+  assert.doesNotMatch(service, /\.\.\/\.\.\/db\//u);
+});
+
+test('legacy admin security data module is only a compatibility export surface', async () => {
+  const facade = await fs.readFile(
+    path.join(srcRoot, 'data', 'admin-security.js'),
+    'utf8',
+  );
+
+  assert.match(
+    facade,
+    /from '\.\.\/modules\/security\/policy\.js'/u,
+  );
+  assert.match(
+    facade,
+    /from '\.\.\/modules\/security\/credentials\.js'/u,
+  );
+  assert.match(
+    facade,
+    /from '\.\.\/modules\/security\/service\.js'/u,
+  );
+
+  assert.doesNotMatch(facade, /crypto\.scrypt/u);
+  assert.doesNotMatch(facade, /repository\.findUserByUsername/u);
+  assert.doesNotMatch(facade, /function normalizeAdminUsername/u);
+});
