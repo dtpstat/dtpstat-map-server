@@ -2319,7 +2319,19 @@ test('server composition root delegates startup runtime and derived-state orches
   );
   assert.match(
     server,
+    /createAdminRuntime\(/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /createAdminTaskManager\(/u,
+  );
+  assert.doesNotMatch(
+    server,
     /createAdminTaskDerivedRefresh\(/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /createAdminWebSocketGateway\(/u,
   );
 
   assert.doesNotMatch(
@@ -2448,6 +2460,65 @@ test('server composition root delegates startup runtime and derived-state orches
   assert.doesNotMatch(
     derived,
     /createApp\(/u,
+  );
+});
+
+
+test('admin runtime owns task persistence derived refresh and websocket wiring', async () => {
+  const server = await fs.readFile(
+    path.join(srcRoot, 'server.js'),
+    'utf8',
+  );
+  const adminRuntime =
+    await fs.readFile(
+      path.join(
+        srcRoot,
+        'application',
+        'admin-runtime.js',
+      ),
+      'utf8',
+    );
+
+  assert.match(
+    server,
+    /createAdminRuntime\(/u,
+  );
+  assert.match(
+    server,
+    /adminRuntime\.adminTasks/u,
+  );
+  assert.match(
+    server,
+    /adminRuntime\.adminWebSocket/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /shared\/tasks\/admin-task-manager\.js/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /http\/admin-websocket\.js/u,
+  );
+
+  assert.match(
+    adminRuntime,
+    /shared\/tasks\/admin-task-manager\.js/u,
+  );
+  assert.match(
+    adminRuntime,
+    /http\/admin-websocket\.js/u,
+  );
+  assert.match(
+    adminRuntime,
+    /createAdminTaskDerivedRefresh\(/u,
+  );
+  assert.match(
+    adminRuntime,
+    /adminTaskSuccessRepository[\s\S]*\.record\(update\)/u,
+  );
+  assert.match(
+    adminRuntime,
+    /securityService[\s\S]*\.appendAudit\(entry\)/u,
   );
 });
 

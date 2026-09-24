@@ -1,13 +1,11 @@
 import 'dotenv/config';
 import {createApp} from './app.js';
 import {loadConfig} from './config.js';
-import {createAdminTaskManager} from './shared/tasks/admin-task-manager.js';
 import {createPool} from './db/pool.js';
-import {createAdminWebSocketGateway} from './http/admin-websocket.js';
 import {startServers} from './http/start-servers.js';
 import {
-  createAdminTaskDerivedRefresh,
-} from './application/derived-state-refresh.js';
+  createAdminRuntime,
+} from './application/admin-runtime.js';
 import {
   bootstrapServerApplication,
   prepareServerDatabase,
@@ -63,40 +61,32 @@ async function main() {
       runtime.bootstrapDependencies,
     );
 
-  const adminTasks = createAdminTaskManager({
-    initialSuccessfulUpdates,
-    recordSuccessfulUpdate:
-      (update) =>
+  const adminRuntime =
+    createAdminRuntime({
+      initialSuccessfulUpdates,
+      adminTaskSuccessRepository:
         runtime
-          .adminTaskSuccessRepository
-          .record(update),
-    recordTaskAudit:
-      (entry) =>
-        runtime
-          .securityService
-          .appendAudit(entry),
-    afterSuccessfulUpdate:
-      createAdminTaskDerivedRefresh(
-        runtime.derivedState,
-      ),
-  });
-  const adminWebSocket =
-    createAdminWebSocketGateway({
-      adminTasks,
+          .adminTaskSuccessRepository,
+      securityService:
+        runtime.securityService,
       adminAuth:
         runtime.adminAuth,
+      derivedState:
+        runtime.derivedState,
     });
 
   const app = createApp({
     ...runtime.appDependencies,
-    adminTasks,
+    adminTasks:
+      adminRuntime.adminTasks,
   });
   const servers = await runServiceOperation(
     'http-servers.start',
     () => startServers({
       app,
       config,
-      webSocketGateway: adminWebSocket,
+      webSocketGateway:
+        adminRuntime.adminWebSocket,
     }),
     {
       successDetails:
@@ -112,7 +102,8 @@ async function main() {
   });
   const shutdown = createServerShutdown({
     servers,
-    adminWebSocket,
+    adminWebSocket:
+      adminRuntime.adminWebSocket,
     pool,
   });
   installProcessShutdownHandlers({
