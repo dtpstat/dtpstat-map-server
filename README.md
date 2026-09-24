@@ -384,29 +384,22 @@ npm run test:integration
 
 Обычный `npm test` не подключается к PostgreSQL. Для проверки реальных migrations,
 PostGIS SQL, project-settings transfer repository/service, временного line-type
-staging и spatial/cursor export используется отдельный opt-in harness.
-
-С локальной БД из `compose.yaml`:
+staging и spatial/cursor export используется отдельный opt-in harness:
 
 ```bash
-DTPSTAT_INTEGRATION_USE_COMPOSE=1 npm run test:integration
+npm run test:integration
 ```
 
-С явно выделенной тестовой БД:
+Harness подключается к существующей БД, указанной в `.env`: `DATABASE_HOST`,
+`DATABASE_PORT`, `DATABASE_NAME` и SSL-настройки берутся из database config,
+а подключение выполняется административной ролью PostgreSQL из
+`POSTGRES_ADMIN_USER` / `POSTGRES_ADMIN_PASSWORD`.
 
-```bash
-DTPSTAT_INTEGRATION_DATABASE_URL='postgresql://user:password@127.0.0.1:5432/testdb' \
-  npm run test:integration
-```
-
-Harness не использует `DATABASE_NAME` или `DATABASE_SCHEMA` приложения.
-В compose-режиме он создаёт отдельную одноразовую БД `dtpstat_it_db_*`,
-устанавливает в неё `postgis`, затем создаёт случайную schema `dtpstat_it_*`
-и применяет все migrations. В `finally` удаляются и schema, и временная БД.
-Для явного `DTPSTAT_INTEGRATION_DATABASE_URL` harness не создаёт/не удаляет
-саму БД, а использует только временную schema; PostGIS в такой выделенной test DB
-должен быть установлен заранее. Remote URL по умолчанию отклоняется; для отдельной
-удалённой test DB нужен `DTPSTAT_INTEGRATION_ALLOW_REMOTE=1`.
+Рабочая `DATABASE_SCHEMA` приложения не используется и не изменяется. Для
+каждого запуска создаётся случайная schema `dtpstat_it_*`, в неё применяются все
+migrations и выполняются integration checks. В `finally` временная schema
+удаляется через `DROP SCHEMA ... CASCADE`. PostGIS ожидается уже установленным в
+этой БД штатным `npm run db:init`.
 
 
 Импорт и перенос application data выполняются через административные API/UI. Отдельного repository-snapshot import script нет.
