@@ -1380,3 +1380,57 @@ test('admin routes import operation audit from its dedicated HTTP module', async
     );
   }
 });
+
+
+test('admin security HTTP routes are split by profile users controls and audit', async () => {
+  const composition = await fs.readFile(
+    path.join(srcRoot, 'routes', 'admin-security-api.js'),
+    'utf8',
+  );
+  const profile = await fs.readFile(
+    path.join(srcRoot, 'routes', 'security', 'profile-routes.js'),
+    'utf8',
+  );
+  const users = await fs.readFile(
+    path.join(srcRoot, 'routes', 'security', 'user-routes.js'),
+    'utf8',
+  );
+  const controls = await fs.readFile(
+    path.join(srcRoot, 'routes', 'security', 'control-routes.js'),
+    'utf8',
+  );
+  const audit = await fs.readFile(
+    path.join(srcRoot, 'routes', 'security', 'audit-routes.js'),
+    'utf8',
+  );
+
+  assert.match(composition, /registerAdminProfileRoutes\(/u);
+  assert.match(composition, /registerAdminUserRoutes\(/u);
+  assert.match(composition, /registerAdminSecurityControlRoutes\(/u);
+  assert.match(composition, /registerAdminAuditRoutes\(/u);
+  assert.doesNotMatch(composition, /router\.post\(\s*'\/admin\/login'/u);
+  assert.doesNotMatch(composition, /\/admin\/security\/audit\/export\.csv/u);
+
+  assert.match(profile, /'\/admin\/login'/u);
+  assert.match(profile, /'\/admin\/profile\/password'/u);
+  assert.match(profile, /'\/admin\/profile\/sessions\/:sessionId'/u);
+  assert.doesNotMatch(profile, /'\/admin\/security\/settings'/u);
+  assert.doesNotMatch(profile, /'\/admin\/security\/audit'/u);
+
+  assert.match(users, /'\/admin\/security\/users'/u);
+  assert.match(users, /temporary-password/u);
+  assert.match(users, /requireUsersOrAudit/u);
+  assert.doesNotMatch(users, /'\/admin\/security\/settings'/u);
+  assert.doesNotMatch(users, /audit\/export\.csv/u);
+
+  assert.match(controls, /'\/admin\/security\/settings'/u);
+  assert.match(controls, /'\/admin\/security\/ip-blocks'/u);
+  assert.doesNotMatch(controls, /temporary-password/u);
+  assert.doesNotMatch(controls, /audit\/export\.csv/u);
+
+  assert.match(audit, /'\/admin\/security\/audit\/facets'/u);
+  assert.match(audit, /'\/admin\/security\/audit\/export\.csv'/u);
+  assert.match(audit, /parseAuditFilters/u);
+  assert.doesNotMatch(audit, /createIpBlock/u);
+  assert.doesNotMatch(audit, /changeOwnPassword/u);
+});
