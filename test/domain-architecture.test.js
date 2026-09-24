@@ -1827,3 +1827,58 @@ test('application composition delegates CSP compression and static asset middlew
     /createProjectSettingsRouter/u,
   );
 });
+
+
+test('app composition root delegates API public-site and terminal HTTP assembly', async () => {
+  const app = await fs.readFile(
+    path.join(srcRoot, 'app.js'),
+    'utf8',
+  );
+  const apiComposition = await fs.readFile(
+    path.join(srcRoot, 'application', 'http', 'api-composition.js'),
+    'utf8',
+  );
+  const publicSite = await fs.readFile(
+    path.join(srcRoot, 'http', 'public-site.js'),
+    'utf8',
+  );
+  const terminal = await fs.readFile(
+    path.join(srcRoot, 'http', 'app-terminal-handlers.js'),
+    'utf8',
+  );
+
+  assert.match(app, /installAppHttpMiddleware\(/u);
+  assert.match(app, /installApplicationApiRoutes\(/u);
+  assert.match(app, /installPublicSiteRoutes\(/u);
+  assert.match(app, /installAppTerminalHandlers\(/u);
+  assert.doesNotMatch(app, /createAdminSecurityRouter/u);
+  assert.doesNotMatch(app, /createProjectSettingsRouter/u);
+  assert.doesNotMatch(app, /createApiRouter/u);
+  assert.doesNotMatch(app, /projectManifest/u);
+  assert.doesNotMatch(app, /renderProjectPage/u);
+  assert.doesNotMatch(app, /API endpoint not found/u);
+  assert.doesNotMatch(app, /Service temporarily unavailable/u);
+
+  assert.match(apiComposition, /createAdminSecurityRouter\(/u);
+  assert.match(apiComposition, /createProjectSettingsTransferRouter\(/u);
+  assert.match(apiComposition, /createLineTypesRouter\(/u);
+  assert.match(apiComposition, /createProjectSettingsRouter\(/u);
+  assert.match(apiComposition, /createOsmBoundariesRouter\(/u);
+  assert.match(apiComposition, /createReportConfigRouter\(/u);
+  assert.match(apiComposition, /createKmlTransferRouter\(/u);
+  assert.match(apiComposition, /createApiRouter\(/u);
+  assert.doesNotMatch(apiComposition, /renderProjectPage/u);
+
+  assert.match(publicSite, /publicDownloadFiles\(/u);
+  assert.match(publicSite, /projectManifest\(/u);
+  assert.match(publicSite, /renderProjectPage\(/u);
+  assert.match(publicSite, /site\.webmanifest/u);
+  assert.doesNotMatch(publicSite, /createApiRouter/u);
+
+  assert.match(terminal, /API endpoint not found/u);
+  assert.match(terminal, /Request body is too large/u);
+  assert.match(terminal, /Request body is not valid JSON/u);
+  assert.match(terminal, /Service temporarily unavailable/u);
+  assert.doesNotMatch(terminal, /projectManifest/u);
+  assert.doesNotMatch(terminal, /createApiRouter/u);
+});
