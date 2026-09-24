@@ -1225,3 +1225,52 @@ test('legacy streaming data modules are only compatibility exports', async () =>
   assert.doesNotMatch(jsonFacade, /class AsyncCharReader/u);
   assert.doesNotMatch(jsonFacade, /TextDecoder/u);
 });
+
+
+test('public download application separates report CSV rendering from filesystem publication', async () => {
+  const service = await fs.readFile(
+    path.join(srcRoot, 'application', 'public-downloads', 'service.js'),
+    'utf8',
+  );
+  const csv = await fs.readFile(
+    path.join(srcRoot, 'shared', 'streaming', 'csv.js'),
+    'utf8',
+  );
+  const files = await fs.readFile(
+    path.join(srcRoot, 'shared', 'files', 'atomic-snapshot.js'),
+    'utf8',
+  );
+
+  assert.match(service, /publicDownloadFiles\(/u);
+  assert.match(service, /serializePublicCsv\(/u);
+  assert.match(service, /replaceFiles\(\{/u);
+  assert.doesNotMatch(service, /fs\.writeFile/u);
+  assert.doesNotMatch(service, /fs\.rename/u);
+  assert.doesNotMatch(service, /crypto\.randomUUID/u);
+
+  assert.match(csv, /serializePublicCsv/u);
+  assert.match(csv, /LEGACY_PUBLIC_CSV_COLUMNS/u);
+  assert.doesNotMatch(csv, /fs\./u);
+  assert.doesNotMatch(csv, /publicDownloadFiles/u);
+
+  assert.match(files, /replaceAtomicSnapshotFiles/u);
+  assert.match(files, /fs\.writeFile/u);
+  assert.match(files, /fs\.rename/u);
+  assert.match(files, /removeObsoleteFiles/u);
+  assert.doesNotMatch(files, /serializePublicCsv/u);
+});
+
+test('legacy public download data service is only a compatibility export surface', async () => {
+  const facade = await fs.readFile(
+    path.join(srcRoot, 'data', 'public-download-service.js'),
+    'utf8',
+  );
+
+  assert.match(
+    facade,
+    /from '\.\.\/application\/public-downloads\/service\.js'/u,
+  );
+  assert.doesNotMatch(facade, /fs\.writeFile/u);
+  assert.doesNotMatch(facade, /function csvValue/u);
+  assert.doesNotMatch(facade, /publicDownloadFiles\(/u);
+});
