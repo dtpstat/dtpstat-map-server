@@ -1248,28 +1248,120 @@ test('project settings module separates update policy from DB storage', async ()
   assert.doesNotMatch(storage, /buildProjectSettingsPlan/u);
 });
 
-test('legacy project settings repository is only a DB composition adapter', async () => {
-  const adapter = await fs.readFile(
-    path.join(srcRoot, 'db', 'project-settings-repository.js'),
+test('project runtime composes settings storage and public download publication', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'project-runtime.js',
+    ),
     'utf8',
   );
   const service = await fs.readFile(
-    path.join(srcRoot, 'modules', 'project', 'settings-service.js'),
+    path.join(
+      srcRoot,
+      'modules',
+      'project',
+      'settings-service.js',
+    ),
+    'utf8',
+  );
+  const storage = await fs.readFile(
+    path.join(
+      srcRoot,
+      'db',
+      'project-settings-storage-repository.js',
+    ),
+    'utf8',
+  );
+  const downloadRepository = await fs.readFile(
+    path.join(
+      srcRoot,
+      'db',
+      'public-download-repository.js',
+    ),
     'utf8',
   );
 
-  assert.match(adapter, /createProjectSettingsService\(/u);
-  assert.match(adapter, /createProjectSettingsStorageRepository\(/u);
-  assert.match(adapter, /acquireDataImportLock/u);
-  assert.match(adapter, /RECALCULATE_CITY_STATISTICS_SQL/u);
-  assert.doesNotMatch(adapter, /UPDATE project_settings/u);
-  assert.doesNotMatch(adapter, /buildProjectSettingsPlan/u);
+  assert.match(
+    runtime,
+    /createProjectSettingsService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createProjectSettingsRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /createProjectRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /createProjectSettingsStorageRepository\(/u,
+  );
+  assert.match(
+    runtime,
+    /withIngestionDatabaseDependencies\(/u,
+  );
+  assert.match(
+    runtime,
+    /createPublicDownloadRepository\(/u,
+  );
+  assert.match(
+    runtime,
+    /createPublicDownloadService\(/u,
+  );
+  assert.match(
+    runtime,
+    /var[\s\S]*public-downloads/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /UPDATE project_settings/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /SELECT json_build_object/u,
+  );
 
-  assert.match(service, /storage\.get\(database\)/u);
-  assert.match(service, /storage\.updateSettings\(/u);
-  assert.match(service, /storage\.updateCityMarkerIcon\(/u);
+  assert.match(
+    service,
+    /storage\.get\(database\)/u,
+  );
+  assert.match(
+    service,
+    /storage\.updateSettings\(/u,
+  );
+  assert.match(
+    service,
+    /storage\.updateCityMarkerIcon\(/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /\.\.\/\.\.\/db\//u,
+  );
+
+  assert.match(
+    storage,
+    /UPDATE project_settings/u,
+  );
+  assert.match(
+    downloadRepository,
+    /SELECT json_build_object/u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'project-settings-repository.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
 });
-
 
 test('portable export application service separates JSON framing from DB storage', async () => {
   const service = await fs.readFile(
@@ -2914,7 +3006,7 @@ test('server composition root delegates startup runtime and derived-state orches
   );
   assert.match(
     runtime,
-    /db\/project-settings-repository\.js/u,
+    /from '\.\/project-runtime\.js'/u,
   );
   assert.match(
     runtime,
