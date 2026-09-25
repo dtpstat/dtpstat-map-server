@@ -1297,9 +1297,7 @@ if (section) {
     const previousId = keepSelection ? state.selectedId : null;
 
     const payload = await api(
-      '/api/admin/geometry-editor/cities/' +
-      encodeURIComponent(cityId) +
-      '/geometries',
+      `/api/admin/geometry-editor/cities/${encodeURIComponent(cityId)}/geometries`,
     );
 
     state.city = payload.city;
