@@ -1392,9 +1392,14 @@ test('portable export application service separates JSON framing from DB storage
   assert.doesNotMatch(storage, /createDataExportService/u);
 });
 
-test('legacy data export repository is only a DB composition adapter', async () => {
-  const adapter = await fs.readFile(
-    path.join(srcRoot, 'db', 'data-export-repository.js'),
+test('portable export runtime composes application service with SQL storage', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'export-runtime.js',
+    ),
     'utf8',
   );
   const service = await fs.readFile(
@@ -1406,17 +1411,74 @@ test('legacy data export repository is only a DB composition adapter', async () 
     ),
     'utf8',
   );
+  const storage = await fs.readFile(
+    path.join(
+      srcRoot,
+      'db',
+      'data-export-storage-repository.js',
+    ),
+    'utf8',
+  );
 
-  assert.match(adapter, /createDataExportService\(database,/u);
-  assert.match(adapter, /createDataExportStorageRepository\(/u);
-  assert.doesNotMatch(adapter, /ST_AsGeoJSON/u);
-  assert.doesNotMatch(adapter, /WITH RECURSIVE ancestry/u);
-  assert.doesNotMatch(adapter, /streamPopulationRegions/u);
+  assert.match(
+    runtime,
+    /createDataExportService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createDataExportRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /createDataExportStorageRepository\(/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /ST_AsGeoJSON/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /WITH RECURSIVE ancestry/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /streamPopulationRegions/u,
+  );
 
-  assert.match(service, /storage\.exportCityBoundaries\(/u);
-  assert.match(service, /storage\.populationRows\(/u);
+  assert.match(
+    service,
+    /storage\.exportCityBoundaries\(/u,
+  );
+  assert.match(
+    service,
+    /storage\.populationRows\(/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /ST_AsGeoJSON/u,
+  );
+
+  assert.match(
+    storage,
+    /ST_AsGeoJSON/u,
+  );
+  assert.match(
+    storage,
+    /WITH RECURSIVE ancestry/u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'data-export-repository.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
 });
-
 
 test('admin security persistence is split by bounded responsibility', async () => {
   const users = await fs.readFile(
@@ -3015,6 +3077,14 @@ test('server composition root delegates startup runtime and derived-state orches
   assert.match(
     runtime,
     /from '\.\/project-runtime\.js'/u,
+  );
+  assert.match(
+    runtime,
+    /from '\.\/data-transfer\/export-runtime\.js'/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /db\/data-export-repository\.js/u,
   );
   assert.match(
     runtime,
