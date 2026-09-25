@@ -148,6 +148,42 @@ test('domain validation policies live in canonical modules without legacy data f
   }
 });
 
+test('line GeoJSON and KML ownership lives in the lines domain module', async () => {
+  const canonical = [
+    ['geojson-plan.js', /buildGeoJsonPlan/u],
+    ['kml-downloader.js', /downloadKml/u],
+    ['kml-parser.js', /parseKmlSource/u],
+    ['kml-transfer.js', /serializeLinesKml/u],
+    ['kml-update-options.js', /resolveKmlUpdateRequest/u],
+  ];
+
+  for (const [fileName, marker] of canonical) {
+    const source = await fs.readFile(
+      path.join(
+        srcRoot,
+        'modules',
+        'lines',
+        fileName,
+      ),
+      'utf8',
+    );
+    assert.match(source, marker, fileName);
+  }
+
+  for (const [fileName] of canonical) {
+    await assert.rejects(
+      fs.access(
+        path.join(
+          srcRoot,
+          'data',
+          fileName,
+        ),
+      ),
+      (error) => error?.code === 'ENOENT',
+    );
+  }
+});
+
 test('legacy API file is a composition root for extracted route modules', async () => {
   const source = await fs.readFile(path.join(srcRoot, 'routes', 'api.js'), 'utf8');
 
@@ -1963,7 +1999,7 @@ test('shared streaming owns ZIP transport and streaming JSON parsing', async () 
   assert.doesNotMatch(json, /\.\.\/\.\.\/data\//u);
 });
 
-test('removed compatibility facades stay absent from source tests and scripts', async () => {
+test('removed compatibility and legacy ownership paths stay absent from source tests and scripts', async () => {
   const removedFacades = new Set([
     path.join(
       srcRoot,
@@ -1982,6 +2018,11 @@ test('removed compatibility facades stay absent from source tests and scripts', 
       'db',
       'osm-boundary-admin-repository.js',
     ),
+    path.join(srcRoot, 'data', 'geojson-plan.js'),
+    path.join(srcRoot, 'data', 'kml-downloader.js'),
+    path.join(srcRoot, 'data', 'kml-parser.js'),
+    path.join(srcRoot, 'data', 'kml-transfer.js'),
+    path.join(srcRoot, 'data', 'kml-update-options.js'),
     path.join(srcRoot, 'data', 'admin-security.js'),
     path.join(srcRoot, 'data', 'line-types.js'),
     path.join(srcRoot, 'data', 'mapbox-access-token.js'),
@@ -1997,6 +2038,11 @@ test('removed compatibility facades stay absent from source tests and scripts', 
     'src/application/data-transfer/routes.js',
     'src/application/data-transfer/runtime.js',
     'src/db/osm-boundary-admin-repository.js',
+    'src/data/geojson-plan.js',
+    'src/data/kml-downloader.js',
+    'src/data/kml-parser.js',
+    'src/data/kml-transfer.js',
+    'src/data/kml-update-options.js',
     'src/data/admin-security.js',
     'src/data/line-types.js',
     'src/data/mapbox-access-token.js',

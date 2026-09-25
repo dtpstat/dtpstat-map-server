@@ -5,7 +5,7 @@ import {
   normalizeLineTypeCode,
   normalizeLineTypeName,
   normalizeLineTypeTitle,
-} from '../modules/lines/type-policy.js';
+} from './type-policy.js';
 
 export const KML_TRANSFER_SCHEMA_VERSION = 2;
 export const KML_BUSINESS_TYPES_PROPERTY = 'dtpstat.businessLineTypes';

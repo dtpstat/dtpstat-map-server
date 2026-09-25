@@ -2,7 +2,7 @@ import {
   DEFAULT_LINE_TYPE_NAME,
   LineTypeValidationError,
   normalizeLineTypeName,
-} from '../modules/lines/type-policy.js';
+} from './type-policy.js';
 
 export class KmlUpdateValidationError extends Error {
   constructor(message) {

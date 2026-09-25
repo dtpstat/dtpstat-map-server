@@ -5,7 +5,7 @@ import {
 import {
   KmlTransferValidationError,
   parseLinesKml,
-} from '../../data/kml-transfer.js';
+} from '../../modules/lines/kml-transfer.js';
 
 export function registerKmlImportRoutes(
   router,

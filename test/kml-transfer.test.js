@@ -5,7 +5,7 @@ import {
   KmlTransferValidationError,
   parseLinesKml,
   serializeLinesKml,
-} from '../src/data/kml-transfer.js';
+} from '../src/modules/lines/kml-transfer.js';
 
 const snapshot = {
   type: 'FeatureCollection',

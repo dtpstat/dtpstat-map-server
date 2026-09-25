@@ -1,12 +1,12 @@
 import crypto from 'node:crypto';
 import { throwIfAdminTaskCancelled } from '../../shared/tasks/admin-task-manager.js';
-import { downloadKml } from '../../data/kml-downloader.js';
-import { parseKmlSource } from '../../data/kml-parser.js';
+import { downloadKml } from './kml-downloader.js';
+import { parseKmlSource } from './kml-parser.js';
 import { comparableLineTypeName } from './type-policy.js';
 import {
   KmlUpdateValidationError,
   resolveKmlUpdateRequest,
-} from '../../data/kml-update-options.js';
+} from './kml-update-options.js';
 import {
   createKmlUpdateRepository,
 } from './kml-update-repository.js';

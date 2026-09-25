@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   buildGeoJsonPlan,
   GeoJsonValidationError,
-} from '../src/data/geojson-plan.js';
+} from '../src/modules/lines/geojson-plan.js';
 
 test('legacy line GeoJSON derives cities, multipliers, and default imported type name', () => {
   const source = {

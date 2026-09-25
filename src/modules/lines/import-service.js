@@ -2,7 +2,7 @@ import {
   buildGeoJsonPlan,
   createGeoJsonAccumulator,
   GeoJsonValidationError,
-} from '../../data/geojson-plan.js';
+} from './geojson-plan.js';
 import { parseStreamingJsonObject } from '../../shared/streaming/streaming-json.js';
 import { throwIfAdminTaskCancelled } from '../../shared/tasks/admin-task-manager.js';
 import { createLineImportRepository } from './import-repository.js';

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseKmlSourcesJson } from './data/kml-update-options.js';
+import { parseKmlSourcesJson } from './modules/lines/kml-update-options.js';
 import { normalizeOsmUpdateUrl } from './data/osm-city-update-options.js';
 import {
   loadApplicationDatabaseConnection,

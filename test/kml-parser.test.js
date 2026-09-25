@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseKmlSource } from '../src/data/kml-parser.js';
+import { parseKmlSource } from '../src/modules/lines/kml-parser.js';
 
 const source = {
   URL: 'https://www.google.com/maps/d/viewer?mid=test',

@@ -2,7 +2,7 @@ import { adminAuditPayloadFingerprint } from '../../shared/logging/admin-audit-d
 import {
   KmlUpdateValidationError,
   resolveKmlUpdateRequest,
-} from '../../data/kml-update-options.js';
+} from './kml-update-options.js';
 
 export function registerLineRoutes(router, {
   adminAuth,

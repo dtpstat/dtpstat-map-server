@@ -4,7 +4,7 @@ import {
   LineTypeValidationError,
   normalizeLineTypeCode,
   normalizeLineTypeName,
-} from '../modules/lines/type-policy.js';
+} from './type-policy.js';
 
 export class GeoJsonValidationError extends Error {
   constructor(message) {
