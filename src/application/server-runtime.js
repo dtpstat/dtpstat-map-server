@@ -22,6 +22,9 @@ import {
   createLineTypesRepository,
 } from '../db/line-types-repository.js';
 import {
+  createGeometryEditorRuntime,
+} from './geometry-editor-runtime.js';
+import {
   createOsmBoundaryAdminRuntime,
 } from './osm-boundary-admin-runtime.js';
 import {
@@ -54,6 +57,7 @@ const DEFAULT_FACTORIES =
     createDerivedStateRefresh,
     createKmlUpdateRuntime,
     createLineTypesRepository,
+    createGeometryEditorRuntime,
     createOsmBoundaryAdminRuntime,
     createOsmCheckpointRuntime,
     createOsmCityUpdateRuntime,
@@ -93,6 +97,11 @@ export function createServerRuntime({
   const lineTypesRepository =
     runtimeFactories
       .createLineTypesRepository(pool);
+  const geometryEditorService =
+    runtimeFactories
+      .createGeometryEditorRuntime(
+        pool,
+      );
   const {
     projectSettingsRepository,
     publicDownloadService,
@@ -198,6 +207,7 @@ export function createServerRuntime({
     projectSettingsRepository,
     settingsTransferService,
     reportConfigService,
+    geometryEditorService,
     refreshPublicDownloads:
       () =>
         derivedState
@@ -225,6 +235,13 @@ export function createServerRuntime({
           .refreshAll({
             reason:
               'osm-boundary-settings',
+          }),
+    refreshGeometryDerived:
+      () =>
+        derivedState
+          .refreshAll({
+            reason:
+              'geometry-editor-recalculate',
           }),
     osmImportSettingsRepository,
     osmBoundaryAdminRepository,

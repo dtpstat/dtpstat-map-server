@@ -33,13 +33,13 @@ const TASK_DATA_CHANGES =
     },
     'kml-update': {
       resource: 'city-geometries',
-      permission: 'data',
+      permission: 'geometry-editor',
       message:
         'Геометрии данных обновлены.',
     },
     'geojson-import': {
       resource: 'city-geometries',
-      permission: 'data',
+      permission: 'geometry-editor',
       message:
         'Геометрии данных импортированы.',
     },
