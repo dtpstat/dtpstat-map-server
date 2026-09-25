@@ -357,6 +357,10 @@ async function startAdminShell() {
     await import('./project-branding.js');
     const session = await globalThis.dtpstatAdminSession;
     const user = session.user;
+    const {
+      startAdminRealtime,
+    } = await import('./realtime-client.js');
+    startAdminRealtime();
     ensureProfileSection();
     ensureTopbarActions();
     updateUserBadge(user);

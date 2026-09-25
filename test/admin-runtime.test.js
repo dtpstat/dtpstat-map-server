@@ -28,6 +28,14 @@ test('admin runtime composes task persistence derived refresh and websocket auth
   const adminWebSocket = {
     marker: 'websocket',
   };
+  const published = [];
+  const realtimeEvents = {
+    marker: 'realtime',
+    publish(change) {
+      published.push(change);
+      return change;
+    },
+  };
   const afterSuccessfulUpdate = async () => ({
     refreshed: true,
   });
@@ -48,6 +56,12 @@ test('admin runtime composes task persistence derived refresh and websocket auth
       adminAuth,
       derivedState,
       factories: {
+        createRealtimeEventBus() {
+          calls.push(
+            'realtime-bus',
+          );
+          return realtimeEvents;
+        },
         createAdminTaskDerivedRefresh(
           receivedDerivedState,
         ) {
@@ -78,6 +92,10 @@ test('admin runtime composes task persistence derived refresh and websocket auth
             options.adminAuth,
             adminAuth,
           );
+          assert.equal(
+            options.realtimeEvents,
+            realtimeEvents,
+          );
           calls.push(
             'websocket',
           );
@@ -89,6 +107,7 @@ test('admin runtime composes task persistence derived refresh and websocket auth
   assert.deepEqual(
     calls,
     [
+      'realtime-bus',
       'derived-hook',
       'task-manager',
       'websocket',
@@ -103,14 +122,48 @@ test('admin runtime composes task persistence derived refresh and websocket auth
     adminWebSocket,
   );
   assert.equal(
+    runtime.realtimeEvents,
+    realtimeEvents,
+  );
+  assert.equal(
     managerOptions
       .initialSuccessfulUpdates,
     initialSuccessfulUpdates,
   );
-  assert.equal(
+  assert.notEqual(
     managerOptions
       .afterSuccessfulUpdate,
     afterSuccessfulUpdate,
+  );
+  assert.deepEqual(
+    await managerOptions
+      .afterSuccessfulUpdate({
+        taskType:
+          'population-update',
+        taskId: 'task-2',
+      }),
+    {
+      refreshed: true,
+    },
+  );
+  assert.deepEqual(
+    published,
+    [{
+      resource:
+        'osm-boundaries',
+      permission:
+        'osm-editor',
+      message:
+        'Данные территорий обновлены. Открытые редакторы синхронизированы.',
+      action:
+        'refresh',
+      source: {
+        kind: 'admin-task',
+        id: 'task-2',
+        taskType:
+          'population-update',
+      },
+    }],
   );
 
   const update = {
