@@ -91,7 +91,8 @@ const DEFAULT_FACTORIES =
 /**
  * Construct the long-lived repository/service graph after migrations have
  * completed. The returned slices make startup/bootstrap and HTTP composition
- * explicit without making server.js aware of individual DB constructors or\n * leaking runtime internals outside their owning composition slice.
+ * explicit without making server.js aware of individual DB constructors or
+ * leaking runtime internals outside their owning composition slice.
  *
  * @param {{
  *   pool: any,
