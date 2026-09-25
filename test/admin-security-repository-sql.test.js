@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createAdminSecurityRepository } from '../src/db/admin-security-repository.js';
+import { createAdminAuditRepository } from '../src/db/admin-audit-repository.js';
+import { createAdminUserRepository } from '../src/db/admin-user-repository.js';
 
 test('failed-login SQL avoids PostgreSQL keyword and RETURNING ambiguities', async () => {
   let queryText = '';
@@ -12,7 +13,7 @@ test('failed-login SQL avoids PostgreSQL keyword and RETURNING ambiguities', asy
       return { rows: [] };
     },
   };
-  const repository = createAdminSecurityRepository(database);
+  const repository = createAdminUserRepository(database);
   const timestamp = '2026-09-07T20:00:00.000Z';
 
   await repository.recordFailedLogin(7, timestamp, {
@@ -52,7 +53,7 @@ test('audit listing exposes avatar availability without changing historical user
       };
     },
   };
-  const repository = createAdminSecurityRepository(database);
+  const repository = createAdminAuditRepository(database);
 
   const rows = await repository.listAudit({ limit: 10, offset: 0 });
 

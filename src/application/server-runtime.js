@@ -2,9 +2,6 @@ import {
   createDerivedStateRefresh,
 } from './derived-state-refresh.js';
 import {
-  createAdminSecurityRepository,
-} from '../db/admin-security-repository.js';
-import {
   createAdminTaskSuccessRepository,
 } from '../db/admin-task-success-repository.js';
 import {
@@ -44,17 +41,11 @@ import {
   createReportConfigRuntime,
 } from './project-report-runtime.js';
 import {
-  createAdminAuthorization,
-} from '../http/admin-auth.js';
-import {
-  createAdminSecurityService,
-} from '../modules/security/service.js';
+  createSecurityRuntime,
+} from './security-runtime.js';
 
 const DEFAULT_FACTORIES =
   Object.freeze({
-    createAdminAuthorization,
-    createAdminSecurityRepository,
-    createAdminSecurityService,
     createAdminTaskSuccessRepository,
     createCitiesRepository,
     createCityBoundaryTransferRuntime,
@@ -71,6 +62,7 @@ const DEFAULT_FACTORIES =
     createProjectRuntime,
     createProjectSettingsTransferRuntime,
     createReportConfigRuntime,
+    createSecurityRuntime,
   });
 
 /**
@@ -175,20 +167,13 @@ export function createServerRuntime({
       .createAdminTaskSuccessRepository(
         pool,
       );
-  const adminSecurityRepository =
+  const {
+    securityService,
+    adminAuth,
+  } =
     runtimeFactories
-      .createAdminSecurityRepository(
+      .createSecurityRuntime(
         pool,
-      );
-  const securityService =
-    runtimeFactories
-      .createAdminSecurityService(
-        adminSecurityRepository,
-      );
-  const adminAuth =
-    runtimeFactories
-      .createAdminAuthorization(
-        securityService,
       );
   const derivedState =
     runtimeFactories

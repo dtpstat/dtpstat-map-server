@@ -40,7 +40,6 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
     'createOsmBoundaryAdminRepository',
     'createOsmCityCheckpointRepository',
     'createAdminTaskSuccessRepository',
-    'createAdminSecurityRepository',
   ];
 
   for (const name of simpleFactories) {
@@ -142,32 +141,25 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
       );
     };
 
-  factories.createAdminSecurityService =
-    (repository) => {
+  factories.createSecurityRuntime =
+    (receivedPool) => {
       assert.equal(
-        repository.name,
-        'createAdminSecurityRepository',
+        receivedPool,
+        pool,
       );
       calls.push(
-        'createAdminSecurityService',
+        'createSecurityRuntime',
       );
-      return value(
-        'createAdminSecurityService',
-      );
-    };
-
-  factories.createAdminAuthorization =
-    (securityService) => {
-      assert.equal(
-        securityService.name,
-        'createAdminSecurityService',
-      );
-      calls.push(
-        'createAdminAuthorization',
-      );
-      return value(
-        'createAdminAuthorization',
-      );
+      return {
+        securityService:
+          value(
+            'createAdminSecurityService',
+          ),
+        adminAuth:
+          value(
+            'createAdminAuthorization',
+          ),
+      };
     };
 
   const refreshCalls = [];
@@ -231,9 +223,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
       'createOsmCityCheckpointRepository',
       'createOsmCityUpdateRuntime',
       'createAdminTaskSuccessRepository',
-      'createAdminSecurityRepository',
-      'createAdminSecurityService',
-      'createAdminAuthorization',
+      'createSecurityRuntime',
       'createDerivedStateRefresh',
     ],
   );
