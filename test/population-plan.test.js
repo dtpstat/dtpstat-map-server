@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   buildPopulationPlan,
   PopulationValidationError,
-} from '../src/data/population-plan.js';
+} from '../src/modules/population/population-plan.js';
 
 function region(overrides = {}) {
   return {

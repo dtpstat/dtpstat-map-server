@@ -1,7 +1,7 @@
 import {
   buildPopulationPlan,
   createPopulationHierarchyAccumulator,
-} from '../../data/population-plan.js';
+} from './population-plan.js';
 import { parseStreamingJsonObject } from '../../shared/streaming/streaming-json.js';
 import { throwIfAdminTaskCancelled } from '../../shared/tasks/admin-task-manager.js';
 import {

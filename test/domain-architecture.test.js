@@ -218,6 +218,67 @@ test('OSM transport parsing and request ownership lives in the OSM domain module
   }
 });
 
+test('geometry population and project data ownership lives in canonical domain modules', async () => {
+  const canonical = [
+    [
+      path.join(
+        srcRoot,
+        'modules',
+        'geometry',
+        'city-boundary-geojson-plan.js',
+      ),
+      /buildCityBoundaryGeoJsonPlan/u,
+    ],
+    [
+      path.join(
+        srcRoot,
+        'modules',
+        'population',
+        'population-plan.js',
+      ),
+      /buildPopulationPlan/u,
+    ],
+    [
+      path.join(
+        srcRoot,
+        'modules',
+        'project',
+        'city-marker-icon.js',
+      ),
+      /validateCityMarkerIcon/u,
+    ],
+  ];
+
+  for (const [file, marker] of canonical) {
+    const source = await fs.readFile(
+      file,
+      'utf8',
+    );
+    assert.match(
+      source,
+      marker,
+      path.relative(root, file),
+    );
+  }
+
+  for (const fileName of [
+    'city-boundary-geojson-plan.js',
+    'population-plan.js',
+    'city-marker-icon.js',
+  ]) {
+    await assert.rejects(
+      fs.access(
+        path.join(
+          srcRoot,
+          'data',
+          fileName,
+        ),
+      ),
+      (error) => error?.code === 'ENOENT',
+    );
+  }
+});
+
 test('legacy API file is a composition root for extracted route modules', async () => {
   const source = await fs.readFile(path.join(srcRoot, 'routes', 'api.js'), 'utf8');
 
@@ -2060,6 +2121,9 @@ test('removed compatibility and legacy ownership paths stay absent from source t
     path.join(srcRoot, 'data', 'osm-city-downloader.js'),
     path.join(srcRoot, 'data', 'osm-city-parser.js'),
     path.join(srcRoot, 'data', 'osm-city-update-options.js'),
+    path.join(srcRoot, 'data', 'city-boundary-geojson-plan.js'),
+    path.join(srcRoot, 'data', 'population-plan.js'),
+    path.join(srcRoot, 'data', 'city-marker-icon.js'),
     path.join(srcRoot, 'data', 'admin-security.js'),
     path.join(srcRoot, 'data', 'line-types.js'),
     path.join(srcRoot, 'data', 'mapbox-access-token.js'),
@@ -2083,6 +2147,9 @@ test('removed compatibility and legacy ownership paths stay absent from source t
     'src/data/osm-city-downloader.js',
     'src/data/osm-city-parser.js',
     'src/data/osm-city-update-options.js',
+    'src/data/city-boundary-geojson-plan.js',
+    'src/data/population-plan.js',
+    'src/data/city-marker-icon.js',
     'src/data/admin-security.js',
     'src/data/line-types.js',
     'src/data/mapbox-access-token.js',

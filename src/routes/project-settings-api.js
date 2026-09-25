@@ -3,7 +3,7 @@ import express, {
 } from 'express';
 import {
   CITY_MARKER_ICON_MAX_BYTES,
-} from '../data/city-marker-icon.js';
+} from '../modules/project/city-marker-icon.js';
 import {
   registerProjectCityMarkerRoutes,
 } from './project/city-marker-routes.js';

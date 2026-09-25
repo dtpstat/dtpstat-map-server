@@ -1,7 +1,7 @@
 import {
   CityMarkerIconValidationError,
   validateCityMarkerIcon,
-} from '../../data/city-marker-icon.js';
+} from '../../modules/project/city-marker-icon.js';
 import {
   createAdminOperationAudit,
   recordAdminOperationChanges,

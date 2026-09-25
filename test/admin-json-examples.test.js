@@ -9,7 +9,7 @@ import {
   POPULATION_JSON_EXAMPLE,
 } from '../admin/json-examples.js';
 import { validateKmlSources } from '../src/modules/lines/kml-update-options.js';
-import { buildPopulationPlan } from '../src/data/population-plan.js';
+import { buildPopulationPlan } from '../src/modules/population/population-plan.js';
 
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

@@ -2,7 +2,7 @@ import { throwIfAdminTaskCancelled } from '../../shared/tasks/admin-task-manager
 import {
   buildCityBoundaryGeoJsonPlan,
   createCityBoundaryGeoJsonAccumulator,
-} from '../../data/city-boundary-geojson-plan.js';
+} from './city-boundary-geojson-plan.js';
 import { parseStreamingJsonObject } from '../../shared/streaming/streaming-json.js';
 import {
   createCityBoundaryTransferRepository,
