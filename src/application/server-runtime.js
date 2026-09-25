@@ -25,8 +25,8 @@ import {
   createOsmBoundaryAdminRepository,
 } from '../db/osm-boundary-admin-repository.js';
 import {
-  createOsmCityCheckpointRepository,
-} from '../db/osm-city-checkpoint-repository.js';
+  createOsmCheckpointRuntime,
+} from './osm-checkpoint-runtime.js';
 import {
   createOsmCityUpdateRuntime,
 } from './osm-update-runtime.js';
@@ -55,7 +55,7 @@ const DEFAULT_FACTORIES =
     createKmlUpdateRuntime,
     createLineTypesRepository,
     createOsmBoundaryAdminRepository,
-    createOsmCityCheckpointRepository,
+    createOsmCheckpointRuntime,
     createOsmCityUpdateRuntime,
     createOsmImportSettingsRepository,
     createPopulationImportRuntime,
@@ -147,7 +147,7 @@ export function createServerRuntime({
       );
   const osmCityCheckpointRepository =
     runtimeFactories
-      .createOsmCityCheckpointRepository(
+      .createOsmCheckpointRuntime(
         pool,
       );
   const osmCityUpdateService =

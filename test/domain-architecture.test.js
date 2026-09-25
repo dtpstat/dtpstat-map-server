@@ -1615,42 +1615,40 @@ test('OSM checkpoint persistence separates record state from staged geometry', a
   assert.doesNotMatch(stage, /source_url/u);
 });
 
-test('legacy OSM checkpoint repository only orchestrates atomic persistence slices', async () => {
-  const facade = await fs.readFile(
-    path.join(srcRoot, 'db', 'osm-city-checkpoint-repository.js'),
+test('OSM checkpoint runtime orchestrates atomic persistence slices', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'osm-checkpoint-runtime.js',
+    ),
     'utf8',
   );
 
-  assert.match(
-    facade,
-    /createOsmCheckpointRecordRepository\(pool\)/u,
-  );
-  assert.match(
-    facade,
-    /createOsmCheckpointStageRepository\(pool\)/u,
-  );
-  assert.match(
-    facade,
-    /records\.lockResumable\(/u,
-  );
-  assert.match(
-    facade,
-    /stage\.stageBatch\(/u,
-  );
-  assert.match(
-    facade,
-    /records\.addBatchMetrics\(/u,
-  );
-  assert.match(
-    facade,
-    /stage\.deleteByCheckpoint\(/u,
+  assert.match(runtime, /db\/osm-checkpoint-record-repository\.js/u);
+  assert.match(runtime, /db\/osm-checkpoint-stage-repository\.js/u);
+  assert.match(runtime, /createOsmCheckpointRecordRepository\(pool\)/u);
+  assert.match(runtime, /createOsmCheckpointStageRepository\(pool\)/u);
+  assert.match(runtime, /records\.lockResumable\(/u);
+  assert.match(runtime, /stage\.stageBatch\(/u);
+  assert.match(runtime, /records\.addBatchMetrics\(/u);
+  assert.match(runtime, /stage\.deleteByCheckpoint\(/u);
+  assert.doesNotMatch(runtime, /ST_BuildArea/u);
+  assert.doesNotMatch(runtime, /settings_fingerprint/u);
+  assert.doesNotMatch(
+    runtime,
+    /INSERT INTO osm_city_update_checkpoint_stage/u,
   );
 
-  assert.doesNotMatch(facade, /ST_BuildArea/u);
-  assert.doesNotMatch(facade, /settings_fingerprint/u);
-  assert.doesNotMatch(
-    facade,
-    /INSERT INTO osm_city_update_checkpoint_stage/u,
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'osm-city-checkpoint-repository.js',
+      ),
+    ),
+    (error) => error?.code === 'ENOENT',
   );
 });
 
@@ -3149,6 +3147,14 @@ test('server composition root delegates startup runtime and derived-state orches
   assert.match(
     runtime,
     /from '\.\/osm-update-runtime\.js'/u,
+  );
+  assert.match(
+    runtime,
+    /from '\.\/osm-checkpoint-runtime\.js'/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /db\/osm-city-checkpoint-repository\.js/u,
   );
   assert.match(
     runtime,

@@ -1,15 +1,15 @@
 import {
   createOsmCheckpointRecordRepository,
-} from './osm-checkpoint-record-repository.js';
+} from '../db/osm-checkpoint-record-repository.js';
 import {
   createOsmCheckpointStageRepository,
-} from './osm-checkpoint-stage-repository.js';
+} from '../db/osm-checkpoint-stage-repository.js';
 
 /**
- * Compatibility façade for durable OSM update checkpoints.
+ * Compose durable OSM checkpoint persistence.
  *
- * Cross-table lifecycle operations remain here so record/status changes and
- * staged geometry are committed or rolled back together.
+ * Cross-table lifecycle operations live at the application boundary so
+ * record/status changes and staged geometry commit or roll back together.
  *
  * @param {{
  *   query: Function,
@@ -20,7 +20,7 @@ import {
  *   stage?: ReturnType<typeof createOsmCheckpointStageRepository>
  * }} [dependencies]
  */
-export function createOsmCityCheckpointRepository(
+export function createOsmCheckpointRuntime(
   pool,
   dependencies = {},
 ) {

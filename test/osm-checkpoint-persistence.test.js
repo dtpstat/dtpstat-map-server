@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  createOsmCityCheckpointRepository,
-} from '../src/db/osm-city-checkpoint-repository.js';
+  createOsmCheckpointRuntime,
+} from '../src/application/osm-checkpoint-runtime.js';
 import {
   createOsmCheckpointRecordRepository,
 } from '../src/db/osm-checkpoint-record-repository.js';
@@ -180,7 +180,7 @@ test('OSM checkpoint stage repository owns PostGIS build validation and batch co
   );
 });
 
-test('OSM checkpoint facade keeps resumable replacement atomic across record and stage storage', async () => {
+test('OSM checkpoint runtime keeps resumable replacement atomic across record and stage storage', async () => {
   const events = [];
   const client = {
     async query(text) {
@@ -197,7 +197,7 @@ test('OSM checkpoint facade keeps resumable replacement atomic across record and
       return client;
     },
     async query() {
-      throw new Error('facade should delegate SQL');
+      throw new Error('runtime should delegate SQL');
     },
   };
   const records = {
@@ -222,7 +222,7 @@ test('OSM checkpoint facade keeps resumable replacement atomic across record and
       events.push(`delete-stage:${checkpointId}`);
     },
   };
-  const repository = createOsmCityCheckpointRepository(
+  const repository = createOsmCheckpointRuntime(
     pool,
     { records, stage },
   );
@@ -246,10 +246,10 @@ test('OSM checkpoint facade keeps resumable replacement atomic across record and
   ]);
 });
 
-test('OSM checkpoint completion uses the caller transaction for stage cleanup and status', async () => {
+test('OSM checkpoint runtime completion uses the caller transaction for stage cleanup and status', async () => {
   const events = [];
   const client = {};
-  const repository = createOsmCityCheckpointRepository(
+  const repository = createOsmCheckpointRuntime(
     {
       async query() {
         throw new Error('not expected');
