@@ -280,3 +280,71 @@ test('successful update timestamps persist by task type and ignore dry runs', as
   });
   assert.equal(recorded.length, 1);
 });
+
+
+test('pending conflict resolution does not record a successful data update', async () => {
+  const recorded = [];
+  const refreshed = [];
+  const manager =
+    createAdminTaskManager({
+      randomUUID:
+        () =>
+          'pending-import-task',
+      recordSuccessfulUpdate:
+        async (update) =>
+          recorded.push(
+            update,
+          ),
+      afterSuccessfulUpdate:
+        async (update) =>
+          refreshed.push(
+            update,
+          ),
+    });
+
+  manager.start(
+    {
+      type:
+        'kml-update',
+      endpoint:
+        '/api/admin/update',
+      recordsSuccessfulUpdate:
+        true,
+    },
+    async () => ({
+      pendingResolution:
+        true,
+      partial: true,
+      warningCount: 1,
+    }),
+  );
+
+  await nextTurn();
+
+  const task =
+    manager.get(
+      'pending-import-task',
+    );
+
+  assert.equal(
+    task.status,
+    'succeeded',
+  );
+  assert.equal(
+    task.result
+      .pendingResolution,
+    true,
+  );
+  assert.equal(
+    recorded.length,
+    0,
+  );
+  assert.equal(
+    refreshed.length,
+    0,
+  );
+  assert.deepEqual(
+    manager.successfulUpdates(),
+    {},
+  );
+});

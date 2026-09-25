@@ -406,6 +406,14 @@ export function createLineImportRepository() {
         : client.query(LINK_BOUNDARIES_SQL, [serializedGeometries]);
     },
 
+    assertNoPendingGeometryImport(
+      client,
+    ) {
+      return client.query(
+        'SELECT assert_no_pending_geometry_import()',
+      );
+    },
+
     clearGeometries(client) {
       return client.query('DELETE FROM city_geometries');
     },

@@ -26,6 +26,7 @@ import {
  *   settingsTransferService?: { exportSettings: () => Promise<object>, importSettings: (payload: unknown) => Promise<object> },
  *   reportConfigService?: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
  *   geometryEditorService?: any,
+ *   geometryImportService?: any,
  *   refreshPublicDownloads?: () => Promise<any>,
  *   refreshPublicDownloadsAfterSettingsImport?: () => Promise<any>,
  *   refreshProjectDerived?: () => Promise<any>,
@@ -53,6 +54,7 @@ export function createApp({
   settingsTransferService,
   reportConfigService,
   geometryEditorService,
+  geometryImportService,
   refreshPublicDownloads,
   refreshPublicDownloadsAfterSettingsImport,
   refreshProjectDerived,
@@ -177,6 +179,7 @@ export function createApp({
       reportConfigService:
         effectiveReportConfigService,
       geometryEditorService,
+      geometryImportService,
       refreshPublicDownloads,
       refreshPublicDownloadsAfterSettingsImport,
       refreshProjectDerived,

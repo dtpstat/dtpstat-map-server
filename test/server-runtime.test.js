@@ -31,6 +31,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
     'createCitiesRepository',
     'createLineTypesRepository',
     'createGeometryEditorRuntime',
+    'createGeometryImportRuntime',
     'createProjectSettingsTransferRuntime',
     'createReportConfigRuntime',
     'createDataExportRuntime',
@@ -91,6 +92,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
     (
       receivedPool,
       options,
+      dependencies,
     ) => {
       assert.equal(
         receivedPool,
@@ -99,6 +101,12 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
       assert.equal(
         options,
         config.kmlUpdate,
+      );
+      assert.equal(
+        dependencies
+          .geometryImportService
+          .name,
+        'createGeometryImportRuntime',
       );
       calls.push(
         'createKmlUpdateRuntime',
@@ -212,6 +220,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
       'createCitiesRepository',
       'createLineTypesRepository',
       'createGeometryEditorRuntime',
+      'createGeometryImportRuntime',
       'createProjectRuntime',
       'createProjectSettingsTransferRuntime',
       'createReportConfigRuntime',
@@ -304,6 +313,13 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
       .geometryEditorService
       .name,
     'createGeometryEditorRuntime',
+  );
+  assert.equal(
+    runtime
+      .appDependencies
+      .geometryImportService
+      .name,
+    'createGeometryImportRuntime',
   );
   assert.equal(
     runtime

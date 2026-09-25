@@ -38,6 +38,10 @@ export function createLineImportService(pool, dependencies) {
       try {
         await client.query('BEGIN');
         await acquireLock(client, pool);
+        await repository
+          .assertNoPendingGeometryImport(
+            client,
+          );
         throwIfAdminTaskCancelled(operation.signal);
         await repository.createRawStage(client);
 
@@ -240,6 +244,10 @@ export function createLineImportService(pool, dependencies) {
       try {
         await client.query('BEGIN');
         await acquireLock(client, pool);
+        await repository
+          .assertNoPendingGeometryImport(
+            client,
+          );
         throwIfAdminTaskCancelled(operation.signal);
 
         await repository.upsertCities(client, plan.cities);

@@ -25,6 +25,9 @@ import {
   createGeometryEditorRuntime,
 } from './geometry-editor-runtime.js';
 import {
+  createGeometryImportRuntime,
+} from './geometry-import-runtime.js';
+import {
   createOsmBoundaryAdminRuntime,
 } from './osm-boundary-admin-runtime.js';
 import {
@@ -58,6 +61,7 @@ const DEFAULT_FACTORIES =
     createKmlUpdateRuntime,
     createLineTypesRepository,
     createGeometryEditorRuntime,
+    createGeometryImportRuntime,
     createOsmBoundaryAdminRuntime,
     createOsmCheckpointRuntime,
     createOsmCityUpdateRuntime,
@@ -102,6 +106,11 @@ export function createServerRuntime({
       .createGeometryEditorRuntime(
         pool,
       );
+  const geometryImportService =
+    runtimeFactories
+      .createGeometryImportRuntime(
+        pool,
+      );
   const {
     projectSettingsRepository,
     publicDownloadService,
@@ -143,6 +152,9 @@ export function createServerRuntime({
       .createKmlUpdateRuntime(
         pool,
         config.kmlUpdate,
+        {
+          geometryImportService,
+        },
       );
   const osmImportSettingsRepository =
     runtimeFactories
@@ -208,6 +220,7 @@ export function createServerRuntime({
     settingsTransferService,
     reportConfigService,
     geometryEditorService,
+    geometryImportService,
     refreshPublicDownloads:
       () =>
         derivedState
