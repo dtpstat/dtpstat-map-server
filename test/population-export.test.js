@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createDataExportRepository } from '../src/db/data-export-repository.js';
+import { createDataExportRuntime } from '../src/application/data-transfer/export-runtime.js';
 
 const rows = [
   {
@@ -63,7 +63,7 @@ test('population export groups named cities by region', async () => {
     },
   };
 
-  const repository = createDataExportRepository(database);
+  const repository = createDataExportRuntime(database);
   const payload = await repository.exportPopulations();
 
   assert.equal(payload.schemaVersion, 3);
@@ -123,7 +123,7 @@ test('streaming population export emits the same region-city shape', async () =>
     async connect() { return client; },
   };
 
-  const repository = createDataExportRepository(database);
+  const repository = createDataExportRuntime(database);
   const payload = JSON.parse(await collect(repository.streamPopulations()));
 
   assert.equal(payload.schemaVersion, 3);
@@ -149,7 +149,7 @@ test('streaming and non-streaming population exports preserve the same portable 
       throw new Error(`Unexpected SQL: ${text}`);
     },
   };
-  const nonStreaming = await createDataExportRepository(database)
+  const nonStreaming = await createDataExportRuntime(database)
     .exportPopulations();
 
   let fetchCount = 0;
@@ -178,7 +178,7 @@ test('streaming and non-streaming population exports preserve the same portable 
     release() {},
   };
   const streaming = JSON.parse(await collect(
-    createDataExportRepository({
+    createDataExportRuntime({
       async connect() { return client; },
     }).streamPopulations(),
   ));
