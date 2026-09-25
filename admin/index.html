@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/admin/line-types.css">
   <link rel="stylesheet" href="/vendor/mapbox-gl/mapbox-gl.css">
   <link rel="stylesheet" href="/admin/osm-boundary-editor.css">
+  <link rel="stylesheet" href="/admin/geometry-editor.css">
   <script src="/vendor/mapbox-gl/mapbox-gl.js"></script>
   <script type="module" src="/admin/admin-session.js"></script>
   <script type="module" src="/admin/project-branding.js"></script>
@@ -38,6 +39,11 @@
     <button type="button" role="tab" data-admin-section-tab="data"
             aria-selected="false" aria-controls="admin-section-data">
       Управление данными
+    </button>
+    <button type="button" role="tab" id="admin-tab-geometries"
+            data-admin-section-tab="geometries"
+            aria-selected="false" aria-controls="admin-section-geometries">
+      Геометрии
     </button>
     <button type="button" role="tab" id="admin-tab-osm-objects"
             data-admin-section-tab="osm-objects"
@@ -449,6 +455,180 @@
             <pre id="task-result">—</pre>
           </details>
         </aside>
+      </div>
+    </section>
+
+    <section class="admin-section-panel" id="admin-section-geometries"
+             data-admin-section-panel="geometries" role="tabpanel"
+             aria-labelledby="admin-tab-geometries" hidden>
+      <div class="admin-layout admin-layout-single">
+        <section class="settings-card geometry-editor-card"
+                 aria-labelledby="geometry-editor-title">
+          <div class="section-heading geometry-editor-heading">
+            <div>
+              <p class="eyebrow">РЕДАКТОР ГЕОМЕТРИЙ</p>
+              <h2 id="geometry-editor-title">Геометрии проекта</h2>
+            </div>
+            <div class="geometry-editor-heading-actions">
+              <span id="geometry-editor-draft-count"
+                    class="geometry-editor-draft-count">Черновики: 0</span>
+              <label class="check geometry-editor-persist-drafts">
+                <input id="geometry-editor-persist-drafts" type="checkbox">
+                хранить между сессиями
+              </label>
+              <button id="geometry-editor-save-all" type="button" disabled>
+                Сохранить все
+              </button>
+              <button class="secondary" id="geometry-editor-discard-all"
+                      type="button" disabled>
+                Сбросить черновики
+              </button>
+              <button class="secondary" id="geometry-editor-refresh"
+                      type="button">
+                Обновить
+              </button>
+              <button id="geometry-editor-recalculate" type="button">
+                Пересчитать
+              </button>
+            </div>
+          </div>
+
+          <p class="panel-description">
+            Ручное редактирование Point, LineString/MultiLineString и Polygon/MultiPolygon.
+            Изменения существующих геометрий сначала сохраняются локально как черновики.
+            Серверные изменения не перезаписывают локальный черновик молча.
+          </p>
+
+          <div class="geometry-editor-workspace">
+            <div class="geometry-editor-layout">
+              <section class="geometry-editor-list-panel"
+                       aria-label="Геометрии выбранного города">
+                <div class="geometry-editor-list-controls">
+                  <label>Город
+                    <select id="geometry-editor-city"></select>
+                  </label>
+                  <label>Поиск
+                    <input id="geometry-editor-search" type="search"
+                           autocomplete="off"
+                           placeholder="Имя, тип, ID, черновик…">
+                  </label>
+                  <div class="geometry-editor-create-actions">
+                    <button class="secondary" id="geometry-new-point"
+                            type="button">+ Точка</button>
+                    <button class="secondary" id="geometry-new-line"
+                            type="button">+ Линия</button>
+                    <button class="secondary" id="geometry-new-polygon"
+                            type="button">+ Полигон</button>
+                  </div>
+                </div>
+
+                <div id="geometry-editor-list" class="geometry-editor-list">
+                  <p class="empty-state">Выберите город…</p>
+                </div>
+
+                <button id="geometry-merge-selected" type="button"
+                        hidden disabled>Объединить выбранные</button>
+              </section>
+
+              <section class="geometry-editor-map-panel"
+                       aria-label="Карта редактора геометрий">
+                <div class="geometry-editor-map-toolbar">
+                  <span id="geometry-editor-mode">Выберите геометрию</span>
+                  <button class="secondary" id="geometry-undo"
+                          type="button" disabled title="Ctrl+Z">↶</button>
+                  <button class="secondary" id="geometry-redo"
+                          type="button" disabled title="Ctrl+Y">↷</button>
+                  <button id="geometry-finish-draw"
+                          type="button" hidden>Завершить</button>
+                  <button class="secondary" id="geometry-cancel-draw"
+                          type="button" hidden>Отмена</button>
+                </div>
+                <div id="geometry-editor-map" class="geometry-editor-map"></div>
+              </section>
+
+              <aside class="geometry-editor-details"
+                     aria-label="Атрибуты выбранной геометрии">
+                <form id="geometry-editor-form">
+                  <div class="geometry-editor-selected-title"
+                       id="geometry-editor-selected-title">
+                    Выберите геометрию
+                  </div>
+
+                  <p class="geometry-editor-conflict"
+                     id="geometry-editor-conflict" hidden></p>
+
+                  <label>Имя
+                    <input name="displayName" type="text"
+                           maxlength="240" disabled
+                           placeholder="Автоматическое имя по типу и ID">
+                  </label>
+
+                  <label>Подсказка
+                    <textarea name="tooltip" rows="4"
+                              maxlength="2000" disabled
+                              placeholder="Если пусто, используется имя"></textarea>
+                  </label>
+
+                  <label>Теги
+                    <input name="tags" type="text"
+                           maxlength="4096" disabled
+                           placeholder="центр, обособленная, эксперимент">
+                    <small>Через запятую.</small>
+                  </label>
+
+                  <label class="check">
+                    <input name="isVisible" type="checkbox" disabled>
+                    Показывать на публичной карте
+                  </label>
+
+                  <fieldset id="geometry-line-fields"
+                            class="geometry-line-fields" hidden>
+                    <legend>Параметры линии</legend>
+                    <label>Тип линии
+                      <select name="lineTypeId"></select>
+                    </label>
+                    <label>Полос / коэффициент
+                      <select name="lanes">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                      </select>
+                    </label>
+                  </fieldset>
+
+                  <div class="geometry-editor-form-actions">
+                    <button type="submit" disabled>Сохранить</button>
+                    <button class="secondary" id="geometry-revert"
+                            type="button" disabled>Отменить правки</button>
+                  </div>
+
+                  <div class="geometry-editor-polygon-actions"
+                       id="geometry-polygon-actions" hidden>
+                    <button class="secondary" id="geometry-cut-area"
+                            type="button">
+                      Вырезать область…
+                    </button>
+                  </div>
+
+                  <button class="danger" id="geometry-delete"
+                          type="button" disabled>
+                    Удалить геометрию…
+                  </button>
+
+                  <p class="notice" id="geometry-editor-message"
+                     role="status"></p>
+
+                  <dl class="geometry-editor-meta"
+                      id="geometry-editor-meta"></dl>
+
+                  <details class="geometry-source-tags">
+                    <summary>Исходные теги импорта</summary>
+                    <pre id="geometry-source-tags">—</pre>
+                  </details>
+                </form>
+              </aside>
+            </div>
+          </div>
+        </section>
       </div>
     </section>
 

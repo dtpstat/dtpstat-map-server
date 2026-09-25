@@ -1,0 +1,415 @@
+.geometry-editor-card > .panel-description {
+  flex: 0 0 auto;
+  margin: -.15rem 0 .9rem;
+}
+
+.geometry-editor-heading {
+  align-items: flex-start;
+  gap: .8rem;
+}
+
+.geometry-editor-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .45rem;
+}
+
+.geometry-editor-heading-actions button,
+.geometry-editor-heading-actions .secondary-link {
+  width: auto;
+}
+
+.geometry-editor-draft-count {
+  align-self: center;
+  color: var(--muted);
+  font-size: .7rem;
+  white-space: nowrap;
+}
+
+.geometry-editor-persist-drafts {
+  align-self: center;
+  margin: 0;
+  font-size: .68rem;
+  white-space: nowrap;
+}
+
+.geometry-editor-workspace {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.geometry-editor-layout {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns:
+    minmax(19rem, .72fr)
+    minmax(30rem, 1.8fr)
+    minmax(20rem, .82fr);
+  gap: .85rem;
+}
+
+.geometry-editor-list-panel,
+.geometry-editor-map-panel,
+.geometry-editor-details {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0c1417;
+}
+
+.geometry-editor-list-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.geometry-editor-list-controls {
+  flex: 0 0 auto;
+  padding: .65rem;
+  display: grid;
+  gap: .6rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.geometry-editor-create-actions {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: .35rem;
+}
+
+.geometry-editor-create-actions button {
+  min-width: 0;
+  padding: .55rem .35rem;
+  font-size: .7rem;
+}
+
+.geometry-editor-list {
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: .5rem;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.geometry-editor-row {
+  width: 100%;
+  min-width: 0;
+  margin: .18rem 0;
+  padding: .5rem;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .4rem;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+}
+
+.geometry-editor-row:hover {
+  background: var(--panel-2);
+  filter: none !important;
+}
+
+.geometry-editor-row.is-selected {
+  border-color: #37756f;
+  background: var(--accent-dark);
+}
+
+.geometry-editor-row.is-hidden {
+  opacity: .55;
+}
+
+.geometry-editor-row.has-draft {
+  border-left-color: #b8872d;
+}
+
+.geometry-editor-row.has-conflict {
+  border-color: #8b3d43;
+  background: #241214;
+}
+
+.geometry-editor-row-copy {
+  min-width: 0;
+}
+
+.geometry-editor-row-name,
+.geometry-editor-row-tags {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-editor-row-name {
+  font-size: .74rem;
+  font-weight: 750;
+}
+
+.geometry-editor-row-tags {
+  margin-top: .14rem;
+  color: var(--muted);
+  font-size: .62rem;
+}
+
+.geometry-editor-row-type {
+  color: var(--muted);
+  font-size: .62rem;
+  white-space: nowrap;
+}
+
+.geometry-editor-map-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.geometry-editor-map-toolbar {
+  flex: 0 0 auto;
+  min-height: 3rem;
+  padding: .42rem;
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  border-bottom: 1px solid var(--line);
+  background: #0d171a;
+}
+
+.geometry-editor-map-toolbar > span {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: var(--muted);
+  font-size: .68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-editor-map-toolbar button {
+  width: auto;
+  padding: .42rem .58rem;
+  font-size: .68rem;
+}
+
+.geometry-editor-map {
+  min-height: 24rem;
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+.geometry-editor-map .mapboxgl-ctrl-attrib {
+  font-size: 9px;
+}
+
+.geometry-editor-details {
+  padding: .75rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+#geometry-editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: .65rem;
+  overflow: visible;
+}
+
+.geometry-editor-selected-title {
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.geometry-editor-conflict {
+  margin: 0;
+  padding: .55rem;
+  border: 1px solid #8b3d43;
+  border-radius: 7px;
+  color: #ffc1c4;
+  background: #241214;
+  font-size: .7rem;
+  line-height: 1.45;
+}
+
+.geometry-editor-conflict[hidden] {
+  display: none;
+}
+
+.geometry-line-fields {
+  margin: 0;
+  padding: .65rem;
+  display: grid;
+  gap: .55rem;
+  border: 1px solid #233840;
+  border-radius: 8px;
+}
+
+.geometry-line-fields[hidden] {
+  display: none;
+}
+
+.geometry-line-fields legend {
+  padding: 0 .3rem;
+  color: var(--muted);
+  font-size: .7rem;
+}
+
+.geometry-editor-form-actions {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: .45rem;
+}
+
+.geometry-editor-meta {
+  margin: 0;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr);
+  gap: .4rem;
+}
+
+.geometry-editor-meta div {
+  min-width: 0;
+  padding: .42rem;
+  border: 1px solid #233840;
+  border-radius: 7px;
+}
+
+.geometry-editor-meta dt {
+  color: var(--muted);
+  font-size: .62rem;
+}
+
+.geometry-editor-meta dd {
+  margin: .12rem 0 0;
+  overflow-wrap: anywhere;
+  font-size: .7rem;
+}
+
+.geometry-source-tags {
+  padding: .55rem;
+  border: 1px solid #233840;
+  border-radius: 7px;
+}
+
+.geometry-source-tags summary {
+  color: var(--muted);
+  font-size: .68rem;
+  cursor: pointer;
+}
+
+.geometry-source-tags pre {
+  max-height: 12rem;
+  margin: .45rem 0 0;
+  padding: .45rem;
+  overflow: auto;
+  background: #081013;
+  font: .65rem/1.45 ui-monospace, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1250px) {
+  .geometry-editor-layout {
+    grid-template-columns:
+      minmax(18rem, .75fr)
+      minmax(0, 1.6fr);
+  }
+
+  .geometry-editor-details {
+    grid-column: 1 / -1;
+    max-height: 23rem;
+  }
+
+  #geometry-editor-form {
+    display: grid;
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr));
+  }
+
+  #geometry-editor-form >
+  .geometry-editor-selected-title,
+  #geometry-editor-form >
+  .geometry-editor-conflict,
+  #geometry-editor-form >
+  .geometry-editor-form-actions,
+  #geometry-editor-form >
+  .danger,
+  #geometry-editor-form >
+  .notice,
+  #geometry-editor-form >
+  .geometry-source-tags {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 900px) {
+  .geometry-editor-card {
+    overflow: visible;
+  }
+
+  .geometry-editor-workspace {
+    overflow: visible;
+  }
+
+  .geometry-editor-layout {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .geometry-editor-list-panel {
+    max-height: 20rem;
+  }
+
+  .geometry-editor-map {
+    min-height: 30rem;
+  }
+
+  .geometry-editor-details {
+    grid-column: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  #geometry-editor-form {
+    display: flex;
+  }
+}
+
+@media (max-width: 700px) {
+  .geometry-editor-heading-actions {
+    justify-content: stretch;
+  }
+
+  .geometry-editor-heading-actions button,
+  .geometry-editor-heading-actions .secondary-link {
+    width: 100%;
+  }
+}
+
+@media (max-width: 650px) {
+  .geometry-editor-create-actions,
+  .geometry-editor-form-actions {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  .geometry-editor-map-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .geometry-editor-map-toolbar > span {
+    flex-basis: 100%;
+  }
+}
