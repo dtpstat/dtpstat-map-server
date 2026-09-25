@@ -1,4 +1,4 @@
-import { OsmCityUpdateValidationError } from '../../data/osm-city-update-options.js';
+import { OsmCityUpdateValidationError } from './osm-city-update-options.js';
 import { OsmCityGeometryError } from './update-errors.js';
 
 /** @param {{ osmType: string, osmId: number | string }} object */

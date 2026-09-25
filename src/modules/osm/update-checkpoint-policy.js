@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { OsmCityUpdateValidationError } from '../../data/osm-city-update-options.js';
+import { OsmCityUpdateValidationError } from './osm-city-update-options.js';
 
 const OSM_CHECKPOINT_FORMAT_VERSION = 1;
 
