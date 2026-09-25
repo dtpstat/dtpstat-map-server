@@ -551,9 +551,13 @@ test('city boundary transfer use case delegates SQL persistence to geometry repo
   assert.match(repository, /UPDATE city_geometries/u);
 });
 
-test('legacy city boundary transfer service is only a DB composition adapter', async () => {
-  const adapter = await fs.readFile(
-    path.join(srcRoot, 'db', 'city-boundary-transfer-service.js'),
+test('portable ingestion application runtime composes city-boundary DB infrastructure', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'portable-ingestion-runtime.js',
+    ),
     'utf8',
   );
   const service = await fs.readFile(
@@ -566,25 +570,80 @@ test('legacy city boundary transfer service is only a DB composition adapter', a
     'utf8',
   );
 
-  assert.match(adapter, /createCityBoundaryTransferUseCase\(pool,/u);
-  assert.match(adapter, /acquireDataImportLock/u);
-  assert.match(adapter, /rebuildCityBoundaryHierarchy/u);
-  assert.match(adapter, /RECALCULATE_CITY_STATISTICS_SQL/u);
-  assert.doesNotMatch(adapter, /parseStreamingJsonObject/u);
-  assert.doesNotMatch(adapter, /buildCityBoundaryGeoJsonPlan/u);
-  assert.doesNotMatch(adapter, /repository\.insertStageBatch/u);
+  assert.match(
+    runtime,
+    /createCityBoundaryTransferService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createCityBoundaryTransferRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /acquireDataImportLock/u,
+  );
+  assert.match(
+    runtime,
+    /rebuildCityBoundaryHierarchy/u,
+  );
+  assert.match(
+    runtime,
+    /sync_active_boundary_cities/u,
+  );
+  assert.match(
+    runtime,
+    /sync_active_boundary_populations/u,
+  );
+  assert.match(
+    runtime,
+    /RECALCULATE_CITY_STATISTICS_SQL/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /parseStreamingJsonObject/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /buildCityBoundaryGeoJsonPlan/u,
+  );
 
-  assert.match(service, /parseStreamingJsonObject\(/u);
-  assert.match(service, /buildCityBoundaryGeoJsonPlan\(/u);
-  assert.match(service, /repository\.insertStageBatch\(/u);
-  assert.match(service, /rebuildHierarchy\(client,/u);
-  assert.match(service, /syncDerivedData\(client\)/u);
-  assert.doesNotMatch(service, /\.\.\/\.\.\/db\//u);
-  assert.doesNotMatch(service, /database-locks/u);
-  assert.doesNotMatch(service, /city-boundary-hierarchy/u);
-  assert.doesNotMatch(service, /recalculate-city-statistics/u);
+  assert.match(
+    service,
+    /parseStreamingJsonObject\(/u,
+  );
+  assert.match(
+    service,
+    /buildCityBoundaryGeoJsonPlan\(/u,
+  );
+  assert.match(
+    service,
+    /repository\.insertStageBatch\(/u,
+  );
+  assert.match(
+    service,
+    /rebuildHierarchy\(client,/u,
+  );
+  assert.match(
+    service,
+    /syncDerivedData\(client\)/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /\.\.\/\.\.\/db\//u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'city-boundary-transfer-service.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
 });
-
 
 test('population import use case delegates SQL persistence to population repository', async () => {
   const service = await fs.readFile(
@@ -622,32 +681,83 @@ test('population import use case delegates SQL persistence to population reposit
   assert.match(repository, /UPDATE city_boundaries AS boundary/u);
 });
 
-test('legacy population import service is only a DB composition adapter', async () => {
-  const adapter = await fs.readFile(
-    path.join(srcRoot, 'db', 'population-import-service.js'),
+test('portable ingestion application runtime composes population DB infrastructure', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'portable-ingestion-runtime.js',
+    ),
     'utf8',
   );
   const service = await fs.readFile(
-    path.join(srcRoot, 'modules', 'population', 'import-service.js'),
+    path.join(
+      srcRoot,
+      'modules',
+      'population',
+      'import-service.js',
+    ),
     'utf8',
   );
 
-  assert.match(adapter, /createPopulationImportUseCase\(pool,/u);
-  assert.match(adapter, /acquireDataImportLock/u);
-  assert.match(adapter, /RECALCULATE_CITY_STATISTICS_SQL/u);
-  assert.doesNotMatch(adapter, /parseStreamingJsonObject/u);
-  assert.doesNotMatch(adapter, /buildPopulationPlan/u);
-  assert.doesNotMatch(adapter, /repository\.resolveStage/u);
+  assert.match(
+    runtime,
+    /createPopulationImportService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createPopulationImportRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /acquireDataImportLock/u,
+  );
+  assert.match(
+    runtime,
+    /RECALCULATE_CITY_STATISTICS_SQL/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /parseStreamingJsonObject/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /buildPopulationPlan/u,
+  );
 
-  assert.match(service, /parseStreamingJsonObject\(/u);
-  assert.match(service, /buildPopulationPlan\(/u);
-  assert.match(service, /repository\.resolveStage\(/u);
-  assert.match(service, /recalculateStatistics\(client\)/u);
-  assert.doesNotMatch(service, /\.\.\/\.\.\/db\//u);
-  assert.doesNotMatch(service, /database-locks/u);
-  assert.doesNotMatch(service, /recalculate-city-statistics/u);
+  assert.match(
+    service,
+    /parseStreamingJsonObject\(/u,
+  );
+  assert.match(
+    service,
+    /buildPopulationPlan\(/u,
+  );
+  assert.match(
+    service,
+    /repository\.resolveStage\(/u,
+  );
+  assert.match(
+    service,
+    /recalculateStatistics\(client\)/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /\.\.\/\.\.\/db\//u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'population-import-service.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
 });
-
 
 test('KML update use case delegates SQL persistence to lines repository', async () => {
   const service = await fs.readFile(
