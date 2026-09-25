@@ -99,7 +99,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
       );
     };
 
-  factories.createOsmCityUpdateService =
+  factories.createOsmCityUpdateRuntime =
     (
       receivedPool,
       options,
@@ -126,10 +126,10 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
         'createOsmCityCheckpointRepository',
       );
       calls.push(
-        'createOsmCityUpdateService',
+        'createOsmCityUpdateRuntime',
       );
       return value(
-        'createOsmCityUpdateService',
+        'createOsmCityUpdateRuntime',
       );
     };
 
@@ -251,7 +251,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
       'createOsmImportSettingsRepository',
       'createOsmBoundaryAdminRepository',
       'createOsmCityCheckpointRepository',
-      'createOsmCityUpdateService',
+      'createOsmCityUpdateRuntime',
       'createAdminTaskSuccessRepository',
       'createAdminSecurityRepository',
       'createAdminSecurityService',

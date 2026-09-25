@@ -5,30 +5,8 @@ import {
   createKmlUpdateService,
 } from '../modules/lines/kml-update-service.js';
 import {
-  acquireDataImportLock,
-} from '../db/database-locks.js';
-import {
-  RECALCULATE_CITY_STATISTICS_SQL,
-} from '../db/recalculate-city-statistics.js';
-
-function withDatabaseDependencies(dependencies = {}) {
-  const recalculateStatisticsSql =
-    dependencies.recalculateStatisticsSql ??
-    RECALCULATE_CITY_STATISTICS_SQL;
-
-  return {
-    ...dependencies,
-    acquireLock:
-      dependencies.acquireLock ??
-      acquireDataImportLock,
-    recalculateStatistics:
-      dependencies.recalculateStatistics ??
-      ((client) =>
-        client.query(
-          recalculateStatisticsSql,
-        )),
-  };
-}
+  withIngestionDatabaseDependencies,
+} from './ingestion-database-runtime.js';
 
 /**
  * Compose the line GeoJSON use case with the shared destructive-import lock
@@ -40,7 +18,7 @@ export function createLineImportRuntime(
 ) {
   return createLineImportService(
     pool,
-    withDatabaseDependencies(
+    withIngestionDatabaseDependencies(
       dependencies,
     ),
   );
@@ -58,7 +36,7 @@ export function createKmlUpdateRuntime(
   return createKmlUpdateService(
     pool,
     config,
-    withDatabaseDependencies(
+    withIngestionDatabaseDependencies(
       dependencies,
     ),
   );
