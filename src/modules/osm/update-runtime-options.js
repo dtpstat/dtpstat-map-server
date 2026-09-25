@@ -2,7 +2,7 @@ import {
   normalizeOsmUpdateUrl,
   OsmCityUpdateValidationError,
   resolveOsmCityUpdateRequest,
-} from '../../data/osm-city-update-options.js';
+} from './osm-city-update-options.js';
 
 export async function resolveOsmUpdateRuntimeOptions({
   settingsRepository,

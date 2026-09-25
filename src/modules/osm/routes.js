@@ -2,7 +2,7 @@ import { adminAuditPayloadFingerprint } from '../../shared/logging/admin-audit-d
 import {
   OsmCityUpdateValidationError,
   resolveOsmCityUpdateRequest,
-} from '../../data/osm-city-update-options.js';
+} from './osm-city-update-options.js';
 
 export function registerOsmRoutes(router, {
   adminAuth,

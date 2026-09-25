@@ -1,4 +1,4 @@
-import { OsmCityDownloadError } from '../../data/osm-city-downloader.js';
+import { OsmCityDownloadError } from './osm-city-downloader.js';
 
 const RETRYABLE_HTTP_STATUS_CODES = new Set([429, 502, 503, 504]);
 const GEOMETRY_504_RETRIES_BEFORE_SPLIT = 3;

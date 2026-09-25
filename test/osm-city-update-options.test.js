@@ -4,7 +4,7 @@ import {
   normalizeOsmUpdateUrl,
   OsmCityUpdateValidationError,
   resolveOsmCityUpdateRequest,
-} from '../src/data/osm-city-update-options.js';
+} from '../src/modules/osm/osm-city-update-options.js';
 
 const config = {
   url: 'https://overpass-api.de/api/interpreter',

@@ -1,10 +1,10 @@
 import crypto from 'node:crypto';
 import { throwIfAdminTaskCancelled } from '../../shared/tasks/admin-task-manager.js';
-import { downloadOsmCities } from '../../data/osm-city-downloader.js';
+import { downloadOsmCities } from './osm-city-downloader.js';
 import {
   parseOsmCityResponse,
   parseOsmPlaceIdsResponse,
-} from '../../data/osm-city-parser.js';
+} from './osm-city-parser.js';
 import { createOsmBoundaryUpdateRepository } from './boundary-update-repository.js';
 import { createOverpassRequestSession } from './overpass-request-session.js';
 import {

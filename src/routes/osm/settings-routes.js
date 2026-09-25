@@ -1,6 +1,6 @@
 import {
   OsmCityUpdateValidationError,
-} from '../../data/osm-city-update-options.js';
+} from '../../modules/osm/osm-city-update-options.js';
 import {
   createAdminOperationAudit,
   recordAdminOperationChanges,

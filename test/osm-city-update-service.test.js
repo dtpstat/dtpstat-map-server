@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { OsmCityDownloadError } from '../src/data/osm-city-downloader.js';
+import { OsmCityDownloadError } from '../src/modules/osm/osm-city-downloader.js';
 import { createOsmCityUpdateRuntime } from '../src/application/osm-update-runtime.js';
 
 const config = {

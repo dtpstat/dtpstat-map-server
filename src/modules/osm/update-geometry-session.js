@@ -1,5 +1,5 @@
-import { OsmCityDownloadError } from '../../data/osm-city-downloader.js';
-import { buildOsmPlacesBatchQuery } from '../../data/osm-city-parser.js';
+import { OsmCityDownloadError } from './osm-city-downloader.js';
+import { buildOsmPlacesBatchQuery } from './osm-city-parser.js';
 import { addContentChecksums } from './update-checkpoint-policy.js';
 import {
   addNameCounts,

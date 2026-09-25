@@ -1,7 +1,7 @@
 import {
   normalizeOsmUpdateUrl,
   OsmCityUpdateValidationError,
-} from '../../data/osm-city-update-options.js';
+} from './osm-city-update-options.js';
 
 function object(value) {
   return (

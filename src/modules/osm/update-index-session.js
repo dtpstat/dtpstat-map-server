@@ -1,7 +1,7 @@
 import {
   buildRussianPlaceIdOverpassQueries,
-} from '../../data/osm-city-parser.js';
-import { OsmCityUpdateValidationError } from '../../data/osm-city-update-options.js';
+} from './osm-city-parser.js';
+import { OsmCityUpdateValidationError } from './osm-city-update-options.js';
 import {
   checkpointIndexFingerprint,
   checkpointOptionSnapshot,

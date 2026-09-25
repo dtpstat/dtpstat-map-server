@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { OsmCityUpdateValidationError } from '../src/data/osm-city-update-options.js';
+import { OsmCityUpdateValidationError } from '../src/modules/osm/osm-city-update-options.js';
 import { checkpointIndexFingerprint } from '../src/modules/osm/update-checkpoint-policy.js';
 import { loadOsmUpdateIndex } from '../src/modules/osm/update-index-session.js';
 
