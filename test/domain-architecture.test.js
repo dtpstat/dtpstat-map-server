@@ -2901,6 +2901,14 @@ test('server composition root delegates startup runtime and derived-state orches
     ),
     'utf8',
   );
+  const projectRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'project-runtime.js',
+    ),
+    'utf8',
+  );
   const derived = await fs.readFile(
     path.join(
       srcRoot,
@@ -3040,9 +3048,17 @@ test('server composition root delegates startup runtime and derived-state orches
     runtime,
     /adminRuntimeDependencies/u,
   );
-  assert.match(
+  assert.doesNotMatch(
     runtime,
     /public-downloads/u,
+  );
+  assert.match(
+    projectRuntime,
+    /\.\/public-downloads\/service\.js/u,
+  );
+  assert.match(
+    projectRuntime,
+    /createPublicDownloadRepository/u,
   );
 
   assert.match(
