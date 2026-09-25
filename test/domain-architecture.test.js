@@ -2417,15 +2417,23 @@ test('server composition root delegates startup runtime and derived-state orches
   );
   assert.match(
     server,
-    /bootstrapServerApplication\(\s*runtime\.bootstrapDependencies/u,
+    /bootstrapServerApplication\(\s*bootstrapDependencies/u,
   );
   assert.match(
     server,
-    /\.\.\.runtime\.appDependencies/u,
+    /\.\.\.appDependencies/u,
   );
   assert.match(
     server,
     /createAdminRuntime\(/u,
+  );
+  assert.match(
+    server,
+    /\.\.\.adminRuntimeDependencies/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /runtime\.(?:adminTaskSuccessRepository|securityService|adminAuth|derivedState)/u,
   );
   assert.doesNotMatch(
     server,
@@ -2520,6 +2528,10 @@ test('server composition root delegates startup runtime and derived-state orches
   assert.match(
     runtime,
     /appDependencies/u,
+  );
+  assert.match(
+    runtime,
+    /adminRuntimeDependencies/u,
   );
   assert.match(
     runtime,

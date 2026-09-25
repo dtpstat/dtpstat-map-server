@@ -50,7 +50,11 @@ async function main() {
     pool,
   });
 
-  const runtime =
+  const {
+    bootstrapDependencies,
+    appDependencies,
+    adminRuntimeDependencies,
+  } =
     createServerRuntime({
       pool,
       config,
@@ -58,25 +62,17 @@ async function main() {
 
   const {initialSuccessfulUpdates} =
     await bootstrapServerApplication(
-      runtime.bootstrapDependencies,
+      bootstrapDependencies,
     );
 
   const adminRuntime =
     createAdminRuntime({
       initialSuccessfulUpdates,
-      adminTaskSuccessRepository:
-        runtime
-          .adminTaskSuccessRepository,
-      securityService:
-        runtime.securityService,
-      adminAuth:
-        runtime.adminAuth,
-      derivedState:
-        runtime.derivedState,
+      ...adminRuntimeDependencies,
     });
 
   const app = createApp({
-    ...runtime.appDependencies,
+    ...appDependencies,
     adminTasks:
       adminRuntime.adminTasks,
   });

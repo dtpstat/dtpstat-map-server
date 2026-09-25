@@ -4,7 +4,7 @@ import {
   createServerRuntime,
 } from '../src/application/server-runtime.js';
 
-test('server runtime composes repository service auth and derived-state slices', () => {
+test('server runtime exposes explicit bootstrap app and admin dependency slices', () => {
   const calls = [];
   const pool = {
     name: 'pool',
@@ -260,6 +260,28 @@ test('server runtime composes repository service auth and derived-state slices',
     ],
   );
 
+  assert.deepEqual(
+    Object.keys(runtime).sort(),
+    [
+      'adminRuntimeDependencies',
+      'appDependencies',
+      'bootstrapDependencies',
+    ],
+  );
+
+  assert.deepEqual(
+    Object.keys(
+      runtime
+        .adminRuntimeDependencies,
+    ).sort(),
+    [
+      'adminAuth',
+      'adminTaskSuccessRepository',
+      'derivedState',
+      'securityService',
+    ],
+  );
+
   assert.equal(
     runtime
       .bootstrapDependencies
@@ -278,19 +300,24 @@ test('server runtime composes repository service auth and derived-state slices',
       .bootstrapDependencies
       .adminTaskSuccessRepository,
     runtime
+      .adminRuntimeDependencies
       .adminTaskSuccessRepository,
   );
   assert.equal(
     runtime
       .bootstrapDependencies
       .securityService,
-    runtime.securityService,
+    runtime
+      .adminRuntimeDependencies
+      .securityService,
   );
   assert.equal(
     runtime
       .bootstrapDependencies
       .derivedState,
-    runtime.derivedState,
+    runtime
+      .adminRuntimeDependencies
+      .derivedState,
   );
 
   assert.equal(
@@ -305,13 +332,17 @@ test('server runtime composes repository service auth and derived-state slices',
     runtime
       .appDependencies
       .adminAuth,
-    runtime.adminAuth,
+    runtime
+      .adminRuntimeDependencies
+      .adminAuth,
   );
   assert.equal(
     runtime
       .appDependencies
       .securityService,
-    runtime.securityService,
+    runtime
+      .adminRuntimeDependencies
+      .securityService,
   );
   assert.equal(
     runtime

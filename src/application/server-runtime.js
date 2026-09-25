@@ -91,7 +91,7 @@ const DEFAULT_FACTORIES =
 /**
  * Construct the long-lived repository/service graph after migrations have
  * completed. The returned slices make startup/bootstrap and HTTP composition
- * explicit without making server.js aware of individual DB constructors.
+ * explicit without making server.js aware of individual DB constructors or\n * leaking runtime internals outside their owning composition slice.
  *
  * @param {{
  *   pool: any,
@@ -223,65 +223,73 @@ export function createServerRuntime({
         reportConfigService,
       });
 
-  return {
-    bootstrapDependencies: {
-      config,
-      repository,
-      osmImportSettingsRepository,
-      securityService,
-      projectSettingsRepository,
-      adminTaskSuccessRepository,
-      derivedState,
-    },
-    appDependencies: {
-      repository,
-      lineTypesRepository,
-      projectSettingsRepository,
-      settingsTransferService,
-      reportConfigService,
-      refreshPublicDownloads:
-        () =>
-          derivedState
-            .refreshPublicDownloads({
-              reason:
-                'report-config',
-            }),
-      refreshPublicDownloadsAfterSettingsImport:
-        () =>
-          derivedState
-            .refreshPublicDownloads({
-              reason:
-                'project-settings-import',
-            }),
-      refreshProjectDerived:
-        () =>
-          derivedState
-            .refreshAll({
-              reason:
-                'project-settings',
-            }),
-      refreshOsmBoundaryDerived:
-        () =>
-          derivedState
-            .refreshAll({
-              reason:
-                'osm-boundary-settings',
-            }),
-      osmImportSettingsRepository,
-      osmBoundaryAdminRepository,
-      exportRepository,
-      importService,
-      cityBoundaryTransferService,
-      populationService,
-      kmlUpdateService,
-      osmCityUpdateService,
-      adminAuth,
-      securityService,
-      config,
-    },
+  const bootstrapDependencies = {
+    config,
+    repository,
+    osmImportSettingsRepository,
+    securityService,
+    projectSettingsRepository,
+    adminTaskSuccessRepository,
+    derivedState,
+  };
+
+  const appDependencies = {
+    repository,
+    lineTypesRepository,
+    projectSettingsRepository,
+    settingsTransferService,
+    reportConfigService,
+    refreshPublicDownloads:
+      () =>
+        derivedState
+          .refreshPublicDownloads({
+            reason:
+              'report-config',
+          }),
+    refreshPublicDownloadsAfterSettingsImport:
+      () =>
+        derivedState
+          .refreshPublicDownloads({
+            reason:
+              'project-settings-import',
+          }),
+    refreshProjectDerived:
+      () =>
+        derivedState
+          .refreshAll({
+            reason:
+              'project-settings',
+          }),
+    refreshOsmBoundaryDerived:
+      () =>
+        derivedState
+          .refreshAll({
+            reason:
+              'osm-boundary-settings',
+          }),
+    osmImportSettingsRepository,
+    osmBoundaryAdminRepository,
+    exportRepository,
+    importService,
+    cityBoundaryTransferService,
+    populationService,
+    kmlUpdateService,
+    osmCityUpdateService,
+    adminAuth,
+    securityService,
+    config,
+  };
+
+  const adminRuntimeDependencies = {
     adminTaskSuccessRepository,
     securityService,
     adminAuth,
     derivedState,
+  };
+
+  return {
+    bootstrapDependencies,
+    appDependencies,
+    adminRuntimeDependencies,
   };
 }
