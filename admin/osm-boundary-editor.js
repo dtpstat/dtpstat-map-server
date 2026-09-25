@@ -59,6 +59,10 @@ if (typeof document !== 'undefined') {
   const geometryMeta = document.querySelector('#osm-boundary-geometry-meta');
   const message = document.querySelector('#osm-boundary-message');
   const mapHost = document.querySelector('#osm-boundary-map');
+  const draftCount = document.querySelector('#osm-boundary-draft-count');
+  const persistDrafts = document.querySelector('#osm-boundary-persist-drafts');
+  const saveAll = document.querySelector('#osm-boundary-save-all');
+  const discardAll = document.querySelector('#osm-boundary-discard-all');
 
   if (panel && treeHost && searchInput && refreshButton && form && mapHost) {
     const state = {
