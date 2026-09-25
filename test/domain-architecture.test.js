@@ -1004,9 +1004,13 @@ test('project settings transfer application service delegates policy and persist
   assert.match(repository, /CREATE TEMP TABLE project_settings_line_types_stage/u);
 });
 
-test('legacy project settings transfer service is only a DB composition adapter', async () => {
-  const adapter = await fs.readFile(
-    path.join(srcRoot, 'db', 'project-settings-transfer-service.js'),
+test('project report runtime composes project settings transfer persistence', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'project-report-runtime.js',
+    ),
     'utf8',
   );
   const service = await fs.readFile(
@@ -1019,20 +1023,60 @@ test('legacy project settings transfer service is only a DB composition adapter'
     'utf8',
   );
 
-  assert.match(adapter, /createProjectSettingsTransferUseCase\(pool,/u);
-  assert.match(adapter, /createProjectSettingsTransferRepository\(/u);
-  assert.match(adapter, /acquireDataImportLock/u);
-  assert.doesNotMatch(adapter, /validateProjectSettingsTransferEnvelope/u);
-  assert.doesNotMatch(adapter, /validateReportConfig/u);
-  assert.doesNotMatch(adapter, /UPDATE project_settings SET/u);
+  assert.match(
+    runtime,
+    /createProjectSettingsTransferService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createProjectSettingsTransferRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /createProjectSettingsTransferRepository\(/u,
+  );
+  assert.match(
+    runtime,
+    /acquireDataImportLock/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /validateProjectSettingsTransferEnvelope/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /validateReportConfig/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /UPDATE project_settings SET/u,
+  );
 
-  assert.match(service, /validateProjectSettingsTransferEnvelope\(/u);
-  assert.match(service, /validateReportConfig\(/u);
-  assert.doesNotMatch(service, /database-locks/u);
-  assert.doesNotMatch(service, /recalculate-city-statistics/u);
-  assert.doesNotMatch(service, /report-config-service/u);
+  assert.match(
+    service,
+    /validateProjectSettingsTransferEnvelope\(/u,
+  );
+  assert.match(
+    service,
+    /validateReportConfig\(/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /database-locks/u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'project-settings-transfer-service.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
 });
-
 
 test('reporting module separates config use case from query compiler and DB storage', async () => {
   const service = await fs.readFile(
@@ -1070,43 +1114,110 @@ test('reporting module separates config use case from query compiler and DB stor
   assert.match(materializer, /compileReportRankQuery\(/u);
 });
 
-test('legacy report config service is only a DB composition adapter', async () => {
-  const adapter = await fs.readFile(
-    path.join(srcRoot, 'db', 'report-config-service.js'),
+test('project report runtime composes report config persistence and materialization', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'project-report-runtime.js',
+    ),
     'utf8',
   );
   const service = await fs.readFile(
-    path.join(srcRoot, 'modules', 'reporting', 'config-service.js'),
+    path.join(
+      srcRoot,
+      'modules',
+      'reporting',
+      'config-service.js',
+    ),
+    'utf8',
+  );
+  const compiler = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'reporting',
+      'query-compiler.js',
+    ),
     'utf8',
   );
   const transferRepository = await fs.readFile(
-    path.join(srcRoot, 'db', 'project-settings-transfer-repository.js'),
+    path.join(
+      srcRoot,
+      'db',
+      'project-settings-transfer-repository.js',
+    ),
     'utf8',
   );
 
-  assert.match(adapter, /createReportConfigUseCase\(pool,/u);
-  assert.match(adapter, /createReportConfigRepository\(/u);
-  assert.match(adapter, /materializeReportValues/u);
-  assert.match(adapter, /acquireDataImportLock/u);
-  assert.match(adapter, /compileReportMetricQuery/u);
-  assert.match(adapter, /compileReportRankQuery/u);
-  assert.doesNotMatch(adapter, /jsonb_object_agg\(config_key/u);
-  assert.doesNotMatch(adapter, /INSERT INTO city_report_values/u);
+  assert.match(
+    runtime,
+    /createReportConfigService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createReportConfigRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /createReportConfigRepository\(/u,
+  );
+  assert.match(
+    runtime,
+    /materializeReportValues/u,
+  );
+  assert.match(
+    runtime,
+    /acquireDataImportLock/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /compileReportMetricQuery/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /compileReportRankQuery/u,
+  );
 
-  assert.match(service, /validateReportConfig\(/u);
-  assert.doesNotMatch(service, /database-locks/u);
-  assert.doesNotMatch(service, /report-config-repository/u);
+  assert.match(
+    service,
+    /validateReportConfig\(/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /database-locks/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /report-config-repository/u,
+  );
+
+  assert.match(
+    compiler,
+    /compileReportMetricQuery/u,
+  );
+  assert.match(
+    compiler,
+    /compileReportRankQuery/u,
+  );
 
   assert.match(
     transferRepository,
     /materializeReportValues\(client, config\)/u,
   );
-  assert.doesNotMatch(
-    transferRepository,
-    /INSERT INTO city_report_values/u,
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'report-config-service.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
   );
 });
-
 
 test('project settings module separates update policy from DB storage', async () => {
   const service = await fs.readFile(
@@ -2804,6 +2915,10 @@ test('server composition root delegates startup runtime and derived-state orches
   assert.match(
     runtime,
     /db\/project-settings-repository\.js/u,
+  );
+  assert.match(
+    runtime,
+    /from '\.\/project-report-runtime\.js'/u,
   );
   assert.match(
     runtime,
