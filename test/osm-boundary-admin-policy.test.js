@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  normalizeOsmBoundaryBulkUpdates,
   normalizeOsmBoundaryChanges,
   normalizeOsmBoundaryId,
   normalizeOsmSubtreeActive,
@@ -65,5 +66,59 @@ test('OSM boundary admin policy rejects unsupported and empty updates', () => {
   assert.throws(
     () => normalizeOsmBoundaryChanges({}),
     /No OSM boundary changes supplied/u,
+  );
+});
+
+
+test('OSM boundary bulk policy requires unique ids revisions and bounded batches', () => {
+  const normalized =
+    normalizeOsmBoundaryBulkUpdates({
+      updates: [{
+        id: '5',
+        baseUpdatedAt:
+          '2026-09-25T10:00:00.000Z',
+        changes: {
+          displayName:
+            ' Новое имя ',
+        },
+      }],
+    });
+
+  assert.deepEqual(
+    normalized,
+    [{
+      id: 5,
+      baseUpdatedAt:
+        '2026-09-25T10:00:00.000Z',
+      changes: {
+        displayName:
+          'Новое имя',
+      },
+    }],
+  );
+
+  assert.throws(
+    () =>
+      normalizeOsmBoundaryBulkUpdates({
+        updates: [
+          {
+            id: 5,
+            baseUpdatedAt:
+              '2026-09-25T10:00:00.000Z',
+            changes: {
+              active: true,
+            },
+          },
+          {
+            id: 5,
+            baseUpdatedAt:
+              '2026-09-25T10:00:00.000Z',
+            changes: {
+              active: false,
+            },
+          },
+        ],
+      }),
+    /Duplicate boundary id/u,
   );
 });

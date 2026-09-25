@@ -13,6 +13,7 @@ function createPool({
   currentPopulationAsOf = '2026-01-01',
   currentPopulationSource = 'test',
   currentAttributes = { note: 'x' },
+  currentUpdatedAt = '2026-09-20T00:00:00.000Z',
   finalPopulation = currentPopulation,
   finalPopulationAsOf = currentPopulationAsOf,
   finalPopulationSource = currentPopulationSource,
@@ -67,6 +68,7 @@ function createPool({
             populationAsOf: currentPopulationAsOf,
             populationSource: currentPopulationSource,
             attributes: currentAttributes,
+            updatedAt: currentUpdatedAt,
           }],
           rowCount: 1,
         };
@@ -248,4 +250,89 @@ test('OSM subtree activation validates boolean state before transaction', async 
 
   assert.equal(pool.queries.length, 0);
   assert.equal(pool.released, false);
+});
+
+
+test('OSM boundary update rejects a stale optimistic revision before mutation', async () => {
+  const pool = createPool({
+    currentUpdatedAt:
+      '2026-09-25T10:00:01.000Z',
+  });
+  const repository =
+    createOsmBoundaryAdminRuntime(pool);
+
+  await assert.rejects(
+    repository.update(
+      5,
+      {
+        displayName:
+          'Новое имя',
+      },
+      {
+        expectedUpdatedAt:
+          '2026-09-25T10:00:00.000Z',
+      },
+    ),
+    (error) =>
+      error instanceof
+        OsmBoundaryAdminValidationError &&
+      error.statusCode === 409 &&
+      error.details
+        ?.conflicts?.[0]?.id === 5,
+  );
+
+  assert.equal(
+    pool.queries.some(
+      (query) =>
+        /^UPDATE city_boundaries/i
+          .test(query),
+    ),
+    false,
+  );
+  assert.equal(
+    pool.queries.at(-1),
+    'ROLLBACK',
+  );
+});
+
+test('OSM boundary bulk update locks revisions and commits one atomic derived sync', async () => {
+  const pool = createPool({
+    currentUpdatedAt:
+      '2026-09-20T00:00:00.000Z',
+  });
+  const repository =
+    createOsmBoundaryAdminRuntime(pool);
+
+  const result =
+    await repository.updateMany({
+      updates: [{
+        id: 5,
+        baseUpdatedAt:
+          '2026-09-20T00:00:00.000Z',
+        changes: {
+          population: 125001,
+        },
+      }],
+    });
+
+  assert.equal(
+    result.changedCount,
+    1,
+  );
+  assert.deepEqual(
+    result.entityIds,
+    [5],
+  );
+  assert.equal(
+    pool.queries.filter(
+      (query) =>
+        query ===
+        'SELECT sync_active_boundary_cities()',
+    ).length,
+    1,
+  );
+  assert.equal(
+    pool.queries.at(-1),
+    'COMMIT',
+  );
 });

@@ -40,6 +40,7 @@ import {
  *   adminTasks?: ReturnType<typeof createAdminTaskManager>,
  *   adminAuth?: ReturnType<import('./http/admin-auth.js').createAdminAuthorization>,
  *   securityService?: ReturnType<import('./modules/security/service.js').createAdminSecurityService>,
+ *   realtimeEvents?: { publish: Function },
  *   config: any
  * }} dependencies
  */
@@ -64,6 +65,7 @@ export function createApp({
   adminTasks = createAdminTaskManager(),
   adminAuth,
   securityService,
+  realtimeEvents,
   config,
 }) {
   const app = express();
@@ -187,6 +189,7 @@ export function createApp({
         effectiveAdminAuth,
       securityService:
         effectiveSecurityService,
+      realtimeEvents,
       config,
     },
   );

@@ -15,6 +15,41 @@ function object(value) {
   );
 }
 
+function realtimeClientId(request) {
+  const value =
+    request.get?.(
+      'x-dtpstat-realtime-client',
+    );
+  if (
+    typeof value !== 'string' ||
+    !value.trim()
+  ) {
+    return null;
+  }
+  return value.trim().slice(0, 128);
+}
+
+function validationError(
+  response,
+  error,
+) {
+  if (
+    !(error instanceof
+      OsmBoundaryAdminValidationError)
+  ) {
+    return false;
+  }
+  response
+    .status(error.statusCode)
+    .json({
+      error: error.message,
+      ...(error.details
+        ? { details: error.details }
+        : {}),
+    });
+  return true;
+}
+
 export function registerOsmBoundaryRoutes(
   router,
   {
@@ -23,6 +58,7 @@ export function registerOsmBoundaryRoutes(
     securityService,
     jsonBody,
     afterBoundaryChange,
+    realtimeEvents,
   },
 ) {
   const audit = (operation) =>
@@ -90,16 +126,11 @@ export function registerOsmBoundaryRoutes(
           .json(feature);
       } catch (error) {
         if (
-          error instanceof
-          OsmBoundaryAdminValidationError
+          validationError(
+            response,
+            error,
+          )
         ) {
-          response
-            .status(
-              error.statusCode,
-            )
-            .json({
-              error: error.message,
-            });
           return;
         }
 
@@ -168,6 +199,27 @@ export function registerOsmBoundaryRoutes(
             ? await afterBoundaryChange?.()
             : undefined;
 
+        if (
+          result.changedCount > 0
+        ) {
+          realtimeEvents?.publish({
+            resource:
+              'osm-boundaries',
+            action:
+              'subtree-active',
+            entityIds:
+              result.entityIds,
+            permission:
+              'osm-editor',
+            originClientId:
+              realtimeClientId(
+                request,
+              ),
+            message:
+              'Активность ветки OSM изменена в другом сеансе.',
+          });
+        }
+
         recordAdminOperationDetails(
           response,
           {
@@ -202,19 +254,93 @@ export function registerOsmBoundaryRoutes(
           });
       } catch (error) {
         if (
-          error instanceof
-          OsmBoundaryAdminValidationError
+          validationError(
+            response,
+            error,
+          )
         ) {
-          response
-            .status(
-              error.statusCode,
-            )
-            .json({
-              error: error.message,
-            });
           return;
         }
 
+        next(error);
+      }
+    },
+  );
+
+
+  router.patch(
+    '/admin/osm-boundaries',
+    adminAuth.requireOsmEditor,
+    audit(
+      'data.osm-boundary.bulk-update',
+    ),
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const result =
+          await boundaryRepository
+            .updateMany(
+              request.body,
+            );
+
+        const derived =
+          result.changedCount > 0
+            ? await afterBoundaryChange?.()
+            : undefined;
+
+        if (
+          result.changedCount > 0
+        ) {
+          realtimeEvents?.publish({
+            resource:
+              'osm-boundaries',
+            action:
+              'bulk-update',
+            entityIds:
+              result.entityIds,
+            permission:
+              'osm-editor',
+            originClientId:
+              realtimeClientId(
+                request,
+              ),
+            message:
+              'OSM-объекты изменены в другом сеансе.',
+          });
+        }
+
+        recordAdminOperationDetails(
+          response,
+          {
+            changedCount:
+              result.changedCount,
+            boundaryIds:
+              result.entityIds,
+          },
+        );
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            ...result,
+            derived,
+          });
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
         next(error);
       }
     },
@@ -252,6 +378,12 @@ export function registerOsmBoundaryRoutes(
               request.params
                 .boundaryId,
               request.body,
+              {
+                expectedUpdatedAt:
+                  request.get?.(
+                    'x-dtpstat-base-revision',
+                  ) ?? null,
+              },
             );
 
         if (!boundary) {
@@ -266,6 +398,23 @@ export function registerOsmBoundaryRoutes(
 
         const derived =
           await afterBoundaryChange?.();
+
+        realtimeEvents?.publish({
+          resource:
+            'osm-boundaries',
+          action:
+            'update',
+          entityIds:
+            [boundary.id],
+          permission:
+            'osm-editor',
+          originClientId:
+            realtimeClientId(
+              request,
+            ),
+          message:
+            'OSM-объект изменён в другом сеансе.',
+        });
 
         recordAdminOperationChanges(
           response,
@@ -284,16 +433,11 @@ export function registerOsmBoundaryRoutes(
           });
       } catch (error) {
         if (
-          error instanceof
-          OsmBoundaryAdminValidationError
+          validationError(
+            response,
+            error,
+          )
         ) {
-          response
-            .status(
-              error.statusCode,
-            )
-            .json({
-              error: error.message,
-            });
           return;
         }
 

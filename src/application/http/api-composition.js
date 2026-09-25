@@ -46,6 +46,7 @@ export function installApplicationApiRoutes(
     adminTasks,
     adminAuth,
     securityService,
+    realtimeEvents,
     config,
   },
 ) {
@@ -118,6 +119,7 @@ export function installApplicationApiRoutes(
           async () =>
             refreshOsmBoundaryDerived
               ?.(),
+        realtimeEvents,
       }),
     );
   }
