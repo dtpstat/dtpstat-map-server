@@ -385,35 +385,155 @@ test('OSM update facade delegates runtime options progress and result assembly',
 });
 
 
-test('legacy OSM DB service is only an infrastructure composition adapter', async () => {
-  const adapter = await fs.readFile(
-    path.join(srcRoot, 'db', 'osm-city-update-service.js'),
+test('ingestion application runtimes share canonical DB infrastructure', async () => {
+  const databaseRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'ingestion-database-runtime.js',
+    ),
     'utf8',
   );
-  const useCase = await fs.readFile(
-    path.join(srcRoot, 'modules', 'osm', 'update-service.js'),
+  const lineRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'lines-ingestion-runtime.js',
+    ),
+    'utf8',
+  );
+  const portableRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'portable-ingestion-runtime.js',
+    ),
+    'utf8',
+  );
+  const osmRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'osm-update-runtime.js',
+    ),
+    'utf8',
+  );
+  const osmUseCase = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'osm',
+      'update-service.js',
+    ),
     'utf8',
   );
 
-  assert.match(adapter, /createOsmCityUpdateUseCase\(pool, config,/u);
-  assert.match(adapter, /acquireDataImportLock/u);
-  assert.match(adapter, /rebuildCityBoundaryHierarchy/u);
-  assert.match(adapter, /RECALCULATE_CITY_STATISTICS_SQL/u);
-  assert.doesNotMatch(adapter, /createOverpassRequestSession/u);
-  assert.doesNotMatch(adapter, /processOsmGeometryBatches/u);
-  assert.doesNotMatch(adapter, /loadOsmUpdateIndex/u);
-  assert.doesNotMatch(adapter, /prepareOsmCheckpoint/u);
+  assert.match(
+    databaseRuntime,
+    /acquireDataImportLock/u,
+  );
+  assert.match(
+    databaseRuntime,
+    /rebuildCityBoundaryHierarchy/u,
+  );
+  assert.match(
+    databaseRuntime,
+    /RECALCULATE_CITY_STATISTICS_SQL/u,
+  );
+  assert.match(
+    databaseRuntime,
+    /sync_active_boundary_cities/u,
+  );
+  assert.match(
+    databaseRuntime,
+    /sync_active_boundary_populations/u,
+  );
+  assert.match(
+    databaseRuntime,
+    /withIngestionDatabaseDependencies/u,
+  );
+  assert.match(
+    databaseRuntime,
+    /withBoundaryIngestionDatabaseDependencies/u,
+  );
 
-  assert.match(useCase, /createOverpassRequestSession\(/u);
-  assert.match(useCase, /processOsmGeometryBatches\(/u);
-  assert.match(useCase, /loadOsmUpdateIndex\(/u);
-  assert.match(useCase, /prepareOsmCheckpoint\(/u);
-  assert.doesNotMatch(useCase, /\.\.\/\.\.\/db\//u);
-  assert.doesNotMatch(useCase, /database-locks/u);
-  assert.doesNotMatch(useCase, /city-boundary-hierarchy/u);
-  assert.doesNotMatch(useCase, /recalculate-city-statistics/u);
+  assert.match(
+    lineRuntime,
+    /withIngestionDatabaseDependencies\(/u,
+  );
+  assert.match(
+    portableRuntime,
+    /withBoundaryIngestionDatabaseDependencies\(/u,
+  );
+  assert.match(
+    portableRuntime,
+    /withIngestionDatabaseDependencies\(/u,
+  );
+  assert.match(
+    osmRuntime,
+    /createOsmCityUpdateService\(/u,
+  );
+  assert.match(
+    osmRuntime,
+    /createOsmCityUpdateRuntime/u,
+  );
+  assert.match(
+    osmRuntime,
+    /withBoundaryIngestionDatabaseDependencies\(/u,
+  );
+  assert.match(
+    osmRuntime,
+    /OsmCityGeometryError/u,
+  );
+
+  for (const runtime of [
+    lineRuntime,
+    portableRuntime,
+    osmRuntime,
+  ]) {
+    assert.doesNotMatch(
+      runtime,
+      /acquireDataImportLock/u,
+    );
+    assert.doesNotMatch(
+      runtime,
+      /RECALCULATE_CITY_STATISTICS_SQL/u,
+    );
+  }
+
+  assert.match(
+    osmUseCase,
+    /createOverpassRequestSession\(/u,
+  );
+  assert.match(
+    osmUseCase,
+    /processOsmGeometryBatches\(/u,
+  );
+  assert.match(
+    osmUseCase,
+    /loadOsmUpdateIndex\(/u,
+  );
+  assert.match(
+    osmUseCase,
+    /prepareOsmCheckpoint\(/u,
+  );
+  assert.doesNotMatch(
+    osmUseCase,
+    /\.\.\/\.\.\/db\//u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'osm-city-update-service.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
 });
-
 
 test('line import use case delegates SQL persistence to lines repository', async () => {
   const service = await fs.readFile(
@@ -467,11 +587,7 @@ test('line ingestion application runtime composes GeoJSON DB infrastructure', as
   );
   assert.match(
     runtime,
-    /acquireDataImportLock/u,
-  );
-  assert.match(
-    runtime,
-    /RECALCULATE_CITY_STATISTICS_SQL/u,
+    /withIngestionDatabaseDependencies\\\(/u,
   );
   assert.doesNotMatch(
     runtime,
@@ -580,23 +696,7 @@ test('portable ingestion application runtime composes city-boundary DB infrastru
   );
   assert.match(
     runtime,
-    /acquireDataImportLock/u,
-  );
-  assert.match(
-    runtime,
-    /rebuildCityBoundaryHierarchy/u,
-  );
-  assert.match(
-    runtime,
-    /sync_active_boundary_cities/u,
-  );
-  assert.match(
-    runtime,
-    /sync_active_boundary_populations/u,
-  );
-  assert.match(
-    runtime,
-    /RECALCULATE_CITY_STATISTICS_SQL/u,
+    /withBoundaryIngestionDatabaseDependencies\\\(/u,
   );
   assert.doesNotMatch(
     runtime,
@@ -710,11 +810,7 @@ test('portable ingestion application runtime composes population DB infrastructu
   );
   assert.match(
     runtime,
-    /acquireDataImportLock/u,
-  );
-  assert.match(
-    runtime,
-    /RECALCULATE_CITY_STATISTICS_SQL/u,
+    /withIngestionDatabaseDependencies\\\(/u,
   );
   assert.doesNotMatch(
     runtime,
@@ -818,11 +914,7 @@ test('line ingestion application runtime composes KML DB infrastructure', async 
   );
   assert.match(
     runtime,
-    /acquireDataImportLock/u,
-  );
-  assert.match(
-    runtime,
-    /RECALCULATE_CITY_STATISTICS_SQL/u,
+    /withIngestionDatabaseDependencies\\\(/u,
   );
   assert.doesNotMatch(
     runtime,
@@ -2715,7 +2807,7 @@ test('server composition root delegates startup runtime and derived-state orches
   );
   assert.match(
     runtime,
-    /db\/osm-city-update-service\.js/u,
+    /application\/osm-update-runtime\.js/u,
   );
   assert.match(
     runtime,
