@@ -60,6 +60,7 @@ export function createSecurityAccountService(
         canManageData: true,
         canManageInterface: true,
         canEditOsm: true,
+        canEditGeometries: true,
         canManageUsers: true,
         canViewAudit: true,
         canManageSecurity: true,
@@ -112,6 +113,7 @@ export function createSecurityAccountService(
       'canManageData',
       'canManageInterface',
       'canEditOsm',
+      'canEditGeometries',
       'canManageUsers',
       'canViewAudit',
       'canManageSecurity',
@@ -166,6 +168,10 @@ export function createSecurityAccountService(
         payload.canEditOsm,
         'canEditOsm',
       ),
+      canEditGeometries: booleanField(
+        payload.canEditGeometries,
+        'canEditGeometries',
+      ),
       canManageUsers: booleanField(
         payload.canManageUsers,
         'canManageUsers',
@@ -219,6 +225,7 @@ export function createSecurityAccountService(
       'canManageData',
       'canManageInterface',
       'canEditOsm',
+      'canEditGeometries',
       'canManageUsers',
       'canViewAudit',
       'canManageSecurity',
@@ -277,6 +284,14 @@ export function createSecurityAccountService(
             payload.canEditOsm,
             'canEditOsm',
             current.canEditOsm,
+          ),
+      canEditGeometries:
+        protectedUser
+          ? true
+          : booleanField(
+            payload.canEditGeometries,
+            'canEditGeometries',
+            current.canEditGeometries,
           ),
       canManageUsers:
         protectedUser

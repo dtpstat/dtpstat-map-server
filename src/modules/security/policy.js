@@ -386,6 +386,9 @@ export function publicAdminUser(user) {
       user.canManageInterface,
     ),
     canEditOsm: Boolean(user.canEditOsm),
+    canEditGeometries: Boolean(
+      user.canEditGeometries,
+    ),
     canManageUsers: Boolean(user.canManageUsers),
     canViewAudit: Boolean(user.canViewAudit),
     canManageSecurity: Boolean(

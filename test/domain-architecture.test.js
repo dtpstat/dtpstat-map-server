@@ -2001,6 +2001,7 @@ test('security module separates policy credentials and focused use cases', async
   assert.match(policy, /normalizeAdminSecuritySettings/u);
   assert.match(policy, /publicAdminUser/u);
   assert.match(policy, /canEditOsm: Boolean\(user\.canEditOsm\)/u);
+  assert.match(policy, /canEditGeometries: Boolean/u);
   assert.doesNotMatch(policy, /crypto\.scrypt/u);
   assert.doesNotMatch(policy, /repository\./u);
 
@@ -2017,6 +2018,7 @@ test('security module separates policy credentials and focused use cases', async
 
   assert.match(accounts, /repository\.createUser\(/u);
   assert.match(accounts, /canEditOsm/u);
+  assert.match(accounts, /canEditGeometries/u);
   assert.match(accounts, /changeOwnPassword/u);
   assert.doesNotMatch(accounts, /findSession/u);
 

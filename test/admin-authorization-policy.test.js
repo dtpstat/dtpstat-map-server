@@ -21,12 +21,26 @@ test('admin authorization policy keeps OSM editing independent from broad data m
   );
 });
 
+test('admin authorization policy keeps geometry editing independent from broad data and OSM management', () => {
+  const user = {
+    isSuperuser: false,
+    canManageData: false,
+    canEditOsm: false,
+    canEditGeometries: true,
+  };
+
+  assert.equal(adminHasPermission(user, 'geometry-editor'), true);
+  assert.equal(adminHasPermission(user, 'osm-editor'), false);
+  assert.equal(adminHasPermission(user, 'data'), false);
+});
+
 test('admin authorization policy maps each explicit capability without cross-granting', () => {
   const user = {
     isSuperuser: false,
     canManageData: true,
     canManageInterface: false,
     canEditOsm: false,
+    canEditGeometries: false,
     canManageUsers: true,
     canViewAudit: false,
     canManageSecurity: true,
@@ -37,6 +51,7 @@ test('admin authorization policy maps each explicit capability without cross-gra
   assert.equal(adminHasPermission(user, 'data'), true);
   assert.equal(adminHasPermission(user, 'interface'), false);
   assert.equal(adminHasPermission(user, 'osm-editor'), false);
+  assert.equal(adminHasPermission(user, 'geometry-editor'), false);
   assert.equal(adminHasPermission(user, 'users'), true);
   assert.equal(adminHasPermission(user, 'audit'), false);
   assert.equal(
@@ -54,6 +69,7 @@ test('admin authorization policy grants every known permission to a superuser on
     canManageData: false,
     canManageInterface: false,
     canEditOsm: false,
+    canEditGeometries: false,
     canManageUsers: false,
     canViewAudit: false,
     canManageSecurity: false,
@@ -65,6 +81,7 @@ test('admin authorization policy grants every known permission to a superuser on
     'data',
     'interface',
     'osm-editor',
+    'geometry-editor',
     'users',
     'audit',
     'users-or-audit',

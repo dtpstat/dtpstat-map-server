@@ -203,6 +203,9 @@ export function createAdminAuthorization(
     requireOsmEditor:
       middleware('osm-editor'),
 
+    requireGeometryEditor:
+      middleware('geometry-editor'),
+
     requireUsers:
       middleware('users'),
 
