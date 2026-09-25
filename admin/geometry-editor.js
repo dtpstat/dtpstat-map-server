@@ -955,7 +955,7 @@ if (section) {
   function renderFormState() {
     const item = state.current;
     const draft = state.draft;
-    const enabled = Boolean(draft);
+    const enabled = Boolean(draft) && !state.drawing;
     for (const control of form.elements) {
       if (control.name === 'lineTypeId' || control.name === 'lanes') continue;
       if (['displayName', 'tooltip', 'tags', 'isVisible'].includes(control.name)) {
@@ -964,7 +964,7 @@ if (section) {
     }
     form.querySelector('button[type="submit"]').disabled = !enabled;
     revertButton.disabled = !enabled;
-    deleteButton.disabled = !item?.id;
+    deleteButton.disabled = !item?.id || Boolean(state.drawing);
 
     const localDraft = item?.id ? draftFor(item.id) : null;
     if (conflictMessage) {
@@ -991,11 +991,20 @@ if (section) {
     };
     title.textContent = item?.id ? displayName(pseudo) : `Новая: ${typeLabel(pseudo)}`;
     lineFields.hidden = family !== 'line';
-    polygonActions.hidden = true;
+    polygonActions.hidden =
+      family !== 'polygon' ||
+      !item?.id;
+    cutButton.disabled =
+      !enabled ||
+      Boolean(localDraft);
+    cutButton.title =
+      localDraft
+        ? 'Сначала сохраните или сбросьте локальный черновик'
+        : '';
 
     if (family === 'line') {
-      form.elements.lineTypeId.disabled = false;
-      form.elements.lanes.disabled = false;
+      form.elements.lineTypeId.disabled = !enabled;
+      form.elements.lanes.disabled = !enabled;
     } else {
       form.elements.lineTypeId.disabled = true;
       form.elements.lanes.disabled = true;
@@ -1030,6 +1039,8 @@ if (section) {
       displayName(item),
       item.geometryType,
       item.lineTypeName,
+      item._draft ? 'черновик' : null,
+      item._conflict ? 'конфликт' : null,
     ].filter(Boolean).join(' ').toLocaleLowerCase('ru-RU');
     return haystack.includes(query);
   }
@@ -1038,15 +1049,16 @@ if (section) {
     const query = searchInput.value.trim().toLocaleLowerCase('ru-RU');
     const visible = state.geometries.filter((item) => geometryMatchesSearch(item, query));
     listHost.replaceChildren();
+
     if (!visible.length) {
       const empty = document.createElement('p');
       empty.className = 'empty-state';
       empty.textContent = state.city ? 'Геометрий нет.' : 'Выберите город…';
       listHost.append(empty);
     }
+
     for (const item of visible) {
-      const row = document.createElement('button');
-      row.type = 'button';
+      const row = document.createElement('div');
       row.className = 'geometry-editor-row';
       row.classList.toggle('is-selected', item.id === state.selectedId);
       row.classList.toggle('is-hidden', item.isVisible === false);
@@ -1055,14 +1067,25 @@ if (section) {
 
       const check = document.createElement('input');
       check.type = 'checkbox';
+      check.className = 'geometry-editor-row-select';
       check.checked = state.selectedSet.has(item.id);
-      check.title = 'Выбрать для групповой операции';
-      check.addEventListener('click', (event) => {
-        event.stopPropagation();
+      check.disabled = Boolean(item._draft || item._conflict);
+      check.title = check.disabled
+        ? 'Сначала сохраните или сбросьте локальный черновик'
+        : 'Выбрать для объединения';
+      check.setAttribute(
+        'aria-label',
+        'Выбрать для объединения: ' + displayName(item),
+      );
+      check.addEventListener('change', () => {
         if (check.checked) state.selectedSet.add(item.id);
         else state.selectedSet.delete(item.id);
         renderMergeState();
       });
+
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'geometry-editor-row-main';
 
       const copy = document.createElement('span');
       copy.className = 'geometry-editor-row-copy';
@@ -1082,20 +1105,82 @@ if (section) {
       const type = document.createElement('span');
       type.className = 'geometry-editor-row-type';
       type.textContent = typeLabel(item);
-      row.append(copy, type);
-      row.addEventListener('click', () => void selectGeometry(item.id));
+
+      open.append(copy, type);
+      open.addEventListener('click', () => void selectGeometry(item.id));
+
+      row.append(check, open);
       listHost.append(row);
     }
+
     renderMergeState();
   }
 
+  function selectedMergeItems() {
+    return [...state.selectedSet]
+      .sort((left, right) => left - right)
+      .map((id) => state.geometries.find((item) => item.id === id))
+      .filter(Boolean);
+  }
+
+  function mergeProblem(items) {
+    if (items.length < 2) return 'Выберите минимум две геометрии.';
+    if (items.some((item) => item._draft || item._conflict)) {
+      return 'Сначала сохраните или сбросьте локальные черновики выбранных геометрий.';
+    }
+
+    const first = items[0];
+    if (first.family === 'point') {
+      return 'Точечные геометрии объединять нельзя.';
+    }
+
+    if (
+      items.some((item) =>
+        item.cityId !== first.cityId ||
+        item.boundaryId !== first.boundaryId ||
+        item.family !== first.family)
+    ) {
+      return 'Геометрии должны принадлежать одному городу, OSM-объекту и типу геометрии.';
+    }
+
+    if (
+      items.some((item) =>
+        item.isVisible !== first.isVisible)
+    ) {
+      return 'У объединяемых геометрий должна совпадать видимость.';
+    }
+
+    if (
+      first.family === 'line' &&
+      items.some((item) =>
+        item.lineTypeId !== first.lineTypeId ||
+        item.lanes !== first.lanes)
+    ) {
+      return 'У объединяемых линий должны совпадать тип линии и коэффициент полос.';
+    }
+
+    if (
+      items.some((item) =>
+        !item.updatedAt)
+    ) {
+      return 'Для одной из геометрий неизвестна серверная ревизия. Обновите список.';
+    }
+
+    return null;
+  }
+
   function renderMergeState() {
-    const selected = state.geometries.filter((item) => state.selectedSet.has(item.id));
-    const families = new Set(selected.map((item) => item.family));
+    const selected = selectedMergeItems();
+    const problem = mergeProblem(selected);
     mergeButton.disabled =
-      selected.length < 2 ||
-      families.size !== 1 ||
-      families.has('point');
+      Boolean(problem) ||
+      Boolean(state.drawing);
+    mergeButton.textContent =
+      selected.length > 0
+        ? `Объединить выбранные (${selected.length})`
+        : 'Объединить выбранные';
+    mergeButton.title =
+      problem ?? '';
   }
 
   function focusGeometry(geometry) {
@@ -1115,6 +1200,7 @@ if (section) {
       isVisible: item.isVisible,
       updatedAt: item.updatedAt,
       lineTypeId: item.lineTypeId,
+      lanes: item.lanes,
       lineTypeName: item.lineTypeName,
       lineTypeColor: item.lineTypeColor,
       lineTypeWidth: item.lineTypeWidth,
@@ -1302,6 +1388,12 @@ if (section) {
 
     state.city = payload.city;
     state.serverGeometries = payload.geometries ?? [];
+    const currentIds = new Set(
+      state.serverGeometries.map((item) => item.id),
+    );
+    state.selectedSet = new Set(
+      [...state.selectedSet].filter((id) => currentIds.has(id)),
+    );
     reconcileCurrentCityDrafts(previousIds);
     rebuildDraftOverlay();
     citySelect.value = String(state.city.id);
@@ -1372,6 +1464,41 @@ if (section) {
       setMessage('Сначала выберите город.', 'error');
       return;
     }
+
+    if (mode === 'cut') {
+      if (
+        !state.current?.id ||
+        familyOf(state.draft) !== 'polygon'
+      ) {
+        setMessage('Для вырезания выберите сохранённый полигон.', 'error');
+        return;
+      }
+
+      const local = captureCurrentDraft();
+      if (local) {
+        setMessage(
+          'Перед вырезанием сохраните или сбросьте локальный черновик выбранного полигона.',
+          'error',
+        );
+        return;
+      }
+
+      state.drawing = {
+        mode: 'cut',
+        coordinates: [],
+      };
+      state.history = [];
+      state.future = [];
+      state.selectedVertexPath = null;
+      updateMapSources();
+      updateDrawControls();
+      renderFormState();
+      setMessage(
+        'Нарисуйте область, которую нужно вырезать: минимум три точки.',
+      );
+      return;
+    }
+
     if (mode === 'line') {
       try {
         const lineTypes = await ensureLineTypes();
@@ -1418,27 +1545,47 @@ if (section) {
     if (drawing?.mode === 'line') {
       canFinish = drawing.coordinates.length >= 2;
     }
-    if (drawing?.mode === 'polygon') {
+    if (
+      drawing?.mode === 'polygon' ||
+      drawing?.mode === 'cut'
+    ) {
       canFinish = drawing.coordinates.length >= 3;
     }
     finishDrawButton.disabled = !canFinish;
 
-    modeLabel.textContent = drawing
-      ? 'Рисование ' + drawing.mode + ': точек ' + drawing.coordinates.length
-      : editingModeText(state.current);
+    if (drawing?.mode === 'cut') {
+      modeLabel.textContent =
+        'Вырезание: точек ' +
+        drawing.coordinates.length +
+        ' · замкнётся автоматически';
+    } else {
+      modeLabel.textContent = drawing
+        ? 'Рисование ' + drawing.mode + ': точек ' + drawing.coordinates.length
+        : editingModeText(state.current);
+    }
     renderHistoryControls();
+    renderMergeState();
   }
 
 
   function cancelDrawing() {
+    const wasCut =
+      state.drawing?.mode ===
+      'cut';
     state.drawing = null;
-    if (!state.selectedId) clearSelection();
+    if (
+      !wasCut &&
+      !state.selectedId
+    ) {
+      clearSelection();
+    }
     updateMapSources();
     updateDrawControls();
+    renderFormState();
   }
 
 
-  function finishDrawing() {
+  async function finishDrawing() {
     const drawing = state.drawing;
     if (!drawing) return;
 
@@ -1468,10 +1615,70 @@ if (section) {
         ...drawing.coordinates.map((item) => [...item]),
         [...drawing.coordinates[0]],
       ];
-      state.draft = {
+      const polygon = {
         type: 'Polygon',
         coordinates: [ring],
       };
+
+      if (drawing.mode === 'cut') {
+        const target = state.current;
+        state.drawing = null;
+        updateMapSources();
+        updateDrawControls();
+        renderFormState();
+
+        if (
+          !target?.id ||
+          !target.updatedAt
+        ) {
+          setMessage(
+            'Не удалось определить серверную ревизию полигона. Обновите список.',
+            'error',
+          );
+          return;
+        }
+
+        try {
+          setMessage('Вырезаем область…');
+          const payload = await api(
+            `/api/admin/geometry-editor/geometries/${encodeURIComponent(target.id)}/cut`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-DTPStat-Base-Revision': target.updatedAt,
+              },
+              body: JSON.stringify({
+                geometry: polygon,
+              }),
+            },
+          );
+
+          drafts.remove(target.id);
+          upsertGeometrySummary(payload.geometry);
+          adoptGeometryDetail(payload.geometry);
+          refreshDraftControls();
+          setMessage(
+            'Область вырезана. Для обновления основной карты и статистики нажмите «Пересчитать».',
+            'success',
+          );
+        } catch (error) {
+          if (error.status === 409) {
+            const local = draftFor(target.id);
+            if (local) {
+              drafts.markConflict(target.id, true);
+            }
+            await refresh({
+              keepSelection: true,
+              fit: false,
+            });
+          }
+          setMessage(error.message, 'error');
+        }
+        return;
+      }
+
+      state.draft = polygon;
       state.current = {
         ...draftItemFor('Polygon'),
         geometry: state.draft,
@@ -1681,8 +1888,154 @@ if (section) {
   });
 
 
-  mergeButton.addEventListener('click', () => {
-    setMessage('Объединение геометрий будет перенесено отдельным блоком.', 'error');
+  mergeButton.addEventListener('click', async () => {
+    captureCurrentDraft();
+
+    const items =
+      selectedMergeItems();
+    const problem =
+      mergeProblem(items);
+
+    if (problem) {
+      renderMergeState();
+      setMessage(
+        problem,
+        'error',
+      );
+      return;
+    }
+
+    const target =
+      items[0];
+
+    const confirmed =
+      await adminConfirm({
+        title:
+          'Объединить геометрии?',
+        message:
+          'Будет объединено геометрий: ' +
+          items.length +
+          '. Основной записью останется #' +
+          target.id +
+          '; остальные записи будут удалены.',
+        confirmLabel:
+          'Объединить',
+        cancelLabel:
+          'Отмена',
+        destructive:
+          true,
+      });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      mergeButton.disabled =
+        true;
+      setMessage(
+        'Объединяем геометрии…',
+      );
+
+      const payload =
+        await api(
+          '/api/admin/geometry-editor/merge',
+          {
+            method:
+              'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body:
+              JSON.stringify({
+                items:
+                  items.map(
+                    (item) => ({
+                      id:
+                        item.id,
+                      baseUpdatedAt:
+                        item.updatedAt,
+                    }),
+                  ),
+              }),
+          },
+        );
+
+      for (const item of items) {
+        drafts.remove(
+          item.id,
+        );
+      }
+
+      const mergedIds =
+        new Set(
+          payload
+            .sourceGeometryIds ??
+          items.map(
+            (item) =>
+              item.id,
+          ),
+        );
+
+      state.serverGeometries =
+        state.serverGeometries
+          .filter(
+            (item) =>
+              !mergedIds.has(
+                item.id,
+              ),
+          );
+
+      state.selectedSet.clear();
+      upsertGeometrySummary(
+        payload.geometry,
+      );
+      adoptGeometryDetail(
+        payload.geometry,
+      );
+      refreshDraftControls();
+
+      setMessage(
+        'Геометрии объединены. Для обновления основной карты и статистики нажмите «Пересчитать».',
+        'success',
+      );
+    } catch (error) {
+      if (error.status === 409) {
+        for (
+          const conflict of
+          error
+            .payload
+            ?.details
+            ?.conflicts ??
+          []
+        ) {
+          const local =
+            draftFor(
+              conflict.id,
+            );
+          if (local) {
+            drafts.markConflict(
+              conflict.id,
+              true,
+            );
+          }
+        }
+
+        await refresh({
+          keepSelection: false,
+          fit: false,
+        });
+      }
+
+      setMessage(
+        error.message,
+        'error',
+      );
+    } finally {
+      renderMergeState();
+      refreshDraftControls();
+    }
   });
 
 
@@ -1791,7 +2144,7 @@ if (section) {
 
 
   cutButton.addEventListener('click', () => {
-    setMessage('Вырезание области будет перенесено отдельным блоком.', 'error');
+    void startDrawing('cut');
   });
 
 

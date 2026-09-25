@@ -102,22 +102,20 @@
   width: 100%;
   min-width: 0;
   margin: .18rem 0;
-  padding: .5rem;
+  padding: .22rem;
   display: grid;
   grid-template-columns:
-    minmax(0, 1fr) auto;
+    auto minmax(0, 1fr);
   align-items: center;
-  gap: .4rem;
+  gap: .3rem;
   border: 1px solid transparent;
   border-radius: 7px;
   color: var(--text);
   background: transparent;
-  text-align: left;
 }
 
 .geometry-editor-row:hover {
   background: var(--panel-2);
-  filter: none !important;
 }
 
 .geometry-editor-row.is-selected {
@@ -136,6 +134,36 @@
 .geometry-editor-row.has-conflict {
   border-color: #8b3d43;
   background: #241214;
+}
+
+.geometry-editor-row-select {
+  margin: 0 .15rem;
+  align-self: center;
+}
+
+.geometry-editor-row-main {
+  width: 100%;
+  min-width: 0;
+  padding: .28rem;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .4rem;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+}
+
+.geometry-editor-row-main:hover {
+  background: transparent;
+  filter: none !important;
+}
+
+#geometry-merge-selected {
+  margin: .5rem;
+  width: calc(100% - 1rem);
 }
 
 .geometry-editor-row-copy {

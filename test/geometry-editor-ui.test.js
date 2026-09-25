@@ -135,13 +135,25 @@ test('geometry editor uses local drafts optimistic revisions atomic bulk save an
     editor,
     /geometry-import\/pending/u,
   );
-  assert.doesNotMatch(
+  assert.match(
     editor,
-    /api\('\/api\/admin\/geometry-editor\/merge/u,
+    /'\/api\/admin\/geometry-editor\/merge'/u,
   );
-  assert.doesNotMatch(
+  assert.match(
     editor,
-    /\/cut',?\s*\{/u,
+    /baseUpdatedAt:\s*item\.updatedAt/u,
+  );
+  assert.match(
+    editor,
+    /startDrawing\('cut'\)/u,
+  );
+  assert.match(
+    editor,
+    /\/geometry-editor\/geometries\/\$\{encodeURIComponent\(target\.id\)\}\/cut/u,
+  );
+  assert.match(
+    editor,
+    /'X-DTPStat-Base-Revision': target\.updatedAt/u,
   );
 });
 
@@ -194,5 +206,66 @@ test('geometry editor keeps direct vertex editing and progressive loading', asyn
   assert.match(
     editor,
     /\/geometry-editor\/geometries\/\$\{encodeURIComponent\(id\)\}/u,
+  );
+});
+
+
+test('geometry merge and cut stay revision-safe around local drafts', async () => {
+  const [
+    editor,
+    html,
+    styles,
+  ] =
+    await Promise.all([
+      read('admin/geometry-editor.js'),
+      read('admin/index.html'),
+      read('admin/geometry-editor.css'),
+    ]);
+
+  assert.match(
+    html,
+    /id="geometry-merge-selected" type="button"\s+disabled/u,
+  );
+  assert.doesNotMatch(
+    html,
+    /id="geometry-merge-selected"[^>]*hidden/u,
+  );
+  assert.match(
+    html,
+    /id="geometry-cut-area"/u,
+  );
+
+  assert.match(
+    editor,
+    /check\.disabled = Boolean\(item\._draft \|\| item\._conflict\)/u,
+  );
+  assert.match(
+    editor,
+    /function mergeProblem\(items\)/u,
+  );
+  assert.match(
+    editor,
+    /Сначала сохраните или сбросьте локальные черновики выбранных геометрий/u,
+  );
+  assert.match(
+    editor,
+    /sourceGeometryIds/u,
+  );
+  assert.match(
+    editor,
+    /familyOf\(state\.draft\) !== 'polygon'/u,
+  );
+  assert.match(
+    editor,
+    /const local = captureCurrentDraft\(\)/u,
+  );
+
+  assert.match(
+    styles,
+    /\.geometry-editor-row-select/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-editor-row-main/u,
   );
 });
