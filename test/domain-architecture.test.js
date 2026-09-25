@@ -71,22 +71,14 @@ test('lightweight domain modules keep dependency direction explicit', async () =
     }
   }
 
-  const dataFiles = await jsFiles(path.join(srcRoot, 'data'));
-  for (const file of dataFiles) {
-    const source = await fs.readFile(file, 'utf8');
-    for (const specifier of importSpecifiers(source)) {
-      assert.doesNotMatch(
-        specifier,
-        /^(?:express(?:\/|$)|node:http(?:\/|$))/u,
-        `${path.relative(root, file)} must stay HTTP-framework independent`,
-      );
-      const resolved = resolveRelativeImport(file, specifier);
-      assert.ok(
-        !resolved || !resolved.startsWith(path.join(srcRoot, 'http') + path.sep),
-        `${path.relative(root, file)} must not depend on src/http`,
-      );
-    }
-  }
+  const legacyDataFiles = await jsFiles(
+    path.join(srcRoot, 'data'),
+  );
+  assert.deepEqual(
+    legacyDataFiles,
+    [],
+    'src/data must stay retired; domain ownership belongs in canonical modules',
+  );
 });
 
 test('domain validation policies live in canonical modules without legacy data facades', async () => {
@@ -2111,6 +2103,61 @@ test('removed compatibility and legacy ownership paths stay absent from source t
     path.join(
       srcRoot,
       'db',
+      'data-import-service.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'kml-update-service.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'city-boundary-transfer-service.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'population-import-service.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'osm-city-update-service.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'project-settings-transfer-service.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'report-config-service.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'project-settings-repository.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'data-export-repository.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'admin-security-repository.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'osm-city-checkpoint-repository.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
       'osm-boundary-admin-repository.js',
     ),
     path.join(srcRoot, 'data', 'geojson-plan.js'),
@@ -2138,6 +2185,17 @@ test('removed compatibility and legacy ownership paths stay absent from source t
   const removedReferences = [
     'src/application/data-transfer/routes.js',
     'src/application/data-transfer/runtime.js',
+    'src/db/data-import-service.js',
+    'src/db/kml-update-service.js',
+    'src/db/city-boundary-transfer-service.js',
+    'src/db/population-import-service.js',
+    'src/db/osm-city-update-service.js',
+    'src/db/project-settings-transfer-service.js',
+    'src/db/report-config-service.js',
+    'src/db/project-settings-repository.js',
+    'src/db/data-export-repository.js',
+    'src/db/admin-security-repository.js',
+    'src/db/osm-city-checkpoint-repository.js',
     'src/db/osm-boundary-admin-repository.js',
     'src/data/geojson-plan.js',
     'src/data/kml-downloader.js',
