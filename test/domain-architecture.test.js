@@ -438,31 +438,79 @@ test('line import use case delegates SQL persistence to lines repository', async
   assert.match(repository, /DELETE FROM line_types AS line_type/u);
 });
 
-test('legacy line data import service is only a DB composition adapter', async () => {
-  const adapter = await fs.readFile(
-    path.join(srcRoot, 'db', 'data-import-service.js'),
+test('line ingestion application runtime composes GeoJSON DB infrastructure', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'lines-ingestion-runtime.js',
+    ),
     'utf8',
   );
   const service = await fs.readFile(
-    path.join(srcRoot, 'modules', 'lines', 'import-service.js'),
+    path.join(
+      srcRoot,
+      'modules',
+      'lines',
+      'import-service.js',
+    ),
     'utf8',
   );
 
-  assert.match(adapter, /createLineImportService\(pool,/u);
-  assert.match(adapter, /acquireDataImportLock/u);
-  assert.match(adapter, /RECALCULATE_CITY_STATISTICS_SQL/u);
-  assert.doesNotMatch(adapter, /parseStreamingJsonObject/u);
-  assert.doesNotMatch(adapter, /buildGeoJsonPlan/u);
-  assert.doesNotMatch(adapter, /repository\.insertGeometries/u);
+  assert.match(
+    runtime,
+    /createLineImportService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createLineImportRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /acquireDataImportLock/u,
+  );
+  assert.match(
+    runtime,
+    /RECALCULATE_CITY_STATISTICS_SQL/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /parseStreamingJsonObject/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /buildGeoJsonPlan/u,
+  );
 
-  assert.match(service, /parseStreamingJsonObject\(/u);
-  assert.match(service, /buildGeoJsonPlan\(/u);
-  assert.match(service, /repository\.insertGeometries\(/u);
-  assert.doesNotMatch(service, /\.\.\/\.\.\/db\//u);
-  assert.doesNotMatch(service, /database-locks/u);
-  assert.doesNotMatch(service, /recalculate-city-statistics/u);
+  assert.match(
+    service,
+    /parseStreamingJsonObject\(/u,
+  );
+  assert.match(
+    service,
+    /buildGeoJsonPlan\(/u,
+  );
+  assert.match(
+    service,
+    /repository\.insertGeometries\(/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /\.\.\/\.\.\/db\//u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'data-import-service.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
 });
-
 
 test('city boundary transfer use case delegates SQL persistence to geometry repository', async () => {
   const service = await fs.readFile(
@@ -631,33 +679,83 @@ test('KML update use case delegates SQL persistence to lines repository', async 
   assert.match(repository, /INSERT INTO geometry_update_runs/u);
 });
 
-test('legacy KML update service is only a DB composition adapter', async () => {
-  const adapter = await fs.readFile(
-    path.join(srcRoot, 'db', 'kml-update-service.js'),
+test('line ingestion application runtime composes KML DB infrastructure', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'lines-ingestion-runtime.js',
+    ),
     'utf8',
   );
   const service = await fs.readFile(
-    path.join(srcRoot, 'modules', 'lines', 'kml-update-service.js'),
+    path.join(
+      srcRoot,
+      'modules',
+      'lines',
+      'kml-update-service.js',
+    ),
     'utf8',
   );
 
-  assert.match(adapter, /createKmlUpdateUseCase\(pool, config,/u);
-  assert.match(adapter, /acquireDataImportLock/u);
-  assert.match(adapter, /RECALCULATE_CITY_STATISTICS_SQL/u);
-  assert.match(adapter, /export \{ KmlUpdateMatchError \}/u);
-  assert.doesNotMatch(adapter, /downloadKml/u);
-  assert.doesNotMatch(adapter, /parseKmlSource/u);
-  assert.doesNotMatch(adapter, /repository\.matchGeometries/u);
+  assert.match(
+    runtime,
+    /createKmlUpdateService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createKmlUpdateRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /acquireDataImportLock/u,
+  );
+  assert.match(
+    runtime,
+    /RECALCULATE_CITY_STATISTICS_SQL/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /downloadKml/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /parseKmlSource/u,
+  );
 
-  assert.match(service, /downloadKml/u);
-  assert.match(service, /parseKmlSource/u);
-  assert.match(service, /repository\.matchGeometries\(/u);
-  assert.match(service, /recalculateStatistics\(client\)/u);
-  assert.doesNotMatch(service, /\.\.\/\.\.\/db\//u);
-  assert.doesNotMatch(service, /database-locks/u);
-  assert.doesNotMatch(service, /recalculate-city-statistics/u);
+  assert.match(
+    service,
+    /downloadKml/u,
+  );
+  assert.match(
+    service,
+    /parseKmlSource/u,
+  );
+  assert.match(
+    service,
+    /repository\.matchGeometries\(/u,
+  );
+  assert.match(
+    service,
+    /recalculateStatistics\(client\)/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /\.\.\/\.\.\/db\//u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'kml-update-service.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
 });
-
 
 test('project settings transfer application service delegates policy and persistence', async () => {
   const service = await fs.readFile(
