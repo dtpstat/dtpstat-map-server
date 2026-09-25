@@ -463,7 +463,16 @@
               <p class="eyebrow">OSM ОБЪЕКТЫ И НАСЕЛЕНИЕ</p>
               <h2 id="osm-boundary-section-title">Редактор объектов OSM</h2>
             </div>
-            <button class="secondary" id="osm-boundary-refresh" type="button">Обновить дерево</button>
+            <div class="osm-boundary-toolbar">
+              <span id="osm-boundary-draft-count" class="osm-boundary-draft-count">Черновики: 0</span>
+              <label class="check osm-boundary-persist-drafts">
+                <input id="osm-boundary-persist-drafts" type="checkbox">
+                хранить между сессиями
+              </label>
+              <button id="osm-boundary-save-all" type="button" disabled>Сохранить все</button>
+              <button class="secondary" id="osm-boundary-discard-all" type="button" disabled>Сбросить черновики</button>
+              <button class="secondary" id="osm-boundary-refresh" type="button">Обновить дерево</button>
+            </div>
           </div>
           <p class="panel-description">
             Иерархия строится только по полному геометрическому вложению. Здесь настраиваются

@@ -361,3 +361,26 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.osm-boundary-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+.osm-boundary-draft-count {
+  color: var(--muted);
+  font-size: .7rem;
+}
+.osm-boundary-persist-drafts {
+  margin: 0;
+  color: var(--muted);
+  font-size: .68rem;
+}
+.osm-boundary-node-button.has-draft {
+  box-shadow: inset 3px 0 0 #d6a84b;
+}
+.osm-boundary-node-button.has-conflict {
+  box-shadow: inset 3px 0 0 var(--danger);
+}
