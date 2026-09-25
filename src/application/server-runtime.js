@@ -21,11 +21,9 @@ import {
   createDataExportRepository,
 } from '../db/data-export-repository.js';
 import {
-  createDataImportService,
-} from '../db/data-import-service.js';
-import {
-  createKmlUpdateService,
-} from '../db/kml-update-service.js';
+  createKmlUpdateRuntime,
+  createLineImportRuntime,
+} from './lines-ingestion-runtime.js';
 import {
   createLineTypesRepository,
 } from '../db/line-types-repository.js';
@@ -72,9 +70,9 @@ const DEFAULT_FACTORIES =
     createCitiesRepository,
     createCityBoundaryTransferService,
     createDataExportRepository,
-    createDataImportService,
+    createLineImportRuntime,
     createDerivedStateRefresh,
-    createKmlUpdateService,
+    createKmlUpdateRuntime,
     createLineTypesRepository,
     createOsmBoundaryAdminRepository,
     createOsmCityCheckpointRepository,
@@ -153,7 +151,7 @@ export function createServerRuntime({
       });
   const importService =
     runtimeFactories
-      .createDataImportService(pool);
+      .createLineImportRuntime(pool);
   const cityBoundaryTransferService =
     runtimeFactories
       .createCityBoundaryTransferService(
@@ -166,7 +164,7 @@ export function createServerRuntime({
       );
   const kmlUpdateService =
     runtimeFactories
-      .createKmlUpdateService(
+      .createKmlUpdateRuntime(
         pool,
         config.kmlUpdate,
       );

@@ -34,7 +34,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
     'createReportConfigService',
     'createDataExportRepository',
     'createPublicDownloadRepository',
-    'createDataImportService',
+    'createLineImportRuntime',
     'createCityBoundaryTransferService',
     'createPopulationImportService',
     'createOsmImportSettingsRepository',
@@ -78,7 +78,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
       );
     };
 
-  factories.createKmlUpdateService =
+  factories.createKmlUpdateRuntime =
     (
       receivedPool,
       options,
@@ -92,10 +92,10 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
         config.kmlUpdate,
       );
       calls.push(
-        'createKmlUpdateService',
+        'createKmlUpdateRuntime',
       );
       return value(
-        'createKmlUpdateService',
+        'createKmlUpdateRuntime',
       );
     };
 

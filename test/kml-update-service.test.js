@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createKmlUpdateService } from '../src/db/kml-update-service.js';
+import { createKmlUpdateRuntime } from '../src/application/lines-ingestion-runtime.js';
 
 const source = {
   URL: 'https://www.google.com/maps/d/viewer?mid=test',
@@ -216,7 +216,7 @@ function parserFor(nextFeatures) {
 
 test('KML matches every imported OSM place and materializes missing city records', async () => {
   const pool = createPool();
-  const service = createKmlUpdateService(pool, config, dependencies);
+  const service = createKmlUpdateRuntime(pool, config, dependencies);
 
   const result = await service.update(undefined, {});
 
@@ -285,7 +285,7 @@ test('KML imports lines when all matching OSM boundaries initially have city_id 
       },
     ],
   });
-  const service = createKmlUpdateService(pool, config, dependencies);
+  const service = createKmlUpdateRuntime(pool, config, dependencies);
 
   const result = await service.update(undefined, {});
 
@@ -304,7 +304,7 @@ test('KML imports lines when all matching OSM boundaries initially have city_id 
 
 test('KML reports empty OSM boundary storage before matching', async () => {
   const pool = createPool({ hasBoundaries: false });
-  const service = createKmlUpdateService(pool, config, dependencies);
+  const service = createKmlUpdateRuntime(pool, config, dependencies);
 
   await assert.rejects(
     service.update(undefined, {}),
@@ -353,7 +353,7 @@ test('KML automatically creates missing NAME and database supplies numeric CODE'
     initialTypeRows: [],
     finalTypeRows,
   });
-  const service = createKmlUpdateService(pool, config, parserFor(typedFeatures));
+  const service = createKmlUpdateRuntime(pool, config, parserFor(typedFeatures));
 
   const result = await service.update(undefined, {});
 
@@ -383,7 +383,7 @@ test('KML matches imported NAME ignoring case and outer spaces without creating 
     width: 4,
   };
   const pool = createPool({ initialTypeRows: [existing] });
-  const service = createKmlUpdateService(pool, config, parserFor(typedFeatures));
+  const service = createKmlUpdateRuntime(pool, config, parserFor(typedFeatures));
 
   const result = await service.update(undefined, {});
   assert.deepEqual(result.createdLineTypes, []);
@@ -403,7 +403,7 @@ test('KML dry run uses OSM place names without creating city or line-type record
       ? row
       : { ...row, cityId: null }),
   });
-  const service = createKmlUpdateService(pool, config, parserFor(typedFeatures));
+  const service = createKmlUpdateRuntime(pool, config, parserFor(typedFeatures));
 
   const result = await service.update(undefined, { dryRun: 'true' });
 
@@ -433,7 +433,7 @@ test('KML dry run uses OSM place names without creating city or line-type record
 
 test('KML download failure happens before a database connection is opened', async () => {
   const pool = createPool();
-  const service = createKmlUpdateService(pool, config, {
+  const service = createKmlUpdateRuntime(pool, config, {
     async download() { throw new Error('network failed'); },
   });
 

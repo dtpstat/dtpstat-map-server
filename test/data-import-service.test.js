@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createDataImportService } from '../src/db/data-import-service.js';
+import { createLineImportRuntime } from '../src/application/lines-ingestion-runtime.js';
 
 const upload = {
   type: 'FeatureCollection',
@@ -93,7 +93,7 @@ function createFakePool({ failOn } = {}) {
 
 test('legacy data import replaces geometries without replacing line type dictionary', async () => {
   const pool = createFakePool();
-  const service = createDataImportService(pool);
+  const service = createLineImportRuntime(pool);
 
   const result = await service.replaceFromGeoJson(upload);
 
@@ -114,7 +114,7 @@ test('legacy data import replaces geometries without replacing line type diction
 
 test('versioned data import applies dictionary by imported NAME before inserting geometries', async () => {
   const pool = createFakePool();
-  const service = createDataImportService(pool);
+  const service = createLineImportRuntime(pool);
 
   const result = await service.replaceFromGeoJson(versionedUpload);
 
@@ -135,7 +135,7 @@ test('versioned data import applies dictionary by imported NAME before inserting
 
 test('data import rolls back and releases its connection after a database error', async () => {
   const pool = createFakePool({ failOn: 'INSERT INTO city_geometries' });
-  const service = createDataImportService(pool);
+  const service = createLineImportRuntime(pool);
 
   await assert.rejects(service.replaceFromGeoJson(upload), /database failure/);
 
@@ -166,7 +166,7 @@ test('streamed line import rolls back raw staged data when JSON fails late', asy
   }
 
   const pool = createFakePool();
-  const service = createDataImportService(pool);
+  const service = createLineImportRuntime(pool);
 
   await assert.rejects(
     service.replaceFromGeoJsonStream(source(), {
@@ -210,7 +210,7 @@ test('streamed line import rolls back staged rows when transport fails after val
   }
 
   const pool = createFakePool();
-  const service = createDataImportService(pool);
+  const service = createLineImportRuntime(pool);
 
   await assert.rejects(
     service.replaceFromGeoJsonStream(source(), {
