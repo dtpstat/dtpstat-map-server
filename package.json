@@ -15,6 +15,7 @@
     "admin:unblock": "node scripts/unblock-admin.js",
     "admin:set-superuser": "node scripts/set-superuser-credentials.js",
     "lint": "eslint .",
+    "test:architecture": "node --test test/domain-architecture.test.js",
     "test": "node --test",
     "check": "npm run lint && npm test",
     "test:integration": "node scripts/postgres-integration.js"

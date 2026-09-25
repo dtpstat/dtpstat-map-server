@@ -38,35 +38,100 @@ function resolveRelativeImport(file, specifier) {
   return path.resolve(path.dirname(file), specifier);
 }
 
-test('lightweight domain modules keep dependency direction explicit', async () => {
-  const moduleFiles = await jsFiles(path.join(srcRoot, 'modules'));
+test('source layers keep dependency direction explicit', async () => {
+  const forbiddenByLayer = new Map([
+    [
+      'modules',
+      ['application', 'db', 'routes', 'http', 'testing', 'data'],
+    ],
+    [
+      'shared',
+      ['application', 'db', 'modules', 'routes', 'http', 'testing', 'data'],
+    ],
+    [
+      'db',
+      ['application', 'routes', 'http', 'testing', 'data'],
+    ],
+    [
+      'routes',
+      ['db', 'testing', 'data'],
+    ],
+    [
+      'http',
+      ['application', 'db', 'routes', 'testing', 'data'],
+    ],
+  ]);
+
+  for (const [layer, forbiddenLayers] of forbiddenByLayer) {
+    const layerFiles = await jsFiles(
+      path.join(srcRoot, layer),
+    );
+    for (const file of layerFiles) {
+      const source = await fs.readFile(
+        file,
+        'utf8',
+      );
+      for (const specifier of importSpecifiers(source)) {
+        const resolved =
+          resolveRelativeImport(
+            file,
+            specifier,
+          );
+        if (!resolved) continue;
+
+        for (const forbiddenLayer of forbiddenLayers) {
+          assert.ok(
+            !resolved.startsWith(
+              path.join(
+                srcRoot,
+                forbiddenLayer,
+              ) + path.sep,
+            ),
+            `${path.relative(root, file)} must not depend on src/${forbiddenLayer}`,
+          );
+        }
+      }
+    }
+  }
+
+  const moduleFiles = await jsFiles(
+    path.join(srcRoot, 'modules'),
+  );
   for (const file of moduleFiles) {
-    const source = await fs.readFile(file, 'utf8');
+    const source = await fs.readFile(
+      file,
+      'utf8',
+    );
     for (const specifier of importSpecifiers(source)) {
-      const resolved = resolveRelativeImport(file, specifier);
-      assert.ok(
-        !resolved ||
-          (
-            !resolved.startsWith(path.join(srcRoot, 'routes') + path.sep) &&
-            !resolved.startsWith(path.join(srcRoot, 'db') + path.sep)
-          ),
-        `${path.relative(root, file)} must not depend on legacy src/routes or src/db`,
+      const importsHttpFramework =
+        specifier === 'express' ||
+        specifier.startsWith('express/') ||
+        specifier === 'node:http' ||
+        specifier.startsWith('node:http/') ||
+        specifier === 'node:https' ||
+        specifier.startsWith('node:https/');
+      assert.equal(
+        importsHttpFramework,
+        false,
+        `${path.relative(root, file)} must stay HTTP-framework independent`,
       );
     }
   }
 
-  const sharedFiles = await jsFiles(path.join(srcRoot, 'shared'));
-  for (const file of sharedFiles) {
-    const source = await fs.readFile(file, 'utf8');
-    for (const specifier of importSpecifiers(source)) {
-      const resolved = resolveRelativeImport(file, specifier);
-      assert.ok(
-        !resolved ||
-          (
-            !resolved.startsWith(path.join(srcRoot, 'modules') + path.sep) &&
-            !resolved.startsWith(path.join(srcRoot, 'application') + path.sep)
-          ),
-        `${path.relative(root, file)} must not depend on modules/application`,
+  const databaseFiles = await jsFiles(
+    path.join(srcRoot, 'db'),
+  );
+  for (const file of databaseFiles) {
+    const fileName = path.basename(file);
+    for (const forbiddenSuffix of [
+      '-service.js',
+      '-runtime.js',
+      '-routes.js',
+    ]) {
+      assert.equal(
+        fileName.endsWith(forbiddenSuffix),
+        false,
+        `${path.relative(root, file)} must remain focused persistence/infrastructure, not a composition facade`,
       );
     }
   }
@@ -79,6 +144,54 @@ test('lightweight domain modules keep dependency direction explicit', async () =
     [],
     'src/data must stay retired; domain ownership belongs in canonical modules',
   );
+});
+
+test('repository architecture instructions stay present and point to enforced checks', async () => {
+  const [agents, architecture] = await Promise.all([
+    fs.readFile(
+      path.join(root, 'AGENTS.md'),
+      'utf8',
+    ),
+    fs.readFile(
+      path.join(root, 'docs', 'architecture.md'),
+      'utf8',
+    ),
+  ]);
+
+  for (const marker of [
+    'docs/architecture.md',
+    'npm run test:architecture',
+    'npm run check',
+    'src/modules',
+    'src/application',
+    'src/db',
+    'src/shared',
+    'src/data',
+  ]) {
+    assert.equal(
+      agents.includes(marker),
+      true,
+      `AGENTS.md must document ${marker}`,
+    );
+  }
+
+  for (const marker of [
+    'src/modules',
+    'src/application',
+    'src/db',
+    'src/routes',
+    'src/http',
+    'src/shared',
+    'src/data',
+    'npm run test:architecture',
+    'npm run check',
+  ]) {
+    assert.equal(
+      architecture.includes(marker),
+      true,
+      `docs/architecture.md must document ${marker}`,
+    );
+  }
 });
 
 test('domain validation policies live in canonical modules without legacy data facades', async () => {
