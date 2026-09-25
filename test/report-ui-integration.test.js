@@ -133,7 +133,7 @@ test('server refreshes report materialization before public snapshots', async ()
   );
   assert.match(
     server,
-    /bootstrapServerApplication\(\s*runtime\.bootstrapDependencies/s,
+    /bootstrapServerApplication\(\s*bootstrapDependencies/s,
   );
   assert.match(
     runtime,
@@ -141,7 +141,7 @@ test('server refreshes report materialization before public snapshots', async ()
   );
   assert.match(
     runtime,
-    /bootstrapDependencies:\s*\{[\s\S]*derivedState/s,
+    /const bootstrapDependencies = \{[\s\S]*derivedState/s,
   );
   assert.match(
     bootstrap,
