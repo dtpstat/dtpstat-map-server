@@ -15,8 +15,8 @@ import {
   createPopulationImportRuntime,
 } from './portable-ingestion-runtime.js';
 import {
-  createDataExportRepository,
-} from '../db/data-export-repository.js';
+  createDataExportRuntime,
+} from './data-transfer/export-runtime.js';
 import {
   createKmlUpdateRuntime,
   createLineImportRuntime,
@@ -58,7 +58,7 @@ const DEFAULT_FACTORIES =
     createAdminTaskSuccessRepository,
     createCitiesRepository,
     createCityBoundaryTransferRuntime,
-    createDataExportRepository,
+    createDataExportRuntime,
     createLineImportRuntime,
     createDerivedStateRefresh,
     createKmlUpdateRuntime,
@@ -123,7 +123,7 @@ export function createServerRuntime({
       .createReportConfigRuntime(pool);
   const exportRepository =
     runtimeFactories
-      .createDataExportRepository(pool);
+      .createDataExportRuntime(pool);
   const importService =
     runtimeFactories
       .createLineImportRuntime(pool);
