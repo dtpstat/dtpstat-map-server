@@ -1689,9 +1689,13 @@ test('OSM boundary admin module separates policy use case and DB storage', async
   assert.doesNotMatch(storage, /OsmBoundaryAdminValidationError/u);
 });
 
-test('legacy OSM boundary admin repository is only a DB composition adapter', async () => {
-  const adapter = await fs.readFile(
-    path.join(srcRoot, 'db', 'osm-boundary-admin-repository.js'),
+test('OSM boundary admin runtime composes service storage and shared DB infrastructure', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'osm-boundary-admin-runtime.js',
+    ),
     'utf8',
   );
   const service = await fs.readFile(
@@ -1699,18 +1703,32 @@ test('legacy OSM boundary admin repository is only a DB composition adapter', as
     'utf8',
   );
 
-  assert.match(adapter, /createOsmBoundaryAdminService\(pool,/u);
-  assert.match(adapter, /createOsmBoundaryAdminStorage\(pool\)/u);
-  assert.match(adapter, /acquireDataImportLock/u);
-  assert.match(adapter, /RECALCULATE_CITY_STATISTICS_SQL/u);
-  assert.match(adapter, /export \{ OsmBoundaryAdminValidationError \}/u);
-  assert.doesNotMatch(adapter, /WITH RECURSIVE subtree/u);
-  assert.doesNotMatch(adapter, /UPDATE city_boundaries/u);
-  assert.doesNotMatch(adapter, /ST_AsGeoJSON/u);
+  assert.match(runtime, /createOsmBoundaryAdminService\(\s*pool,/u);
+  assert.match(runtime, /createOsmBoundaryAdminStorage\(pool\)/u);
+  assert.match(
+    runtime,
+    /withBoundaryIngestionDatabaseDependencies\(/u,
+  );
+  assert.doesNotMatch(runtime, /acquireDataImportLock/u);
+  assert.doesNotMatch(runtime, /RECALCULATE_CITY_STATISTICS_SQL/u);
+  assert.doesNotMatch(runtime, /WITH RECURSIVE subtree/u);
+  assert.doesNotMatch(runtime, /UPDATE city_boundaries/u);
+  assert.doesNotMatch(runtime, /ST_AsGeoJSON/u);
 
   assert.match(service, /storage\.getGeometry\(/u);
   assert.match(service, /storage\.getBoundary\(/u);
   assert.match(service, /storage\.updateSubtreeActive\(/u);
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'osm-boundary-admin-repository.js',
+      ),
+    ),
+    (error) => error?.code === 'ENOENT',
+  );
 });
 
 
@@ -1959,6 +1977,11 @@ test('removed compatibility facades stay absent from source tests and scripts', 
       'data-transfer',
       'runtime.js',
     ),
+    path.join(
+      srcRoot,
+      'db',
+      'osm-boundary-admin-repository.js',
+    ),
     path.join(srcRoot, 'data', 'admin-security.js'),
     path.join(srcRoot, 'data', 'line-types.js'),
     path.join(srcRoot, 'data', 'mapbox-access-token.js'),
@@ -1973,6 +1996,7 @@ test('removed compatibility facades stay absent from source tests and scripts', 
   const removedReferences = [
     'src/application/data-transfer/routes.js',
     'src/application/data-transfer/runtime.js',
+    'src/db/osm-boundary-admin-repository.js',
     'src/data/admin-security.js',
     'src/data/line-types.js',
     'src/data/mapbox-access-token.js',
@@ -3151,6 +3175,14 @@ test('server composition root delegates startup runtime and derived-state orches
   assert.match(
     runtime,
     /from '\.\/osm-update-runtime\.js'/u,
+  );
+  assert.match(
+    runtime,
+    /from '\.\/osm-boundary-admin-runtime\.js'/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /db\/osm-boundary-admin-repository\.js/u,
   );
   assert.match(
     runtime,

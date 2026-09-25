@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  createOsmBoundaryAdminRepository,
+  createOsmBoundaryAdminRuntime,
+} from '../src/application/osm-boundary-admin-runtime.js';
+import {
   OsmBoundaryAdminValidationError,
-} from '../src/db/osm-boundary-admin-repository.js';
+} from '../src/modules/osm/boundary-admin-policy.js';
 
 function createPool({
   currentActive = true,
@@ -103,7 +105,7 @@ function createPool({
 
 test('OSM boundary list reads population metadata from the boundary itself', async () => {
   const pool = createPool();
-  const repository = createOsmBoundaryAdminRepository(pool);
+  const repository = createOsmBoundaryAdminRuntime(pool);
 
   const rows = await repository.list();
 
@@ -123,7 +125,7 @@ test('territory data can be edited on an inactive OSM boundary without activatin
     finalAttributes: { census: true },
     finalActive: false,
   });
-  const repository = createOsmBoundaryAdminRepository(pool);
+  const repository = createOsmBoundaryAdminRuntime(pool);
 
   const result = await repository.update(5, {
     population: 125000,
@@ -161,7 +163,7 @@ test('active state can change without modifying territory population', async () 
     finalPopulation: 1000,
     finalActive: true,
   });
-  const repository = createOsmBoundaryAdminRepository(pool);
+  const repository = createOsmBoundaryAdminRuntime(pool);
 
   const result = await repository.update(5, { active: true });
 
@@ -180,7 +182,7 @@ test('OSM boundary update can explicitly clear population while inactive', async
     finalPopulation: null,
     finalActive: false,
   });
-  const repository = createOsmBoundaryAdminRepository(pool);
+  const repository = createOsmBoundaryAdminRuntime(pool);
 
   const result = await repository.update(5, { population: null });
 
@@ -197,7 +199,7 @@ test('activating one OSM object never activates parents or descendants', async (
     currentActive: false,
     finalActive: true,
   });
-  const repository = createOsmBoundaryAdminRepository(pool);
+  const repository = createOsmBoundaryAdminRuntime(pool);
 
   await repository.update(5, { active: true });
 
@@ -220,7 +222,7 @@ test('OSM subtree deactivation updates selected node and descendants once', asyn
       { id: 7, active: false },
     ],
   });
-  const repository = createOsmBoundaryAdminRepository(pool);
+  const repository = createOsmBoundaryAdminRuntime(pool);
 
   const result = await repository.setSubtreeActive(5, false);
 
@@ -235,7 +237,7 @@ test('OSM subtree deactivation updates selected node and descendants once', asyn
 
 test('OSM subtree activation validates boolean state before transaction', async () => {
   const pool = createPool();
-  const repository = createOsmBoundaryAdminRepository(pool);
+  const repository = createOsmBoundaryAdminRuntime(pool);
 
   await assert.rejects(
     repository.setSubtreeActive(5, 'false'),

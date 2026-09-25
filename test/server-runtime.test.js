@@ -37,7 +37,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
     'createCityBoundaryTransferRuntime',
     'createPopulationImportRuntime',
     'createOsmImportSettingsRepository',
-    'createOsmBoundaryAdminRepository',
+    'createOsmBoundaryAdminRuntime',
     'createOsmCheckpointRuntime',
     'createAdminTaskSuccessRepository',
   ];
@@ -219,7 +219,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
       'createPopulationImportRuntime',
       'createKmlUpdateRuntime',
       'createOsmImportSettingsRepository',
-      'createOsmBoundaryAdminRepository',
+      'createOsmBoundaryAdminRuntime',
       'createOsmCheckpointRuntime',
       'createOsmCityUpdateRuntime',
       'createAdminTaskSuccessRepository',
