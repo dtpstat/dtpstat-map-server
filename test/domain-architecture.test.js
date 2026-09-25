@@ -1519,30 +1519,78 @@ test('admin security persistence is split by bounded responsibility', async () =
   assert.doesNotMatch(audit, /admin_security_settings/u);
 });
 
-test('legacy admin security repository is only a persistence composition facade', async () => {
-  const facade = await fs.readFile(
-    path.join(srcRoot, 'db', 'admin-security-repository.js'),
+test('security runtime composes focused persistence service and HTTP authorization', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'security-runtime.js',
+    ),
     'utf8',
   );
 
-  assert.match(facade, /createAdminUserRepository\(database\)/u);
-  assert.match(facade, /createAdminSessionRepository\(database\)/u);
   assert.match(
-    facade,
-    /createAdminAccessControlRepository\(database\)/u,
+    runtime,
+    /createAdminUserRepository\(/u,
   );
-  assert.match(facade, /createAdminAuditRepository\(database\)/u);
-  assert.match(facade, /\.\.\.users/u);
-  assert.match(facade, /\.\.\.sessions/u);
-  assert.match(facade, /\.\.\.accessControl/u);
-  assert.match(facade, /\.\.\.audit/u);
+  assert.match(
+    runtime,
+    /createAdminSessionRepository\(/u,
+  );
+  assert.match(
+    runtime,
+    /createAdminAccessControlRepository\(/u,
+  );
+  assert.match(
+    runtime,
+    /createAdminAuditRepository\(/u,
+  );
+  assert.match(
+    runtime,
+    /createAdminSecurityPersistence/u,
+  );
+  assert.match(
+    runtime,
+    /createAdminSecurityService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createAdminAuthorization\(/u,
+  );
+  assert.match(
+    runtime,
+    /createSecurityRuntime/u,
+  );
 
-  assert.doesNotMatch(facade, /SELECT .*admin_users/u);
-  assert.doesNotMatch(facade, /INSERT INTO admin_sessions/u);
-  assert.doesNotMatch(facade, /admin_login_ip_state/u);
-  assert.doesNotMatch(facade, /admin_audit_log/u);
+  assert.doesNotMatch(
+    runtime,
+    /SELECT .*admin_users/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /INSERT INTO admin_sessions/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /admin_login_ip_state/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /admin_audit_log/u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'admin-security-repository.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
 });
-
 
 test('OSM checkpoint persistence separates record state from staged geometry', async () => {
   const record = await fs.readFile(
@@ -2971,6 +3019,14 @@ test('server composition root delegates startup runtime and derived-state orches
     ),
     'utf8',
   );
+  const securityRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'security-runtime.js',
+    ),
+    'utf8',
+  );
   const derived = await fs.readFile(
     path.join(
       srcRoot,
@@ -3096,10 +3152,22 @@ test('server composition root delegates startup runtime and derived-state orches
   );
   assert.match(
     runtime,
+    /from '\.\/security-runtime\.js'/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /modules\/security\/service\.js/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /http\/admin-auth\.js/u,
+  );
+  assert.match(
+    securityRuntime,
     /modules\/security\/service\.js/u,
   );
   assert.match(
-    runtime,
+    securityRuntime,
     /http\/admin-auth\.js/u,
   );
   assert.match(
