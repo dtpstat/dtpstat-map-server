@@ -4,7 +4,9 @@ import {
   normalizeGeometryBulkUpdates,
   normalizeGeometryChanges,
   normalizeGeometryCreatePayload,
+  normalizeGeometryCutRequest,
   normalizeGeometryId,
+  normalizeGeometryMergeRequest,
   normalizeGeometryRevision,
   validateGeometryLineState,
 } from './editor-policy.js';
@@ -709,6 +711,250 @@ export function createGeometryEditorService(
               ),
             geometries,
           };
+        },
+      );
+    },
+
+    async merge(payload) {
+      const items =
+        normalizeGeometryMergeRequest(
+          payload,
+        );
+
+      return write(
+        async (client) => {
+          const ids =
+            items.map(
+              (item) =>
+                item.id,
+            );
+
+          const locked =
+            await storage
+              .lockGeometries(
+                client,
+                [...ids].sort(
+                  (
+                    left,
+                    right,
+                  ) =>
+                    left - right,
+                ),
+              );
+
+          const conflicts =
+            conflictDetails(
+              items,
+              locked,
+            );
+
+          if (
+            conflicts.length > 0
+          ) {
+            throw new GeometryEditorValidationError(
+              'One or more geometries changed before merge',
+              409,
+              {
+                conflicts,
+              },
+            );
+          }
+
+          const byId =
+            new Map(
+              locked.map(
+                (item) => [
+                  item.id,
+                  item,
+                ],
+              ),
+            );
+
+          const ordered =
+            ids.map(
+              (id) =>
+                byId.get(id),
+            );
+
+          const first =
+            ordered[0];
+
+          if (
+            first.family ===
+            'point'
+          ) {
+            throw new GeometryEditorValidationError(
+              'Point geometries cannot be merged',
+            );
+          }
+
+          if (
+            ordered.some(
+              (item) =>
+                item.cityId !==
+                  first.cityId ||
+                item.boundaryId !==
+                  first.boundaryId ||
+                item.family !==
+                  first.family,
+            )
+          ) {
+            throw new GeometryEditorValidationError(
+              'Merged geometries must belong to the same city, OSM boundary and geometry family',
+            );
+          }
+
+          if (
+            ordered.some(
+              (item) =>
+                item.isVisible !==
+                first.isVisible,
+            )
+          ) {
+            throw new GeometryEditorValidationError(
+              'Merged geometries must have the same visibility',
+            );
+          }
+
+          if (
+            first.family ===
+              'line' &&
+            ordered.some(
+              (item) =>
+                item.lineTypeId !==
+                  first.lineTypeId ||
+                item.lanes !==
+                  first.lanes,
+            )
+          ) {
+            throw new GeometryEditorValidationError(
+              'Merged lines must have the same line type and lanes',
+            );
+          }
+
+          const sourceTags =
+            JSON.stringify(
+              first.sourceTags ??
+              {},
+            );
+          const preserveSourceTags =
+            ordered.every(
+              (item) =>
+                JSON.stringify(
+                  item.sourceTags ??
+                  {},
+                ) === sourceTags,
+            );
+
+          const geometry =
+            await storage
+              .mergeGeometries(
+                client,
+                ids,
+                first.family,
+                preserveSourceTags,
+              );
+
+          if (!geometry) {
+            throw new GeometryEditorValidationError(
+              'Merged geometry is empty or invalid',
+            );
+          }
+
+          return {
+            geometry,
+            sourceGeometryIds:
+              ids,
+          };
+        },
+      );
+    },
+
+    async cut(
+      geometryId,
+      payload,
+      options = {},
+    ) {
+      const id =
+        normalizeGeometryId(
+          geometryId,
+        );
+      const cutter =
+        normalizeGeometryCutRequest(
+          payload,
+        );
+      const expected =
+        normalizeGeometryRevision(
+          options
+            .expectedUpdatedAt,
+        );
+
+      return write(
+        async (client) => {
+          const locked =
+            await storage
+              .lockGeometries(
+                client,
+                [id],
+              );
+
+          const previous =
+            locked[0] ??
+            null;
+
+          if (!previous) {
+            return null;
+          }
+
+          const actual =
+            revision(
+              previous.updatedAt,
+            );
+
+          if (
+            actual !== expected
+          ) {
+            throw new GeometryEditorValidationError(
+              'Geometry changed before cut',
+              409,
+              {
+                conflicts: [{
+                  id,
+                  reason:
+                    'changed',
+                  expectedUpdatedAt:
+                    expected,
+                  actualUpdatedAt:
+                    actual,
+                }],
+              },
+            );
+          }
+
+          if (
+            previous.family !==
+            'polygon'
+          ) {
+            throw new GeometryEditorValidationError(
+              'Only polygon geometries can be cut',
+            );
+          }
+
+          const geometry =
+            await storage
+              .cutGeometry(
+                client,
+                id,
+                cutter,
+              );
+
+          if (!geometry) {
+            throw new GeometryEditorValidationError(
+              'Cut must overlap only part of the polygon and produce a valid non-empty result',
+            );
+          }
+
+          return geometry;
         },
       );
     },

@@ -721,3 +721,134 @@ export function normalizeGeometryBulkUpdates(
     },
   );
 }
+
+
+export function normalizeGeometryMergeRequest(
+  payload,
+) {
+  const source =
+    object(
+      payload,
+      'Request body',
+    );
+
+  const unknown =
+    Object.keys(source)
+      .filter(
+        (key) =>
+          key !== 'items',
+      );
+
+  if (unknown.length > 0) {
+    throw new GeometryEditorValidationError(
+      'Unsupported merge fields: ' +
+        unknown.join(', '),
+    );
+  }
+
+  if (
+    !Array.isArray(source.items) ||
+    source.items.length < 2 ||
+    source.items.length > 200
+  ) {
+    throw new GeometryEditorValidationError(
+      'items must contain 2-200 geometries',
+    );
+  }
+
+  const seen = new Set();
+
+  return source.items.map(
+    (entry, index) => {
+      object(
+        entry,
+        `items[${index}]`,
+      );
+
+      const entryUnknown =
+        Object.keys(entry)
+          .filter(
+            (key) =>
+              ![
+                'id',
+                'baseUpdatedAt',
+              ].includes(key),
+          );
+
+      if (
+        entryUnknown.length > 0
+      ) {
+        throw new GeometryEditorValidationError(
+          `items[${index}] contains unsupported fields: ` +
+            entryUnknown.join(', '),
+        );
+      }
+
+      const id =
+        normalizeGeometryId(
+          entry.id,
+        );
+
+      if (seen.has(id)) {
+        throw new GeometryEditorValidationError(
+          `Duplicate geometry id in merge: ${id}`,
+        );
+      }
+      seen.add(id);
+
+      return {
+        id,
+        baseUpdatedAt:
+          normalizeGeometryRevision(
+            entry.baseUpdatedAt,
+          ),
+      };
+    },
+  );
+}
+
+export function normalizeGeometryCutRequest(
+  payload,
+) {
+  const source =
+    object(
+      payload,
+      'Request body',
+    );
+
+  const unknown =
+    Object.keys(source)
+      .filter(
+        (key) =>
+          key !== 'geometry',
+      );
+
+  if (unknown.length > 0) {
+    throw new GeometryEditorValidationError(
+      'Unsupported cut fields: ' +
+        unknown.join(', '),
+    );
+  }
+
+  if (!('geometry' in source)) {
+    throw new GeometryEditorValidationError(
+      'geometry is required',
+    );
+  }
+
+  const geometry =
+    validateEditorGeometry(
+      source.geometry,
+    );
+
+  if (
+    geometryFamily(geometry) !==
+    'polygon'
+  ) {
+    throw new GeometryEditorValidationError(
+      'Cut geometry must be Polygon or MultiPolygon',
+    );
+  }
+
+  return geometry;
+}

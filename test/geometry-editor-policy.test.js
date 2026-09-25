@@ -5,6 +5,8 @@ import {
   geometryFamily,
   normalizeGeometryBulkUpdates,
   normalizeGeometryCreatePayload,
+  normalizeGeometryCutRequest,
+  normalizeGeometryMergeRequest,
   normalizeGeometryTags,
   validateEditorGeometry,
 } from '../src/modules/geometry/editor-policy.js';
@@ -157,5 +159,99 @@ test('geometry bulk updates require unique ids revisions and non-empty changes',
         ],
       }),
     /Duplicate geometry id/u,
+  );
+});
+
+
+test('geometry merge request requires distinct optimistic revisions', () => {
+  const items =
+    normalizeGeometryMergeRequest({
+      items: [
+        {
+          id: 9,
+          baseUpdatedAt:
+            '2026-09-25T12:00:00Z',
+        },
+        {
+          id: 4,
+          baseUpdatedAt:
+            '2026-09-25T12:05:00Z',
+        },
+      ],
+    });
+
+  assert.deepEqual(
+    items,
+    [
+      {
+        id: 9,
+        baseUpdatedAt:
+          '2026-09-25T12:00:00.000Z',
+      },
+      {
+        id: 4,
+        baseUpdatedAt:
+          '2026-09-25T12:05:00.000Z',
+      },
+    ],
+  );
+
+  assert.throws(
+    () =>
+      normalizeGeometryMergeRequest({
+        items: [
+          {
+            id: 9,
+            baseUpdatedAt:
+              '2026-09-25T12:00:00Z',
+          },
+          {
+            id: 9,
+            baseUpdatedAt:
+              '2026-09-25T12:05:00Z',
+          },
+        ],
+      }),
+    /Duplicate geometry id in merge/u,
+  );
+});
+
+test('geometry cut request accepts only polygon cutters', () => {
+  assert.deepEqual(
+    normalizeGeometryCutRequest({
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[
+          [30, 60],
+          [31, 60],
+          [31, 61],
+          [30, 60],
+        ]],
+      },
+    }),
+    {
+      type: 'Polygon',
+      coordinates: [[
+        [30, 60],
+        [31, 60],
+        [31, 61],
+        [30, 60],
+      ]],
+    },
+  );
+
+  assert.throws(
+    () =>
+      normalizeGeometryCutRequest({
+        geometry: {
+          type:
+            'LineString',
+          coordinates: [
+            [30, 60],
+            [31, 61],
+          ],
+        },
+      }),
+    /Cut geometry must be Polygon or MultiPolygon/u,
   );
 });

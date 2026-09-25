@@ -117,6 +117,8 @@ const GEOMETRY_SUMMARIES_SQL = `
     geometry.display_name AS "displayName",
     geometry.is_visible AS "isVisible",
     geometry.updated_at AS "updatedAt",
+    geometry.line_type_id::integer AS "lineTypeId",
+    geometry.lanes,
     line_type.name AS "lineTypeName",
     line_type.color AS "lineTypeColor",
     line_type.width::double precision AS "lineTypeWidth",
@@ -239,6 +241,119 @@ const UPDATE_GEOMETRY_SQL = `
     AND NOT ST_IsEmpty(prepared.geom)
     AND ST_IsValid(prepared.geom)
   RETURNING geometry.id::integer AS id
+`;
+
+const MERGE_GEOMETRIES_SQL = `
+  WITH selected AS (
+    SELECT geom
+    FROM city_geometries
+    WHERE id = ANY($2::bigint[])
+  ),
+  merged AS (
+    SELECT CASE
+      WHEN $3 = 'line' THEN
+        ST_Multi(
+          ST_CollectionExtract(
+            ST_Collect(geom),
+            2
+          )
+        )
+      ELSE
+        ST_Multi(
+          ST_CollectionExtract(
+            ST_MakeValid(
+              ST_UnaryUnion(
+                ST_Collect(geom)
+              )
+            ),
+            3
+          )
+        )
+    END AS geom
+    FROM selected
+  )
+  UPDATE city_geometries AS target
+  SET
+    geom = merged.geom,
+    length_m = CASE
+      WHEN $3 = 'line'
+        THEN ST_Length(
+          merged.geom::geography
+        )
+      ELSE NULL
+    END,
+    lane_length_m = CASE
+      WHEN $3 = 'line'
+        THEN ST_Length(
+          merged.geom::geography
+        ) * target.lanes
+      ELSE NULL
+    END,
+    source_tags = CASE
+      WHEN $4
+        THEN target.source_tags
+      ELSE '{}'::jsonb
+    END,
+    was_edited = TRUE,
+    updated_at = NOW()
+  FROM merged
+  WHERE target.id = $1
+    AND NOT ST_IsEmpty(
+      merged.geom
+    )
+    AND ST_IsValid(
+      merged.geom
+    )
+  RETURNING
+    target.id::integer AS id
+`;
+
+const CUT_GEOMETRY_SQL = `
+  WITH prepared AS (
+    SELECT
+      ST_SetSRID(
+        ST_GeomFromGeoJSON(
+          $2::text
+        ),
+        4326
+      ) AS cutter
+  ),
+  difference AS (
+    SELECT
+      ST_Multi(
+        ST_CollectionExtract(
+          ST_MakeValid(
+            ST_Difference(
+              geometry.geom,
+              prepared.cutter
+            )
+          ),
+          3
+        )
+      ) AS geom
+    FROM city_geometries AS geometry
+    CROSS JOIN prepared
+    WHERE geometry.id = $1
+  )
+  UPDATE city_geometries AS geometry
+  SET
+    geom = difference.geom,
+    was_edited = TRUE,
+    updated_at = NOW()
+  FROM difference
+  WHERE geometry.id = $1
+    AND NOT ST_IsEmpty(
+      difference.geom
+    )
+    AND ST_IsValid(
+      difference.geom
+    )
+    AND NOT ST_Equals(
+      difference.geom,
+      geometry.geom
+    )
+  RETURNING
+    geometry.id::integer AS id
 `;
 
 export function createGeometryEditorStorage(
@@ -435,6 +550,70 @@ export function createGeometryEditorStorage(
         'DELETE FROM city_geometries WHERE id = $1',
         [geometryId],
       );
+    },
+
+    async mergeGeometries(
+      client,
+      ids,
+      family,
+      preserveSourceTags,
+    ) {
+      const targetId =
+        ids[0];
+
+      const result =
+        await client.query(
+          MERGE_GEOMETRIES_SQL,
+          [
+            targetId,
+            ids,
+            family,
+            preserveSourceTags,
+          ],
+        );
+
+      if (!result.rows[0]) {
+        return null;
+      }
+
+      await client.query(
+        `DELETE FROM city_geometries
+         WHERE id = ANY($1::bigint[])
+           AND id <> $2`,
+        [
+          ids,
+          targetId,
+        ],
+      );
+
+      return one(
+        client,
+        targetId,
+      );
+    },
+
+    async cutGeometry(
+      client,
+      geometryId,
+      cutter,
+    ) {
+      const result =
+        await client.query(
+          CUT_GEOMETRY_SQL,
+          [
+            geometryId,
+            JSON.stringify(
+              cutter,
+            ),
+          ],
+        );
+
+      return result.rows[0]
+        ? one(
+          client,
+          geometryId,
+        )
+        : null;
     },
 
     assertNoPendingImport(

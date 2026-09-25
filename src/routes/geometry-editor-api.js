@@ -578,6 +578,162 @@ export function createGeometryEditorRouter({
   );
 
   router.post(
+    '/admin/geometry-editor/merge',
+    adminAuth
+      .requireGeometryEditor,
+    audit(
+      'geometry.merge',
+    ),
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const result =
+          await geometryEditorService
+            .merge(
+              request.body,
+            );
+
+        recordAdminOperationDetails(
+          response,
+          {
+            sourceGeometryIds:
+              result
+                .sourceGeometryIds,
+            resultGeometryId:
+              result
+                .geometry
+                .id,
+            cityId:
+              result
+                .geometry
+                .cityId,
+            family:
+              result
+                .geometry
+                .family,
+          },
+        );
+
+        publishChange(
+          realtimeEvents,
+          request,
+          {
+            action:
+              'merge',
+            entityIds:
+              result
+                .sourceGeometryIds,
+          },
+        );
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json(result);
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/geometry-editor/geometries/:geometryId/cut',
+    adminAuth
+      .requireGeometryEditor,
+    audit(
+      'geometry.cut',
+    ),
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const geometry =
+          await geometryEditorService
+            .cut(
+              request.params
+                .geometryId,
+              request.body,
+              {
+                expectedUpdatedAt:
+                  expectedRevision(
+                    request,
+                  ),
+              },
+            );
+
+        if (!geometry) {
+          response
+            .status(404)
+            .json({
+              error:
+                'Geometry not found',
+            });
+          return;
+        }
+
+        recordAdminOperationDetails(
+          response,
+          {
+            geometryId:
+              geometry.id,
+            cityId:
+              geometry.cityId,
+            family:
+              geometry.family,
+          },
+        );
+
+        publishChange(
+          realtimeEvents,
+          request,
+          {
+            action:
+              'cut',
+            entityIds:
+              [geometry.id],
+          },
+        );
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            geometry,
+          });
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.post(
     '/admin/geometry-editor/recalculate',
     adminAuth
       .requireGeometryEditor,

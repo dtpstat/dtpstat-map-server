@@ -89,6 +89,22 @@ test('geometry editor backend follows current policy storage service runtime rou
     route,
     /permission:\s*'geometry-editor'/u,
   );
+  assert.match(
+    route,
+    /'\/admin\/geometry-editor\/merge'/u,
+  );
+  assert.match(
+    route,
+    /'\/admin\/geometry-editor\/geometries\/:geometryId\/cut'/u,
+  );
+  assert.match(
+    storage,
+    /ST_UnaryUnion/u,
+  );
+  assert.match(
+    storage,
+    /ST_Difference/u,
+  );
   assert.doesNotMatch(
     route,
     /requireData/u,
