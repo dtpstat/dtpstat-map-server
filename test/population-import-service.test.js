@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createPopulationImportService } from '../src/db/population-import-service.js';
+import { createPopulationImportRuntime } from '../src/application/portable-ingestion-runtime.js';
 
 const upload = {
   schemaVersion: 2,
@@ -108,7 +108,7 @@ function createFakePool({
 
 test('population update matches city names inside a named region', async () => {
   const pool = createFakePool();
-  const service = createPopulationImportService(pool);
+  const service = createPopulationImportRuntime(pool);
 
   const result = await service.updateFromJson(upload);
 
@@ -153,7 +153,7 @@ test('missing and ambiguous names are skipped and valid cities still commit', as
     statuses,
     updatedCities: 1,
   });
-  const service = createPopulationImportService(pool);
+  const service = createPopulationImportRuntime(pool);
   const mixed = {
     ...upload,
     regions: [{
@@ -195,7 +195,7 @@ test('missing and ambiguous names are skipped and valid cities still commit', as
 
 test('invalid individual city is skipped before database staging', async () => {
   const pool = createFakePool();
-  const service = createPopulationImportService(pool);
+  const service = createPopulationImportRuntime(pool);
   const mixed = {
     ...upload,
     regions: [{
@@ -242,7 +242,7 @@ test('streamed population cursor keeps numeric region order without rereading', 
   }
 
   const pool = createFakePool();
-  const service = createPopulationImportService(pool);
+  const service = createPopulationImportRuntime(pool);
   const progress = [];
   const result = await service.updateFromJsonStream(source(), {
     maxJsonBytes: Buffer.byteLength(document) + 1,
@@ -292,7 +292,7 @@ test('streamed population import rolls back when JSON fails late', async () => {
   }
 
   const pool = createFakePool();
-  const service = createPopulationImportService(pool);
+  const service = createPopulationImportRuntime(pool);
 
   await assert.rejects(
     service.updateFromJsonStream(source(), {
@@ -318,7 +318,7 @@ test('streamed population import rolls back when JSON fails late', async () => {
 
 test('schema v3 stages OSM identity and resolution keeps name fallback optional', async () => {
   const pool = createFakePool();
-  const service = createPopulationImportService(pool);
+  const service = createPopulationImportRuntime(pool);
   const payload = {
     schemaVersion: 3,
     regions: [{
@@ -409,7 +409,7 @@ test('same names with different OSM identities are not collapsed during import',
     updatedRegions: 2,
     updatedCities: 2,
   });
-  const service = createPopulationImportService(pool);
+  const service = createPopulationImportRuntime(pool);
   const payload = {
     schemaVersion: 3,
     regions: [
@@ -452,7 +452,7 @@ test('same names with different OSM identities are not collapsed during import',
 
 test('legacy schema v2 without OSM identity remains supported', async () => {
   const pool = createFakePool();
-  const service = createPopulationImportService(pool);
+  const service = createPopulationImportRuntime(pool);
 
   const result = await service.updateFromJson(upload);
 
@@ -467,7 +467,7 @@ test('legacy schema v2 without OSM identity remains supported', async () => {
 
 test('v2+ name fallback uses OSM aliases and linked application city names', async () => {
   const pool = createFakePool();
-  const service = createPopulationImportService(pool);
+  const service = createPopulationImportRuntime(pool);
   const payload = {
     schemaVersion: 2,
     regions: [{
@@ -523,7 +523,7 @@ test('v2+ name fallback uses OSM aliases and linked application city names', asy
 
 test('v3 entries without OSM identity use the same v2+ name fallback', async () => {
   const pool = createFakePool();
-  const service = createPopulationImportService(pool);
+  const service = createPopulationImportRuntime(pool);
   const payload = {
     schemaVersion: 3,
     regions: [{
@@ -561,7 +561,7 @@ test('mixed exact and name-only entries resolving to one boundary skip duplicate
     updatedRegions: 1,
     updatedCities: 1,
   });
-  const service = createPopulationImportService(pool);
+  const service = createPopulationImportRuntime(pool);
   const payload = {
     schemaVersion: 3,
     regions: [{
@@ -620,7 +620,7 @@ test('streaming population import preserves schema v3 OSM identity', async () =>
   }
 
   const pool = createFakePool();
-  const service = createPopulationImportService(pool);
+  const service = createPopulationImportRuntime(pool);
   const result = await service.updateFromJsonStream(source(), {
     maxJsonBytes: Buffer.byteLength(document) + 1,
     maxItemBytes: 1024 * 1024,

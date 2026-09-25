@@ -15,8 +15,9 @@ import {
   createCitiesRepository,
 } from '../db/cities-repository.js';
 import {
-  createCityBoundaryTransferService,
-} from '../db/city-boundary-transfer-service.js';
+  createCityBoundaryTransferRuntime,
+  createPopulationImportRuntime,
+} from './portable-ingestion-runtime.js';
 import {
   createDataExportRepository,
 } from '../db/data-export-repository.js';
@@ -39,9 +40,6 @@ import {
 import {
   createOsmImportSettingsRepository,
 } from '../db/osm-import-settings-repository.js';
-import {
-  createPopulationImportService,
-} from '../db/population-import-service.js';
 import {
   createProjectSettingsRepository,
 } from '../db/project-settings-repository.js';
@@ -68,7 +66,7 @@ const DEFAULT_FACTORIES =
     createAdminSecurityService,
     createAdminTaskSuccessRepository,
     createCitiesRepository,
-    createCityBoundaryTransferService,
+    createCityBoundaryTransferRuntime,
     createDataExportRepository,
     createLineImportRuntime,
     createDerivedStateRefresh,
@@ -78,7 +76,7 @@ const DEFAULT_FACTORIES =
     createOsmCityCheckpointRepository,
     createOsmCityUpdateService,
     createOsmImportSettingsRepository,
-    createPopulationImportService,
+    createPopulationImportRuntime,
     createProjectSettingsRepository,
     createProjectSettingsTransferService,
     createPublicDownloadRepository,
@@ -154,12 +152,12 @@ export function createServerRuntime({
       .createLineImportRuntime(pool);
   const cityBoundaryTransferService =
     runtimeFactories
-      .createCityBoundaryTransferService(
+      .createCityBoundaryTransferRuntime(
         pool,
       );
   const populationService =
     runtimeFactories
-      .createPopulationImportService(
+      .createPopulationImportRuntime(
         pool,
       );
   const kmlUpdateService =
