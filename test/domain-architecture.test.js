@@ -587,7 +587,7 @@ test('line ingestion application runtime composes GeoJSON DB infrastructure', as
   );
   assert.match(
     runtime,
-    /withIngestionDatabaseDependencies\\\(/u,
+    /withIngestionDatabaseDependencies\(/u,
   );
   assert.doesNotMatch(
     runtime,
@@ -696,7 +696,7 @@ test('portable ingestion application runtime composes city-boundary DB infrastru
   );
   assert.match(
     runtime,
-    /withBoundaryIngestionDatabaseDependencies\\\(/u,
+    /withBoundaryIngestionDatabaseDependencies\(/u,
   );
   assert.doesNotMatch(
     runtime,
@@ -810,7 +810,7 @@ test('portable ingestion application runtime composes population DB infrastructu
   );
   assert.match(
     runtime,
-    /withIngestionDatabaseDependencies\\\(/u,
+    /withIngestionDatabaseDependencies\(/u,
   );
   assert.doesNotMatch(
     runtime,
@@ -914,7 +914,7 @@ test('line ingestion application runtime composes KML DB infrastructure', async 
   );
   assert.match(
     runtime,
-    /withIngestionDatabaseDependencies\\\(/u,
+    /withIngestionDatabaseDependencies\(/u,
   );
   assert.doesNotMatch(
     runtime,
@@ -2807,7 +2807,7 @@ test('server composition root delegates startup runtime and derived-state orches
   );
   assert.match(
     runtime,
-    /application\/osm-update-runtime\.js/u,
+    /from '\.\/osm-update-runtime\.js'/u,
   );
   assert.match(
     runtime,
