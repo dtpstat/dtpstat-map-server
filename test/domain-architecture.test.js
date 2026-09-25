@@ -335,8 +335,12 @@ test('OSM update facade delegates atomic replacement transaction to commit sessi
     path.join(srcRoot, 'modules', 'osm', 'update-commit-session.js'),
     'utf8',
   );
-  const checkpointRepository = await fs.readFile(
-    path.join(srcRoot, 'db', 'osm-city-checkpoint-repository.js'),
+  const checkpointRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'osm-checkpoint-runtime.js',
+    ),
     'utf8',
   );
 
@@ -349,7 +353,7 @@ test('OSM update facade delegates atomic replacement transaction to commit sessi
   assert.match(commitSession, /client\.query\('COMMIT'\)/u);
   assert.match(commitSession, /client\.query\('ROLLBACK'\)/u);
   assert.match(commitSession, /checkpointRepository\.complete\(/u);
-  assert.match(checkpointRepository, /async complete\(client, checkpointId\)/u);
+  assert.match(checkpointRuntime, /async complete\(client, checkpointId\)/u);
 });
 
 
