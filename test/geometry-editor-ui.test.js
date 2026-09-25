@@ -131,7 +131,7 @@ test('geometry editor uses local drafts optimistic revisions atomic bulk save an
     /Все локальные черновики применены атомарно/u,
   );
 
-  assert.doesNotMatch(
+  assert.match(
     editor,
     /geometry-import\/pending/u,
   );
@@ -267,5 +267,100 @@ test('geometry merge and cut stay revision-safe around local drafts', async () =
   assert.match(
     styles,
     /\.geometry-editor-row-main/u,
+  );
+});
+
+
+test('geometry editor resolves staged import conflicts visually without dropping local drafts', async () => {
+  const [
+    editor,
+    html,
+    styles,
+  ] =
+    await Promise.all([
+      read('admin/geometry-editor.js'),
+      read('admin/index.html'),
+      read('admin/geometry-editor.css'),
+    ]);
+
+  for (const id of [
+    'geometry-import-conflicts',
+    'geometry-import-conflict-list',
+    'geometry-import-apply',
+    'geometry-import-discard',
+    'geometry-conflict-decision',
+    'geometry-conflict-candidates',
+    'geometry-conflict-keep',
+    'geometry-conflict-add',
+    'geometry-conflict-replace',
+  ]) {
+    assert.match(
+      html,
+      new RegExp(
+        `id="${id}"`,
+        'u',
+      ),
+    );
+  }
+
+  assert.match(
+    editor,
+    /const IMPORT_SOURCE = 'geometry-editor-import-conflict'/u,
+  );
+  assert.match(
+    editor,
+    /geometry-editor-import-incoming/u,
+  );
+  assert.match(
+    editor,
+    /geometry-editor-import-existing/u,
+  );
+  assert.match(
+    editor,
+    /function renderImportConflicts\(\)/u,
+  );
+  assert.match(
+    editor,
+    /function setConflictDecision/u,
+  );
+  assert.match(
+    editor,
+    /'keep-existing'/u,
+  );
+  assert.match(
+    editor,
+    /'add-new'/u,
+  );
+  assert.match(
+    editor,
+    /'replace'/u,
+  );
+  assert.match(
+    editor,
+    /conflictAdd\.disabled =\s*Boolean/u,
+  );
+  assert.match(
+    editor,
+    /draftFor\(\s*candidate\.existing\.id/u,
+  );
+  assert.match(
+    editor,
+    /captureCurrentDraft\(\)/u,
+  );
+  assert.match(
+    editor,
+    /waitForGeometryImportTask/u,
+  );
+  assert.match(
+    editor,
+    /geometry-import\/tasks\//u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-import-conflicts/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-conflict-candidate\.has-local-draft/u,
   );
 });

@@ -44,11 +44,85 @@ export function registerGeometryImportRoutes(
     maxBodyBytes,
     startAdminTask,
     progressLog,
+    adminTasks,
   },
 ) {
   if (!geometryImportService) {
     return;
   }
+
+  router.get(
+    '/admin/geometry-import/tasks/:taskId',
+    adminAuth
+      .requireGeometryEditor,
+    (
+      request,
+      response,
+    ) => {
+      const task =
+        adminTasks.get(
+          request.params
+            .taskId,
+        );
+
+      const isGeometryImportTask =
+        task?.type ===
+          'kml-update' &&
+        /^\/api\/admin\/geometry-import\/\d+\/apply$/u
+          .test(
+            task.endpoint ??
+            '',
+          );
+
+      if (
+        !task ||
+        !isGeometryImportTask
+      ) {
+        response
+          .status(404)
+          .json({
+            error:
+              'Geometry import task not found',
+          });
+        return;
+      }
+
+      response
+        .set(
+          'Cache-Control',
+          'no-store',
+        )
+        .json({
+          task: {
+            id:
+              task.id,
+            status:
+              task.status,
+            completedAt:
+              task.completedAt ??
+              null,
+            cancellable:
+              Boolean(
+                task.cancellable,
+              ),
+            ...(task.result !==
+              undefined
+              ? {
+                  result:
+                    task.result,
+                }
+              : {}),
+            ...(task.error !==
+              undefined
+              ? {
+                  error:
+                    task.error,
+                }
+              : {}),
+          },
+        });
+    },
+  );
 
   router.get(
     '/admin/geometry-import/pending',

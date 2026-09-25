@@ -179,6 +179,7 @@ export function createApiRouter({
       startAdminTask,
       progressLog:
         logAdminTaskProgress,
+      adminTasks,
     },
   );
 

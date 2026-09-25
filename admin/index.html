@@ -499,6 +499,34 @@
             Серверные изменения не перезаписывают локальный черновик молча.
           </p>
 
+          <section class="geometry-import-conflicts"
+                   id="geometry-import-conflicts" hidden>
+            <div class="geometry-import-conflicts-heading">
+              <div>
+                <strong id="geometry-import-conflicts-title">
+                  Конфликты импорта
+                </strong>
+                <span id="geometry-import-conflicts-summary"></span>
+              </div>
+              <div>
+                <button id="geometry-import-apply"
+                        type="button" disabled>
+                  Применить решения
+                </button>
+                <button class="danger" id="geometry-import-discard"
+                        type="button">
+                  Отбросить импорт
+                </button>
+              </div>
+            </div>
+            <p class="geometry-import-conflicts-note">
+              Production-геометрии ещё не изменены. Для каждой входящей
+              геометрии выберите, что делать с найденными совпадениями.
+            </p>
+            <div id="geometry-import-conflict-list"
+                 class="geometry-import-conflict-list"></div>
+          </section>
+
           <div class="geometry-editor-workspace">
             <div class="geometry-editor-layout">
               <section class="geometry-editor-list-panel"
@@ -548,6 +576,28 @@
 
               <aside class="geometry-editor-details"
                      aria-label="Атрибуты выбранной геометрии">
+                <section class="geometry-conflict-decision"
+                         id="geometry-conflict-decision" hidden>
+                  <strong id="geometry-conflict-title">
+                    Конфликт импорта
+                  </strong>
+                  <p id="geometry-conflict-description"></p>
+                  <div id="geometry-conflict-candidates"></div>
+                  <div class="geometry-conflict-actions">
+                    <button class="secondary" id="geometry-conflict-keep"
+                            type="button">
+                      Оставить текущие
+                    </button>
+                    <button class="secondary" id="geometry-conflict-add"
+                            type="button">
+                      Считать новой
+                    </button>
+                    <button id="geometry-conflict-replace" type="button">
+                      Принять вместо выбранных
+                    </button>
+                  </div>
+                </section>
+
                 <form id="geometry-editor-form">
                   <div class="geometry-editor-selected-title"
                        id="geometry-editor-selected-title">

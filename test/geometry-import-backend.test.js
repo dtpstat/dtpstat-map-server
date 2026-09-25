@@ -117,3 +117,44 @@ test('staged KML conflict backend is wired through runtime routes and portable-i
     /assertNoPendingGeometryImport/u,
   );
 });
+
+
+test('geometry editors can poll only geometry-import task status without broad data permission', async () => {
+  const [
+    routes,
+    api,
+  ] =
+    await Promise.all([
+      read(
+        'src/modules/geometry/import-routes.js',
+      ),
+      read(
+        'src/routes/api.js',
+      ),
+    ]);
+
+  assert.match(
+    routes,
+    /'\/admin\/geometry-import\/tasks\/:taskId'/u,
+  );
+  assert.match(
+    routes,
+    /requireGeometryEditor/u,
+  );
+  assert.match(
+    routes,
+    /task\?\.type ===\s*'kml-update'/u,
+  );
+  assert.match(
+    routes,
+    /geometry-import\\\/\\d\+\\\/apply/u,
+  );
+  assert.doesNotMatch(
+    routes,
+    /requireData/u,
+  );
+  assert.match(
+    api,
+    /registerGeometryImportRoutes\([\s\S]*adminTasks/u,
+  );
+});

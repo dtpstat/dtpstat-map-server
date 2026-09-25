@@ -41,13 +41,29 @@ if (section) {
   const finishDrawButton = document.querySelector('#geometry-finish-draw');
   const cancelDrawButton = document.querySelector('#geometry-cancel-draw');
   const modeLabel = document.querySelector('#geometry-editor-mode');
-
+  const newPointButton = document.querySelector('#geometry-new-point');
+  const newLineButton = document.querySelector('#geometry-new-line');
+  const newPolygonButton = document.querySelector('#geometry-new-polygon');
+  const importPanel = document.querySelector('#geometry-import-conflicts');
+  const importTitle = document.querySelector('#geometry-import-conflicts-title');
+  const importSummary = document.querySelector('#geometry-import-conflicts-summary');
+  const importList = document.querySelector('#geometry-import-conflict-list');
+  const importApply = document.querySelector('#geometry-import-apply');
+  const importDiscard = document.querySelector('#geometry-import-discard');
+  const conflictDecision = document.querySelector('#geometry-conflict-decision');
+  const conflictTitle = document.querySelector('#geometry-conflict-title');
+  const conflictDescription = document.querySelector('#geometry-conflict-description');
+  const conflictCandidates = document.querySelector('#geometry-conflict-candidates');
+  const conflictKeep = document.querySelector('#geometry-conflict-keep');
+  const conflictAdd = document.querySelector('#geometry-conflict-add');
+  const conflictReplace = document.querySelector('#geometry-conflict-replace');
 
   const MAP_SOURCE = 'geometry-editor-items';
   const SELECTED_SOURCE = 'geometry-editor-selected';
   const HANDLE_SOURCE = 'geometry-editor-handles';
   const DRAW_SOURCE = 'geometry-editor-draw';
   const BOUNDARY_SOURCE = 'geometry-editor-boundary';
+  const IMPORT_SOURCE = 'geometry-editor-import-conflict';
   const DELETE_VERTEX_CURSOR =
     'url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2228%22 height=%2228%22 viewBox=%220 0 28 28%22%3E%3Cpath d=%22M3 2l8.6 18.8 2.8-7.1 7.2-2.8L3 2z%22 fill=%22white%22 stroke=%22%2310181b%22 stroke-width=%221.5%22 stroke-linejoin=%22round%22/%3E%3Ccircle cx=%2220%22 cy=%2220%22 r=%226.5%22 fill=%22%23d84f57%22 stroke=%22white%22 stroke-width=%221.5%22/%3E%3Cpath d=%22M16.5 20h7%22 stroke=%22white%22 stroke-width=%222%22 stroke-linecap=%22round%22/%3E%3C/svg%3E") 3 2, pointer';
 
@@ -74,6 +90,9 @@ if (section) {
     hoveredSegment: false,
     deleteModifier: false,
     suppressMapClick: false,
+    importSession: null,
+    activeConflictId: null,
+    conflictDecisions: new Map(),
   };
 
   const drafts = createDraftStore({
@@ -116,7 +135,11 @@ if (section) {
         ? 'Черновики: ' + entries.length + ' · конфликтов: ' + conflicts
         : 'Черновики: ' + entries.length;
     }
-    if (saveAll) saveAll.disabled = entries.length === 0;
+    if (saveAll) {
+      saveAll.disabled =
+        entries.length === 0 ||
+        Boolean(state.importSession);
+    }
     if (discardAll) discardAll.disabled = entries.length === 0;
     if (persistDrafts) persistDrafts.checked = drafts.isPersistent();
   }
@@ -412,6 +435,7 @@ if (section) {
       map.addSource(SELECTED_SOURCE, { type: 'geojson', data: emptyCollection() });
       map.addSource(HANDLE_SOURCE, { type: 'geojson', data: emptyCollection() });
       map.addSource(DRAW_SOURCE, { type: 'geojson', data: emptyCollection() });
+      map.addSource(IMPORT_SOURCE, { type: 'geojson', data: emptyCollection() });
 
       addLayerSafe(map, {
         id: 'geometry-editor-boundary-fill',
@@ -506,7 +530,29 @@ if (section) {
         source: DRAW_SOURCE,
         paint: { 'fill-color': '#ff6b72', 'fill-opacity': 0.18 },
       });
-
+      addLayerSafe(map, {
+        id: 'geometry-editor-import-existing',
+        type: 'line',
+        source: IMPORT_SOURCE,
+        filter: ['==', ['get', 'role'], 'existing'],
+        paint: {
+          'line-color': '#b86cff',
+          'line-width': 6,
+          'line-opacity': 0.85,
+        },
+      });
+      addLayerSafe(map, {
+        id: 'geometry-editor-import-incoming',
+        type: 'line',
+        source: IMPORT_SOURCE,
+        filter: ['==', ['get', 'role'], 'incoming'],
+        paint: {
+          'line-color': '#ff5d67',
+          'line-width': 8,
+          'line-opacity': 0.9,
+          'line-dasharray': [1.6, 1],
+        },
+      });
 
       addLayerSafe(map, {
         id: 'geometry-editor-segment-hit',
@@ -724,6 +770,123 @@ if (section) {
     }
   }
 
+  function relationLabel(relation) {
+    const labels = {
+      'equals-different-tags':
+        'геометрия равна, исходные теги различаются',
+      'within-same-tags':
+        'одна линия входит в другую при одинаковых исходных тегах',
+      overlaps:
+        'линии частично совпадают',
+    };
+    return labels[relation] ?? relation;
+  }
+
+  function activeConflict() {
+    if (!state.importSession) return null;
+    return state.importSession.conflicts.find(
+      (item) =>
+        item.incomingId ===
+        state.activeConflictId,
+    ) ?? null;
+  }
+
+  function importConflictFeatures() {
+    const conflict = activeConflict();
+    if (!conflict) return emptyCollection();
+
+    const features = [{
+      type: 'Feature',
+      geometry: conflict.geometry,
+      properties: {
+        role: 'incoming',
+        id: conflict.incomingId,
+        name:
+          conflict.displayName ??
+          'Incoming #' +
+            conflict.incomingId,
+      },
+    }];
+
+    for (const candidate of conflict.candidates) {
+      features.push({
+        type: 'Feature',
+        geometry:
+          candidate.existing
+            .geometry,
+        properties: {
+          role: 'existing',
+          id:
+            candidate.existing.id,
+          name:
+            candidate.existing
+              .displayName ??
+            'Geometry #' +
+              candidate.existing.id,
+          relation:
+            candidate.relation,
+        },
+      });
+    }
+
+    return {
+      type: 'FeatureCollection',
+      features,
+    };
+  }
+
+  function fitFeatureCollection(collection) {
+    if (
+      !state.map ||
+      !collection?.features?.length
+    ) {
+      return;
+    }
+
+    let west = Infinity;
+    let south = Infinity;
+    let east = -Infinity;
+    let north = -Infinity;
+
+    const visit = (value) => {
+      if (!Array.isArray(value)) return;
+      if (
+        value.length >= 2 &&
+        typeof value[0] === 'number' &&
+        typeof value[1] === 'number'
+      ) {
+        west = Math.min(west, value[0]);
+        east = Math.max(east, value[0]);
+        south = Math.min(south, value[1]);
+        north = Math.max(north, value[1]);
+        return;
+      }
+      for (const child of value) visit(child);
+    };
+
+    for (const item of collection.features) {
+      visit(item.geometry?.coordinates);
+    }
+
+    if (
+      [west, south, east, north]
+        .every(Number.isFinite)
+    ) {
+      state.map.fitBounds(
+        [
+          [west, south],
+          [east, north],
+        ],
+        {
+          padding: 80,
+          maxZoom: 18,
+          duration: 250,
+        },
+      );
+    }
+  }
+
+
   function updateMapSources() {
     const map = state.map;
     if (!map) return;
@@ -745,14 +908,28 @@ if (section) {
     );
     map.getSource(HANDLE_SOURCE)?.setData(handleFeatures());
     map.getSource(DRAW_SOURCE)?.setData(drawingFeature());
+    map.getSource(IMPORT_SOURCE)?.setData(
+      importConflictFeatures(),
+    );
+
+    const conflictBoundary =
+      activeConflict()
+        ?.boundaryGeometry;
+
     map.getSource(BOUNDARY_SOURCE)?.setData(
-      state.city?.boundaryGeometry
+      conflictBoundary
         ? {
             type: 'Feature',
-            geometry: state.city.boundaryGeometry,
+            geometry: conflictBoundary,
             properties: {},
           }
-        : emptyCollection(),
+        : state.city?.boundaryGeometry
+          ? {
+              type: 'Feature',
+              geometry: state.city.boundaryGeometry,
+              properties: {},
+            }
+          : emptyCollection(),
     );
   }
 
@@ -955,7 +1132,10 @@ if (section) {
   function renderFormState() {
     const item = state.current;
     const draft = state.draft;
-    const enabled = Boolean(draft) && !state.drawing;
+    const enabled =
+      Boolean(draft) &&
+      !state.drawing &&
+      !state.importSession;
     for (const control of form.elements) {
       if (control.name === 'lineTypeId' || control.name === 'lanes') continue;
       if (['displayName', 'tooltip', 'tags', 'isVisible'].includes(control.name)) {
@@ -964,7 +1144,10 @@ if (section) {
     }
     form.querySelector('button[type="submit"]').disabled = !enabled;
     revertButton.disabled = !enabled;
-    deleteButton.disabled = !item?.id || Boolean(state.drawing);
+    deleteButton.disabled =
+      !item?.id ||
+      Boolean(state.drawing) ||
+      Boolean(state.importSession);
 
     const localDraft = item?.id ? draftFor(item.id) : null;
     if (conflictMessage) {
@@ -998,9 +1181,11 @@ if (section) {
       !enabled ||
       Boolean(localDraft);
     cutButton.title =
-      localDraft
-        ? 'Сначала сохраните или сбросьте локальный черновик'
-        : '';
+      state.importSession
+        ? 'Сначала разрешите конфликты подготовленного импорта'
+        : localDraft
+          ? 'Сначала сохраните или сбросьте локальный черновик'
+          : '';
 
     if (family === 'line') {
       form.elements.lineTypeId.disabled = !enabled;
@@ -1069,7 +1254,11 @@ if (section) {
       check.type = 'checkbox';
       check.className = 'geometry-editor-row-select';
       check.checked = state.selectedSet.has(item.id);
-      check.disabled = Boolean(item._draft || item._conflict);
+      check.disabled = Boolean(
+        state.importSession ||
+        item._draft ||
+        item._conflict,
+      );
       check.title = check.disabled
         ? 'Сначала сохраните или сбросьте локальный черновик'
         : 'Выбрать для объединения';
@@ -1124,6 +1313,9 @@ if (section) {
   }
 
   function mergeProblem(items) {
+    if (state.importSession) {
+      return 'Сначала разрешите конфликты подготовленного импорта.';
+    }
     if (items.length < 2) return 'Выберите минимум две геометрии.';
     if (items.some((item) => item._draft || item._conflict)) {
       return 'Сначала сохраните или сбросьте локальные черновики выбранных геометрий.';
@@ -1264,6 +1456,13 @@ if (section) {
 
 
   async function selectGeometry(id, { focus = true } = {}) {
+    if (state.importSession) {
+      setMessage(
+        'Сначала разрешите конфликты подготовленного импорта.',
+        'error',
+      );
+      return;
+    }
     if (state.drawing) cancelDrawing();
     const summary = state.geometries.find((candidate) => candidate.id === id);
     if (!summary) return;
@@ -1312,6 +1511,660 @@ if (section) {
     renderHistoryControls();
     modeLabel.textContent = 'Выберите геометрию';
   }
+
+  function renderConflictDecision() {
+    const conflict = activeConflict();
+    conflictDecision.hidden = !conflict;
+    if (!conflict) {
+      conflictCandidates.replaceChildren();
+      return;
+    }
+
+    conflictTitle.textContent =
+      conflict.displayName ??
+      'Incoming #' +
+        conflict.incomingId;
+
+    conflictDescription.textContent =
+      conflict.cityName +
+      '; тип линии: ' +
+      conflict.lineTypeName +
+      '; sourceTags incoming: ' +
+      JSON.stringify(
+        conflict.sourceTags ??
+        {},
+      ) +
+      (
+        conflict.autoExistingId
+          ? '; точное совпадение уже существует: geometry #' +
+            conflict.autoExistingId
+          : ''
+      );
+
+    conflictAdd.disabled =
+      Boolean(
+        conflict.autoExistingId,
+      );
+    conflictAdd.title =
+      conflict.autoExistingId
+        ? 'Нельзя создать дубль: incoming уже имеет точное совпадение с теми же source_tags'
+        : '';
+
+    const decision =
+      state.conflictDecisions.get(
+        conflict.incomingId,
+      );
+    const selectedIds =
+      new Set(
+        decision
+          ?.replaceExistingIds ??
+        [],
+      );
+
+    const rows =
+      conflict.candidates.map(
+        (candidate) => {
+          const localDraft =
+            draftFor(
+              candidate.existing.id,
+            );
+          const label =
+            document.createElement(
+              'label',
+            );
+          label.className =
+            'geometry-conflict-candidate';
+          label.classList.toggle(
+            'has-local-draft',
+            Boolean(localDraft),
+          );
+
+          const checkbox =
+            document.createElement(
+              'input',
+            );
+          checkbox.type =
+            'checkbox';
+          checkbox.value =
+            String(
+              candidate.existing.id,
+            );
+          checkbox.checked =
+            selectedIds.has(
+              candidate.existing.id,
+            );
+          checkbox.disabled =
+            Boolean(localDraft);
+          checkbox.title =
+            localDraft
+              ? 'У этой геометрии есть локальный черновик. Для замены сначала сбросьте его.'
+              : '';
+
+          const copy =
+            document.createElement(
+              'span',
+            );
+          const name =
+            document.createElement(
+              'strong',
+            );
+          name.textContent =
+            candidate.existing
+              .displayName ??
+            'Geometry #' +
+              candidate.existing.id;
+
+          const details =
+            document.createElement(
+              'small',
+            );
+          details.textContent =
+            relationLabel(
+              candidate.relation,
+            ) +
+            '; изменялась вручную=' +
+            (
+              candidate.existing
+                .wasEdited
+                ? 'да'
+                : 'нет'
+            ) +
+            (
+              localDraft
+                ? '; есть локальный черновик'
+                : ''
+            ) +
+            '; sourceTags=' +
+            JSON.stringify(
+              candidate.existing
+                .sourceTags ??
+              {},
+            );
+
+          copy.append(
+            name,
+            details,
+          );
+          label.append(
+            checkbox,
+            copy,
+          );
+          return label;
+        },
+      );
+
+    conflictCandidates
+      .replaceChildren(
+        ...rows,
+      );
+  }
+
+  function renderImportConflicts() {
+    const session =
+      state.importSession;
+
+    importPanel.hidden =
+      !session;
+
+    citySelect.disabled =
+      Boolean(session);
+    newPointButton.disabled =
+      Boolean(session);
+    newLineButton.disabled =
+      Boolean(session);
+    newPolygonButton.disabled =
+      Boolean(session);
+    recalculateButton.disabled =
+      Boolean(session);
+
+    if (!session) {
+      importList
+        .replaceChildren();
+      importSummary.textContent =
+        '';
+      importApply.disabled =
+        true;
+      importDiscard.disabled =
+        true;
+      conflictDecision.hidden =
+        true;
+      refreshDraftControls();
+      renderFormState();
+      renderMergeState();
+      return;
+    }
+
+    importDiscard.disabled =
+      false;
+    importTitle.textContent =
+      'Конфликты KML — session #' +
+      session.id;
+
+    const resolved =
+      session.conflicts.filter(
+        (item) =>
+          state.conflictDecisions
+            .has(
+              item.incomingId,
+            ),
+      ).length;
+
+    importSummary.textContent =
+      session.conflictGeometries +
+      ' геометрий / ' +
+      session.conflictPairs +
+      ' пар. Решено: ' +
+      resolved +
+      '/' +
+      session.conflictGeometries +
+      '.';
+
+    importApply.disabled =
+      resolved !==
+      session.conflictGeometries;
+
+    const buttons =
+      session.conflicts.map(
+        (conflict) => {
+          const button =
+            document.createElement(
+              'button',
+            );
+          button.type =
+            'button';
+          button.className =
+            'geometry-import-conflict-item';
+          button.classList.toggle(
+            'is-active',
+            conflict.incomingId ===
+              state.activeConflictId,
+          );
+          button.classList.toggle(
+            'is-resolved',
+            state.conflictDecisions
+              .has(
+                conflict.incomingId,
+              ),
+          );
+
+          const heading =
+            document.createElement(
+              'strong',
+            );
+          heading.textContent =
+            conflict.displayName ??
+            'Incoming #' +
+              conflict.incomingId;
+
+          const details =
+            document.createElement(
+              'small',
+            );
+          const decision =
+            state.conflictDecisions.get(
+              conflict.incomingId,
+            );
+          details.textContent =
+            conflict.cityName +
+            '; кандидатов: ' +
+            conflict.candidates.length +
+            (
+              decision
+                ? '; решение: ' +
+                  decision.action
+                : '; решение не выбрано'
+            );
+
+          button.append(
+            heading,
+            details,
+          );
+          button.addEventListener(
+            'click',
+            () =>
+              showImportConflict(
+                conflict.incomingId,
+              ),
+          );
+          return button;
+        },
+      );
+
+    importList.replaceChildren(
+      ...buttons,
+    );
+    renderConflictDecision();
+    refreshDraftControls();
+    renderFormState();
+    renderMergeState();
+  }
+
+  function showImportConflict(
+    incomingId,
+    {
+      fit = true,
+      capture = true,
+    } = {},
+  ) {
+    if (capture) {
+      captureCurrentDraft();
+    }
+
+    state.activeConflictId =
+      incomingId;
+    state.selectedId = null;
+    state.current = null;
+    state.draft = null;
+    state.history = [];
+    state.future = [];
+    state.selectedVertexPath = null;
+    applyForm(null);
+    renderList();
+    renderImportConflicts();
+    updateMapSources();
+
+    const collection =
+      importConflictFeatures();
+
+    if (fit) {
+      fitFeatureCollection(
+        collection,
+      );
+    }
+
+    modeLabel.textContent =
+      'Конфликт #' +
+      incomingId +
+      ': красная — incoming, фиолетовые — текущие';
+  }
+
+  function setConflictDecision(
+    action,
+  ) {
+    const conflict =
+      activeConflict();
+    if (!conflict) return;
+
+    if (
+      action ===
+        'add-new' &&
+      conflict.autoExistingId
+    ) {
+      setMessage(
+        'Новая запись не создаётся: incoming уже имеет точное совпадение с теми же source_tags.',
+        'error',
+      );
+      return;
+    }
+
+    let replaceExistingIds =
+      [];
+
+    if (
+      action ===
+        'replace'
+    ) {
+      replaceExistingIds =
+        Array.from(
+          conflictCandidates
+            .querySelectorAll(
+              'input[type="checkbox"]:checked',
+            ),
+        )
+          .map(
+            (input) =>
+              Number(
+                input.value,
+              ),
+          )
+          .filter(
+            (id) =>
+              Number.isSafeInteger(
+                id,
+              ) &&
+              id > 0,
+          );
+
+      if (
+        !replaceExistingIds
+          .length
+      ) {
+        setMessage(
+          'Для замены выберите хотя бы одну текущую геометрию без локального черновика.',
+          'error',
+        );
+        return;
+      }
+
+      const localIds =
+        replaceExistingIds.filter(
+          (id) =>
+            Boolean(
+              draftFor(id),
+            ),
+        );
+      if (
+        localIds.length >
+        0
+      ) {
+        setMessage(
+          'Нельзя заменить геометрию с локальным черновиком. Сначала сбросьте этот черновик или выберите другое решение.',
+          'error',
+        );
+        return;
+      }
+    }
+
+    state.conflictDecisions.set(
+      conflict.incomingId,
+      {
+        incomingId:
+          conflict.incomingId,
+        action,
+        replaceExistingIds,
+      },
+    );
+
+    setMessage(
+      'Решение сохранено локально. База изменится только после общей кнопки применения.',
+      'success',
+    );
+    renderImportConflicts();
+  }
+
+  async function loadPendingImport() {
+    const payload =
+      await api(
+        '/api/admin/geometry-import/pending',
+      );
+    const next =
+      payload.session ??
+      null;
+    const previousId =
+      state.importSession
+        ?.id ??
+      null;
+
+    if (
+      !next ||
+      next.id !==
+        previousId
+    ) {
+      state.conflictDecisions
+        .clear();
+      state.activeConflictId =
+        next?.conflicts?.[0]
+          ?.incomingId ??
+        null;
+    }
+
+    state.importSession =
+      next;
+    renderImportConflicts();
+    updateMapSources();
+    return next;
+  }
+
+  async function waitForGeometryImportTask(
+    taskId,
+  ) {
+    for (;;) {
+      const status =
+        await api(
+          '/api/admin/geometry-import/tasks/' +
+          encodeURIComponent(
+            taskId,
+          ),
+        );
+      const task =
+        status.task;
+
+      if (
+        !task ||
+        [
+          'failed',
+          'cancelled',
+          'succeeded',
+        ].includes(
+          task.status,
+        )
+      ) {
+        if (
+          task?.status ===
+          'succeeded'
+        ) {
+          return task.result;
+        }
+
+        throw new Error(
+          task?.error?.message ??
+          'Задача завершилась без успешного результата',
+        );
+      }
+
+      await new Promise(
+        (resolve) => {
+          window.setTimeout(
+            resolve,
+            500,
+          );
+        },
+      );
+    }
+  }
+
+  async function applyImportDecisions() {
+    const session =
+      state.importSession;
+    if (
+      !session ||
+      importApply.disabled
+    ) {
+      return;
+    }
+
+    try {
+      importApply.disabled =
+        true;
+      importDiscard.disabled =
+        true;
+      setMessage(
+        'Применяем решения конфликтов…',
+      );
+
+      const accepted =
+        await api(
+          '/api/admin/geometry-import/' +
+          session.id +
+          '/apply',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body:
+              JSON.stringify({
+                decisions:
+                  session.conflicts
+                    .map(
+                      (conflict) =>
+                        state.conflictDecisions.get(
+                          conflict.incomingId,
+                        ),
+                    ),
+              }),
+          },
+        );
+
+      const result =
+        await waitForGeometryImportTask(
+          accepted.taskId,
+        );
+
+      state.importSession =
+        null;
+      state.activeConflictId =
+        null;
+      state.conflictDecisions
+        .clear();
+      renderImportConflicts();
+
+      await refresh({
+        keepSelection: false,
+        fit: false,
+      });
+
+      setMessage(
+        'Импорт применён. Добавлено: ' +
+        (
+          result
+            ?.insertedGeometries ??
+          0
+        ) +
+        '; заменено: ' +
+        (
+          result
+            ?.replacedExistingGeometries ??
+          0
+        ) +
+        '.',
+        'success',
+      );
+    } catch (error) {
+      setMessage(
+        error.message,
+        'error',
+      );
+      await loadPendingImport()
+        .catch(
+          () => {},
+        );
+    } finally {
+      renderImportConflicts();
+    }
+  }
+
+  async function discardPendingImport() {
+    const session =
+      state.importSession;
+    if (!session) return;
+
+    const confirmed =
+      await adminConfirm({
+        title:
+          'Отбросить подготовленный импорт?',
+        message:
+          'Staged KML import session #' +
+          session.id +
+          ' будет удалена. Production-геометрии не изменятся.',
+        confirmLabel:
+          'Отбросить импорт',
+        cancelLabel:
+          'Отмена',
+        destructive:
+          true,
+      });
+
+    if (!confirmed) return;
+
+    try {
+      importDiscard.disabled =
+        true;
+      await api(
+        '/api/admin/geometry-import/' +
+        session.id,
+        {
+          method: 'DELETE',
+        },
+      );
+
+      state.importSession =
+        null;
+      state.activeConflictId =
+        null;
+      state.conflictDecisions
+        .clear();
+      renderImportConflicts();
+
+      await refresh({
+        keepSelection: false,
+        fit: false,
+      });
+
+      setMessage(
+        'Staged импорт отброшен. Production-геометрии не изменялись.',
+        'success',
+      );
+    } catch (error) {
+      setMessage(
+        error.message,
+        'error',
+      );
+      renderImportConflicts();
+    }
+  }
+
 
   function renderLineTypes() {
     form.elements.lineTypeId.replaceChildren(...state.lineTypes.map((lineType) => {
@@ -1422,14 +2275,54 @@ if (section) {
     try {
       await ensureMap();
       const cityId = Number(citySelect.value || state.city?.id || state.cities[0]?.id);
-      await loadCities();
+      await Promise.all([
+        loadCities(),
+        loadPendingImport(),
+      ]);
       const resolvedId = Number.isSafeInteger(cityId) && cityId > 0
         ? cityId
         : state.cities[0]?.id;
       if (resolvedId) {
         await loadCity(resolvedId, { keepSelection, fit });
-        const conflicts = drafts.list().filter((draft) => draft.conflict).length;
-        if (!conflicts) setMessage('');
+
+        if (
+          state.importSession &&
+          state.activeConflictId
+        ) {
+          showImportConflict(
+            state.activeConflictId,
+            {
+              fit,
+              capture: false,
+            },
+          );
+        } else {
+          const conflicts =
+            drafts.list()
+              .filter(
+                (draft) =>
+                  draft.conflict,
+              )
+              .length;
+          if (!conflicts) {
+            setMessage('');
+          }
+        }
+      } else if (
+        state.importSession &&
+        state.activeConflictId
+      ) {
+        showImportConflict(
+          state.activeConflictId,
+          {
+            fit,
+            capture: false,
+          },
+        );
+        setMessage(
+          'Подготовленный импорт ожидает разрешения конфликтов.',
+          'error',
+        );
       } else {
         setMessage(
           'В редакторе нет активных городов. Проверьте активность объектов в OSM-дереве.',
@@ -1460,6 +2353,13 @@ if (section) {
   }
 
   async function startDrawing(mode) {
+    if (state.importSession) {
+      setMessage(
+        'Сначала разрешите конфликты подготовленного импорта.',
+        'error',
+      );
+      return;
+    }
     if (!state.city) {
       setMessage('Сначала выберите город.', 'error');
       return;
@@ -1716,6 +2616,13 @@ if (section) {
   }
 
   async function saveCurrent() {
+    if (state.importSession) {
+      setMessage(
+        'Сначала разрешите конфликты подготовленного импорта.',
+        'error',
+      );
+      return;
+    }
     if (!state.draft || state.drawing || !state.city || !form.reportValidity()) return;
 
     const currentId = state.current?.id;
@@ -2040,6 +2947,14 @@ if (section) {
 
 
   async function recalculateDerived() {
+    if (state.importSession) {
+      setMessage(
+        'Сначала разрешите конфликты подготовленного импорта.',
+        'error',
+      );
+      return;
+    }
+
     const selectedId = state.selectedId;
     try {
       recalculateButton.disabled = true;
@@ -2066,6 +2981,13 @@ if (section) {
   }
 
   saveAll?.addEventListener('click', async () => {
+    if (state.importSession) {
+      setMessage(
+        'Сначала разрешите конфликты подготовленного импорта.',
+        'error',
+      );
+      return;
+    }
     captureCurrentDraft();
     const entries = drafts.list();
     if (!entries.length) return;
@@ -2143,6 +3065,38 @@ if (section) {
   });
 
 
+  conflictKeep.addEventListener(
+    'click',
+    () =>
+      setConflictDecision(
+        'keep-existing',
+      ),
+  );
+  conflictAdd.addEventListener(
+    'click',
+    () =>
+      setConflictDecision(
+        'add-new',
+      ),
+  );
+  conflictReplace.addEventListener(
+    'click',
+    () =>
+      setConflictDecision(
+        'replace',
+      ),
+  );
+  importApply.addEventListener(
+    'click',
+    () =>
+      void applyImportDecisions(),
+  );
+  importDiscard.addEventListener(
+    'click',
+    () =>
+      void discardPendingImport(),
+  );
+
   cutButton.addEventListener('click', () => {
     void startDrawing('cut');
   });
@@ -2152,9 +3106,9 @@ if (section) {
   redoButton.addEventListener('click', redo);
   finishDrawButton.addEventListener('click', () => void finishDrawing());
   cancelDrawButton.addEventListener('click', cancelDrawing);
-  document.querySelector('#geometry-new-point').addEventListener('click', () => void startDrawing('point'));
-  document.querySelector('#geometry-new-line').addEventListener('click', () => void startDrawing('line'));
-  document.querySelector('#geometry-new-polygon').addEventListener('click', () => void startDrawing('polygon'));
+  newPointButton.addEventListener('click', () => void startDrawing('point'));
+  newLineButton.addEventListener('click', () => void startDrawing('line'));
+  newPolygonButton.addEventListener('click', () => void startDrawing('polygon'));
 
   citySelect.addEventListener('change', () => {
     state.selectedSet.clear();
