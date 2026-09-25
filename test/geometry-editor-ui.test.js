@@ -237,7 +237,7 @@ test('geometry merge and cut stay revision-safe around local drafts', async () =
 
   assert.match(
     editor,
-    /check\.disabled = Boolean\(item\._draft \|\| item\._conflict\)/u,
+    /check\.disabled = Boolean\([\s\S]*state\.importSession[\s\S]*item\._draft[\s\S]*item\._conflict[\s\S]*\);/u,
   );
   assert.match(
     editor,
