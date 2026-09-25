@@ -30,8 +30,8 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
   const simpleFactories = [
     'createCitiesRepository',
     'createLineTypesRepository',
-    'createProjectSettingsTransferService',
-    'createReportConfigService',
+    'createProjectSettingsTransferRuntime',
+    'createReportConfigRuntime',
     'createDataExportRepository',
     'createPublicDownloadRepository',
     'createLineImportRuntime',
@@ -203,7 +203,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
         dependencies
           .reportConfigService
           .name,
-        'createReportConfigService',
+        'createReportConfigRuntime',
       );
       calls.push(
         'createDerivedStateRefresh',
@@ -239,8 +239,8 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
       'createCitiesRepository',
       'createLineTypesRepository',
       'createProjectSettingsRepository',
-      'createProjectSettingsTransferService',
-      'createReportConfigService',
+      'createProjectSettingsTransferRuntime',
+      'createReportConfigRuntime',
       'createDataExportRepository',
       'createPublicDownloadRepository',
       'createPublicDownloadService',

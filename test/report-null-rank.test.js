@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DEFAULT_REPORT_CONFIG } from '../src/modules/reporting/config-policy.js';
-import { createReportConfigService } from '../src/db/report-config-service.js';
+import { createReportConfigRuntime } from '../src/application/project-report-runtime.js';
 
 function configRow() {
   const config = structuredClone(DEFAULT_REPORT_CONFIG);
@@ -38,7 +38,7 @@ test('report materialization ranks only visible cities and leaves missing metric
     async connect() { return client; },
   };
 
-  const result = await createReportConfigService(pool).refresh();
+  const result = await createReportConfigRuntime(pool).refresh();
 
   assert.equal(result.cities, 2);
   assert.match(

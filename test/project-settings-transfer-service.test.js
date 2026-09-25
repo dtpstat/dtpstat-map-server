@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  createProjectSettingsTransferService,
+  createProjectSettingsTransferRuntime,
+} from '../src/application/project-report-runtime.js';
+import {
   ProjectSettingsTransferValidationError,
-} from '../src/db/project-settings-transfer-service.js';
+} from '../src/application/data-transfer/project-settings-service.js';
 
 function exportPool() {
   const client = {
@@ -106,7 +108,7 @@ function exportPool() {
 }
 
 test('settings export contains download name, sequential ranking and line display settings but no private admin data', async () => {
-  const service = createProjectSettingsTransferService(exportPool());
+  const service = createProjectSettingsTransferRuntime(exportPool());
   const payload = await service.exportSettings();
 
   assert.equal(payload._dtpstat.kind, 'project-settings');
@@ -131,7 +133,7 @@ test('settings export contains download name, sequential ranking and line displa
 
 test('settings import rejects another transfer kind before opening a database transaction', async () => {
   let connected = false;
-  const service = createProjectSettingsTransferService({
+  const service = createProjectSettingsTransferRuntime({
     async connect() {
       connected = true;
       throw new Error('must not connect');
@@ -149,7 +151,7 @@ test('settings import rejects another transfer kind before opening a database tr
 
 test('settings import rejects unsupported schema versions before touching the database', async () => {
   let connected = false;
-  const service = createProjectSettingsTransferService({
+  const service = createProjectSettingsTransferRuntime({
     async connect() {
       connected = true;
       throw new Error('must not connect');
@@ -174,7 +176,7 @@ function exportServiceWithSnapshot(snapshot, queries) {
     release() {},
   };
 
-  return createProjectSettingsTransferService(
+  return createProjectSettingsTransferRuntime(
     {
       async connect() {
         return client;

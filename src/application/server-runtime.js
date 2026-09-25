@@ -44,14 +44,12 @@ import {
   createProjectSettingsRepository,
 } from '../db/project-settings-repository.js';
 import {
-  createProjectSettingsTransferService,
-} from '../db/project-settings-transfer-service.js';
+  createProjectSettingsTransferRuntime,
+  createReportConfigRuntime,
+} from './project-report-runtime.js';
 import {
   createPublicDownloadRepository,
 } from '../db/public-download-repository.js';
-import {
-  createReportConfigService,
-} from '../db/report-config-service.js';
 import {
   createAdminAuthorization,
 } from '../http/admin-auth.js';
@@ -78,10 +76,10 @@ const DEFAULT_FACTORIES =
     createOsmImportSettingsRepository,
     createPopulationImportRuntime,
     createProjectSettingsRepository,
-    createProjectSettingsTransferService,
+    createProjectSettingsTransferRuntime,
     createPublicDownloadRepository,
     createPublicDownloadService,
-    createReportConfigService,
+    createReportConfigRuntime,
   });
 
 /**
@@ -120,12 +118,12 @@ export function createServerRuntime({
       );
   const settingsTransferService =
     runtimeFactories
-      .createProjectSettingsTransferService(
+      .createProjectSettingsTransferRuntime(
         pool,
       );
   const reportConfigService =
     runtimeFactories
-      .createReportConfigService(pool);
+      .createReportConfigRuntime(pool);
   const exportRepository =
     runtimeFactories
       .createDataExportRepository(pool);
