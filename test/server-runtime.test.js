@@ -33,7 +33,6 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
     'createProjectSettingsTransferRuntime',
     'createReportConfigRuntime',
     'createDataExportRepository',
-    'createPublicDownloadRepository',
     'createLineImportRuntime',
     'createCityBoundaryTransferRuntime',
     'createPopulationImportRuntime',
@@ -57,25 +56,35 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
       };
   }
 
-  factories.createProjectSettingsRepository =
-    (
-      receivedPool,
-      publicMap,
-    ) => {
+  factories.createProjectRuntime =
+    (options) => {
       assert.equal(
-        receivedPool,
+        options.database,
         pool,
       );
       assert.equal(
-        publicMap,
+        options.publicMapDefaults,
         config.publicMap,
       );
+      assert.equal(
+        options.projectRoot,
+        config.projectRoot,
+      );
       calls.push(
-        'createProjectSettingsRepository',
+        'createProjectRuntime',
       );
-      return value(
-        'createProjectSettingsRepository',
-      );
+      return {
+        projectSettingsRepository:
+          value(
+            'createProjectSettingsRuntime',
+          ),
+        publicDownloadService: {
+          name:
+            'createPublicDownloadRuntime',
+          directory:
+            '/srv/app/var/public-downloads',
+        },
+      };
     };
 
   factories.createKmlUpdateRuntime =
@@ -133,35 +142,6 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
       );
     };
 
-  factories.createPublicDownloadService =
-    (options) => {
-      assert.equal(
-        options
-          .repository
-          .name,
-        'createPublicDownloadRepository',
-      );
-      assert.equal(
-        options
-          .projectSettingsRepository
-          .name,
-        'createProjectSettingsRepository',
-      );
-      assert.equal(
-        options.directory,
-        '/srv/app/var/public-downloads',
-      );
-      calls.push(
-        'createPublicDownloadService',
-      );
-      return {
-        name:
-          'createPublicDownloadService',
-        directory:
-          options.directory,
-      };
-    };
-
   factories.createAdminSecurityService =
     (repository) => {
       assert.equal(
@@ -197,7 +177,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
         dependencies
           .publicDownloadService
           .name,
-        'createPublicDownloadService',
+        'createPublicDownloadRuntime',
       );
       assert.equal(
         dependencies
@@ -238,12 +218,10 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
     [
       'createCitiesRepository',
       'createLineTypesRepository',
-      'createProjectSettingsRepository',
+      'createProjectRuntime',
       'createProjectSettingsTransferRuntime',
       'createReportConfigRuntime',
       'createDataExportRepository',
-      'createPublicDownloadRepository',
-      'createPublicDownloadService',
       'createLineImportRuntime',
       'createCityBoundaryTransferRuntime',
       'createPopulationImportRuntime',

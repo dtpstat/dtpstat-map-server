@@ -1,7 +1,3 @@
-import path from 'node:path';
-import {
-  createPublicDownloadService,
-} from './public-downloads/service.js';
 import {
   createDerivedStateRefresh,
 } from './derived-state-refresh.js';
@@ -41,15 +37,12 @@ import {
   createOsmImportSettingsRepository,
 } from '../db/osm-import-settings-repository.js';
 import {
-  createProjectSettingsRepository,
-} from '../db/project-settings-repository.js';
+  createProjectRuntime,
+} from './project-runtime.js';
 import {
   createProjectSettingsTransferRuntime,
   createReportConfigRuntime,
 } from './project-report-runtime.js';
-import {
-  createPublicDownloadRepository,
-} from '../db/public-download-repository.js';
 import {
   createAdminAuthorization,
 } from '../http/admin-auth.js';
@@ -75,10 +68,8 @@ const DEFAULT_FACTORIES =
     createOsmCityUpdateRuntime,
     createOsmImportSettingsRepository,
     createPopulationImportRuntime,
-    createProjectSettingsRepository,
+    createProjectRuntime,
     createProjectSettingsTransferRuntime,
-    createPublicDownloadRepository,
-    createPublicDownloadService,
     createReportConfigRuntime,
   });
 
@@ -110,12 +101,18 @@ export function createServerRuntime({
   const lineTypesRepository =
     runtimeFactories
       .createLineTypesRepository(pool);
-  const projectSettingsRepository =
+  const {
+    projectSettingsRepository,
+    publicDownloadService,
+  } =
     runtimeFactories
-      .createProjectSettingsRepository(
-        pool,
-        config.publicMap,
-      );
+      .createProjectRuntime({
+        database: pool,
+        publicMapDefaults:
+          config.publicMap,
+        projectRoot:
+          config.projectRoot,
+      });
   const settingsTransferService =
     runtimeFactories
       .createProjectSettingsTransferRuntime(
@@ -127,24 +124,6 @@ export function createServerRuntime({
   const exportRepository =
     runtimeFactories
       .createDataExportRepository(pool);
-  const publicDownloadRepository =
-    runtimeFactories
-      .createPublicDownloadRepository(
-        pool,
-      );
-  const publicDownloadService =
-    runtimeFactories
-      .createPublicDownloadService({
-        repository:
-          publicDownloadRepository,
-        projectSettingsRepository,
-        directory:
-          path.join(
-            config.projectRoot,
-            'var',
-            'public-downloads',
-          ),
-      });
   const importService =
     runtimeFactories
       .createLineImportRuntime(pool);

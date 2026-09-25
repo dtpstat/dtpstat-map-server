@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createProjectSettingsRepository } from '../src/db/project-settings-repository.js';
+import { createProjectSettingsRuntime } from '../src/application/project-runtime.js';
 
 test('project settings repository reads and updates the singleton row', async () => {
   const calls = [];
@@ -53,7 +53,7 @@ test('project settings repository reads and updates the singleton row', async ()
       };
     },
   };
-  const repository = createProjectSettingsRepository(database);
+  const repository = createProjectSettingsRuntime(database);
 
   const initial = await repository.get();
   assert.equal(initial.projectName, 'Выделенные полосы в России');
@@ -216,7 +216,7 @@ test('project settings save commits thresholds and city classification atomicall
       throw new Error('pool.query must not be used during transactional save');
     },
   };
-  const repository = createProjectSettingsRepository(database);
+  const repository = createProjectSettingsRuntime(database);
 
   const saved = await repository.save({
     projectName: 'Выделенные полосы в России',
