@@ -13,6 +13,10 @@ function canEditOsm(user) {
   return Boolean(user?.isSuperuser || user?.canEditOsm);
 }
 
+function canEditGeometries(user) {
+  return Boolean(user?.isSuperuser || user?.canEditGeometries);
+}
+
 function canAccessSecurity(user) {
   return Boolean(
     user?.isSuperuser || user?.canManageUsers || user?.canViewAudit || user?.canManageSecurity,
@@ -257,6 +261,7 @@ function setupPrimarySections(user) {
   const dataAccess = !mustChangePassword && canManageData(user);
   const permissions = {
     data: dataAccess,
+    geometries: !mustChangePassword && canEditGeometries(user),
     'osm-objects': !mustChangePassword && canEditOsm(user),
     interface: !mustChangePassword && canManageInterface(user),
     security: !mustChangePassword && canAccessSecurity(user),
@@ -271,7 +276,7 @@ function setupPrimarySections(user) {
     tab.hidden = !permissions[key];
   }
 
-  const available = ['data', 'osm-objects', 'interface', 'security', 'profile']
+  const available = ['data', 'geometries', 'osm-objects', 'interface', 'security', 'profile']
     .filter((key) => permissions[key]);
   const select = (key) => {
     if (!permissions[key]) return;
@@ -282,8 +287,13 @@ function setupPrimarySections(user) {
       tab.tabIndex = active ? 0 : -1;
     }
     for (const panel of panels) panel.hidden = panel.dataset.adminSectionPanel !== key;
-    if (connection) connection.hidden = key !== 'data' || !permissions.data;
+    if (connection) {
+      connection.hidden = !['data', 'geometries', 'osm-objects'].includes(key);
+    }
     if (key === 'security') window.dispatchEvent(new CustomEvent('dtpstat:security-refresh'));
+    if (key === 'geometries') {
+      window.dispatchEvent(new CustomEvent('dtpstat:geometry-editor-open'));
+    }
     if (key === 'osm-objects') {
       window.dispatchEvent(new CustomEvent('dtpstat:osm-boundary-editor-open'));
     }
@@ -308,6 +318,7 @@ function updateUserBadge(user) {
   const roles = [
     user.isSuperuser ? 'superuser' : null,
     user.canManageData ? 'данные' : null,
+    user.canEditGeometries ? 'геометрии' : null,
     user.canEditOsm ? 'OSM' : null,
     user.canManageInterface ? 'интерфейс' : null,
     user.canManageUsers ? 'пользователи' : null,
@@ -357,6 +368,10 @@ async function startAdminShell() {
     await import('./project-branding.js');
     const session = await globalThis.dtpstatAdminSession;
     const user = session.user;
+    const {
+      startAdminRealtime,
+    } = await import('./realtime-client.js');
+    startAdminRealtime();
     ensureProfileSection();
     ensureTopbarActions();
     updateUserBadge(user);
@@ -365,6 +380,7 @@ async function startAdminShell() {
     await import('./profile-editor.js');
     if (!user.mustChangePassword) {
       if (canManageData(user)) await loadDataEditors();
+      if (canEditGeometries(user)) await import('./geometry-editor.js');
       if (canEditOsm(user)) await import('./osm-boundary-editor.js');
       if (canManageInterface(user)) await loadInterfaceEditors(user);
       if (canAccessSecurity(user)) await import('./security-editor-v2.js');

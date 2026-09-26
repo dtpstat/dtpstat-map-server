@@ -83,7 +83,8 @@ const LOCK_BOUNDARY_SQL = `
     boundary.population::integer AS population,
     boundary.population_as_of AS "populationAsOf",
     boundary.population_source AS "populationSource",
-    boundary.attributes
+    boundary.attributes,
+    boundary.updated_at AS "updatedAt"
   FROM city_boundaries AS boundary
   WHERE boundary.id = $1
   FOR UPDATE OF boundary

@@ -1,8 +1,9 @@
 export class OsmBoundaryAdminValidationError extends Error {
-  constructor(message, statusCode = 400) {
+  constructor(message, statusCode = 400, details = null) {
     super(message);
     this.name = 'OsmBoundaryAdminValidationError';
     this.statusCode = statusCode;
+    this.details = details;
   }
 }
 
@@ -185,4 +186,100 @@ export function normalizeOsmSubtreeActive(value) {
     );
   }
   return value;
+}
+
+
+export function normalizeOsmBoundaryRevision(value) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new OsmBoundaryAdminValidationError(
+      'baseUpdatedAt must be an ISO timestamp',
+    );
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) {
+    throw new OsmBoundaryAdminValidationError(
+      'baseUpdatedAt must be an ISO timestamp',
+    );
+  }
+  return date.toISOString();
+}
+
+export function normalizeOsmBoundaryBulkUpdates(value) {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value)
+  ) {
+    throw new OsmBoundaryAdminValidationError(
+      'Request body must be an object',
+    );
+  }
+
+  const unknown = Object.keys(value)
+    .filter((key) => key !== 'updates');
+  if (unknown.length > 0) {
+    throw new OsmBoundaryAdminValidationError(
+      'Unsupported bulk update fields: ' +
+        unknown.join(', '),
+    );
+  }
+
+  if (
+    !Array.isArray(value.updates) ||
+    value.updates.length < 1 ||
+    value.updates.length > 500
+  ) {
+    throw new OsmBoundaryAdminValidationError(
+      'updates must contain 1-500 items',
+    );
+  }
+
+  const seen = new Set();
+  return value.updates.map((entry, index) => {
+    if (
+      !entry ||
+      typeof entry !== 'object' ||
+      Array.isArray(entry)
+    ) {
+      throw new OsmBoundaryAdminValidationError(
+        `updates[${index}] must be an object`,
+      );
+    }
+
+    const entryUnknown =
+      Object.keys(entry)
+        .filter((key) =>
+          ![
+            'id',
+            'baseUpdatedAt',
+            'changes',
+          ].includes(key));
+    if (entryUnknown.length > 0) {
+      throw new OsmBoundaryAdminValidationError(
+        `updates[${index}] contains unsupported fields: ` +
+          entryUnknown.join(', '),
+      );
+    }
+
+    const id =
+      normalizeOsmBoundaryId(entry.id);
+    if (seen.has(id)) {
+      throw new OsmBoundaryAdminValidationError(
+        `Duplicate boundary id in bulk update: ${id}`,
+      );
+    }
+    seen.add(id);
+
+    return {
+      id,
+      baseUpdatedAt:
+        normalizeOsmBoundaryRevision(
+          entry.baseUpdatedAt,
+        ),
+      changes:
+        normalizeOsmBoundaryChanges(
+          entry.changes,
+        ),
+    };
+  });
 }

@@ -2,7 +2,7 @@
  * Authorization policy for administrator capabilities.
  *
  * @param {any} user
- * @param {'any'|'profile'|'data'|'interface'|'osm-editor'|'users'|'audit'|'users-or-audit'|'security'|'superuser'} permission
+ * @param {'any'|'profile'|'data'|'interface'|'osm-editor'|'geometry-editor'|'users'|'audit'|'users-or-audit'|'security'|'superuser'} permission
  */
 export function adminHasPermission(user, permission) {
   if (!user) return false;
@@ -23,6 +23,9 @@ export function adminHasPermission(user, permission) {
   }
   if (permission === 'osm-editor') {
     return Boolean(user.canEditOsm);
+  }
+  if (permission === 'geometry-editor') {
+    return Boolean(user.canEditGeometries);
   }
   if (permission === 'users') {
     return Boolean(user.canManageUsers);

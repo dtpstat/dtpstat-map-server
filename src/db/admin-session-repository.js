@@ -12,6 +12,7 @@ const SESSION_USER_FIELDS = `
   users.can_manage_data AS "canManageData",
   users.can_manage_interface AS "canManageInterface",
   users.can_edit_osm AS "canEditOsm",
+  users.can_edit_geometries AS "canEditGeometries",
   users.can_manage_users AS "canManageUsers",
   users.can_view_audit AS "canViewAudit",
   users.can_manage_security AS "canManageSecurity",

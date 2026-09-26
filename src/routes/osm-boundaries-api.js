@@ -20,7 +20,8 @@ import {
  *   adminAuth: any,
  *   securityService: any,
  *   osmConfig: any,
- *   afterBoundaryChange?: () => Promise<any>
+ *   afterBoundaryChange?: () => Promise<any>,
+ *   realtimeEvents?: { publish: Function }
  * }} dependencies
  */
 export function createOsmBoundariesRouter({
@@ -30,6 +31,7 @@ export function createOsmBoundariesRouter({
   securityService,
   osmConfig,
   afterBoundaryChange,
+  realtimeEvents,
 }) {
   const router = Router();
 
@@ -59,6 +61,7 @@ export function createOsmBoundariesRouter({
       securityService,
       jsonBody,
       afterBoundaryChange,
+      realtimeEvents,
     },
   );
 

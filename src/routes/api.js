@@ -23,6 +23,9 @@ import {
 import {
   registerPopulationRoutes,
 } from '../application/data-transfer/population-routes.js';
+import {
+  registerGeometryImportRoutes,
+} from '../modules/geometry/import-routes.js';
 import { registerLineRoutes } from '../modules/lines/routes.js';
 import { registerMapRoutes } from '../modules/map/routes.js';
 import { registerOsmRoutes } from '../modules/osm/routes.js';
@@ -63,6 +66,7 @@ import {
  *   cityBoundaryTransferService: CityBoundaryTransferService,
  *   populationService: PopulationImportService,
  *   kmlUpdateService: KmlUpdateService,
+ *   geometryImportService?: any,
  *   osmCityUpdateService: OsmCityUpdateService,
  *   adminTasks: ReturnType<import('../shared/tasks/admin-task-manager.js').createAdminTaskManager>,
  *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
@@ -90,6 +94,7 @@ export function createApiRouter({
   cityBoundaryTransferService,
   populationService,
   kmlUpdateService,
+  geometryImportService,
   osmCityUpdateService,
   adminTasks,
   adminAuth,
@@ -160,6 +165,23 @@ export function createApiRouter({
     kmlUpdateService,
     progressLog: logAdminTaskProgress,
   });
+
+  registerGeometryImportRoutes(
+    router,
+    {
+      geometryImportService,
+      adminAuth,
+      rejectWhileAdminTaskActive,
+      operationAudit,
+      jsonBody,
+      maxBodyBytes:
+        importApi.maxBodyBytes,
+      startAdminTask,
+      progressLog:
+        logAdminTaskProgress,
+      adminTasks,
+    },
+  );
 
   registerOsmRoutes(router, {
     adminAuth,

@@ -4,6 +4,7 @@ import { adminConfirm } from './admin-dialog.js';
 import { trackDirtyForm } from './admin-dirty-state.js';
 import { bindHumanUnits } from './admin-human-units.js';
 import { readTabState, writeTabState } from './admin-tab-state.js';
+import { subscribeAdminRealtime } from './realtime-client.js';
 
 const taskTypeTabs = Object.freeze({
   'osm-city-update': 'osm',
@@ -62,8 +63,6 @@ const state = {
     kml: readTabState('data-operation-kml', ['kml-external', 'kml-geojson'], 'kml-external'),
     population: readTabState('data-operation-population', ['population-json'], 'population-json'),
   },
-  socket: null,
-  reconnectTimer: null,
   transfer: null,
 };
 const elements = {
@@ -1633,62 +1632,83 @@ elements.populationForm.addEventListener('submit', async (event) => {
 
 elements.refresh.addEventListener('click', () => refresh());
 
-function setConnection(status, text) {
-  elements.connection.className = `connection connection-${status}`;
-  elements.connection.textContent = text;
-}
-
-function connectWebSocket() {
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const socket = new WebSocket(`${protocol}//${location.host}/api/admin/ws`);
-  state.socket = socket;
-  socket.addEventListener('open', () => {
-    setConnection('online', 'WebSocket: подключён');
-    void refresh({ quiet: true });
-  });
-  socket.addEventListener('message', (event) => {
-    try {
-      const message = JSON.parse(event.data);
-      if (message.type === 'snapshot' || message.type === 'task') {
-        if (message.lastSuccessfulUpdates) {
-          state.lastSuccessfulUpdates = message.lastSuccessfulUpdates;
-        }
-        applyTask(message.task, true);
-        if (
-          message.task &&
-          ['failed', 'cancelled', 'succeeded'].includes(message.task.status)
-        ) {
-          void loadOsmCheckpoint().catch((error) => {
-            setTaskNotice('osm', error.message, 'error');
-          });
-        }
-      } else if (message.type === 'success') {
-        state.lastSuccessfulUpdates = {
-          ...state.lastSuccessfulUpdates,
-          [message.update.taskType]: message.update,
-        };
-        renderSuccessfulUpdates();
-      } else if (message.type === 'log' && state.task?.id === message.taskId) {
-        const log = state.task.log ?? [];
-        if (!log.some((entry) => entry.sequence === message.entry.sequence)) {
-          applyTask({...state.task, log: [...log, message.entry]});
-        }
-      }
-    } catch {
-      setNotice('Получено некорректное WebSocket-событие.', 'error');
+function handleRealtimeMessage(message) {
+  if (
+    message.type === 'snapshot' ||
+    message.type === 'task'
+  ) {
+    if (
+      message.lastSuccessfulUpdates
+    ) {
+      state.lastSuccessfulUpdates =
+        message.lastSuccessfulUpdates;
     }
-  });
-  socket.addEventListener('close', () => {
-    if (state.socket !== socket) return;
-    state.socket = null;
-    setConnection('pending', 'WebSocket: переподключение…');
-    clearTimeout(state.reconnectTimer);
-    state.reconnectTimer = setTimeout(connectWebSocket, 2000);
-  });
-  socket.addEventListener('error', () => socket.close());
-}
+    applyTask(
+      message.task,
+      true,
+    );
+    if (
+      message.task &&
+      [
+        'failed',
+        'cancelled',
+        'succeeded',
+      ].includes(
+        message.task.status,
+      )
+    ) {
+      void loadOsmCheckpoint()
+        .catch((error) => {
+          setTaskNotice(
+            'osm',
+            error.message,
+            'error',
+          );
+        });
+    }
+    return;
+  }
 
+  if (
+    message.type === 'success'
+  ) {
+    state.lastSuccessfulUpdates = {
+      ...state
+        .lastSuccessfulUpdates,
+      [message.update.taskType]:
+        message.update,
+    };
+    renderSuccessfulUpdates();
+    return;
+  }
+
+  if (
+    message.type === 'log' &&
+    state.task?.id ===
+      message.taskId
+  ) {
+    const log =
+      state.task.log ?? [];
+    if (
+      !log.some(
+        (entry) =>
+          entry.sequence ===
+          message.entry.sequence,
+      )
+    ) {
+      applyTask({
+        ...state.task,
+        log: [
+          ...log,
+          message.entry,
+        ],
+      });
+    }
+  }
+}
 selectTab(state.selected);
 await loadAdminConfig();
 await refresh({ quiet: true });
-connectWebSocket();
+subscribeAdminRealtime(
+  handleRealtimeMessage,
+);

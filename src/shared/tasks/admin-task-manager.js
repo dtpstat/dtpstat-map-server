@@ -153,7 +153,12 @@ export function createAdminTaskManager(dependencies = {}) {
       const completedAt = now();
       let successfulUpdate = null;
 
-      if (task.recordsSuccessfulUpdate) {
+      if (
+        task.recordsSuccessfulUpdate &&
+        task.result
+          ?.pendingResolution !==
+          true
+      ) {
         successfulUpdate = {
           taskType: task.type,
           taskId: task.id,

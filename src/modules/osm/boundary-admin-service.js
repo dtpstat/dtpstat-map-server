@@ -1,6 +1,8 @@
 import {
+  normalizeOsmBoundaryBulkUpdates,
   normalizeOsmBoundaryChanges,
   normalizeOsmBoundaryId,
+  normalizeOsmBoundaryRevision,
   normalizeOsmSubtreeActive,
   OsmBoundaryAdminValidationError,
 } from './boundary-admin-policy.js';
@@ -9,6 +11,74 @@ export { OsmBoundaryAdminValidationError };
 
 function own(value, key) {
   return Object.hasOwn(value, key);
+}
+
+function boundaryRevision(value) {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  return normalizeOsmBoundaryRevision(
+    String(value),
+  );
+}
+
+function assertExpectedRevision(
+  boundaryId,
+  actual,
+  expected,
+) {
+  if (!expected) return;
+  const actualRevision =
+    boundaryRevision(actual);
+  if (actualRevision === expected) {
+    return;
+  }
+  throw new OsmBoundaryAdminValidationError(
+    'OSM boundary changed after the local draft was created',
+    409,
+    {
+      conflicts: [{
+        id: boundaryId,
+        expectedUpdatedAt: expected,
+        actualUpdatedAt: actualRevision,
+      }],
+    },
+  );
+}
+
+function nextBoundaryValue(
+  previous,
+  normalized,
+) {
+  return {
+    active: own(normalized, 'active')
+      ? normalized.active
+      : previous.active,
+    displayName: own(normalized, 'displayName')
+      ? normalized.displayName
+      : previous.displayName,
+    displayType: own(normalized, 'displayType')
+      ? normalized.displayType
+      : previous.displayType,
+    population: own(normalized, 'population')
+      ? normalized.population
+      : previous.population,
+    populationAsOf: own(
+      normalized,
+      'populationAsOf',
+    )
+      ? normalized.populationAsOf
+      : previous.populationAsOf,
+    populationSource: own(
+      normalized,
+      'populationSource',
+    )
+      ? normalized.populationSource
+      : previous.populationSource,
+    attributes: own(normalized, 'attributes')
+      ? normalized.attributes
+      : previous.attributes,
+  };
 }
 
 /**
@@ -111,6 +181,7 @@ export function createOsmBoundaryAdminService(
           active: nextActive,
           affectedCount: subtree.length,
           changedCount,
+          entityIds: ids,
           previousActiveCount,
           previousInactiveCount,
         };
@@ -129,10 +200,107 @@ export function createOsmBoundaryAdminService(
       }
     },
 
-    async update(boundaryId, changes) {
+    async updateMany(payload) {
+      const updates =
+        normalizeOsmBoundaryBulkUpdates(
+          payload,
+        );
+      const client = await pool.connect();
+
+      try {
+        await client.query('BEGIN');
+        await acquireLock(client, pool);
+
+        const locked = new Map();
+        for (
+          const update of
+          [...updates].sort(
+            (left, right) =>
+              left.id - right.id,
+          )
+        ) {
+          const previous =
+            await storage.lockBoundary(
+              client,
+              update.id,
+            );
+          if (!previous) {
+            throw new OsmBoundaryAdminValidationError(
+              `OSM boundary ${update.id} not found`,
+              404,
+            );
+          }
+          assertExpectedRevision(
+            update.id,
+            previous.updatedAt,
+            update.baseUpdatedAt,
+          );
+          locked.set(
+            update.id,
+            previous,
+          );
+        }
+
+        for (const update of updates) {
+          await storage.updateBoundary(
+            client,
+            update.id,
+            nextBoundaryValue(
+              locked.get(update.id),
+              update.changes,
+            ),
+          );
+        }
+
+        await syncDerivedData(client);
+
+        const boundaries = [];
+        for (const update of updates) {
+          boundaries.push(
+            await storage.getBoundary(
+              client,
+              update.id,
+            ),
+          );
+        }
+
+        await client.query('COMMIT');
+        return {
+          changedCount:
+            boundaries.length,
+          entityIds:
+            boundaries.map(
+              (boundary) =>
+                boundary.id,
+            ),
+          boundaries,
+        };
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        if (error?.code === '23505') {
+          throw new OsmBoundaryAdminValidationError(
+            'One or more active OSM objects would have duplicate normalized type and name',
+            409,
+          );
+        }
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
+    async update(boundaryId, changes, options = {}) {
       const id = normalizeOsmBoundaryId(boundaryId);
       const normalized =
         normalizeOsmBoundaryChanges(changes);
+      const expectedUpdatedAt =
+        options.expectedUpdatedAt === undefined ||
+        options.expectedUpdatedAt === null ||
+        options.expectedUpdatedAt === ''
+          ? null
+          : normalizeOsmBoundaryRevision(
+            options.expectedUpdatedAt,
+          );
       const client = await pool.connect();
 
       try {
@@ -148,35 +316,17 @@ export function createOsmBoundaryAdminService(
           return null;
         }
 
-        const next = {
-          active: own(normalized, 'active')
-            ? normalized.active
-            : previous.active,
-          displayName: own(normalized, 'displayName')
-            ? normalized.displayName
-            : previous.displayName,
-          displayType: own(normalized, 'displayType')
-            ? normalized.displayType
-            : previous.displayType,
-          population: own(normalized, 'population')
-            ? normalized.population
-            : previous.population,
-          populationAsOf: own(
+        assertExpectedRevision(
+          id,
+          previous.updatedAt,
+          expectedUpdatedAt,
+        );
+
+        const next =
+          nextBoundaryValue(
+            previous,
             normalized,
-            'populationAsOf',
-          )
-            ? normalized.populationAsOf
-            : previous.populationAsOf,
-          populationSource: own(
-            normalized,
-            'populationSource',
-          )
-            ? normalized.populationSource
-            : previous.populationSource,
-          attributes: own(normalized, 'attributes')
-            ? normalized.attributes
-            : previous.attributes,
-        };
+          );
 
         await storage.updateBoundary(
           client,

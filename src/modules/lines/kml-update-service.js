@@ -17,6 +17,16 @@ export class KmlUpdateMatchError extends Error {
   }
 }
 
+function importedSourceTags(
+  properties,
+) {
+  const tags = {
+    ...(properties ?? {}),
+  };
+  delete tags.fingerprint;
+  return tags;
+}
+
 /** @param {Array<any>} features */
 function removeDuplicateFeatures(features) {
   const byFingerprint = new Map();
@@ -84,6 +94,10 @@ function publicLineTypes(rows) {
  *   download?: typeof downloadKml,
  *   parse?: typeof parseKmlSource,
  *   repository?: ReturnType<typeof createKmlUpdateRepository>,
+ *   geometryImportService?: {
+ *     stageKml: Function,
+ *     applyInTransaction: Function
+ *   },
  *   acquireLock: (client: any, pool: any) => Promise<void>,
  *   recalculateStatistics: (client: any) => Promise<any>
  * }} dependencies
@@ -93,6 +107,8 @@ export function createKmlUpdateService(pool, config, dependencies) {
   const parse = dependencies?.parse ?? parseKmlSource;
   const repository =
     dependencies?.repository ?? createKmlUpdateRepository();
+  const geometryImportService =
+    dependencies?.geometryImportService ?? null;
   const acquireLock = dependencies?.acquireLock;
   const recalculateStatistics = dependencies?.recalculateStatistics;
 
@@ -185,8 +201,16 @@ export function createKmlUpdateService(pool, config, dependencies) {
         const missingNames = missingTypeNames(referencedNames, typeRows);
         let createdLineTypes = [];
         let wouldCreateLineTypes = [];
+        const stagedImport =
+          Boolean(
+            geometryImportService,
+          ) &&
+          !options.dryRun;
 
-        if (options.dryRun) {
+        if (
+          options.dryRun ||
+          stagedImport
+        ) {
           // PostgreSQL sequences are non-transactional. Do not INSERT here:
           // a rolled-back dry run must not consume future numeric CODE values.
           wouldCreateLineTypes = previewLineTypes(missingNames);
@@ -264,7 +288,10 @@ export function createKmlUpdateService(pool, config, dependencies) {
             .map((row) => [Number(row.boundaryId), Number(row.cityId)]),
         );
 
-        if (!options.dryRun) {
+        if (
+          !options.dryRun &&
+          !stagedImport
+        ) {
           await repository.upsertMatchedCities(
             client,
             matchedCityPayload,
@@ -296,8 +323,14 @@ export function createKmlUpdateService(pool, config, dependencies) {
           const cityId = row.cityId === null
             ? cityIdByBoundary.get(Number(row.boundaryId)) ?? null
             : Number(row.cityId);
-          if (!options.dryRun && cityId === null) {
-            throw new Error(`Matched OSM place has no city record: ${cityName}`);
+          if (
+            !options.dryRun &&
+            !stagedImport &&
+            cityId === null
+          ) {
+            throw new Error(
+              `Matched OSM place has no city record: ${cityName}`,
+            );
           }
           return {
             cityId,
@@ -308,6 +341,10 @@ export function createKmlUpdateService(pool, config, dependencies) {
             businessTypeName: lineType.name,
             multiple: feature.multiple,
             properties: feature.properties,
+            sourceTags:
+              importedSourceTags(
+                feature.properties,
+              ),
             geometry: feature.geometry,
           };
         });
@@ -371,6 +408,106 @@ export function createKmlUpdateService(pool, config, dependencies) {
         if (options.dryRun) {
           await client.query('ROLLBACK');
           return result;
+        }
+
+        if (stagedImport) {
+          const importSession =
+            await geometryImportService
+              .stageKml(
+                client,
+                matched,
+                result,
+              );
+
+          throwIfAdminTaskCancelled(
+            operation.signal,
+          );
+
+          if (
+            importSession
+              .conflictCount >
+            0
+          ) {
+            operation.onProgress?.({
+              phase:
+                'import-conflicts',
+              sessionId:
+                importSession.id,
+              conflictGeometries:
+                importSession
+                  .conflictGeometries,
+              conflictPairs:
+                importSession
+                  .conflictCount,
+            });
+
+            operation.onCommit?.();
+            await client.query(
+              'COMMIT',
+            );
+
+            return {
+              ...result,
+              partial: true,
+              warningCount: 1,
+              pendingResolution:
+                true,
+              importSession,
+              createdLineTypes: [],
+            };
+          }
+
+          const applied =
+            await geometryImportService
+              .applyInTransaction(
+                client,
+                importSession.id,
+                [],
+              );
+
+          createdLineTypes =
+            applied
+              .createdLineTypes ??
+            [];
+
+          typeRows = (
+            await repository
+              .loadLineTypes(
+                client,
+                referencedNames,
+              )
+          ).rows;
+
+          throwIfAdminTaskCancelled(
+            operation.signal,
+          );
+          operation.onCommit?.();
+          await client.query(
+            'COMMIT',
+          );
+
+          return {
+            ...result,
+            pendingResolution:
+              false,
+            importSession: {
+              ...importSession,
+              status:
+                'applied',
+            },
+            lineTypes:
+              publicLineTypes(
+                typeRows,
+              ),
+            createdLineTypes,
+            wouldCreateLineTypes: [],
+            updateRunId:
+              applied.updateRunId,
+            completedAt:
+              applied.completedAt,
+            reconciliation:
+              applied,
+          };
         }
 
         await repository.clearGeometries(client);

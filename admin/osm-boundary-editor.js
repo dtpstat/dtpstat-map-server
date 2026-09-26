@@ -1,6 +1,11 @@
 import { adminConfirm } from './admin-dialog.js';
-
+import { createDraftStore } from './draft-store.js';
 import { publishDerivedDataChange } from './derived-data-events.js';
+import {
+  realtimeClientId,
+  realtimeMutationHeaders,
+  subscribeAdminRealtime,
+} from './realtime-client.js';
 
 export function buildBoundaryTreeIndex(items) {
   const byId = new Map();
@@ -54,10 +59,15 @@ if (typeof document !== 'undefined') {
   const geometryMeta = document.querySelector('#osm-boundary-geometry-meta');
   const message = document.querySelector('#osm-boundary-message');
   const mapHost = document.querySelector('#osm-boundary-map');
+  const draftCount = document.querySelector('#osm-boundary-draft-count');
+  const persistDrafts = document.querySelector('#osm-boundary-persist-drafts');
+  const saveAll = document.querySelector('#osm-boundary-save-all');
+  const discardAll = document.querySelector('#osm-boundary-discard-all');
 
   if (panel && treeHost && searchInput && refreshButton && form && mapHost) {
     const state = {
       boundaries: [],
+      serverBoundaries: [],
       selectedId: null,
       expandedIds: new Set(),
       map: null,
@@ -75,6 +85,152 @@ if (typeof document !== 'undefined') {
     const save = document.querySelector('#osm-boundary-save');
     const enableBranch = document.querySelector('#osm-boundary-enable-branch');
     const disableBranch = document.querySelector('#osm-boundary-disable-branch');
+    const REMOTE_SYNC_DELAY_MS = 75;
+    let remoteSyncTimer = null;
+    const remoteSyncReasons = new Set();
+
+    const drafts = createDraftStore({
+      namespace: 'osm-boundaries',
+    });
+
+    function serverBoundary(id) {
+      return state.serverBoundaries.find((item) => item.id === id) ?? null;
+    }
+
+    function draftFor(id) {
+      return drafts.get(id);
+    }
+
+    function withDraft(item) {
+      const draft = item ? draftFor(item.id) : null;
+      return draft
+        ? {
+          ...item,
+          ...draft.changes,
+          _draft: true,
+          _conflict: Boolean(draft.conflict),
+        }
+        : item;
+    }
+
+    function rebuildDraftOverlay() {
+      state.boundaries = state.serverBoundaries.map(withDraft);
+    }
+
+    function refreshDraftControls() {
+      const entries = drafts.list();
+      const conflicts = entries.filter((draft) => draft.conflict).length;
+      if (draftCount) {
+        draftCount.textContent = conflicts
+          ? `Черновики: ${entries.length} · конфликтов: ${conflicts}`
+          : `Черновики: ${entries.length}`;
+      }
+      if (saveAll) saveAll.disabled = entries.length === 0;
+      if (discardAll) discardAll.disabled = entries.length === 0;
+      if (persistDrafts) persistDrafts.checked = drafts.isPersistent();
+    }
+
+    function applyDraftStoreState(change = {}) {
+      rebuildDraftOverlay();
+      refreshDraftControls();
+      renderTree();
+
+      const selectedId =
+        state.selectedId;
+
+      if (
+        selectedId &&
+        (
+          change.modeChanged ||
+          change.changedIds?.includes(
+            String(selectedId),
+          )
+        )
+      ) {
+        const selected =
+          state.boundaries.find(
+            (item) =>
+              item.id ===
+              selectedId,
+          );
+
+        if (selected) {
+          applySelection(
+            selected,
+          );
+        }
+      }
+
+      if (
+        selectedId &&
+        change.removedIds?.includes(
+          String(selectedId),
+        )
+      ) {
+        scheduleOsmServerSync(
+          'draft-removed',
+        );
+      }
+    }
+
+    function scheduleOsmServerSync(
+      reason,
+    ) {
+      remoteSyncReasons.add(
+        reason,
+      );
+
+      if (
+        remoteSyncTimer !== null
+      ) {
+        window.clearTimeout(
+          remoteSyncTimer,
+        );
+      }
+
+      remoteSyncTimer =
+        window.setTimeout(
+          async () => {
+            remoteSyncTimer =
+              null;
+
+            const reasons =
+              new Set(
+                remoteSyncReasons,
+              );
+            remoteSyncReasons
+              .clear();
+
+            await load();
+
+            const conflicts =
+              drafts.list()
+                .filter(
+                  (draft) =>
+                    draft.conflict,
+                )
+                .length;
+
+            const fromRealtime =
+              reasons.has(
+                'realtime',
+              );
+
+            setMessage(
+              conflicts
+                ? `OSM-данные синхронизированы. Локальных конфликтов: ${conflicts}.`
+                : fromRealtime
+                  ? 'OSM-данные автоматически синхронизированы.'
+                  : 'Общий черновик синхронизирован с серверным состоянием.',
+              conflicts
+                ? 'error'
+                : 'success',
+            );
+          },
+          REMOTE_SYNC_DELAY_MS,
+        );
+    }
+
     function setMessage(text, tone = '') {
       message.textContent = text;
       message.className = 'notice';
@@ -82,14 +238,26 @@ if (typeof document !== 'undefined') {
     }
 
     async function api(path, options = {}) {
+      const method = String(options.method ?? 'GET').toUpperCase();
+      const headers = {
+        Accept: 'application/json',
+        ...(options.headers ?? {}),
+      };
       const response = await fetch(path, {
         credentials: 'same-origin',
         ...options,
-        headers: { Accept: 'application/json', ...(options.headers ?? {}) },
+        headers: ['GET', 'HEAD'].includes(method)
+          ? headers
+          : realtimeMutationHeaders(headers),
       });
       let payload = null;
       try { payload = await response.json(); } catch { /* empty */ }
-      if (!response.ok) throw new Error(payload?.error ?? `HTTP ${response.status}`);
+      if (!response.ok) {
+        const error = new Error(payload?.error ?? `HTTP ${response.status}`);
+        error.status = response.status;
+        error.payload = payload;
+        throw error;
+      }
       return payload;
     }
 
@@ -226,6 +394,8 @@ if (typeof document !== 'undefined') {
       button.type = 'button';
       button.className = 'osm-boundary-node-button';
       button.classList.toggle('is-selected', item.id === state.selectedId);
+      button.classList.toggle('has-draft', Boolean(item._draft));
+      button.classList.toggle('has-conflict', Boolean(item._conflict));
 
       const aggregate = aggregateBoundaryBranchStatus(item, fullChildrenByParent, statusMemo);
       const dot = document.createElement('span');
@@ -346,6 +516,7 @@ if (typeof document !== 'undefined') {
 
     function applySelection(item) {
       state.selectedId = item?.id ?? null;
+      const localDraft = item ? draftFor(item.id) : null;
       const enabled = Boolean(item);
       for (const control of [
         active,
@@ -407,6 +578,12 @@ if (typeof document !== 'undefined') {
         ),
       );
       updateBranchActions(item);
+      if (localDraft?.conflict) {
+        setMessage(
+          'Серверная версия изменилась после создания локального черновика. Проверьте изменения перед сохранением.',
+          'error',
+        );
+      }
       renderTree();
     }
 
@@ -541,11 +718,138 @@ if (typeof document !== 'undefined') {
       window.setTimeout(() => map.resize(), 0);
     }
 
+    function formChanges(baseItem) {
+      if (!baseItem) return {};
+
+      const changes = {};
+      if (active.checked !== Boolean(baseItem.active)) {
+        changes.active = active.checked;
+      }
+
+      const displayNameValue = displayName.value.trim();
+      if (displayNameValue !== String(baseItem.displayName ?? '')) {
+        changes.displayName = displayNameValue;
+      }
+
+      if (displayType.value !== String(baseItem.displayType ?? '')) {
+        changes.displayType = displayType.value;
+      }
+
+      const populationValue = population.value.trim();
+      const normalizedPopulation = populationValue === ''
+        ? null
+        : Number(populationValue);
+      if (normalizedPopulation !== (baseItem.population ?? null)) {
+        changes.population = normalizedPopulation;
+      }
+
+      const populationAsOfValue = populationAsOf.value.trim();
+      const normalizedPopulationAsOf =
+        populationAsOfValue === '' ? null : populationAsOfValue;
+      const basePopulationAsOf = baseItem.populationAsOf
+        ? String(baseItem.populationAsOf).slice(0, 10)
+        : null;
+      if (normalizedPopulationAsOf !== basePopulationAsOf) {
+        changes.populationAsOf = normalizedPopulationAsOf;
+      }
+
+      const populationSourceValue = populationSource.value.trim();
+      const normalizedPopulationSource =
+        populationSourceValue === '' ? null : populationSourceValue;
+      if (normalizedPopulationSource !== (baseItem.populationSource ?? null)) {
+        changes.populationSource = normalizedPopulationSource;
+      }
+
+      let attributesValue;
+      try {
+        attributesValue = JSON.parse(attributes.value.trim() || '{}');
+      } catch {
+        throw new Error('Атрибуты территории должны быть корректным JSON object.');
+      }
+      if (
+        !attributesValue ||
+        typeof attributesValue !== 'object' ||
+        Array.isArray(attributesValue)
+      ) {
+        throw new Error('Атрибуты территории должны быть JSON object.');
+      }
+      if (
+        JSON.stringify(attributesValue) !==
+        JSON.stringify(baseItem.attributes ?? {})
+      ) {
+        changes.attributes = attributesValue;
+      }
+
+      return changes;
+    }
+
+    function captureSelectedDraft() {
+      if (!state.selectedId) return;
+      const baseItem = serverBoundary(state.selectedId);
+      if (!baseItem) return;
+
+      const changes = formChanges(baseItem);
+      const keys = Object.keys(changes);
+      if (keys.length === 0) {
+        drafts.remove(state.selectedId);
+      } else {
+        const current = draftFor(state.selectedId);
+        drafts.upsert(state.selectedId, {
+          baseUpdatedAt: current?.baseUpdatedAt ?? baseItem.updatedAt,
+          changes,
+          conflict: Boolean(current?.conflict),
+        });
+      }
+
+      rebuildDraftOverlay();
+      refreshDraftControls();
+      renderTree();
+    }
+
+    function reconcileDrafts() {
+      for (const draft of drafts.list()) {
+        const item = serverBoundary(Number(draft.id));
+        if (!item) {
+          drafts.markConflict(draft.id, true);
+          continue;
+        }
+        if (
+          draft.baseUpdatedAt &&
+          String(item.updatedAt) !== String(draft.baseUpdatedAt)
+        ) {
+          drafts.markConflict(draft.id, true);
+        }
+      }
+      rebuildDraftOverlay();
+      refreshDraftControls();
+    }
+
+    async function saveDraftEntries(entries) {
+      if (!entries.length) return null;
+      const payload = await api('/api/admin/osm-boundaries', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          updates: entries.map((draft) => ({
+            id: Number(draft.id),
+            baseUpdatedAt: draft.baseUpdatedAt,
+            changes: draft.changes,
+          })),
+        }),
+      });
+      for (const draft of entries) drafts.remove(draft.id);
+      await load();
+      publishDerivedDataChange('osm-boundary');
+      publishDerivedDataChange('osm-boundary-subtree');
+      window.dispatchEvent(new CustomEvent('dtpstat:osm-boundary-changed'));
+      return payload;
+    }
+
     async function selectBoundary(id) {
       const item = state.boundaries.find((candidate) => candidate.id === id);
       if (!item) return;
       applySelection(item);
-      setMessage('');
+      if (!draftFor(id)?.conflict) setMessage('');
       try {
         await showGeometry(id);
       } catch (error) {
@@ -557,7 +861,8 @@ if (typeof document !== 'undefined') {
       refreshButton.disabled = true;
       try {
         const payload = await api('/api/admin/osm-boundaries');
-        state.boundaries = payload.boundaries ?? [];
+        state.serverBoundaries = payload.boundaries ?? [];
+        reconcileDrafts();
         const validIds = new Set(state.boundaries.map((item) => item.id));
         state.expandedIds = new Set(
           [...state.expandedIds].filter((id) => validIds.has(id)),
@@ -567,7 +872,9 @@ if (typeof document !== 'undefined') {
           : null;
         applySelection(selected ?? null);
         if (!selected) renderTree();
-        setMessage('');
+        if (!selected || !draftFor(selected.id)?.conflict) {
+          setMessage('');
+        }
       } catch (error) {
         setMessage(`Не удалось загрузить дерево: ${error.message}`, 'error');
       } finally {
@@ -578,81 +885,42 @@ if (typeof document !== 'undefined') {
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!state.selectedId || !form.reportValidity()) return;
-      save.disabled = true;
-      setMessage('Сохраняем…');
+
       try {
-        const payload = await api(
-          `/api/admin/osm-boundaries/${encodeURIComponent(state.selectedId)}`,
+        captureSelectedDraft();
+      } catch (error) {
+        setMessage(error.message, 'error');
+        return;
+      }
+
+      const draft = draftFor(state.selectedId);
+      if (!draft) {
+        setMessage('Нет несохранённых изменений.');
+        return;
+      }
+
+      save.disabled = true;
+      setMessage('Сохраняем локальный черновик…');
+      try {
+        await saveDraftEntries([
           {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify((() => {
-              const changes = {
-                active: active.checked,
-                displayName: displayName.value.trim(),
-                displayType: displayType.value,
-              };
-              const populationValue = population.value.trim();
-              if (
-                populationValue !== (population.dataset.initialValue ?? '')
-              ) {
-                changes.population = populationValue === ''
-                  ? null
-                  : Number(populationValue);
-              }
-
-              const populationAsOfValue = populationAsOf.value.trim();
-              if (
-                populationAsOfValue !==
-                (populationAsOf.dataset.initialValue ?? '')
-              ) {
-                changes.populationAsOf =
-                  populationAsOfValue === '' ? null : populationAsOfValue;
-              }
-
-              const populationSourceValue = populationSource.value.trim();
-              if (
-                populationSourceValue !==
-                (populationSource.dataset.initialValue ?? '')
-              ) {
-                changes.populationSource =
-                  populationSourceValue === '' ? null : populationSourceValue;
-              }
-
-              let attributesValue;
-              try {
-                attributesValue = JSON.parse(attributes.value.trim() || '{}');
-              } catch {
-                throw new Error('Атрибуты территории должны быть корректным JSON object.');
-              }
-              if (
-                !attributesValue ||
-                typeof attributesValue !== 'object' ||
-                Array.isArray(attributesValue)
-              ) {
-                throw new Error('Атрибуты территории должны быть JSON object.');
-              }
-              if (
-                JSON.stringify(attributesValue) !==
-                (attributes.dataset.initialValue ?? '{}')
-              ) {
-                changes.attributes = attributesValue;
-              }
-              return changes;
-            })()),
+            id: String(state.selectedId),
+            ...draft,
           },
-        );
-        await load();
-        const updated = state.boundaries.find((item) => item.id === payload.boundary.id);
-        if (updated) applySelection(updated);
+        ]);
         setMessage(
           'Настройки OSM-объекта сохранены. Таблица и линии пересчитаны.',
           'success',
         );
-        publishDerivedDataChange('osm-boundary');
-        publishDerivedDataChange('osm-boundary-subtree');
-        window.dispatchEvent(new CustomEvent('dtpstat:osm-boundary-changed'));
       } catch (error) {
+        if (error.status === 409) {
+          for (const conflict of error.payload?.details?.conflicts ?? []) {
+            drafts.markConflict(conflict.id, true);
+          }
+          refreshDraftControls();
+          rebuildDraftOverlay();
+          renderTree();
+        }
         setMessage(error.message, 'error');
       } finally {
         save.disabled = !state.selectedId;
@@ -717,6 +985,133 @@ if (typeof document !== 'undefined') {
       }
     }
 
+    for (const control of [
+      active,
+      displayName,
+      displayType,
+      population,
+      populationAsOf,
+      populationSource,
+      attributes,
+    ]) {
+      control?.addEventListener('input', () => {
+        try {
+          captureSelectedDraft();
+          setMessage('');
+        } catch (error) {
+          setMessage(error.message, 'error');
+        }
+      });
+      control?.addEventListener('change', () => {
+        try {
+          captureSelectedDraft();
+        } catch (error) {
+          setMessage(error.message, 'error');
+        }
+      });
+    }
+
+    saveAll?.addEventListener('click', async () => {
+      const entries = drafts.list();
+      if (!entries.length) return;
+      saveAll.disabled = true;
+      setMessage(`Сохраняем черновики: ${entries.length}…`);
+      try {
+        const payload = await saveDraftEntries(entries);
+        setMessage(
+          `Сохранено объектов: ${payload.changedCount}. Все локальные черновики применены.`,
+          'success',
+        );
+      } catch (error) {
+        if (error.status === 409) {
+          for (const conflict of error.payload?.details?.conflicts ?? []) {
+            drafts.markConflict(conflict.id, true);
+          }
+          refreshDraftControls();
+          rebuildDraftOverlay();
+          const selected = state.boundaries.find((item) => item.id === state.selectedId);
+          if (selected) applySelection(selected);
+        }
+        setMessage(error.message, 'error');
+      } finally {
+        refreshDraftControls();
+      }
+    });
+
+    discardAll?.addEventListener('click', async () => {
+      const entries = drafts.list();
+      if (!entries.length) return;
+      const confirmed = await adminConfirm({
+        title: 'Сбросить локальные черновики?',
+        message: `Будут удалены локальные изменения объектов: ${entries.length}. Серверные данные не изменятся.`,
+        confirmLabel: 'Сбросить черновики',
+        cancelLabel: 'Отмена',
+        destructive: true,
+      });
+      if (!confirmed) return;
+      drafts.clear();
+      await load();
+      setMessage('Локальные черновики удалены.');
+    });
+
+    persistDrafts?.addEventListener('change', () => {
+      drafts.setPersistent(persistDrafts.checked);
+      applyDraftStoreState({
+        modeChanged: true,
+        changedIds:
+          drafts.list()
+            .map(
+              (draft) =>
+                String(
+                  draft.id,
+                ),
+            ),
+        removedIds: [],
+      });
+      setMessage(
+        drafts.isPersistent()
+          ? 'Черновики будут храниться в localStorage и синхронизироваться между вкладками.'
+          : 'Черновики хранятся только в sessionStorage текущей вкладки.',
+      );
+    });
+
+    drafts.subscribe((change) => {
+      if (
+        change.source !==
+        'external-storage'
+      ) {
+        return;
+      }
+
+      applyDraftStoreState(
+        change,
+      );
+
+      if (
+        change.changedIds?.length &&
+        !change.removedIds?.length
+      ) {
+        setMessage(
+          'Общие черновики обновлены из другой вкладки.',
+          'success',
+        );
+      }
+    });
+
+    subscribeAdminRealtime((message) => {
+      if (
+        message?.type !== 'data-change' ||
+        message.change?.resource !== 'osm-boundaries' ||
+        message.change?.originClientId === realtimeClientId()
+      ) {
+        return;
+      }
+
+      scheduleOsmServerSync(
+        'realtime',
+      );
+    });
+
     enableBranch?.addEventListener('click', () => void setBranchActive(true));
     disableBranch?.addEventListener('click', () => void setBranchActive(false));
     searchInput.addEventListener('input', () => renderTree());
@@ -726,6 +1121,7 @@ if (typeof document !== 'undefined') {
       window.setTimeout(() => state.map?.resize(), 0);
     });
     window.addEventListener('dtpstat:osm-boundaries-reloaded', () => void load());
+    refreshDraftControls();
     void load({ keepSelection: false });
   }
 }

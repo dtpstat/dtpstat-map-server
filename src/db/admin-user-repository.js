@@ -6,6 +6,7 @@ const USER_FIELDS_SQL = `
   can_manage_data AS "canManageData",
   can_manage_interface AS "canManageInterface",
   can_edit_osm AS "canEditOsm",
+  can_edit_geometries AS "canEditGeometries",
   can_manage_users AS "canManageUsers",
   can_view_audit AS "canViewAudit",
   can_manage_security AS "canManageSecurity",
@@ -54,11 +55,11 @@ const GET_USER_SQL =
 const CREATE_USER_SQL = `
   INSERT INTO admin_users (
     username, display_name, email, password_hash,
-    can_manage_data, can_manage_interface, can_edit_osm, can_manage_users,
-    can_view_audit, can_manage_security,
+    can_manage_data, can_manage_interface, can_edit_osm, can_edit_geometries,
+    can_manage_users, can_view_audit, can_manage_security,
     is_superuser, is_bootstrap, must_change_password
   )
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
   RETURNING ${USER_FIELDS_SQL}
 `;
 
@@ -70,14 +71,15 @@ const UPDATE_USER_SQL = `
     can_manage_data = $4,
     can_manage_interface = $5,
     can_edit_osm = $6,
-    can_manage_users = $7,
-    can_view_audit = $8,
-    can_manage_security = $9,
-    is_blocked = $10,
-    manual_blocked_at = $11,
-    manual_blocked_until = $12,
-    manual_block_reason = $13,
-    manual_blocked_by = $14,
+    can_edit_geometries = $7,
+    can_manage_users = $8,
+    can_view_audit = $9,
+    can_manage_security = $10,
+    is_blocked = $11,
+    manual_blocked_at = $12,
+    manual_blocked_until = $13,
+    manual_block_reason = $14,
+    manual_blocked_by = $15,
     updated_at = NOW()
   WHERE id = $1
   RETURNING ${USER_FIELDS_SQL}
@@ -192,6 +194,7 @@ export function createAdminUserRepository(database) {
         user.canManageData,
         user.canManageInterface,
         user.canEditOsm,
+        user.canEditGeometries,
         user.canManageUsers,
         user.canViewAudit,
         user.canManageSecurity,
@@ -210,6 +213,7 @@ export function createAdminUserRepository(database) {
         user.canManageData,
         user.canManageInterface,
         user.canEditOsm,
+        user.canEditGeometries,
         user.canManageUsers,
         user.canViewAudit,
         user.canManageSecurity,

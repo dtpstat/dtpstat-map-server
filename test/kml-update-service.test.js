@@ -440,3 +440,215 @@ test('KML download failure happens before a database connection is opened', asyn
   await assert.rejects(service.update(undefined, {}), /network failed/);
   assert.equal(pool.connections, 0);
 });
+
+
+test('KML stages conflicts without mutating production geometry or success dictionaries', async () => {
+  const pool =
+    createPool();
+  const staged = [];
+  let applyCalls = 0;
+
+  const geometryImportService = {
+    async stageKml(
+      _client,
+      rows,
+      metadata,
+    ) {
+      staged.push({
+        rows:
+          structuredClone(
+            rows,
+          ),
+        metadata:
+          structuredClone(
+            metadata,
+          ),
+      });
+
+      return {
+        id: 41,
+        kind: 'kml',
+        status:
+          'pending',
+        stagedGeometries:
+          rows.length,
+        conflictCount: 2,
+        conflictGeometries: 1,
+        createdAt:
+          '2026-09-25T20:00:00.000Z',
+      };
+    },
+    async applyInTransaction() {
+      applyCalls += 1;
+      return {};
+    },
+  };
+
+  const service =
+    createKmlUpdateRuntime(
+      pool,
+      config,
+      {
+        ...dependencies,
+        geometryImportService,
+      },
+    );
+
+  const result =
+    await service.update(
+      undefined,
+      {},
+    );
+
+  assert.equal(
+    result.pendingResolution,
+    true,
+  );
+  assert.equal(
+    result.partial,
+    true,
+  );
+  assert.equal(
+    result.importSession.id,
+    41,
+  );
+  assert.equal(
+    staged.length,
+    1,
+  );
+  assert.equal(
+    staged[0].rows.length,
+    2,
+  );
+  assert.equal(
+    staged[0].rows[0]
+      .sourceTags
+      .fingerprint,
+    undefined,
+  );
+  assert.equal(
+    applyCalls,
+    0,
+  );
+  assert.equal(
+    pool.queries.some(
+      (query) =>
+        query ===
+        'DELETE FROM city_geometries',
+    ),
+    false,
+  );
+  assert.equal(
+    pool.queries.some(
+      (query) =>
+        query.includes(
+          'INSERT INTO cities (',
+        ),
+    ),
+    false,
+  );
+  assert.equal(
+    pool.insertCount,
+    0,
+  );
+  assert.equal(
+    pool.queries.at(-1),
+    'COMMIT',
+  );
+});
+
+test('KML staged import applies immediately when no conflicts exist', async () => {
+  const pool =
+    createPool();
+  let applyCalls = 0;
+
+  const geometryImportService = {
+    async stageKml(
+      _client,
+      rows,
+    ) {
+      return {
+        id: 42,
+        kind: 'kml',
+        status:
+          'pending',
+        stagedGeometries:
+          rows.length,
+        conflictCount: 0,
+        conflictGeometries: 0,
+        createdAt:
+          '2026-09-25T20:00:00.000Z',
+      };
+    },
+    async applyInTransaction(
+      _client,
+      sessionId,
+      decisions,
+    ) {
+      applyCalls += 1;
+      assert.equal(
+        sessionId,
+        42,
+      );
+      assert.deepEqual(
+        decisions,
+        [],
+      );
+
+      return {
+        sessionId,
+        status:
+          'applied',
+        updateRunId: 77,
+        completedAt:
+          '2026-09-25T20:01:00.000Z',
+        createdLineTypes: [],
+      };
+    },
+  };
+
+  const service =
+    createKmlUpdateRuntime(
+      pool,
+      config,
+      {
+        ...dependencies,
+        geometryImportService,
+      },
+    );
+
+  const result =
+    await service.update(
+      undefined,
+      {},
+    );
+
+  assert.equal(
+    result.pendingResolution,
+    false,
+  );
+  assert.equal(
+    result.updateRunId,
+    77,
+  );
+  assert.equal(
+    result.importSession.status,
+    'applied',
+  );
+  assert.equal(
+    applyCalls,
+    1,
+  );
+  assert.equal(
+    pool.queries.some(
+      (query) =>
+        query ===
+        'DELETE FROM city_geometries',
+    ),
+    false,
+  );
+  assert.equal(
+    pool.queries.at(-1),
+    'COMMIT',
+  );
+});

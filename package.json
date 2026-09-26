@@ -18,7 +18,9 @@
     "test:architecture": "node --test test/domain-architecture.test.js",
     "test": "node --test",
     "check": "npm run lint && npm test",
-    "test:integration": "node scripts/postgres-integration.js"
+    "test:integration": "node scripts/postgres-integration.js",
+    "test:geometry-schema": "node scripts/verify-geometry-schema-ci.js",
+    "test:geometry-upgrade": "node scripts/verify-geometry-upgrade-ci.js"
   },
   "dependencies": {
     "compression": "^1.8.1",

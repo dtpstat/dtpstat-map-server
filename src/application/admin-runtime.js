@@ -5,19 +5,75 @@ import {
   createAdminTaskManager,
 } from '../shared/tasks/admin-task-manager.js';
 import {
+  createRealtimeEventBus,
+} from '../shared/events/realtime-event-bus.js';
+import {
   createAdminWebSocketGateway,
 } from '../http/admin-websocket.js';
+
+const TASK_DATA_CHANGES =
+  Object.freeze({
+    'osm-city-update': {
+      resource: 'osm-boundaries',
+      permission: 'osm-editor',
+      message:
+        'OSM-объекты обновлены. Открытые редакторы синхронизированы.',
+    },
+    'city-geojson-import': {
+      resource: 'osm-boundaries',
+      permission: 'osm-editor',
+      message:
+        'OSM-объекты импортированы. Открытые редакторы синхронизированы.',
+    },
+    'population-update': {
+      resource: 'osm-boundaries',
+      permission: 'osm-editor',
+      message:
+        'Данные территорий обновлены. Открытые редакторы синхронизированы.',
+    },
+    'kml-update': {
+      resource: 'city-geometries',
+      permission: 'geometry-editor',
+      message:
+        'Геометрии данных обновлены.',
+    },
+    'geojson-import': {
+      resource: 'city-geometries',
+      permission: 'geometry-editor',
+      message:
+        'Геометрии данных импортированы.',
+    },
+  });
 
 const DEFAULT_FACTORIES =
   Object.freeze({
     createAdminTaskDerivedRefresh,
     createAdminTaskManager,
+    createRealtimeEventBus,
     createAdminWebSocketGateway,
   });
 
+function taskDataChange(update) {
+  const definition =
+    TASK_DATA_CHANGES[
+      update.taskType
+    ];
+  if (!definition) return null;
+  return {
+    ...definition,
+    action: 'refresh',
+    source: {
+      kind: 'admin-task',
+      id: update.taskId,
+      taskType: update.taskType,
+    },
+  };
+}
+
 /**
- * Compose admin task execution, durable success/audit callbacks and the
- * authenticated WebSocket gateway after bootstrap state has been loaded.
+ * Compose admin task execution, realtime data notifications, durable
+ * success/audit callbacks and the authenticated WebSocket gateway after
+ * bootstrap state has been loaded.
  *
  * @param {{
  *   initialSuccessfulUpdates: any[],
@@ -41,6 +97,31 @@ export function createAdminRuntime({
     ...factories,
   };
 
+  const realtimeEvents =
+    runtimeFactories
+      .createRealtimeEventBus();
+
+  const refreshAfterSuccessfulUpdate =
+    runtimeFactories
+      .createAdminTaskDerivedRefresh(
+        derivedState,
+      );
+
+  const afterSuccessfulUpdate =
+    async (update) => {
+      const change =
+        taskDataChange(update);
+      try {
+        return await refreshAfterSuccessfulUpdate(
+          update,
+        );
+      } finally {
+        if (change) {
+          realtimeEvents.publish(change);
+        }
+      }
+    };
+
   const adminTasks =
     runtimeFactories
       .createAdminTaskManager({
@@ -53,11 +134,7 @@ export function createAdminRuntime({
           (entry) =>
             securityService
               .appendAudit(entry),
-        afterSuccessfulUpdate:
-          runtimeFactories
-            .createAdminTaskDerivedRefresh(
-              derivedState,
-            ),
+        afterSuccessfulUpdate,
       });
 
   const adminWebSocket =
@@ -65,10 +142,12 @@ export function createAdminRuntime({
       .createAdminWebSocketGateway({
         adminTasks,
         adminAuth,
+        realtimeEvents,
       });
 
   return {
     adminTasks,
     adminWebSocket,
+    realtimeEvents,
   };
 }

@@ -8,6 +8,9 @@ import {
   createKmlTransferRouter,
 } from '../../routes/kml-transfer-api.js';
 import {
+  createGeometryEditorRouter,
+} from '../../routes/geometry-editor-api.js';
+import {
   createLineTypesRouter,
 } from '../../routes/line-types-api.js';
 import {
@@ -31,10 +34,13 @@ export function installApplicationApiRoutes(
     projectSettingsRepository,
     settingsTransferService,
     reportConfigService,
+    geometryEditorService,
+    geometryImportService,
     refreshPublicDownloads,
     refreshPublicDownloadsAfterSettingsImport,
     refreshProjectDerived,
     refreshOsmBoundaryDerived,
+    refreshGeometryDerived,
     osmImportSettingsRepository,
     osmBoundaryAdminRepository,
     exportRepository,
@@ -46,6 +52,7 @@ export function installApplicationApiRoutes(
     adminTasks,
     adminAuth,
     securityService,
+    realtimeEvents,
     config,
   },
 ) {
@@ -118,6 +125,22 @@ export function installApplicationApiRoutes(
           async () =>
             refreshOsmBoundaryDerived
               ?.(),
+        realtimeEvents,
+      }),
+    );
+  }
+
+  if (geometryEditorService) {
+    app.use(
+      '/api',
+      createGeometryEditorRouter({
+        geometryEditorService,
+        ...commonAdmin,
+        afterRecalculate:
+          async () =>
+            refreshGeometryDerived
+              ?.(),
+        realtimeEvents,
       }),
     );
   }
@@ -153,6 +176,7 @@ export function installApplicationApiRoutes(
       cityBoundaryTransferService,
       populationService,
       kmlUpdateService,
+      geometryImportService,
       osmCityUpdateService,
       adminTasks,
       adminAuth,

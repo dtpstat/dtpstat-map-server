@@ -25,10 +25,13 @@ import {
  *   projectSettingsRepository?: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
  *   settingsTransferService?: { exportSettings: () => Promise<object>, importSettings: (payload: unknown) => Promise<object> },
  *   reportConfigService?: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
+ *   geometryEditorService?: any,
+ *   geometryImportService?: any,
  *   refreshPublicDownloads?: () => Promise<any>,
  *   refreshPublicDownloadsAfterSettingsImport?: () => Promise<any>,
  *   refreshProjectDerived?: () => Promise<any>,
  *   refreshOsmBoundaryDerived?: () => Promise<any>,
+ *   refreshGeometryDerived?: () => Promise<any>,
  *   osmImportSettingsRepository?: { get: Function, save: Function },
  *   osmBoundaryAdminRepository?: { list: Function, getGeometry: Function, update: Function },
  *   exportRepository: import('./routes/api.js').DataExportRepository,
@@ -40,6 +43,7 @@ import {
  *   adminTasks?: ReturnType<typeof createAdminTaskManager>,
  *   adminAuth?: ReturnType<import('./http/admin-auth.js').createAdminAuthorization>,
  *   securityService?: ReturnType<import('./modules/security/service.js').createAdminSecurityService>,
+ *   realtimeEvents?: { publish: Function },
  *   config: any
  * }} dependencies
  */
@@ -49,10 +53,13 @@ export function createApp({
   projectSettingsRepository,
   settingsTransferService,
   reportConfigService,
+  geometryEditorService,
+  geometryImportService,
   refreshPublicDownloads,
   refreshPublicDownloadsAfterSettingsImport,
   refreshProjectDerived,
   refreshOsmBoundaryDerived,
+  refreshGeometryDerived,
   osmImportSettingsRepository,
   osmBoundaryAdminRepository,
   exportRepository,
@@ -64,6 +71,7 @@ export function createApp({
   adminTasks = createAdminTaskManager(),
   adminAuth,
   securityService,
+  realtimeEvents,
   config,
 }) {
   const app = express();
@@ -170,10 +178,13 @@ export function createApp({
         effectiveSettingsTransferService,
       reportConfigService:
         effectiveReportConfigService,
+      geometryEditorService,
+      geometryImportService,
       refreshPublicDownloads,
       refreshPublicDownloadsAfterSettingsImport,
       refreshProjectDerived,
       refreshOsmBoundaryDerived,
+      refreshGeometryDerived,
       osmImportSettingsRepository,
       osmBoundaryAdminRepository,
       exportRepository,
@@ -187,6 +198,7 @@ export function createApp({
         effectiveAdminAuth,
       securityService:
         effectiveSecurityService,
+      realtimeEvents,
       config,
     },
   );

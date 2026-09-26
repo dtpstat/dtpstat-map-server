@@ -26,6 +26,7 @@
 }
 
 .admin-feedback-toast.is-success { border-left-color: var(--success); }
+.admin-feedback-toast.is-info { border-left-color: var(--accent); }
 .admin-feedback-toast.is-error { border-left-color: var(--danger); }
 
 .admin-feedback-toast span {

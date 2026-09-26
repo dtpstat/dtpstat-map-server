@@ -213,6 +213,7 @@ function security(config) {
     canManageData: true,
     canManageInterface: true,
     canEditOsm: true,
+    canEditGeometries: true,
     canManageUsers: true,
     canViewAudit: true,
     canManageSecurity: true,
@@ -251,6 +252,8 @@ function security(config) {
     requireData: requireAuth,
     requireInterface: requireAuth,
     requireOsmEditor:
+      requireAuth,
+    requireGeometryEditor:
       requireAuth,
     requireUsers: requireAuth,
     requireAudit: requireAuth,
