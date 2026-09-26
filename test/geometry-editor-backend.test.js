@@ -140,3 +140,43 @@ test('admin task geometry changes are routed to geometry editors rather than bro
     /permission: 'geometry-editor'/u,
   );
 });
+
+
+test('geometry editor city catalog includes active linked cities before their first geometry', async () => {
+  const storage =
+    await read(
+      'src/db/geometry-editor-storage.js',
+    );
+
+  const start =
+    storage.indexOf(
+      'const CITIES_SQL',
+    );
+  const end =
+    storage.indexOf(
+      'const CITY_SQL',
+      start,
+    );
+  const query =
+    storage.slice(
+      start,
+      end,
+    );
+
+  assert.match(
+    query,
+    /FROM city_boundaries AS boundary[\s\S]*boundary\.is_active/u,
+  );
+  assert.match(
+    query,
+    /COUNT\(\*\)::integer[\s\S]*AS "geometryCount"/u,
+  );
+  assert.doesNotMatch(
+    query,
+    /geometry_presence/u,
+  );
+  assert.doesNotMatch(
+    query,
+    /EXISTS \([\s\S]*FROM city_geometries AS geometry_presence/u,
+  );
+});

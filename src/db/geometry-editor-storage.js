@@ -73,11 +73,6 @@ const CITIES_SQL = `
     WHERE boundary.city_id = city.id
       AND boundary.is_active
   )
-    AND EXISTS (
-      SELECT 1
-      FROM city_geometries AS geometry_presence
-      WHERE geometry_presence.city_id = city.id
-    )
   ORDER BY city.name, city.id
 `;
 
