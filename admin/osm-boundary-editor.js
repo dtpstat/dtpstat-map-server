@@ -85,6 +85,10 @@ if (typeof document !== 'undefined') {
     const save = document.querySelector('#osm-boundary-save');
     const enableBranch = document.querySelector('#osm-boundary-enable-branch');
     const disableBranch = document.querySelector('#osm-boundary-disable-branch');
+    const REMOTE_SYNC_DELAY_MS = 75;
+    let remoteSyncTimer = null;
+    const remoteSyncReasons = new Set();
+
     const drafts = createDraftStore({
       namespace: 'osm-boundaries',
     });
@@ -124,6 +128,107 @@ if (typeof document !== 'undefined') {
       if (saveAll) saveAll.disabled = entries.length === 0;
       if (discardAll) discardAll.disabled = entries.length === 0;
       if (persistDrafts) persistDrafts.checked = drafts.isPersistent();
+    }
+
+    function applyDraftStoreState(change = {}) {
+      rebuildDraftOverlay();
+      refreshDraftControls();
+      renderTree();
+
+      const selectedId =
+        state.selectedId;
+
+      if (
+        selectedId &&
+        (
+          change.modeChanged ||
+          change.changedIds?.includes(
+            String(selectedId),
+          )
+        )
+      ) {
+        const selected =
+          state.boundaries.find(
+            (item) =>
+              item.id ===
+              selectedId,
+          );
+
+        if (selected) {
+          applySelection(
+            selected,
+          );
+        }
+      }
+
+      if (
+        selectedId &&
+        change.removedIds?.includes(
+          String(selectedId),
+        )
+      ) {
+        scheduleOsmServerSync(
+          'draft-removed',
+        );
+      }
+    }
+
+    function scheduleOsmServerSync(
+      reason,
+    ) {
+      remoteSyncReasons.add(
+        reason,
+      );
+
+      if (
+        remoteSyncTimer !== null
+      ) {
+        window.clearTimeout(
+          remoteSyncTimer,
+        );
+      }
+
+      remoteSyncTimer =
+        window.setTimeout(
+          async () => {
+            remoteSyncTimer =
+              null;
+
+            const reasons =
+              new Set(
+                remoteSyncReasons,
+              );
+            remoteSyncReasons
+              .clear();
+
+            await load();
+
+            const conflicts =
+              drafts.list()
+                .filter(
+                  (draft) =>
+                    draft.conflict,
+                )
+                .length;
+
+            const fromRealtime =
+              reasons.has(
+                'realtime',
+              );
+
+            setMessage(
+              conflicts
+                ? `OSM-данные синхронизированы. Локальных конфликтов: ${conflicts}.`
+                : fromRealtime
+                  ? 'OSM-данные автоматически синхронизированы.'
+                  : 'Общий черновик синхронизирован с серверным состоянием.',
+              conflicts
+                ? 'error'
+                : 'success',
+            );
+          },
+          REMOTE_SYNC_DELAY_MS,
+        );
     }
 
     function setMessage(text, tone = '') {
@@ -951,12 +1056,46 @@ if (typeof document !== 'undefined') {
 
     persistDrafts?.addEventListener('change', () => {
       drafts.setPersistent(persistDrafts.checked);
-      refreshDraftControls();
+      applyDraftStoreState({
+        modeChanged: true,
+        changedIds:
+          drafts.list()
+            .map(
+              (draft) =>
+                String(
+                  draft.id,
+                ),
+            ),
+        removedIds: [],
+      });
       setMessage(
         drafts.isPersistent()
-          ? 'Черновики будут храниться в localStorage между сессиями.'
+          ? 'Черновики будут храниться в localStorage и синхронизироваться между вкладками.'
           : 'Черновики хранятся только в sessionStorage текущей вкладки.',
       );
+    });
+
+    drafts.subscribe((change) => {
+      if (
+        change.source !==
+        'external-storage'
+      ) {
+        return;
+      }
+
+      applyDraftStoreState(
+        change,
+      );
+
+      if (
+        change.changedIds?.length &&
+        !change.removedIds?.length
+      ) {
+        setMessage(
+          'Общие черновики обновлены из другой вкладки.',
+          'success',
+        );
+      }
     });
 
     subscribeAdminRealtime((message) => {
@@ -968,15 +1107,9 @@ if (typeof document !== 'undefined') {
         return;
       }
 
-      void load().then(() => {
-        const conflicts = drafts.list().filter((draft) => draft.conflict).length;
-        setMessage(
-          conflicts
-            ? `OSM-данные синхронизированы. Локальных конфликтов: ${conflicts}.`
-            : 'OSM-данные автоматически синхронизированы.',
-          conflicts ? 'error' : 'success',
-        );
-      });
+      scheduleOsmServerSync(
+        'realtime',
+      );
     });
 
     enableBranch?.addEventListener('click', () => void setBranchActive(true));

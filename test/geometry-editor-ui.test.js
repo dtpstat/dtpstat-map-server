@@ -364,3 +364,91 @@ test('geometry editor resolves staged import conflicts visually without dropping
     /\.geometry-conflict-candidate\.has-local-draft/u,
   );
 });
+
+
+test('geometry persistent drafts synchronize across tabs and coalesce storage with realtime refresh', async () => {
+  const [
+    drafts,
+    geometry,
+    osm,
+  ] =
+    await Promise.all([
+      read(
+        'admin/draft-store.js',
+      ),
+      read(
+        'admin/geometry-editor.js',
+      ),
+      read(
+        'admin/osm-boundary-editor.js',
+      ),
+    ]);
+
+  assert.match(
+    drafts,
+    /subscribe\(listener\)/u,
+  );
+  assert.match(
+    drafts,
+    /addEventListener\(\s*'storage'/u,
+  );
+  assert.match(
+    drafts,
+    /changedIds/u,
+  );
+  assert.match(
+    drafts,
+    /removedIds/u,
+  );
+  assert.match(
+    drafts,
+    /if \(\s*Boolean\(\s*drafts\[key\][\s\S]*\.conflict[\s\S]*=== nextConflict/u,
+  );
+
+  assert.match(
+    geometry,
+    /drafts\.subscribe/u,
+  );
+  assert.match(
+    geometry,
+    /handleExternalDraftChange/u,
+  );
+  assert.match(
+    geometry,
+    /pendingExternalDraftSync/u,
+  );
+  assert.match(
+    geometry,
+    /scheduleGeometryServerSync\(\s*'realtime'/u,
+  );
+  assert.doesNotMatch(
+    geometry,
+    /void refresh\(\{ keepSelection: true, fit: false \}\)\.then/u,
+  );
+
+  assert.match(
+    osm,
+    /drafts\.subscribe/u,
+  );
+  assert.match(
+    osm,
+    /scheduleOsmServerSync\(\s*'realtime'/u,
+  );
+});
+
+
+test('geometry editor does not overwrite a cross-tab draft after an in-progress drag or cut', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /if \(\s*state\.pendingExternalDraftSync\s*\) \{\s*flushPendingExternalDraftSync\(\);\s*\} else \{\s*captureCurrentDraft\(\);/u,
+  );
+  assert.match(
+    editor,
+    /drawing\.mode === 'cut'[\s\S]*state\.pendingExternalDraftSync[\s\S]*Вырезание отменено/u,
+  );
+});

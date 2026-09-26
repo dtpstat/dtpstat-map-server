@@ -93,7 +93,12 @@ if (section) {
     importSession: null,
     activeConflictId: null,
     conflictDecisions: new Map(),
+    pendingExternalDraftSync: false,
   };
+
+  const REMOTE_SYNC_DELAY_MS = 75;
+  let remoteSyncTimer = null;
+  const remoteSyncReasons = new Set();
 
   const drafts = createDraftStore({
     namespace: 'city-geometries',
@@ -142,6 +147,173 @@ if (section) {
     }
     if (discardAll) discardAll.disabled = entries.length === 0;
     if (persistDrafts) persistDrafts.checked = drafts.isPersistent();
+  }
+
+  function selectedDraftChanged(change) {
+    if (!state.selectedId) return false;
+    const id = String(state.selectedId);
+    return (
+      change.changedIds?.includes(id) ||
+      change.removedIds?.includes(id)
+    );
+  }
+
+  function syncSelectedDraftFromStorage() {
+    if (
+      !state.selectedId ||
+      !state.current ||
+      state.current.id !== state.selectedId ||
+      state.importSession
+    ) {
+      return;
+    }
+
+    const local = draftFor(state.selectedId);
+    if (!local) {
+      scheduleGeometryServerSync('draft-removed');
+      return;
+    }
+
+    if (
+      geometryDraftIsStale(
+        state.current.updatedAt,
+        local,
+      )
+    ) {
+      drafts.markConflict(
+        state.selectedId,
+        true,
+      );
+    }
+
+    const currentDraft =
+      draftFor(state.selectedId);
+    const effective =
+      applyGeometryDraft(
+        state.current,
+        currentDraft,
+      );
+
+    state.draft =
+      clone(effective.geometry);
+    state.history = [];
+    state.future = [];
+    state.selectedVertexPath = null;
+
+    applyForm(effective);
+    rebuildDraftOverlay();
+    renderList();
+    updateMapSources();
+    renderHistoryControls();
+    refreshDraftControls();
+
+    setMessage(
+      currentDraft?.conflict
+        ? 'Общий черновик обновлён в другой вкладке, но его серверная ревизия уже устарела.'
+        : 'Общий черновик обновлён в другой вкладке.',
+      currentDraft?.conflict
+        ? 'error'
+        : 'success',
+    );
+  }
+
+  function flushPendingExternalDraftSync() {
+    if (
+      !state.pendingExternalDraftSync ||
+      state.dragPath ||
+      state.drawing
+    ) {
+      return;
+    }
+
+    state.pendingExternalDraftSync = false;
+    syncSelectedDraftFromStorage();
+  }
+
+  function handleExternalDraftChange(change) {
+    rebuildDraftOverlay();
+    refreshDraftControls();
+    renderList();
+
+    if (state.importSession) {
+      renderImportConflicts();
+    }
+
+    if (selectedDraftChanged(change)) {
+      if (
+        state.dragPath ||
+        state.drawing
+      ) {
+        state.pendingExternalDraftSync = true;
+        updateMapSources();
+        setMessage(
+          'Общий черновик изменён в другой вкладке. Изменение будет применено после завершения текущего действия.',
+          'error',
+        );
+        return;
+      }
+
+      syncSelectedDraftFromStorage();
+    } else {
+      updateMapSources();
+    }
+
+    if (change.modeChanged) {
+      refreshDraftControls();
+    }
+  }
+
+  function scheduleGeometryServerSync(reason) {
+    remoteSyncReasons.add(reason);
+    if (remoteSyncTimer !== null) {
+      window.clearTimeout(
+        remoteSyncTimer,
+      );
+    }
+
+    remoteSyncTimer =
+      window.setTimeout(
+        async () => {
+          remoteSyncTimer = null;
+          const reasons =
+            new Set(remoteSyncReasons);
+          remoteSyncReasons.clear();
+
+          await refresh({
+            keepSelection: true,
+            fit: false,
+          });
+
+          if (state.importSession) {
+            return;
+          }
+
+          const conflicts =
+            drafts.list()
+              .filter(
+                (draft) =>
+                  draft.conflict,
+              )
+              .length;
+
+          const fromRealtime =
+            reasons.has(
+              'realtime',
+            );
+
+          setMessage(
+            conflicts
+              ? 'Данные синхронизированы. Локальных конфликтов: ' + conflicts + '.'
+              : fromRealtime
+                ? 'Геометрии автоматически синхронизированы.'
+                : 'Общий черновик синхронизирован с серверным состоянием.',
+            conflicts
+              ? 'error'
+              : 'success',
+          );
+        },
+        REMOTE_SYNC_DELAY_MS,
+      );
   }
 
   async function api(path, options = {}) {
@@ -697,7 +869,15 @@ if (section) {
         state.dragPath = null;
         map.dragPan.enable();
         updateDraftMap();
-        captureCurrentDraft();
+
+        if (
+          state.pendingExternalDraftSync
+        ) {
+          flushPendingExternalDraftSync();
+        } else {
+          captureCurrentDraft();
+        }
+
         refreshHandleCursor();
       });
 
@@ -2482,12 +2662,29 @@ if (section) {
     updateMapSources();
     updateDrawControls();
     renderFormState();
+    flushPendingExternalDraftSync();
   }
 
 
   async function finishDrawing() {
     const drawing = state.drawing;
     if (!drawing) return;
+
+    if (
+      drawing.mode === 'cut' &&
+      state.pendingExternalDraftSync
+    ) {
+      state.drawing = null;
+      updateMapSources();
+      updateDrawControls();
+      renderFormState();
+      flushPendingExternalDraftSync();
+      setMessage(
+        'Вырезание отменено: общий черновик этой геометрии изменился в другой вкладке.',
+        'error',
+      );
+      return;
+    }
 
     if (drawing.mode === 'point') {
       if (!drawing.coordinates[0]) return;
@@ -2591,6 +2788,7 @@ if (section) {
     applyForm(state.current);
     updateDraftMap();
     updateDrawControls();
+    flushPendingExternalDraftSync();
   }
 
 
@@ -3036,11 +3234,28 @@ if (section) {
 
   persistDrafts?.addEventListener('change', () => {
     drafts.setPersistent(persistDrafts.checked);
+    rebuildDraftOverlay();
     refreshDraftControls();
+    renderList();
+    updateMapSources();
+    syncSelectedDraftFromStorage();
     setMessage(
       drafts.isPersistent()
-        ? 'Черновики будут храниться в localStorage между сессиями.'
+        ? 'Черновики будут храниться в localStorage и синхронизироваться между вкладками.'
         : 'Черновики хранятся только в sessionStorage текущей вкладки.',
+    );
+  });
+
+  drafts.subscribe((change) => {
+    if (
+      change.source !==
+      'external-storage'
+    ) {
+      return;
+    }
+
+    handleExternalDraftChange(
+      change,
     );
   });
 
@@ -3053,15 +3268,9 @@ if (section) {
       return;
     }
 
-    void refresh({ keepSelection: true, fit: false }).then(() => {
-      const conflicts = drafts.list().filter((draft) => draft.conflict).length;
-      setMessage(
-        conflicts
-          ? 'Геометрии синхронизированы. Локальных конфликтов: ' + conflicts + '.'
-          : 'Геометрии автоматически синхронизированы.',
-        conflicts ? 'error' : 'success',
-      );
-    });
+    scheduleGeometryServerSync(
+      'realtime',
+    );
   });
 
 
