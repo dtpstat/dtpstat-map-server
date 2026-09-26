@@ -16,6 +16,8 @@ const dataAuthorization =
   `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
 const osmAuthorization =
   `Basic ${Buffer.from('osm:test:secret').toString('base64')}`;
+const geometryAuthorization =
+  `Basic ${Buffer.from('geometry:test:secret').toString('base64')}`;
 
 function testAdminAuth() {
   return {
@@ -39,6 +41,7 @@ function testAdminAuth() {
             username: 'importer',
             canManageData: true,
             canEditOsm: false,
+            canEditGeometries: false,
             isSuperuser: false,
           },
         };
@@ -55,6 +58,24 @@ function testAdminAuth() {
             username: 'osm-editor',
             canManageData: false,
             canEditOsm: true,
+            canEditGeometries: false,
+            isSuperuser: false,
+          },
+        };
+      }
+
+      if (
+        request.headers.authorization ===
+        geometryAuthorization
+      ) {
+        return {
+          status: 'success',
+          user: {
+            id: 3,
+            username: 'geometry-editor',
+            canManageData: false,
+            canEditOsm: false,
+            canEditGeometries: true,
             isSuperuser: false,
           },
         };
@@ -298,4 +319,217 @@ test('admin WebSocket streams task events only to data managers and resource eve
             : resolve(),
       ),
   );
+});
+
+
+test('geometry realtime snapshots and live changes require the dedicated geometry permission', async () => {
+  const adminTasks =
+    createAdminTaskManager({
+      randomUUID:
+        () =>
+          'geometry-ws-task',
+    });
+  const realtimeEvents =
+    createRealtimeEventBus({
+      randomUUID:
+        () =>
+          'geometry-change',
+      now:
+        () =>
+          '2026-09-26T15:00:00.000Z',
+    });
+
+  realtimeEvents.publish({
+    resource:
+      'city-geometries',
+    permission:
+      'geometry-editor',
+    entityIds: [11],
+    message:
+      'Geometry snapshot',
+  });
+
+  const gateway =
+    createAdminWebSocketGateway({
+      adminTasks,
+      adminAuth:
+        testAdminAuth(),
+      realtimeEvents,
+    });
+  const server =
+    http.createServer(
+      (_request, response) =>
+        response.end(),
+    );
+
+  gateway.attach(server);
+
+  await new Promise(
+    (resolve) =>
+      server.listen(
+        0,
+        '127.0.0.1',
+        resolve,
+      ),
+  );
+
+  const address =
+    server.address();
+  const url =
+    `ws://127.0.0.1:${address.port}/api/admin/ws`;
+
+  const dataMessages = [];
+  const osmMessages = [];
+  const geometryMessages = [];
+
+  const dataSocket =
+    await openSocket(
+      url,
+      dataAuthorization,
+      dataMessages,
+    );
+  const osmSocket =
+    await openSocket(
+      url,
+      osmAuthorization,
+      osmMessages,
+    );
+  const geometrySocket =
+    await openSocket(
+      url,
+      geometryAuthorization,
+      geometryMessages,
+    );
+
+  try {
+    assert.deepEqual(
+      dataMessages[0]
+        .realtime
+        .resources,
+      {},
+    );
+    assert.deepEqual(
+      osmMessages[0]
+        .realtime
+        .resources,
+      {},
+    );
+
+    assert.equal(
+      geometryMessages[0]
+        .realtime
+        .resources
+        ['city-geometries']
+        ?.permission,
+      'geometry-editor',
+    );
+
+    realtimeEvents.publish({
+      resource:
+        'city-geometries',
+      permission:
+        'geometry-editor',
+      entityIds: [12],
+      message:
+        'Geometry changed',
+    });
+
+    await new Promise(
+      (resolve) =>
+        setImmediate(
+          resolve,
+        ),
+    );
+
+    assert.equal(
+      dataMessages.some(
+        (message) =>
+          message.type ===
+            'data-change' &&
+          message.change
+            ?.resource ===
+            'city-geometries',
+      ),
+      false,
+    );
+    assert.equal(
+      osmMessages.some(
+        (message) =>
+          message.type ===
+            'data-change' &&
+          message.change
+            ?.resource ===
+            'city-geometries',
+      ),
+      false,
+    );
+    assert.ok(
+      geometryMessages.some(
+        (message) =>
+          message.type ===
+            'data-change' &&
+          message.change
+            ?.resource ===
+            'city-geometries' &&
+          message.change
+            ?.permission ===
+            'geometry-editor',
+      ),
+    );
+
+    adminTasks.start(
+      {
+        type:
+          'kml-update',
+        endpoint:
+          '/api/admin/update',
+      },
+      async (context) => {
+        context.log(
+          'geometry task log',
+        );
+        return {};
+      },
+    );
+
+    await new Promise(
+      (resolve) =>
+        setImmediate(
+          resolve,
+        ),
+    );
+    await new Promise(
+      (resolve) =>
+        setImmediate(
+          resolve,
+        ),
+    );
+
+    assert.equal(
+      geometryMessages.some(
+        (message) =>
+          message.type ===
+            'log' ||
+          message.type ===
+            'task' ||
+          message.type ===
+            'success',
+      ),
+      false,
+    );
+  } finally {
+    dataSocket.close();
+    osmSocket.close();
+    geometrySocket.close();
+    await gateway.close();
+    await new Promise(
+      (resolve, reject) =>
+        server.close(
+          (error) =>
+            error
+              ? reject(error)
+              : resolve(),
+        ),
+    );
+  }
 });
