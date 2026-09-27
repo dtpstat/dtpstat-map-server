@@ -499,6 +499,39 @@ test('geometry editor keeps existing geometry read-only until explicit edit star
 });
 
 
+test('geometry begin edit waits for lease and discards stale async acquire results', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /beginEditPendingId: null/u,
+  );
+  assert.match(
+    editor,
+    /state\.beginEditPendingId !== null/u,
+  );
+  assert.match(
+    editor,
+    /const requestedId = item\.id;[\s\S]*state\.beginEditPendingId =[\s\S]*await api\([\s\S]*\/edit-lock/u,
+  );
+  assert.match(
+    editor,
+    /String\(state\.selectedId\)[\s\S]*String\(requestedId\)[\s\S]*releaseDraftLease/u,
+  );
+  assert.match(
+    editor,
+    /state\.editing = true;[\s\S]*state\.editLease = lease/u,
+  );
+  assert.match(
+    editor,
+    /finally \{[\s\S]*state\.beginEditPendingId =[\s\S]*null;[\s\S]*renderFormState\(\)/u,
+  );
+});
+
+
 test('geometry editor exposes normal unlinked geometry and persistent explicit editing', async () => {
   const [
     editor,

@@ -106,6 +106,7 @@ if (section) {
     editLease: null,
     blockedLease: null,
     editLeases: new Map(),
+    beginEditPendingId: null,
   };
 
   const REMOTE_SYNC_DELAY_MS = 75;
@@ -1512,7 +1513,8 @@ if (section) {
       state.editing;
     beginEditButton.disabled =
       Boolean(state.importSession) ||
-      Boolean(state.drawing);
+      Boolean(state.drawing) ||
+      state.beginEditPendingId !== null;
 
     const blockedByOther =
       Boolean(
@@ -1965,22 +1967,49 @@ if (section) {
     if (
       !item?.id ||
       isLocalGeometryId(item.id) ||
-      state.editing
+      state.editing ||
+      state.beginEditPendingId !== null
     ) {
       return;
     }
+
+    const requestedId = item.id;
+    state.beginEditPendingId =
+      requestedId;
+    renderFormState();
 
     try {
       setMessage('Получаем блокировку редактирования…');
       const payload = await api(
         '/api/admin/geometry-editor/geometries/' +
-          encodeURIComponent(item.id) +
+          encodeURIComponent(requestedId) +
           '/edit-lock',
         { method: 'POST' },
       );
       const lease = payload.lease;
-      const existing = draftFor(item.id);
-      drafts.upsert(item.id, {
+
+      if (
+        String(state.selectedId) !==
+          String(requestedId) ||
+        String(state.current?.id) !==
+          String(requestedId)
+      ) {
+        await releaseDraftLease({
+          id: requestedId,
+          kind: 'update',
+          editToken: lease.token,
+        }).catch(
+          (error) =>
+            console.warn(
+              'Failed to release stale geometry edit lease',
+              error,
+            ),
+        );
+        return;
+      }
+
+      const existing = draftFor(requestedId);
+      drafts.upsert(requestedId, {
         ...(existing ?? {}),
         kind: 'update',
         baseUpdatedAt:
@@ -1993,7 +2022,7 @@ if (section) {
       state.editing = true;
       state.editLease = lease;
       state.blockedLease = null;
-      state.editLeases.set(Number(item.id), {
+      state.editLeases.set(Number(requestedId), {
         ...lease,
         token: undefined,
       });
@@ -2001,7 +2030,7 @@ if (section) {
       const effective =
         applyGeometryDraft(
           item,
-          draftFor(item.id),
+          draftFor(requestedId),
         );
       state.draft = clone(effective.geometry);
       applyForm(effective);
@@ -2013,13 +2042,30 @@ if (section) {
         'success',
       );
     } catch (error) {
-      if (error.status === 409) {
+      if (
+        String(state.selectedId) ===
+          String(requestedId) &&
+        error.status === 409
+      ) {
         state.blockedLease =
           error.payload?.details?.lease ??
           null;
-        renderFormState();
       }
-      setMessage(error.message, 'error');
+      if (
+        String(state.selectedId) ===
+        String(requestedId)
+      ) {
+        setMessage(error.message, 'error');
+      }
+    } finally {
+      if (
+        String(state.beginEditPendingId) ===
+        String(requestedId)
+      ) {
+        state.beginEditPendingId =
+          null;
+      }
+      renderFormState();
     }
   }
 
