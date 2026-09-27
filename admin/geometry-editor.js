@@ -1507,6 +1507,12 @@ if (section) {
       Boolean(state.drawing) ||
       Boolean(state.importSession);
 
+    const blockedByOther =
+      Boolean(
+        activeLease &&
+        activeLease.clientId !== realtimeClientId(),
+      );
+
     beginEditButton.hidden =
       !item?.id ||
       localItem ||
@@ -1514,13 +1520,8 @@ if (section) {
     beginEditButton.disabled =
       Boolean(state.importSession) ||
       Boolean(state.drawing) ||
-      state.beginEditPendingId !== null;
-
-    const blockedByOther =
-      Boolean(
-        activeLease &&
-        activeLease.clientId !== realtimeClientId(),
-      );
+      state.beginEditPendingId !== null ||
+      blockedByOther;
 
     takeoverEditButton.hidden =
       !(
@@ -1659,6 +1660,10 @@ if (section) {
     for (const item of visible) {
       const row = document.createElement('div');
       row.className = 'geometry-editor-row';
+      const rowLease =
+        state.editLeases.get(
+          Number(item.id),
+        );
       row.classList.toggle('is-selected', item.id === state.selectedId);
       row.classList.toggle('is-hidden', item.isVisible === false);
       row.classList.toggle('has-draft', Boolean(item._draft));
@@ -1704,6 +1709,10 @@ if (section) {
         item.lineTypeName,
         item._draft ? 'черновик' : null,
         item._conflict ? 'конфликт' : null,
+        rowLease
+          ? 'редактирует: ' +
+            (rowLease.username ?? 'другой пользователь')
+          : null,
         !item.boundaryId ? 'без привязки' : null,
         item.isVisible === false ? 'скрыта' : null,
       ].filter(Boolean).join(' · ') || typeLabel(item);
@@ -1974,6 +1983,27 @@ if (section) {
     }
 
     const requestedId = item.id;
+    const knownLease =
+      state.editLeases.get(
+        Number(requestedId),
+      );
+    if (
+      knownLease &&
+      knownLease.clientId !==
+        realtimeClientId()
+    ) {
+      state.blockedLease =
+        knownLease;
+      renderFormState();
+      setMessage(
+        'Эта геометрия уже редактируется пользователем «' +
+          (knownLease.username ?? 'другой пользователь') +
+          '».',
+        'error',
+      );
+      return;
+    }
+
     state.beginEditPendingId =
       requestedId;
     renderFormState();
@@ -4269,6 +4299,14 @@ if (section) {
           (error) =>
             console.warn(
               'Geometry edit token heartbeat failed',
+              error,
+            ),
+        );
+      void loadEditLeases()
+        .catch(
+          (error) =>
+            console.warn(
+              'Geometry edit lease refresh failed',
               error,
             ),
         );

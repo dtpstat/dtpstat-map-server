@@ -532,6 +532,39 @@ test('geometry begin edit waits for lease and discards stale async acquire resul
 });
 
 
+test('geometry editor exposes foreign lease owner and blocks ordinary begin edit', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /const blockedByOther =[\s\S]*activeLease\.clientId !== realtimeClientId\(\)/u,
+  );
+  assert.match(
+    editor,
+    /beginEditButton\.disabled =[\s\S]*blockedByOther/u,
+  );
+  assert.match(
+    editor,
+    /const knownLease =[\s\S]*state\.editLeases\.get[\s\S]*knownLease\.clientId !==[\s\S]*realtimeClientId\(\)/u,
+  );
+  assert.match(
+    editor,
+    /Эта геометрия уже редактируется пользователем/u,
+  );
+  assert.match(
+    editor,
+    /rowLease[\s\S]*редактирует: /u,
+  );
+  assert.match(
+    editor,
+    /Geometry edit lease refresh failed/u,
+  );
+});
+
+
 test('geometry editor exposes normal unlinked geometry and persistent explicit editing', async () => {
   const [
     editor,
