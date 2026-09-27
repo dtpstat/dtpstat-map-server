@@ -171,13 +171,13 @@ test('geometry editor city catalog includes active linked cities before their fi
     query,
     /COUNT\(\*\)::integer[\s\S]*AS "geometryCount"/u,
   );
-  assert.doesNotMatch(
+  assert.match(
     query,
-    /geometry_presence/u,
+    /OR EXISTS \([\s\S]*FROM city_geometries AS geometry_presence[\s\S]*geometry_presence\.city_id = city\.id/u,
   );
-  assert.doesNotMatch(
+  assert.match(
     query,
-    /EXISTS \([\s\S]*FROM city_geometries AS geometry_presence/u,
+    /WHERE EXISTS \([\s\S]*FROM city_boundaries AS boundary[\s\S]*boundary\.is_active[\s\S]*\)[\s\S]*OR EXISTS/u,
   );
 });
 
