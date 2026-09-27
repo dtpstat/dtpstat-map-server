@@ -623,7 +623,10 @@ try {
   const durable =
     await client.query(
       `
-        SELECT id
+        SELECT
+          id,
+          city_id::bigint AS city_id,
+          boundary_id::bigint AS boundary_id
         FROM city_geometries
         WHERE id = $1
       `,
@@ -635,23 +638,108 @@ try {
     1,
     'Boundary deactivation deleted durable geometry',
   );
+  assert.equal(
+    durable.rows[0]
+      ?.boundary_id,
+    null,
+    'Boundary deactivation must suspend geometry by clearing BOUNDARY_ID',
+  );
+  assert.equal(
+    Number(
+      durable.rows[0]
+        ?.city_id,
+    ),
+    canonicalCityId,
+    'Suspended geometry must retain its logical CITY_ID',
+  );
 
   await client.query(
     'BEGIN',
   );
-  await client.query(
-    `
-      UPDATE city_boundaries
-      SET is_active = TRUE
-      WHERE id = $1
-    `,
-    [boundaryId],
-  );
+
+  const replacementBoundary =
+    await client.query(
+      `
+        WITH prepared AS (
+          SELECT ST_Multi(
+            ST_GeomFromText(
+              'POLYGON((20 44,20.03 44,20.03 44.03,20 44.03,20 44))',
+              4326
+            )
+          ) AS geom
+        )
+        INSERT INTO city_boundaries (
+          place_type,
+          admin_level,
+          osm_type,
+          osm_id,
+          osm_name,
+          tags,
+          geom,
+          bounds,
+          is_active,
+          display_name,
+          display_type,
+          area_m2
+        )
+        SELECT
+          'city',
+          8,
+          'relation',
+          990000003,
+          'Geometry Schema CI Renamed',
+          '{"name":"Geometry Schema CI Renamed"}'::jsonb,
+          geom,
+          ST_Envelope(geom),
+          TRUE,
+          'Geometry Schema CI Renamed',
+          'city',
+          ST_Area(geom::geography)
+        FROM prepared
+        RETURNING id::bigint AS id
+      `,
+    );
+
+  const replacementBoundaryId =
+    Number(
+      replacementBoundary.rows[0]
+        .id,
+    );
+
   await client.query(
     'SELECT sync_active_boundary_cities()',
   );
   await client.query(
     'COMMIT',
+  );
+
+  const reboundGeometry =
+    await client.query(
+      `
+        SELECT
+          city_id::bigint AS city_id,
+          boundary_id::bigint AS boundary_id
+        FROM city_geometries
+        WHERE id = $1
+      `,
+      [geometryId],
+    );
+
+  assert.equal(
+    Number(
+      reboundGeometry.rows[0]
+        ?.city_id,
+    ),
+    canonicalCityId,
+    'Replacement boundary changed the logical geometry city',
+  );
+  assert.equal(
+    Number(
+      reboundGeometry.rows[0]
+        ?.boundary_id,
+    ),
+    replacementBoundaryId,
+    'Suspended geometry was not rebound to the new active boundary',
   );
 
   const activeEffective =
@@ -667,7 +755,7 @@ try {
   assert.equal(
     activeEffective.rowCount,
     1,
-    'Reactivated boundary geometry did not become effective',
+    'Geometry rebound to a replacement boundary did not become effective',
   );
 
   await client.query(
