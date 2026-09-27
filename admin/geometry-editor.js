@@ -456,9 +456,10 @@ if (section) {
   }
 
   function editingModeText(item) {
-    return item
+    if (!item) return 'Выберите геометрию';
+    return state.editing
       ? `Редактирование: ${displayName(item)} · клик по сегменту — добавить узел · Ctrl+клик по узлу — удалить`
-      : 'Выберите геометрию';
+      : `Просмотр: ${displayName(item)} · нажмите «Начать редактирование» для изменений`;
   }
 
   function geometryType(geometry) {
@@ -3020,9 +3021,13 @@ if (section) {
       }
 
       const local = captureCurrentDraft();
-      if (local) {
+      if (
+        Object.keys(
+          local?.changes ?? {},
+        ).length > 0
+      ) {
         setMessage(
-          'Перед вырезанием сохраните или сбросьте локальный черновик выбранного полигона.',
+          'Перед вырезанием синхронизируйте или отмените локальные изменения выбранного полигона.',
           'error',
         );
         return;
@@ -3209,6 +3214,12 @@ if (section) {
               headers: {
                 'Content-Type': 'application/json',
                 'X-DTPStat-Base-Revision': target.updatedAt,
+                ...(draftFor(target.id)?.editToken
+                  ? {
+                      'X-DTPStat-Edit-Token':
+                        draftFor(target.id).editToken,
+                    }
+                  : {}),
               },
               body: JSON.stringify({
                 geometry: polygon,
@@ -3216,7 +3227,19 @@ if (section) {
             },
           );
 
+          const editDraft =
+            draftFor(target.id);
+          if (editDraft?.editToken) {
+            await Promise.allSettled([
+              releaseDraftLease({
+                ...editDraft,
+                id: target.id,
+              }),
+            ]);
+          }
           drafts.remove(target.id);
+          state.editing = false;
+          state.editLease = null;
           upsertGeometrySummary(payload.geometry);
           adoptGeometryDetail(payload.geometry);
           refreshDraftControls();

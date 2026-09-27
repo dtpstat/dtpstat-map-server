@@ -116,7 +116,7 @@ test('geometry editor uses local drafts optimistic revisions atomic bulk save an
   );
   assert.match(
     editor,
-    /resource !== 'city-geometries'/u,
+    /change\?\.resource !==[\s\S]*'city-geometries'/u,
   );
   assert.match(
     editor,
