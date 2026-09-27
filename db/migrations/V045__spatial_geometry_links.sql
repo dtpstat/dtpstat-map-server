@@ -20,6 +20,44 @@ DROP FUNCTION IF EXISTS BUSLANES.SYNC_GEOMETRY_CITY_FROM_BOUNDARY();
 DROP FUNCTION IF EXISTS BUSLANES.PROPAGATE_BOUNDARY_CITY_TO_GEOMETRIES();
 DROP FUNCTION IF EXISTS BUSLANES.RECONCILE_GEOMETRY_BOUNDARY_OWNERSHIP();
 
+-- V040 used one UPDATE trigger for both editable content and administrative
+-- link maintenance. Keep derived lengths in that trigger, but make UPDATED_AT
+-- a revision of editable content only. CITY_ID/BOUNDARY_ID relinking must not
+-- invalidate optimistic editor revisions.
+CREATE OR REPLACE FUNCTION BUSLANES.NORMALIZE_CITY_GEOMETRY_DERIVED()
+RETURNS TRIGGER
+LANGUAGE PLPGSQL
+AS $FUNCTION$
+BEGIN
+    IF GEOMETRYTYPE(NEW.GEOM) IN ('LINESTRING', 'MULTILINESTRING') THEN
+        NEW.LENGTH_M := ST_LENGTH(NEW.GEOM::GEOGRAPHY);
+        NEW.LANE_LENGTH_M := NEW.LENGTH_M * NEW.LANES;
+    ELSE
+        NEW.LENGTH_M := NULL;
+        NEW.LANE_LENGTH_M := NULL;
+    END IF;
+
+    IF TG_OP = 'UPDATE' THEN
+        IF NEW.GEOM IS DISTINCT FROM OLD.GEOM
+           OR NEW.LINE_TYPE_ID IS DISTINCT FROM OLD.LINE_TYPE_ID
+           OR NEW.LANES IS DISTINCT FROM OLD.LANES
+           OR NEW.PROPERTIES IS DISTINCT FROM OLD.PROPERTIES
+           OR NEW.DISPLAY_NAME IS DISTINCT FROM OLD.DISPLAY_NAME
+           OR NEW.TOOLTIP IS DISTINCT FROM OLD.TOOLTIP
+           OR NEW.TAGS IS DISTINCT FROM OLD.TAGS
+           OR NEW.SOURCE_TAGS IS DISTINCT FROM OLD.SOURCE_TAGS
+           OR NEW.IS_VISIBLE IS DISTINCT FROM OLD.IS_VISIBLE
+           OR NEW.WAS_EDITED IS DISTINCT FROM OLD.WAS_EDITED THEN
+            NEW.UPDATED_AT := NOW();
+        ELSE
+            NEW.UPDATED_AT := OLD.UPDATED_AT;
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END
+$FUNCTION$;
+
 CREATE OR REPLACE FUNCTION BUSLANES.RESOLVE_GEOMETRY_ADMIN_LINKS(
     INPUT_GEOM PUBLIC.GEOMETRY
 )
@@ -97,19 +135,20 @@ AS $FUNCTION$
                 ) THEN
                     ST_LENGTH(
                         ST_COLLECTIONEXTRACT(
-                            ST_DIFFERENCE(
-                                ST_INTERSECTION(
-                                    INPUT_GEOM,
-                                    CANDIDATE.GEOM
-                                ),
-                                COALESCE(
-                                    DESCENDANT_UNION.ACTIVE_DESCENDANTS,
-                                    ST_GEOMFROMTEXT(
-                                        'GEOMETRYCOLLECTION EMPTY',
-                                        4326
+                            CASE
+                                WHEN DESCENDANT_UNION.ACTIVE_DESCENDANTS IS NULL
+                                    THEN ST_INTERSECTION(
+                                        INPUT_GEOM,
+                                        CANDIDATE.GEOM
                                     )
+                                ELSE ST_DIFFERENCE(
+                                    ST_INTERSECTION(
+                                        INPUT_GEOM,
+                                        CANDIDATE.GEOM
+                                    ),
+                                    DESCENDANT_UNION.ACTIVE_DESCENDANTS
                                 )
-                            ),
+                            END,
                             2
                         )::GEOGRAPHY
                     )
@@ -119,19 +158,20 @@ AS $FUNCTION$
                 ) THEN
                     ST_AREA(
                         ST_COLLECTIONEXTRACT(
-                            ST_DIFFERENCE(
-                                ST_INTERSECTION(
-                                    INPUT_GEOM,
-                                    CANDIDATE.GEOM
-                                ),
-                                COALESCE(
-                                    DESCENDANT_UNION.ACTIVE_DESCENDANTS,
-                                    ST_GEOMFROMTEXT(
-                                        'GEOMETRYCOLLECTION EMPTY',
-                                        4326
+                            CASE
+                                WHEN DESCENDANT_UNION.ACTIVE_DESCENDANTS IS NULL
+                                    THEN ST_INTERSECTION(
+                                        INPUT_GEOM,
+                                        CANDIDATE.GEOM
                                     )
+                                ELSE ST_DIFFERENCE(
+                                    ST_INTERSECTION(
+                                        INPUT_GEOM,
+                                        CANDIDATE.GEOM
+                                    ),
+                                    DESCENDANT_UNION.ACTIVE_DESCENDANTS
                                 )
-                            ),
+                            END,
                             3
                         )::GEOGRAPHY
                     )

@@ -70,4 +70,12 @@ test('geometry administrative links are optional spatially derived state', async
     migration,
     /NULL is a normal editable state/u,
   );
+  assert.match(
+    migration,
+    /NEW\.UPDATED_AT := OLD\.UPDATED_AT/u,
+  );
+  assert.match(
+    migration,
+    /ACTIVE_DESCENDANTS IS NULL[\s\S]*ST_INTERSECTION/u,
+  );
 });
