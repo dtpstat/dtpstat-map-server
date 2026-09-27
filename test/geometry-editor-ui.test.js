@@ -48,9 +48,13 @@ test('geometry editor is a dedicated permission-protected top-level admin sectio
     html,
     /id="geometry-editor-draft-count"/u,
   );
-  assert.match(
+  assert.doesNotMatch(
     html,
     /id="geometry-editor-persist-drafts"/u,
+  );
+  assert.match(
+    html,
+    /geometry-editor-storage-mode[\s\S]*localStorage/u,
   );
   assert.match(
     html,
@@ -120,7 +124,7 @@ test('geometry editor uses local drafts optimistic revisions atomic bulk save an
   );
   assert.match(
     editor,
-    /\/api\/admin\/geometry-editor\/geometries', \{\s*method: 'PATCH'/u,
+    /\/api\/admin\/geometry-editor\/sync/u,
   );
   assert.match(
     editor,
@@ -128,7 +132,7 @@ test('geometry editor uses local drafts optimistic revisions atomic bulk save an
   );
   assert.match(
     editor,
-    /Все локальные черновики применены атомарно/u,
+    /Операция применена атомарно/u,
   );
 
   assert.match(
@@ -454,38 +458,37 @@ test('geometry editor does not overwrite a cross-tab draft after an in-progress 
 });
 
 
-test('geometry editor marks suspended geometries and blocks creation until a boundary is active', async () => {
+test('geometry editor exposes normal unlinked geometry and persistent explicit editing', async () => {
   const [
     editor,
+    html,
     styles,
-  ] =
-    await Promise.all([
-      read(
-        'admin/geometry-editor.js',
-      ),
-      read(
-        'admin/geometry-editor.css',
-      ),
-    ]);
+    drafts,
+  ] = await Promise.all([
+    read('admin/geometry-editor.js'),
+    read('admin/index.html'),
+    read('admin/geometry-editor.css'),
+    read('admin/draft-store.js'),
+  ]);
 
-  assert.match(
+  assert.match(editor, /'__unlinked__'/u);
+  assert.match(editor, /\/geometry-editor\/unlinked\/geometries/u);
+  assert.match(editor, /drafts\.setPersistent\(true\)/u);
+  assert.match(editor, /edit-locks\/validate/u);
+  assert.match(editor, /edit-lock\/takeover/u);
+  assert.match(editor, /force-takeover/u);
+  assert.match(editor, /crypto\.randomUUID\(\)/u);
+  assert.match(editor, /30_000/u);
+  assert.match(editor, /const showEditable =[\s\S]*state\.editing/u);
+  assert.match(editor, /backgroundGeometries = showEditable[\s\S]*filter/u);
+  assert.doesNotMatch(
     editor,
-    /item\.suspended \? 'подвешена · нет активной OSM-области'/u,
+    /создавать новые можно только после активации области/u,
   );
-  assert.match(
-    editor,
-    /подвешено: \$\{suspended\}/u,
-  );
-  assert.match(
-    editor,
-    /!state\.city\?\.boundaryId/u,
-  );
-  assert.match(
-    editor,
-    /После активации области этого города она будет перепривязана автоматически/u,
-  );
-  assert.match(
-    styles,
-    /\.geometry-editor-row\.is-suspended/u,
-  );
+  assert.match(html, /id="geometry-begin-edit"/u);
+  assert.match(html, /id="geometry-takeover-edit"/u);
+  assert.match(html, /Очистить локальные изменения/u);
+  assert.match(styles, /\.geometry-editor-row\.is-unlinked/u);
+  assert.match(drafts, /\.\.\.clone\(draft\)/u);
 });
+

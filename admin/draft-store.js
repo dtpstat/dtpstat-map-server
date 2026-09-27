@@ -709,6 +709,7 @@ export function createDraftStore({
       const drafts =
         read();
       drafts[key] = {
+        ...clone(draft),
         baseUpdatedAt:
           draft.baseUpdatedAt,
         changes:

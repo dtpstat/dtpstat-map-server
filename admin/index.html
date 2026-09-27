@@ -472,16 +472,16 @@
             <div class="geometry-editor-heading-actions">
               <span id="geometry-editor-draft-count"
                     class="geometry-editor-draft-count">Черновики: 0</span>
-              <label class="check geometry-editor-persist-drafts">
-                <input id="geometry-editor-persist-drafts" type="checkbox">
-                хранить между сессиями
-              </label>
+              <span class="geometry-editor-storage-mode"
+                    title="Несинхронизированные изменения хранятся в localStorage браузера">
+                localStorage
+              </span>
               <button id="geometry-editor-save-all" type="button" disabled>
-                Сохранить все
+                Синхронизировать
               </button>
               <button class="secondary" id="geometry-editor-discard-all"
                       type="button" disabled>
-                Сбросить черновики
+                Очистить локальные изменения
               </button>
               <button class="secondary" id="geometry-editor-refresh"
                       type="button">
@@ -607,6 +607,18 @@
                   <p class="geometry-editor-conflict"
                      id="geometry-editor-conflict" hidden></p>
 
+                  <div class="geometry-editor-edit-actions">
+                    <button id="geometry-begin-edit" type="button" disabled>
+                      Начать редактирование
+                    </button>
+                    <button class="danger" id="geometry-takeover-edit"
+                            type="button" hidden>
+                      Перехватить редактирование…
+                    </button>
+                    <span id="geometry-edit-lock-status"
+                          class="geometry-edit-lock-status"></span>
+                  </div>
+
                   <label>Имя
                     <input name="displayName" type="text"
                            maxlength="240" disabled
@@ -646,7 +658,7 @@
                   </fieldset>
 
                   <div class="geometry-editor-form-actions">
-                    <button type="submit" disabled>Сохранить</button>
+                    <button type="submit" disabled>Сохранить локально</button>
                     <button class="secondary" id="geometry-revert"
                             type="button" disabled>Отменить правки</button>
                   </div>

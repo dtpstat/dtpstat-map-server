@@ -609,11 +609,35 @@
 }
 
 
-.geometry-editor-row.is-suspended {
+.geometry-editor-row.is-unlinked {
   border-color: #8f6d2d;
   background: #211b10;
 }
 
-.geometry-editor-row.is-suspended .geometry-editor-row-tags {
+.geometry-editor-row.is-unlinked .geometry-editor-row-tags {
   color: #d9b66c;
+}
+
+
+.geometry-editor-storage-mode {
+  align-self: center;
+  font-size: .82rem;
+  opacity: .72;
+}
+
+.geometry-editor-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .55rem;
+  margin-bottom: .8rem;
+}
+
+.geometry-edit-lock-status {
+  font-size: .82rem;
+  opacity: .78;
+}
+
+.geometry-editor-row.is-unlinked .geometry-editor-row-tags {
+  font-style: italic;
 }
