@@ -2986,7 +2986,7 @@ if (section) {
     }
   }
 
-  function draftItemFor(type) {  function draftItemFor(type) {
+  function draftItemFor(type) {
     return {
       id: null,
       cityId: state.city?.id,
@@ -4044,7 +4044,7 @@ if (section) {
       void takeoverEditing(),
   );
 
-  conflictKeep.addEventListener(  conflictKeep.addEventListener(
+  conflictKeep.addEventListener(
     'click',
     () =>
       setConflictDecision(
