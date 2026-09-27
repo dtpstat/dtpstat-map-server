@@ -4,8 +4,10 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import {
   hashAdminPassword,
+} from '../src/modules/security/credentials.js';
+import {
   normalizeAdminUsername,
-} from '../src/data/admin-security.js';
+} from '../src/modules/security/policy.js';
 import { loadDatabaseSchema } from '../src/db/database-environment.js';
 import { createDatabaseClient } from './database.js';
 

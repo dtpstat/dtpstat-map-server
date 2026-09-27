@@ -14,7 +14,7 @@ test('admin report builder is catalog-driven, four-tabbed and has no free-form e
     source('admin/report-range-ui.js'),
     source('admin/report-config.css'),
     source('db/migrations/V014__configurable_city_reports.sql'),
-    source('src/data/report-config.js'),
+    source('src/modules/reporting/config-policy.js'),
   ]);
 
   assert.match(shell, /await import\('\.\/report-config-editor\.js'\)/);
@@ -109,11 +109,57 @@ test('public ranking headers, metric cells and conditional formats are generated
 });
 
 test('server refreshes report materialization before public snapshots', async () => {
-  const server = await source('src/server.js');
-  const reportPosition = server.indexOf("await refreshReportValues({reason: 'startup'})");
-  const snapshotsPosition = server.indexOf("await refreshPublicDownloads({reason: 'startup'})");
+  const [
+    server,
+    runtime,
+    bootstrap,
+    derivedState,
+  ] = await Promise.all([
+    source('src/server.js'),
+    source(
+      'src/application/server-runtime.js',
+    ),
+    source(
+      'src/application/server-bootstrap.js',
+    ),
+    source(
+      'src/application/derived-state-refresh.js',
+    ),
+  ]);
+
+  assert.match(
+    server,
+    /createServerRuntime\(\{/,
+  );
+  assert.match(
+    server,
+    /bootstrapServerApplication\(\s*bootstrapDependencies/s,
+  );
+  assert.match(
+    runtime,
+    /createDerivedStateRefresh\(\{/,
+  );
+  assert.match(
+    runtime,
+    /const bootstrapDependencies = \{[\s\S]*derivedState/s,
+  );
+  assert.match(
+    bootstrap,
+    /await derivedState\.refreshAll\(\{\s*reason: 'startup',?\s*\}\)/s,
+  );
+
+  const reportPosition =
+    derivedState.indexOf(
+      'await refreshReportValues(details)',
+    );
+  const snapshotsPosition =
+    derivedState.indexOf(
+      'return refreshPublicDownloads(',
+    );
 
   assert.ok(reportPosition >= 0);
-  assert.ok(snapshotsPosition > reportPosition);
-  assert.match(server, /await refreshReportValues\(details\);\s*return refreshPublicDownloads\(details\);/s);
+  assert.ok(
+    snapshotsPosition >
+      reportPosition,
+  );
 });

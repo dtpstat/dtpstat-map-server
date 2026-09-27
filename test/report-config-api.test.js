@@ -5,7 +5,7 @@ import express from 'express';
 import {
   DEFAULT_REPORT_CONFIG,
   validateReportConfig,
-} from '../src/data/report-config.js';
+} from '../src/modules/reporting/config-policy.js';
 import { createReportConfigRouter } from '../src/routes/report-config-api.js';
 
 const authorization = `Basic ${Buffer.from('admin:test-secret').toString('base64')}`;
@@ -116,11 +116,7 @@ test('admin report endpoint requires auth and returns fixed catalogs', async () 
 
     assert.equal(payload.config.metrics.length, 3);
     assert.ok(payload.catalog.fields.some((field) => field.key === 'geometry.length_m'));
-    assert.ok(payload.catalog.fields.some((field) => field.key === 'geometry.perimeter_m'));
-    assert.ok(payload.catalog.fields.some((field) => field.key === 'geometry.area_m2'));
     assert.ok(payload.catalog.fields.some((field) => field.key === 'city.area_m2'));
-    assert.ok(payload.catalog.geometryTypes.some((item) => item.key === 'polygon'));
-    assert.ok(payload.catalog.tagFilterModes.some((item) => item.key === 'all'));
     assert.ok(payload.catalog.aggregates.some((aggregate) => aggregate.key === 'sum'));
     assert.ok(payload.catalog.aggregates.some((aggregate) => aggregate.key === 'median'));
     assert.ok(payload.catalog.operators.some((operator) => operator.key === 'divide'));

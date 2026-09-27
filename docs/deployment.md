@@ -72,7 +72,7 @@ MAPBOX_ACCESS_TOKEN=pk....
 
 ## Миграции
 
-Текущий набор: `V001…V042`.
+Текущий набор: `V001…V033`.
 
 Последние migrations:
 
@@ -95,17 +95,9 @@ V032__boundary_population_attributes.sql
 V033__vertical_report_config.sql
 V034__admin_password_policy.sql
 V035__osm_editor_role.sql
-V036__geometry_editor_role.sql
-V037__universal_city_geometries.sql
-V038__geometry_import_conflicts.sql
-V039__sync_geometry_editor_cities.sql
-V040__geometry_model_invariants.sql
-V041__city_boundary_identity_and_pending_guards.sql
-V042__effective_geometry_ownership.sql
-V043__geometry_final_state_constraints.sql
 ```
 
-Назначение `V023…V043`:
+Назначение `V023…V035`:
 
 - `V023` — logical `FULL_NAME` OSM boundary, merge relation fragments по `PLACE_TYPE + FULL_NAME`, sync `CITIES.FULL_NAME`;
 - `V024` — ordered `REPORT_CONFIG.RANK_SORT`;
@@ -119,17 +111,9 @@ V043__geometry_final_state_constraints.sql
 - `V032` — boundary-owned population/asOf/source/attributes и синхронизация активной population projection;
 - `V033` — перенос `REPORT_CONFIG` на вертикальное `CONFIG_KEY/CONFIG_VALUE` storage без изменения внешнего report API;
 - `V034` — настраиваемая политика паролей администраторов;
-- `V035` — отдельное право доступа к OSM editor;
-- `V036` — отдельное право доступа к geometry editor;
-- `V037` — универсальные Point/Line/Polygon city geometries;
-- `V038` — pending geometry-import conflicts;
-- `V039` — синхронизация geometry editor с city model;
-- `V040` — geometry invariants/derived normalization;
-- `V041` — identity и pending-import guards;
-- `V042` — effective geometry ownership;
-- `V043` — финальные ограничения geometry model.
+- `V035` — отдельное право доступа к OSM object editor.
 
-Следующая migration: **V044+**. Опубликованные migration files не изменяются задним числом.
+Следующая migration: **V036+**. Опубликованные migration files не изменяются задним числом.
 
 Startup автоматически применяет pending migrations под PostgreSQL advisory lock, затем повторно сверяет `<DATABASE_SCHEMA>.schema_versions` с набором `db/migrations`. Modified/gapped/newer history или ошибка SQL считаются startup error: HTTP listeners не открываются. `npm run db:migrate` остаётся ручной preflight-командой, но для обычного restart больше не обязателен.
 

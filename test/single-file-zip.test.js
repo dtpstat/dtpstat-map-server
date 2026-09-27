@@ -11,7 +11,7 @@ import {
   createSingleFileZipStream,
   openSingleFileZip,
   SingleFileZipError,
-} from '../src/data/single-file-zip.js';
+} from '../src/shared/streaming/single-file-zip.js';
 
 async function collect(source) {
   const chunks = [];

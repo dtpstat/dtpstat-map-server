@@ -9,12 +9,12 @@ function canManageInterface(user) {
   return Boolean(user?.isSuperuser || user?.canManageInterface);
 }
 
-function canEditGeometries(user) {
-  return Boolean(user?.isSuperuser || user?.canEditGeometries);
-}
-
 function canEditOsm(user) {
   return Boolean(user?.isSuperuser || user?.canEditOsm);
+}
+
+function canEditGeometries(user) {
+  return Boolean(user?.isSuperuser || user?.canEditGeometries);
 }
 
 function canAccessSecurity(user) {
@@ -147,6 +147,7 @@ function normalizeInterfaceEditorNodes() {
     // only by the interface role and by the outer interface panel scroller.
     reportPanel.querySelector('#report-config-form')?.removeAttribute('data-task-form');
     reportPanel.querySelector('.report-config-sections')?.classList.remove('form-fields');
+    reportPanel.querySelector('.report-config-editor')?.classList.remove('transfer-mode');
     document.querySelector('#interface-panels')?.append(reportPanel);
   }
 
@@ -260,8 +261,8 @@ function setupPrimarySections(user) {
   const dataAccess = !mustChangePassword && canManageData(user);
   const permissions = {
     data: dataAccess,
-    'osm-objects': !mustChangePassword && Boolean(user.isSuperuser || user.canEditOsm),
-    geometries: !mustChangePassword && Boolean(user.isSuperuser || user.canEditGeometries),
+    geometries: !mustChangePassword && canEditGeometries(user),
+    'osm-objects': !mustChangePassword && canEditOsm(user),
     interface: !mustChangePassword && canManageInterface(user),
     security: !mustChangePassword && canAccessSecurity(user),
     profile: true,
@@ -286,13 +287,15 @@ function setupPrimarySections(user) {
       tab.tabIndex = active ? 0 : -1;
     }
     for (const panel of panels) panel.hidden = panel.dataset.adminSectionPanel !== key;
-    if (connection) connection.hidden = key !== 'data' || !permissions.data;
-    if (key === 'security') window.dispatchEvent(new CustomEvent('dtpstat:security-refresh'));
-    if (key === 'osm-objects') {
-      window.dispatchEvent(new CustomEvent('dtpstat:osm-boundary-editor-open'));
+    if (connection) {
+      connection.hidden = !['data', 'geometries', 'osm-objects'].includes(key);
     }
+    if (key === 'security') window.dispatchEvent(new CustomEvent('dtpstat:security-refresh'));
     if (key === 'geometries') {
       window.dispatchEvent(new CustomEvent('dtpstat:geometry-editor-open'));
+    }
+    if (key === 'osm-objects') {
+      window.dispatchEvent(new CustomEvent('dtpstat:osm-boundary-editor-open'));
     }
   };
 
@@ -353,7 +356,8 @@ function updateUserBadge(user) {
     image.hidden = true;
     fallback.hidden = false;
   };
-  image.src = `/api/admin/profile/avatar?v=${Date.now()}`;
+  const avatarVersion = encodeURIComponent(user.updatedAt ?? '1');
+  image.src = `/api/admin/profile/avatar?v=${avatarVersion}`;
 }
 
 
@@ -364,6 +368,10 @@ async function startAdminShell() {
     await import('./project-branding.js');
     const session = await globalThis.dtpstatAdminSession;
     const user = session.user;
+    const {
+      startAdminRealtime,
+    } = await import('./realtime-client.js');
+    startAdminRealtime();
     ensureProfileSection();
     ensureTopbarActions();
     updateUserBadge(user);
@@ -372,8 +380,8 @@ async function startAdminShell() {
     await import('./profile-editor.js');
     if (!user.mustChangePassword) {
       if (canManageData(user)) await loadDataEditors();
-      if (canEditOsm(user)) await import('./osm-boundary-editor.js');
       if (canEditGeometries(user)) await import('./geometry-editor.js');
+      if (canEditOsm(user)) await import('./osm-boundary-editor.js');
       if (canManageInterface(user)) await loadInterfaceEditors(user);
       if (canAccessSecurity(user)) await import('./security-editor-v2.js');
     }

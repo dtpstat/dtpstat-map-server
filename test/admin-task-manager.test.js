@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   AdminTaskAlreadyRunningError,
   createAdminTaskManager,
-} from '../src/data/admin-task-manager.js';
+} from '../src/shared/tasks/admin-task-manager.js';
 
 const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -282,25 +282,69 @@ test('successful update timestamps persist by task type and ignore dry runs', as
 });
 
 
-test('pending conflict task does not record a successful update', async () => {
-  const updates = [];
-  let scheduled;
-  const manager = createAdminTaskManager({
-    schedule(callback) { scheduled = callback; },
-    randomUUID: () => '00000000-0000-4000-8000-000000000099',
-    async recordSuccessfulUpdate(update) { updates.push(update); },
-  });
-  manager.start({
-    type: 'kml-update',
-    endpoint: '/api/admin/update',
-    recordsSuccessfulUpdate: true,
-  }, async () => ({
-    pendingResolution: true,
-    importSession: { id: 99, conflictGeometries: 2 },
-  }));
-  await scheduled();
-  assert.equal(manager.current().status, 'succeeded');
-  assert.equal(manager.current().result.pendingResolution, true);
-  assert.deepEqual(updates, []);
-  assert.deepEqual(manager.successfulUpdates(), {});
+test('pending conflict resolution does not record a successful data update', async () => {
+  const recorded = [];
+  const refreshed = [];
+  const manager =
+    createAdminTaskManager({
+      randomUUID:
+        () =>
+          'pending-import-task',
+      recordSuccessfulUpdate:
+        async (update) =>
+          recorded.push(
+            update,
+          ),
+      afterSuccessfulUpdate:
+        async (update) =>
+          refreshed.push(
+            update,
+          ),
+    });
+
+  manager.start(
+    {
+      type:
+        'kml-update',
+      endpoint:
+        '/api/admin/update',
+      recordsSuccessfulUpdate:
+        true,
+    },
+    async () => ({
+      pendingResolution:
+        true,
+      partial: true,
+      warningCount: 1,
+    }),
+  );
+
+  await nextTurn();
+
+  const task =
+    manager.get(
+      'pending-import-task',
+    );
+
+  assert.equal(
+    task.status,
+    'succeeded',
+  );
+  assert.equal(
+    task.result
+      .pendingResolution,
+    true,
+  );
+  assert.equal(
+    recorded.length,
+    0,
+  );
+  assert.equal(
+    refreshed.length,
+    0,
+  );
+  assert.deepEqual(
+    manager.successfulUpdates(),
+    {},
+  );
 });

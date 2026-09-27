@@ -121,7 +121,6 @@ if (form) {
     config: null,
     catalog: null,
     lineTypes: [],
-    geometryTags: [],
     view: readTabState(
       'report-view',
       ['metrics', 'table', 'csv', 'rank'],
@@ -264,7 +263,6 @@ if (form) {
       kind: 'aggregate',
       field: field.key,
       aggregate: field.aggregates[0],
-      geometryType: field.geometryTypes?.[0] ?? 'any',
       groupBy: 'none',
     };
   }
@@ -326,17 +324,10 @@ if (form) {
     if (operand.kind === 'field') return fieldLabel;
     const aggregate = aggregateDefinition(operand.aggregate);
     const aggregateLabel = aggregate?.label ?? operand.aggregate;
-    const geometryType = state.catalog.geometryTypes
-      ?.find((item) => item.key === operand.geometryType)?.label
-      ?? operand.geometryType
-      ?? 'все геометрии';
     const group = operand.groupBy === 'line_type.name'
-      ? `; бизнес-тип: ${operand.groupValue ?? '—'}`
+      ? ` [тип: ${operand.groupValue ?? '—'}]`
       : '';
-    const tags = operand.tagFilter?.tags?.length
-      ? `; теги ${operand.tagFilter.mode}: ${operand.tagFilter.tags.join(', ')}`
-      : '';
-    return `${aggregateLabel}(${fieldLabel}) [${geometryType}${group}${tags}]`;
+    return `${aggregateLabel}(${fieldLabel})${group}`;
   }
 
   function metricRpnTokens(metric) {
@@ -448,11 +439,6 @@ if (form) {
       if (operand.kind === 'aggregate') {
         const definition = fieldDefinition(operand.field);
         operand.aggregate = definition.aggregates[0];
-        operand.geometryType = definition.geometryTypes?.[0] ?? 'any';
-        if (operand.geometryType !== 'line') {
-          operand.groupBy = 'none';
-          delete operand.groupValue;
-        }
       }
       renderAll();
     });
@@ -475,31 +461,8 @@ if (form) {
       renderAll();
     });
 
-    const geometryTypeLabel = document.createElement('label');
-    geometryTypeLabel.textContent = 'Тип геометрии';
-    const allowedGeometryTypes = definition.geometryTypes ?? ['any'];
-    const geometryTypeSelect = select(
-      (state.catalog.geometryTypes ?? [])
-        .filter((item) => allowedGeometryTypes.includes(item.key))
-        .map((item) => ({ value: item.key, label: item.label })),
-      operand.geometryType ?? allowedGeometryTypes[0],
-    );
-    geometryTypeSelect.disabled = allowedGeometryTypes.length === 1;
-    geometryTypeLabel.append(geometryTypeSelect);
-    host.append(geometryTypeLabel);
-    geometryTypeSelect.addEventListener('change', () => {
-      operand.geometryType = geometryTypeSelect.value;
-      if (operand.geometryType !== 'line') {
-        operand.groupBy = 'none';
-        delete operand.groupValue;
-      }
-      renderAll();
-    });
-
     const groupingOptions = state.catalog.groupings
-      .filter((grouping) =>
-        grouping.key === 'none' ||
-        (operand.geometryType === 'line' && state.lineTypes.length > 0))
+      .filter((grouping) => grouping.key === 'none' || state.lineTypes.length > 0)
       .map((grouping) => ({ value: grouping.key, label: grouping.label }));
     const groupLabel = document.createElement('label');
     groupLabel.textContent = 'Группировка / выбор группы';
@@ -532,60 +495,6 @@ if (form) {
         renderAll();
       });
     }
-
-    const tagBox = document.createElement('div');
-    tagBox.className = 'report-tag-filter';
-    const tagModeLabel = document.createElement('label');
-    tagModeLabel.textContent = 'Фильтр по тегам';
-    const tagModes = [
-      { value: '', label: 'без фильтра' },
-      ...(state.catalog.tagFilterModes ?? []).map((item) => ({
-        value: item.key,
-        label: item.label,
-      })),
-    ];
-    const tagMode = select(tagModes, operand.tagFilter?.mode ?? '');
-    tagModeLabel.append(tagMode);
-
-    const tagValuesLabel = document.createElement('label');
-    tagValuesLabel.textContent = 'Теги через запятую';
-    const tagValues = document.createElement('input');
-    tagValues.type = 'text';
-    tagValues.maxLength = 2048;
-    tagValues.placeholder = state.geometryTags.slice(0, 4).join(', ') || 'центр, обособленная';
-    tagValues.value = operand.tagFilter?.tags?.join(', ') ?? '';
-    tagValues.disabled = !operand.tagFilter;
-    tagValuesLabel.append(tagValues);
-
-    const applyTagFilter = () => {
-      const mode = tagMode.value;
-      const tags = tagValues.value
-        .split(',')
-        .map((value) => value.trim())
-        .filter(Boolean);
-      if (!mode) {
-        delete operand.tagFilter;
-        tagValues.disabled = true;
-      } else {
-        operand.tagFilter = { mode, tags: tags.length ? tags : [state.geometryTags[0] ?? 'тег'] };
-        tagValues.disabled = false;
-        if (!tags.length) tagValues.value = operand.tagFilter.tags.join(', ');
-      }
-      renderAll();
-    };
-    tagMode.addEventListener('change', applyTagFilter);
-    tagValues.addEventListener('change', () => {
-      const tags = tagValues.value
-        .split(',')
-        .map((value) => value.trim())
-        .filter(Boolean);
-      if (operand.tagFilter && tags.length) {
-        operand.tagFilter.tags = tags;
-        renderAll();
-      }
-    });
-    tagBox.append(tagModeLabel, tagValuesLabel);
-    host.append(tagBox);
   }
 
   function renderMetrics() {
@@ -1275,7 +1184,6 @@ if (form) {
       state.config = clone(payload.config);
       state.catalog = payload.catalog;
       state.lineTypes = payload.lineTypes ?? [];
-      state.geometryTags = payload.geometryTags ?? [];
       renderAll();
       dirtyState?.markClean();
       setMessage('Конфигурация загружена.');

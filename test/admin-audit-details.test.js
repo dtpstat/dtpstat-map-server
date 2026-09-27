@@ -4,7 +4,7 @@ import {
   adminAuditPayloadFingerprint,
   createAdminAuditChangeSet,
   sanitizeAdminAuditData,
-} from '../src/data/admin-audit-details.js';
+} from '../src/shared/logging/admin-audit-details.js';
 
 test('admin audit change set records concrete field-level before and after values', () => {
   const result = createAdminAuditChangeSet(

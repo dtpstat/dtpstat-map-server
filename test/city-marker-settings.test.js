@@ -4,7 +4,7 @@ import {
   CITY_MARKER_ICON_MAX_BYTES,
   CityMarkerIconValidationError,
   validateCityMarkerIcon,
-} from '../src/data/city-marker-icon.js';
+} from '../src/modules/project/city-marker-icon.js';
 import {
   CITY_MARKER_ICON,
   CITY_MARKER_ICON_URL,

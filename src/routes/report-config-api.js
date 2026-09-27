@@ -3,18 +3,18 @@ import {
   publicReportConfig,
   REPORT_CONFIG_CATALOG,
   ReportConfigValidationError,
-} from '../data/report-config.js';
+} from '../modules/reporting/config-policy.js';
 import {
   createAdminOperationAudit,
   recordAdminOperationChanges,
-} from '../http/admin-auth.js';
+} from '../http/admin-operation-audit.js';
 
 /**
  * @param {{
  *   reportConfigService: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
  *   lineTypesRepository: { list: () => Promise<any[]> },
  *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
- *   securityService: ReturnType<import('../data/admin-security.js').createAdminSecurityService>,
+ *   securityService: ReturnType<import('../modules/security/service.js').createAdminSecurityService>,
  *   maxBodyBytes: number,
  *   afterSave?: (result: any) => Promise<any>
  * }} dependencies
@@ -50,17 +50,15 @@ export function createReportConfigRouter({
     adminAuth.requireInterface,
     async (_request, response, next) => {
       try {
-        const [config, lineTypes, geometryTags] = await Promise.all([
+        const [config, lineTypes] = await Promise.all([
           reportConfigService.get(),
           lineTypesRepository.list(),
-          reportConfigService.listGeometryTags?.() ?? Promise.resolve([]),
         ]);
         response.set('Cache-Control', 'no-store');
         response.json({
           config,
           catalog: REPORT_CONFIG_CATALOG,
           lineTypes: lineTypes.map(({ code, name, title }) => ({ code, name, title })),
-          geometryTags,
         });
       } catch (error) {
         next(error);

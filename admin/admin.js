@@ -1,8 +1,10 @@
+import { copyTextToClipboard } from './admin-clipboard.js';
 import { createTaskNotices } from './task-notices.js';
 import { adminConfirm } from './admin-dialog.js';
 import { trackDirtyForm } from './admin-dirty-state.js';
 import { bindHumanUnits } from './admin-human-units.js';
 import { readTabState, writeTabState } from './admin-tab-state.js';
+import { subscribeAdminRealtime } from './realtime-client.js';
 
 const taskTypeTabs = Object.freeze({
   'osm-city-update': 'osm',
@@ -61,8 +63,6 @@ const state = {
     kml: readTabState('data-operation-kml', ['kml-external', 'kml-geojson'], 'kml-external'),
     population: readTabState('data-operation-population', ['population-json'], 'population-json'),
   },
-  socket: null,
-  reconnectTimer: null,
   transfer: null,
 };
 const elements = {
@@ -73,6 +73,7 @@ const elements = {
   logCount: document.querySelector('#log-count'),
   result: document.querySelector('#task-result'),
   resultPanel: document.querySelector('#result-panel'),
+  resultCopy: document.querySelector('#result-copy'),
   notices: [...document.querySelectorAll('[data-task-notice]')],
   refresh: document.querySelector('#refresh-task'),
   tabs: [...document.querySelectorAll('[data-task-tab]')],
@@ -96,6 +97,11 @@ const elements = {
   populationForm: document.querySelector('#population-form'),
 };
 const taskNotices = createTaskNotices(elements.notices, taskNames);
+if (elements.resultCopy) {
+  elements.resultCopy.addEventListener('click', () => {
+    void copyTaskResult();
+  });
+}
 const transferOverlay = createTransferOverlay();
 const osmSettingsDirty = trackDirtyForm(elements.osmForm, {
   label: 'Настройки OSM-загрузки',
@@ -693,6 +699,31 @@ function pretty(value) {
   return JSON.stringify(value, null, 2);
 }
 
+function taskResultPayload(task) {
+  if (!task) return undefined;
+  if (task.error !== undefined) return { error: task.error };
+  if (task.result !== undefined) return task.result;
+  return undefined;
+}
+
+let resultCopyFeedbackTimer = null;
+
+async function copyTaskResult() {
+  const payload = taskResultPayload(state.task);
+  if (payload === undefined || !elements.resultCopy) return;
+
+  const copied = await copyTextToClipboard(pretty(payload));
+  elements.resultCopy.textContent = copied ? 'Скопировано' : 'Не удалось';
+  elements.resultCopy.classList.toggle('result-copy-failed', !copied);
+
+  if (resultCopyFeedbackTimer) clearTimeout(resultCopyFeedbackTimer);
+  resultCopyFeedbackTimer = setTimeout(() => {
+    elements.resultCopy.textContent = 'Копировать';
+    elements.resultCopy.classList.remove('result-copy-failed');
+    resultCopyFeedbackTimer = null;
+  }, 1800);
+}
+
 function setNotice(message, tone = 'warning', taskKey = state.selected) {
   taskNotices.set(taskKey, message, tone);
 }
@@ -801,23 +832,34 @@ function renderLog(log) {
 function renderResult(task) {
   elements.resultPanel.className = 'result-panel';
   elements.resultPanel.open = false;
-  if (!task) {
+
+  const payload = taskResultPayload(task);
+  if (elements.resultCopy) {
+    elements.resultCopy.hidden = payload === undefined;
+    elements.resultCopy.textContent = 'Копировать';
+    elements.resultCopy.classList.remove('result-copy-failed');
+    elements.resultCopy.setAttribute(
+      'aria-label',
+      task?.error !== undefined
+        ? 'Копировать JSON ошибки'
+        : 'Копировать JSON результата',
+    );
+  }
+
+  if (payload === undefined) {
     elements.result.textContent = '—';
     return;
   }
+
   if (task.error !== undefined) {
     elements.resultPanel.classList.add('result-error');
-    elements.resultPanel.open = true;
-    elements.result.textContent = pretty({ error: task.error });
-  } else if (task.result !== undefined) {
+  } else {
     elements.resultPanel.classList.add(
       task.result?.partial ? 'result-warning' : 'result-success',
     );
-    elements.resultPanel.open = true;
-    elements.result.textContent = pretty(task.result);
-  } else {
-    elements.result.textContent = '—';
   }
+  elements.resultPanel.open = true;
+  elements.result.textContent = pretty(payload);
 }
 
 function setFormTaskLock(form, locked) {
@@ -1590,62 +1632,83 @@ elements.populationForm.addEventListener('submit', async (event) => {
 
 elements.refresh.addEventListener('click', () => refresh());
 
-function setConnection(status, text) {
-  elements.connection.className = `connection connection-${status}`;
-  elements.connection.textContent = text;
-}
-
-function connectWebSocket() {
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const socket = new WebSocket(`${protocol}//${location.host}/api/admin/ws`);
-  state.socket = socket;
-  socket.addEventListener('open', () => {
-    setConnection('online', 'WebSocket: подключён');
-    void refresh({ quiet: true });
-  });
-  socket.addEventListener('message', (event) => {
-    try {
-      const message = JSON.parse(event.data);
-      if (message.type === 'snapshot' || message.type === 'task') {
-        if (message.lastSuccessfulUpdates) {
-          state.lastSuccessfulUpdates = message.lastSuccessfulUpdates;
-        }
-        applyTask(message.task, true);
-        if (
-          message.task &&
-          ['failed', 'cancelled', 'succeeded'].includes(message.task.status)
-        ) {
-          void loadOsmCheckpoint().catch((error) => {
-            setTaskNotice('osm', error.message, 'error');
-          });
-        }
-      } else if (message.type === 'success') {
-        state.lastSuccessfulUpdates = {
-          ...state.lastSuccessfulUpdates,
-          [message.update.taskType]: message.update,
-        };
-        renderSuccessfulUpdates();
-      } else if (message.type === 'log' && state.task?.id === message.taskId) {
-        const log = state.task.log ?? [];
-        if (!log.some((entry) => entry.sequence === message.entry.sequence)) {
-          applyTask({...state.task, log: [...log, message.entry]});
-        }
-      }
-    } catch {
-      setNotice('Получено некорректное WebSocket-событие.', 'error');
+function handleRealtimeMessage(message) {
+  if (
+    message.type === 'snapshot' ||
+    message.type === 'task'
+  ) {
+    if (
+      message.lastSuccessfulUpdates
+    ) {
+      state.lastSuccessfulUpdates =
+        message.lastSuccessfulUpdates;
     }
-  });
-  socket.addEventListener('close', () => {
-    if (state.socket !== socket) return;
-    state.socket = null;
-    setConnection('pending', 'WebSocket: переподключение…');
-    clearTimeout(state.reconnectTimer);
-    state.reconnectTimer = setTimeout(connectWebSocket, 2000);
-  });
-  socket.addEventListener('error', () => socket.close());
-}
+    applyTask(
+      message.task,
+      true,
+    );
+    if (
+      message.task &&
+      [
+        'failed',
+        'cancelled',
+        'succeeded',
+      ].includes(
+        message.task.status,
+      )
+    ) {
+      void loadOsmCheckpoint()
+        .catch((error) => {
+          setTaskNotice(
+            'osm',
+            error.message,
+            'error',
+          );
+        });
+    }
+    return;
+  }
 
+  if (
+    message.type === 'success'
+  ) {
+    state.lastSuccessfulUpdates = {
+      ...state
+        .lastSuccessfulUpdates,
+      [message.update.taskType]:
+        message.update,
+    };
+    renderSuccessfulUpdates();
+    return;
+  }
+
+  if (
+    message.type === 'log' &&
+    state.task?.id ===
+      message.taskId
+  ) {
+    const log =
+      state.task.log ?? [];
+    if (
+      !log.some(
+        (entry) =>
+          entry.sequence ===
+          message.entry.sequence,
+      )
+    ) {
+      applyTask({
+        ...state.task,
+        log: [
+          ...log,
+          message.entry,
+        ],
+      });
+    }
+  }
+}
 selectTab(state.selected);
 await loadAdminConfig();
 await refresh({ quiet: true });
-connectWebSocket();
+subscribeAdminRealtime(
+  handleRealtimeMessage,
+);

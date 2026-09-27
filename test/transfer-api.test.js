@@ -13,7 +13,7 @@ import { createApp } from '../src/app.js';
 import {
   createSingleFileZipStream,
   openSingleFileZip,
-} from '../src/data/single-file-zip.js';
+} from '../src/shared/streaming/single-file-zip.js';
 
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

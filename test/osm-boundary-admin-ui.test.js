@@ -284,3 +284,26 @@ test('admin clears previous task status immediately when a new operation starts'
     /Boolean\(state\.transfer\) \|\| Boolean\(active\(state\.task\)\)/,
   );
 });
+
+
+test('OSM editor keeps optimistic drafts locally and bulk-saves them over realtime API', async () => {
+  const [html, editor, draftStore] = await Promise.all([
+    read('admin/index.html'),
+    read('admin/osm-boundary-editor.js'),
+    read('admin/draft-store.js'),
+  ]);
+
+  assert.match(html, /id="osm-boundary-save-all"/);
+  assert.match(html, /id="osm-boundary-discard-all"/);
+  assert.match(html, /id="osm-boundary-persist-drafts"/);
+  assert.match(editor, /createDraftStore\(\{[\s\S]*namespace: 'osm-boundaries'/);
+  assert.match(editor, /baseUpdatedAt/);
+  assert.match(editor, /\/api\/admin\/osm-boundaries'[\s\S]*method: 'PATCH'/);
+  assert.match(editor, /subscribeAdminRealtime/);
+  assert.match(editor, /message\.change\?\.resource !== 'osm-boundaries'/);
+  assert.match(editor, /drafts\.markConflict/);
+  assert.match(editor, /realtimeMutationHeaders/);
+  assert.match(draftStore, /sessionStorage/);
+  assert.match(draftStore, /localStorage/);
+  assert.match(draftStore, /setPersistent/);
+});

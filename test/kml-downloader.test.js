@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { downloadKml, KmlDownloadError } from '../src/data/kml-downloader.js';
+import { downloadKml, KmlDownloadError } from '../src/modules/lines/kml-downloader.js';
 
 const source = {
   fetchURL: 'https://www.google.com/maps/d/kml?mid=test&forcekml=1',

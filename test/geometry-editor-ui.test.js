@@ -4,181 +4,488 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const read = (relative) => fs.readFile(path.join(root, relative), 'utf8');
+const root =
+  path.resolve(
+    path.dirname(
+      fileURLToPath(
+        import.meta.url,
+      ),
+    ),
+    '..',
+  );
 
-test('geometry editor is an independent top-level role-protected admin section', async () => {
-  const [html, shell, editor, styles] = await Promise.all([
-    read('admin/index.html'),
-    read('admin/admin-shell.js'),
-    read('admin/geometry-editor.js'),
-    read('admin/geometry-editor.css'),
-  ]);
+const read =
+  (relativePath) =>
+    fs.readFile(
+      path.join(
+        root,
+        relativePath,
+      ),
+      'utf8',
+    );
 
-  assert.match(html, /data-admin-section-tab="geometries"[\s\S]*aria-controls="admin-section-geometries"/);
-  assert.match(html, /id="admin-section-geometries"[\s\S]*id="geometry-editor-map"/);
-  assert.match(html, /id="geometry-editor-list"[\s\S]*id="geometry-editor-map"[\s\S]*id="geometry-editor-form"/);
-  assert.match(shell, /geometries:[\s\S]*canEditGeometries/);
-  assert.match(shell, /if \(canEditGeometries\(user\)\) await import\('\.\/geometry-editor\.js'\)/);
-  assert.match(shell, /dtpstat:geometry-editor-open/);
-  const [securityEditor, auth] = await Promise.all([
-    read('admin/security-editor-v2.js'),
-    read('src/http/admin-auth.js'),
-  ]);
-  assert.match(securityEditor, /canEditGeometries/);
-  assert.match(securityEditor, /Редактирование геометрий/);
-  assert.match(auth, /requireGeometryEditor:\s*middleware\('geometry-editor'\)/);
-  assert.match(auth, /user\.canEditGeometries/);
+test('geometry editor is a dedicated permission-protected top-level admin section', async () => {
+  const [
+    html,
+    shell,
+    styles,
+  ] =
+    await Promise.all([
+      read('admin/index.html'),
+      read('admin/admin-shell.js'),
+      read('admin/geometry-editor.css'),
+    ]);
 
-  assert.match(editor, /geometry-editor\/cities/);
-  assert.match(editor, /geometry-editor\/geometries/);
-  assert.match(editor, /function editableSequences\(geometry\)/);
-  assert.match(editor, /kind: 'midpoint'/);
-  assert.match(editor, /kind: 'segment'/);
-  assert.match(editor, /geometry-editor-segment-hit/);
-  assert.match(editor, /'line-width': 18/);
-  assert.match(editor, /map\.on\('mousedown', 'geometry-editor-vertices'/);
-  assert.match(editor, /projectedSegmentCoordinate/);
-  assert.match(editor, /insertMidpoint/);
-  assert.match(editor, /deleteVertexAtPath/);
-  assert.match(editor, /state\.history\.length > 50/);
-  assert.match(editor, /geometry-editor\/merge/);
-  assert.match(editor, /\/cut/);
-  assert.match(editor, /adminConfirm\(/);
-  assert.doesNotMatch(editor, /window\.confirm/);
+  assert.match(
+    html,
+    /data-admin-section-tab="geometries"[\s\S]*aria-controls="admin-section-geometries"/u,
+  );
+  assert.match(
+    html,
+    /id="admin-section-geometries"[\s\S]*id="geometry-editor-list"[\s\S]*id="geometry-editor-map"[\s\S]*id="geometry-editor-form"/u,
+  );
+  assert.match(
+    html,
+    /id="geometry-editor-draft-count"/u,
+  );
+  assert.match(
+    html,
+    /id="geometry-editor-persist-drafts"/u,
+  );
+  assert.match(
+    html,
+    /id="geometry-editor-save-all"/u,
+  );
+  assert.match(
+    html,
+    /id="geometry-editor-discard-all"/u,
+  );
 
-  assert.match(styles, /grid-template-columns:\s*minmax\(19rem, \.72fr\)[\s\S]*minmax\(30rem, 1\.8fr\)[\s\S]*minmax\(20rem, \.82fr\)/);
-  assert.match(styles, /\.geometry-editor-list[\s\S]*overflow:\s*auto/);
-  assert.match(styles, /\.geometry-editor-details[\s\S]*overflow-y:\s*auto/);
+  assert.match(
+    shell,
+    /function canEditGeometries\(user\)/u,
+  );
+  assert.match(
+    shell,
+    /geometries: !mustChangePassword && canEditGeometries\(user\)/u,
+  );
+  assert.match(
+    shell,
+    /if \(canEditGeometries\(user\)\) await import\('\.\/geometry-editor\.js'\)/u,
+  );
+  assert.match(
+    shell,
+    /dtpstat:geometry-editor-open/u,
+  );
+
+  assert.match(
+    styles,
+    /grid-template-columns:\s*minmax\(19rem, \.72fr\)[\s\S]*minmax\(30rem, 1\.8fr\)[\s\S]*minmax\(20rem, \.82fr\)/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-editor-row\.has-conflict/u,
+  );
 });
 
-test('geometry editor attribute form exposes visibility tags line fields and polygon cut', async () => {
-  const html = await read('admin/index.html');
+test('geometry editor uses local drafts optimistic revisions atomic bulk save and realtime sync', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
 
-  assert.match(html, /name="displayName"/);
-  assert.match(html, /name="tooltip"/);
-  assert.match(html, /name="tags"/);
-  assert.match(html, /name="isVisible"/);
-  assert.match(html, /name="lineTypeId"/);
-  assert.match(html, /name="lanes"/);
-  assert.match(html, /id="geometry-cut-area"/);
-  assert.match(html, /id="geometry-delete"/);
-  assert.match(html, /id="geometry-new-point"/);
-  assert.match(html, /id="geometry-new-line"/);
-  assert.match(html, /id="geometry-new-polygon"/);
-});
-
-
-test('geometry editor exposes visual staged-import conflict decisions', async () => {
-  const [html, editor] = await Promise.all([
-    read('admin/index.html'),
-    read('admin/geometry-editor.js'),
-  ]);
-  assert.match(html, /id="geometry-import-conflicts"/);
-  assert.match(html, /id="geometry-conflict-candidates"/);
-  assert.match(html, /id="geometry-conflict-keep"/);
-  assert.match(html, /id="geometry-conflict-add"/);
-  assert.match(html, /id="geometry-conflict-replace"/);
-  assert.match(editor, /geometry-import\/pending/);
-  assert.match(editor, /keep-existing/);
-  assert.match(editor, /add-new/);
-  assert.match(editor, /replaceExistingIds/);
-  assert.match(editor, /geometry-editor-import-incoming/);
-  assert.match(editor, /geometry-editor-import-existing/);
-});
-
-
-test('geometry editor explains an actually empty active-city catalog', async () => {
-  const editor = await read('admin/geometry-editor.js');
-  assert.match(editor, /Нет активных городов в OSM-дереве/);
-  assert.match(editor, /Проверьте активность объектов в OSM-дереве/);
-  assert.match(editor, /cityLinkState/);
-});
-
-
-test('geometry editor loads data progressively instead of one global catalog request', async () => {
-  const editor = await read('admin/geometry-editor.js');
-
-  assert.match(editor, /async function loadCities\(\)/);
-  assert.match(editor, /\/geometry-editor\/cities\/\$\{encodeURIComponent\(cityId\)\}\/geometries/);
-  assert.match(editor, /\/geometry-editor\/geometries\/\$\{encodeURIComponent\(id\)\}/);
-  assert.match(editor, /async function ensureLineTypes\(\)/);
-  assert.match(editor, /api\('\/api\/line-types'\)/);
-  assert.doesNotMatch(editor, /payload\.tags/);
-  assert.doesNotMatch(editor, /payload\.lineTypes[\s\S]{0,200}geometry-editor\/cities/);
-});
-
-
-test('geometry mutations update editor state locally and explicit recalc refreshes derived data', async () => {
-  const [html, editor] = await Promise.all([
-    read('admin/index.html'),
-    read('admin/geometry-editor.js'),
-  ]);
-
-  assert.match(html, /id="geometry-editor-recalculate"/);
-  assert.match(editor, /function upsertGeometrySummary\(item\)/);
-  assert.match(editor, /function adoptGeometryDetail\(item/);
-  assert.match(editor, /\/api\/admin\/geometry-editor\/recalculate/);
-  assert.match(editor, /основной карты и статистики/);
-
-  const submitStart = editor.indexOf("form.addEventListener('submit'");
-  const deleteStart = editor.indexOf("deleteButton.addEventListener");
-  const mutationBlock = editor.slice(submitStart, deleteStart);
-  assert.doesNotMatch(mutationBlock, /await loadCity\(/);
-  assert.doesNotMatch(mutationBlock, /await loadCities\(/);
-});
-
-
-test('explicit geometry recalculation signals an already-open public map tab', async () => {
-  const editor = await read('admin/geometry-editor.js');
   assert.match(
     editor,
-    /import \{ publishDerivedDataChange \} from '\.\/derived-data-events\.js';/,
+    /createDraftStore/u,
   );
-  assert.match(editor, /publishDerivedDataChange\('geometry-editor'\)/);
-  assert.match(editor, /основная карта/);
+  assert.match(
+    editor,
+    /namespace: 'city-geometries'/u,
+  );
+  assert.match(
+    editor,
+    /realtimeMutationHeaders/u,
+  );
+  assert.match(
+    editor,
+    /subscribeAdminRealtime/u,
+  );
+  assert.match(
+    editor,
+    /resource !== 'city-geometries'/u,
+  );
+  assert.match(
+    editor,
+    /X-DTPStat-Base-Revision/u,
+  );
+  assert.match(
+    editor,
+    /\/api\/admin\/geometry-editor\/geometries', \{\s*method: 'PATCH'/u,
+  );
+  assert.match(
+    editor,
+    /drafts\.markConflict/u,
+  );
+  assert.match(
+    editor,
+    /Все локальные черновики применены атомарно/u,
+  );
+
+  assert.match(
+    editor,
+    /geometry-import\/pending/u,
+  );
+  assert.match(
+    editor,
+    /'\/api\/admin\/geometry-editor\/merge'/u,
+  );
+  assert.match(
+    editor,
+    /baseUpdatedAt:\s*item\.updatedAt/u,
+  );
+  assert.match(
+    editor,
+    /startDrawing\('cut'\)/u,
+  );
+  assert.match(
+    editor,
+    /\/geometry-editor\/geometries\/\$\{encodeURIComponent\(target\.id\)\}\/cut/u,
+  );
+  assert.match(
+    editor,
+    /'X-DTPStat-Base-Revision': target\.updatedAt/u,
+  );
+});
+
+test('geometry editor keeps direct vertex editing and progressive loading', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /function editableSequences\(geometry\)/u,
+  );
+  assert.match(
+    editor,
+    /kind: 'midpoint'/u,
+  );
+  assert.match(
+    editor,
+    /kind: 'segment'/u,
+  );
+  assert.match(
+    editor,
+    /geometry-editor-segment-hit/u,
+  );
+  assert.match(
+    editor,
+    /'line-width': 18/u,
+  );
+  assert.match(
+    editor,
+    /map\.on\('mousedown', 'geometry-editor-vertices'/u,
+  );
+  assert.match(
+    editor,
+    /insertMidpoint/u,
+  );
+  assert.match(
+    editor,
+    /deleteVertexAtPath/u,
+  );
+  assert.match(
+    editor,
+    /state\.history\.length > 50/u,
+  );
+  assert.match(
+    editor,
+    /\/geometry-editor\/cities\/\$\{encodeURIComponent\(cityId\)\}\/geometries/u,
+  );
+  assert.match(
+    editor,
+    /\/geometry-editor\/geometries\/\$\{encodeURIComponent\(id\)\}/u,
+  );
 });
 
 
-test('vertex editing uses a wide segment hitbox and direct Ctrl-click deletion', async () => {
-  const [html, editor] = await Promise.all([
-    read('admin/index.html'),
-    read('admin/geometry-editor.js'),
-  ]);
+test('geometry merge and cut stay revision-safe around local drafts', async () => {
+  const [
+    editor,
+    html,
+    styles,
+  ] =
+    await Promise.all([
+      read('admin/geometry-editor.js'),
+      read('admin/index.html'),
+      read('admin/geometry-editor.css'),
+    ]);
 
-  assert.doesNotMatch(html, /id="geometry-delete-node"/);
-  assert.match(editor, /id: 'geometry-editor-segment-hit'/);
-  assert.match(editor, /'line-width': 18/);
-  assert.match(editor, /map\.queryRenderedFeatures\(event\.point/);
-  assert.match(editor, /map\.project\(coordinates\[0\]\)/);
-  assert.match(editor, /map\.unproject/);
-  assert.match(editor, /originalEvent\?\.ctrlKey \|\| originalEvent\?\.metaKey/);
-  assert.match(editor, /deleteVertexAtPath\(JSON\.parse\(candidate\.properties\.path\)\)/);
-  assert.match(editor, /Ctrl\+клик по узлу — удалить/);
-  assert.doesNotMatch(editor, /event\.key === 'Delete'/);
-  assert.doesNotMatch(editor, /event\.key === 'Backspace'/);
+  assert.match(
+    html,
+    /id="geometry-merge-selected" type="button"\s+disabled/u,
+  );
+  assert.doesNotMatch(
+    html,
+    /id="geometry-merge-selected"[^>]*hidden/u,
+  );
+  assert.match(
+    html,
+    /id="geometry-cut-area"/u,
+  );
+
+  assert.match(
+    editor,
+    /check\.disabled = Boolean\([\s\S]*state\.importSession[\s\S]*item\._draft[\s\S]*item\._conflict[\s\S]*\);/u,
+  );
+  assert.match(
+    editor,
+    /function mergeProblem\(items\)/u,
+  );
+  assert.match(
+    editor,
+    /Сначала сохраните или сбросьте локальные черновики выбранных геометрий/u,
+  );
+  assert.match(
+    editor,
+    /sourceGeometryIds/u,
+  );
+  assert.match(
+    editor,
+    /familyOf\(state\.draft\) !== 'polygon'/u,
+  );
+  assert.match(
+    editor,
+    /const local = captureCurrentDraft\(\)/u,
+  );
+
+  assert.match(
+    styles,
+    /\.geometry-editor-row-select/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-editor-row-main/u,
+  );
 });
 
 
-test('Ctrl or Cmd dynamically switches a hovered vertex to a delete cursor', async () => {
-  const editor = await read('admin/geometry-editor.js');
+test('geometry editor resolves staged import conflicts visually without dropping local drafts', async () => {
+  const [
+    editor,
+    html,
+    styles,
+  ] =
+    await Promise.all([
+      read('admin/geometry-editor.js'),
+      read('admin/index.html'),
+      read('admin/geometry-editor.css'),
+    ]);
 
-  assert.match(editor, /DELETE_VERTEX_CURSOR/);
-  assert.match(editor, /hoveredVertex/);
-  assert.match(editor, /deleteModifier/);
-  assert.match(editor, /event\.key === 'Control' \|\| event\.key === 'Meta'/);
-  assert.match(editor, /canvas\.style\.cursor = DELETE_VERTEX_CURSOR/);
-  assert.match(editor, /window\.addEventListener\('keyup'/);
-  assert.match(editor, /window\.addEventListener\('blur'/);
-  assert.match(editor, /state\.hoveredVertex\) canvas\.style\.cursor = 'move'/);
+  for (const id of [
+    'geometry-import-conflicts',
+    'geometry-import-conflict-list',
+    'geometry-import-apply',
+    'geometry-import-discard',
+    'geometry-conflict-decision',
+    'geometry-conflict-candidates',
+    'geometry-conflict-keep',
+    'geometry-conflict-add',
+    'geometry-conflict-replace',
+  ]) {
+    assert.match(
+      html,
+      new RegExp(
+        `id="${id}"`,
+        'u',
+      ),
+    );
+  }
+
+  assert.match(
+    editor,
+    /const IMPORT_SOURCE = 'geometry-editor-import-conflict'/u,
+  );
+  assert.match(
+    editor,
+    /geometry-editor-import-incoming/u,
+  );
+  assert.match(
+    editor,
+    /geometry-editor-import-existing/u,
+  );
+  assert.match(
+    editor,
+    /function renderImportConflicts\(\)/u,
+  );
+  assert.match(
+    editor,
+    /function setConflictDecision/u,
+  );
+  assert.match(
+    editor,
+    /'keep-existing'/u,
+  );
+  assert.match(
+    editor,
+    /'add-new'/u,
+  );
+  assert.match(
+    editor,
+    /'replace'/u,
+  );
+  assert.match(
+    editor,
+    /conflictAdd\.disabled =\s*Boolean/u,
+  );
+  assert.match(
+    editor,
+    /draftFor\(\s*candidate\.existing\.id/u,
+  );
+  assert.match(
+    editor,
+    /captureCurrentDraft\(\)/u,
+  );
+  assert.match(
+    editor,
+    /waitForGeometryImportTask/u,
+  );
+  assert.match(
+    editor,
+    /geometry-import\/tasks\//u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-import-conflicts/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-conflict-candidate\.has-local-draft/u,
+  );
 });
 
 
-test('selected geometry is removed from the background source while editing its draft', async () => {
-  const editor = await read('admin/geometry-editor.js');
+test('geometry persistent drafts synchronize across tabs and coalesce storage with realtime refresh', async () => {
+  const [
+    drafts,
+    geometry,
+    osm,
+  ] =
+    await Promise.all([
+      read(
+        'admin/draft-store.js',
+      ),
+      read(
+        'admin/geometry-editor.js',
+      ),
+      read(
+        'admin/osm-boundary-editor.js',
+      ),
+    ]);
 
-  assert.match(editor, /const backgroundGeometries = state\.draft && state\.current\?\.id/);
-  assert.match(editor, /state\.geometries\.filter\(\(item\) => item\.id !== state\.current\.id\)/);
-  assert.match(editor, /MAP_SOURCE\)\?\.setData\(featureCollection\(backgroundGeometries\)\)/);
-  assert.match(editor, /SELECTED_SOURCE\)\?\.setData/);
+  assert.match(
+    drafts,
+    /subscribe\(listener\)/u,
+  );
+  assert.match(
+    drafts,
+    /addEventListener\(\s*'storage'/u,
+  );
+  assert.match(
+    drafts,
+    /changedIds/u,
+  );
+  assert.match(
+    drafts,
+    /removedIds/u,
+  );
+  assert.match(
+    drafts,
+    /if \(\s*Boolean\(\s*drafts\[key\][\s\S]*\.conflict[\s\S]*=== nextConflict/u,
+  );
+
+  assert.match(
+    geometry,
+    /drafts\.subscribe/u,
+  );
+  assert.match(
+    geometry,
+    /handleExternalDraftChange/u,
+  );
+  assert.match(
+    geometry,
+    /pendingExternalDraftSync/u,
+  );
+  assert.match(
+    geometry,
+    /scheduleGeometryServerSync\(\s*'realtime'/u,
+  );
+  assert.doesNotMatch(
+    geometry,
+    /void refresh\(\{ keepSelection: true, fit: false \}\)\.then/u,
+  );
+
+  assert.match(
+    osm,
+    /drafts\.subscribe/u,
+  );
+  assert.match(
+    osm,
+    /scheduleOsmServerSync\(\s*'realtime'/u,
+  );
+});
+
+
+test('geometry editor does not overwrite a cross-tab draft after an in-progress drag or cut', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /if \(\s*state\.pendingExternalDraftSync\s*\) \{\s*flushPendingExternalDraftSync\(\);\s*\} else \{\s*captureCurrentDraft\(\);/u,
+  );
+  assert.match(
+    editor,
+    /drawing\.mode === 'cut'[\s\S]*state\.pendingExternalDraftSync[\s\S]*Вырезание отменено/u,
+  );
+});
+
+
+test('geometry editor marks suspended geometries and blocks creation until a boundary is active', async () => {
+  const [
+    editor,
+    styles,
+  ] =
+    await Promise.all([
+      read(
+        'admin/geometry-editor.js',
+      ),
+      read(
+        'admin/geometry-editor.css',
+      ),
+    ]);
+
+  assert.match(
+    editor,
+    /item\.suspended \? 'подвешена · нет активной OSM-области'/u,
+  );
+  assert.match(
+    editor,
+    /подвешено: \$\{suspended\}/u,
+  );
+  assert.match(
+    editor,
+    /!state\.city\?\.boundaryId/u,
+  );
+  assert.match(
+    editor,
+    /После активации области этого города она будет перепривязана автоматически/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-editor-row\.is-suspended/u,
+  );
 });

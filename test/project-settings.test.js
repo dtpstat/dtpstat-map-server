@@ -4,7 +4,7 @@ import {
   buildProjectSettingsPlan,
   normalizeProjectFooterHtml,
   ProjectSettingsValidationError,
-} from '../src/data/project-settings.js';
+} from '../src/modules/project/settings-policy.js';
 
 test('project settings normalize name keywords metrics theme and restricted footer HTML', () => {
   const plan = buildProjectSettingsPlan({

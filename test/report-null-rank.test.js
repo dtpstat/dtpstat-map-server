@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DEFAULT_REPORT_CONFIG } from '../src/data/report-config.js';
-import { createReportConfigService } from '../src/db/report-config-service.js';
+import { DEFAULT_REPORT_CONFIG } from '../src/modules/reporting/config-policy.js';
+import { createReportConfigRuntime } from '../src/application/project-report-runtime.js';
 
 function configRow() {
   const config = structuredClone(DEFAULT_REPORT_CONFIG);
@@ -16,7 +16,7 @@ function configRow() {
   };
 }
 
-test('report materialization ranks only cities with effective geometries and leaves missing metric rank null', async () => {
+test('report materialization ranks only visible cities and leaves missing metric rank null', async () => {
   let materializeSql = '';
   let rankingSql = '';
   const client = {
@@ -38,7 +38,7 @@ test('report materialization ranks only cities with effective geometries and lea
     async connect() { return client; },
   };
 
-  const result = await createReportConfigService(pool).refresh();
+  const result = await createReportConfigRuntime(pool).refresh();
 
   assert.equal(result.cities, 2);
   assert.match(
@@ -47,11 +47,7 @@ test('report materialization ranks only cities with effective geometries and lea
   );
   assert.match(
     materializeSql,
-    /FROM effective_city_geometries AS geometry_presence\s*WHERE geometry_presence\.city_id = city\.id/s,
-  );
-  assert.doesNotMatch(
-    materializeSql,
-    /geometry_boundary\.id = geometry_presence\.boundary_id/,
+    /FROM city_geometries AS geometry_presence\s*JOIN city_boundaries AS geometry_boundary\s*ON geometry_boundary\.id = geometry_presence\.boundary_id\s*AND geometry_boundary\.is_active\s*WHERE geometry_presence\.city_id = city\.id/s,
   );
   assert.match(
     rankingSql,

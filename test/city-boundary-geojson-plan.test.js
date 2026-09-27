@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   buildCityBoundaryGeoJsonPlan,
   CityBoundaryGeoJsonValidationError,
-} from '../src/data/city-boundary-geojson-plan.js';
+} from '../src/modules/geometry/city-boundary-geojson-plan.js';
 
 function collection(properties = {}) {
   return {

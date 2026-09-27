@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { OsmCityDownloadError } from '../src/data/osm-city-downloader.js';
-import { createOsmCityUpdateService } from '../src/db/osm-city-update-service.js';
+import { OsmCityDownloadError } from '../src/modules/osm/osm-city-downloader.js';
+import { createOsmCityUpdateRuntime } from '../src/application/osm-update-runtime.js';
 
 const config = {
   url: 'https://overpass-api.de/api/interpreter',
@@ -299,6 +299,30 @@ function createCheckpointRepositoryMock({
       checkpoint.updatedAt = '2026-09-20T11:00:00.000Z';
       return snapshot();
     },
+    async complete(client, id) {
+      calls.push({ method: 'complete', id });
+      await client.query(
+        'DELETE FROM osm_city_update_checkpoint_stage WHERE checkpoint_id = $1',
+        [id],
+      );
+      await client.query(
+        `UPDATE osm_city_update_checkpoints
+         SET status = 'completed',
+             index_objects = '[]'::jsonb,
+             last_error = NULL,
+             completed_at = NOW(),
+             updated_at = NOW()
+         WHERE id = $1`,
+        [id],
+      );
+      checkpoint.status = 'completed';
+      checkpoint.indexObjects = [];
+      checkpoint.totalObjects = 0;
+      checkpoint.lastError = null;
+      checkpoint.completedAt = '2026-09-20T13:00:00.000Z';
+      checkpoint.updatedAt = checkpoint.completedAt;
+      staged.clear();
+    },
     async discard(id) {
       calls.push({ method: 'discard', id });
       checkpoint.status = 'discarded';
@@ -390,7 +414,7 @@ async function createFailedCheckpoint({
   const pool = createPool();
   let downloadCall = 0;
   let indexParseCall = 0;
-  const service = createOsmCityUpdateService(pool, config, {
+  const service = createOsmCityUpdateRuntime(pool, config, {
     checkpointRepository: repository,
     async download(_url, query) {
       downloadCall += 1;
@@ -474,7 +498,7 @@ test('OSM resume survives failure and skips already staged objects', async () =>
   const pool = createPool();
   const progress = [];
   const queries = [];
-  const service = createOsmCityUpdateService(pool, config, {
+  const service = createOsmCityUpdateRuntime(pool, config, {
     checkpointRepository: repository,
     async download(_url, query) {
       queries.push(query);
@@ -534,7 +558,7 @@ test('OSM resume records unbuildable polygons as processed and excludes them fro
   const pool = createPool({ stageCount: 2, boundaryCount: 2 });
   const progress = [];
   const queries = [];
-  const service = createOsmCityUpdateService(pool, config, {
+  const service = createOsmCityUpdateRuntime(pool, config, {
     checkpointRepository: repository,
     async download(_url, query) {
       queries.push(query);
@@ -557,11 +581,13 @@ test('OSM resume records unbuildable polygons as processed and excludes them fro
 
   assert.equal(queries.length, 1);
   assert.match(queries[0], /way\(id:9\)/);
-  assert.equal(repository.state.stagedObjects, 3);
+  assert.equal(repository.state.status, 'completed');
+  assert.equal(repository.state.stagedObjects, 0);
   assert.equal(repository.state.remainingObjects, 0);
-  assert.equal(repository.state.geometryObjects, 2);
-  assert.equal(repository.state.unbuildableGeometryObjects, 1);
-  assert.equal(repository.staged.get('way/9').geometryStatus, 'unbuildable');
+  assert.ok(repository.calls.some((call) =>
+    call.method === 'stageBatch' && call.keys.includes('way/9')));
+  assert.ok(repository.calls.some((call) =>
+    call.method === 'complete'));
   assert.equal(result.indexedPlaces, 3);
   assert.equal(result.importedPlaces, 2);
   assert.equal(result.unbuildableGeometryPlaces, 1);
@@ -587,7 +613,7 @@ test('OSM resume records unbuildable polygons as processed and excludes them fro
 test('OSM resume rejects incompatible batch semantics before downloading', async () => {
   const { repository } = await createFailedCheckpoint();
   let downloads = 0;
-  const service = createOsmCityUpdateService(createPool(), {
+  const service = createOsmCityUpdateRuntime(createPool(), {
     ...config,
     batchSize: 1,
   }, {
@@ -623,7 +649,7 @@ test('explicit OSM restart replaces old checkpoint only after the new index succ
 
   let downloadCall = 0;
   let indexParseCall = 0;
-  const service = createOsmCityUpdateService(createPool(), config, {
+  const service = createOsmCityUpdateRuntime(createPool(), config, {
     checkpointRepository: repository,
     async download(_url, query) {
       downloadCall += 1;
@@ -666,7 +692,7 @@ test('explicit OSM restart replaces old checkpoint only after the new index succ
 test('OSM fresh start refuses to discard unfinished checkpoint implicitly', async () => {
   const { repository } = await createFailedCheckpoint();
   let downloads = 0;
-  const service = createOsmCityUpdateService(
+  const service = createOsmCityUpdateRuntime(
     createPool(),
     config,
     {
@@ -692,7 +718,7 @@ test('OSM update stages sequential ID batches before one atomic replacement', as
   const operationProgress = [];
   const downloadQueries = [];
   const base = createDependencies();
-  const service = createOsmCityUpdateService(pool, config, {
+  const service = createOsmCityUpdateRuntime(pool, config, {
     ...base,
     async download(url, query, options) {
       downloadQueries.push({ url, query, maxBytes: options.maxBytes });
@@ -764,7 +790,7 @@ test('OSM update stages sequential ID batches before one atomic replacement', as
 
 test('OSM dry run validates the complete staged replacement and rolls it back', async () => {
   const pool = createPool();
-  const service = createOsmCityUpdateService(pool, config, createDependencies());
+  const service = createOsmCityUpdateRuntime(pool, config, createDependencies());
 
   const result = await service.update(undefined, { dryRun: 'true' });
 
@@ -781,7 +807,7 @@ test('oversized OSM geometry batch is split and retried sequentially', async () 
   const pool = createPool();
   const progress = [];
   let call = 0;
-  const service = createOsmCityUpdateService(pool, config, {
+  const service = createOsmCityUpdateRuntime(pool, config, {
     async download(_url, query) {
       call += 1;
       if (call === 5) {
@@ -846,7 +872,7 @@ test('single oversized OSM object fails with its exact OSM identity', async () =
   const pool = createPool();
   const base = createDependencies();
   let calls = 0;
-  const service = createOsmCityUpdateService(pool, {
+  const service = createOsmCityUpdateRuntime(pool, {
     ...config,
     batchSize: 1,
     maxResponseBytes: 1000,
@@ -879,7 +905,7 @@ test('single oversized OSM object fails with its exact OSM identity', async () =
 test('OSM total byte budget is reported separately from one-response limit', async () => {
   const pool = createPool();
   const base = createDependencies();
-  const service = createOsmCityUpdateService(pool, {
+  const service = createOsmCityUpdateRuntime(pool, {
     ...config,
     maxResponseBytes: 40,
     maxTotalBytes: 45,
@@ -925,7 +951,7 @@ test('a later OSM batch failure leaves production boundaries untouched', async (
       };
     },
   });
-  const service = createOsmCityUpdateService(pool, config, dependencies);
+  const service = createOsmCityUpdateRuntime(pool, config, dependencies);
 
   await assert.rejects(service.update(undefined, {}), /second batch failed/);
   assert.equal(pool.queries.includes('BEGIN'), false);
@@ -948,7 +974,7 @@ test('an incomplete batch is rejected before the production transaction', async 
         : parsed;
     },
   });
-  const service = createOsmCityUpdateService(pool, config, dependencies);
+  const service = createOsmCityUpdateRuntime(pool, config, dependencies);
 
   await assert.rejects(service.update(undefined, {}), /missing: way\/8/);
   assert.equal(pool.queries.includes('BEGIN'), false);
@@ -959,7 +985,7 @@ test('an incomplete batch is rejected before the production transaction', async 
 
 test('OSM index download failure happens before a database connection is opened', async () => {
   const pool = createPool();
-  const service = createOsmCityUpdateService(pool, config, {
+  const service = createOsmCityUpdateRuntime(pool, config, {
     async download() {
       throw new Error('network failed');
     },
@@ -985,7 +1011,7 @@ test('HTTP 429 waits and retries the same OSM request without advancing the batc
     retryBaseDelayMs: 30,
     retryMaxDelayMs: 240,
   };
-  const service = createOsmCityUpdateService(pool, retryConfig, {
+  const service = createOsmCityUpdateRuntime(pool, retryConfig, {
     ...base,
     now: () => now,
     async sleep(milliseconds) {
@@ -1055,7 +1081,7 @@ test('transient OSM network failure retries the same geometry request', async ()
   let attempts = 0;
   let successfulDownloads = 0;
 
-  const service = createOsmCityUpdateService(pool, {
+  const service = createOsmCityUpdateRuntime(pool, {
     ...config,
     maxRetries: 4,
     retryBaseDelayMs: 10,
@@ -1130,7 +1156,7 @@ test('transient OSM network failure retries the same geometry request', async ()
 test('non-retryable OSM network failure still stops immediately', async () => {
   const pool = createPool();
   let attempts = 0;
-  const service = createOsmCityUpdateService(pool, config, {
+  const service = createOsmCityUpdateRuntime(pool, config, {
     async download() {
       attempts += 1;
       throw new OsmCityDownloadError(
@@ -1161,7 +1187,7 @@ test('repeated HTTP 504 splits a multi-object geometry batch instead of exhausti
   let indexSuccesses = 0;
   let geometryAttempts = 0;
 
-  const service = createOsmCityUpdateService(pool, {
+  const service = createOsmCityUpdateRuntime(pool, {
     ...config,
     batchSize: 2,
     maxRetries: 6,
@@ -1297,7 +1323,7 @@ test('HTTP 504 retries the same OSM index part after backoff', async () => {
   const progress = [];
   const queries = [];
   let attempts = 0;
-  const service = createOsmCityUpdateService(pool, {
+  const service = createOsmCityUpdateRuntime(pool, {
     ...config,
     maxRetries: 1,
     retryBaseDelayMs: 30,
@@ -1351,7 +1377,7 @@ test('HTTP 429 stops only after the configured retry limit', async () => {
   const pool = createPool();
   const delays = [];
   let attempts = 0;
-  const service = createOsmCityUpdateService(pool, {
+  const service = createOsmCityUpdateRuntime(pool, {
     ...config,
     maxRetries: 2,
     retryBaseDelayMs: 10,
@@ -1381,7 +1407,7 @@ test('HTTP 429 stops only after the configured retry limit', async () => {
 test('admin cancellation interrupts an HTTP 429 backoff immediately', async () => {
   const pool = createPool();
   const controller = new AbortController();
-  const service = createOsmCityUpdateService(pool, {
+  const service = createOsmCityUpdateRuntime(pool, {
     ...config,
     retryBaseDelayMs: 1000,
     retryMaxDelayMs: 1000,
@@ -1415,7 +1441,7 @@ test('saved OSM source is rejected when deployment allowlist no longer permits i
     ...config,
     allowedURLs: new Set([config.url]),
   };
-  const service = createOsmCityUpdateService(pool, restrictedConfig, {
+  const service = createOsmCityUpdateRuntime(pool, restrictedConfig, {
     settingsRepository: {
       async get() {
         return {

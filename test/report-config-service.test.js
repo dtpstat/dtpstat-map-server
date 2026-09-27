@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   compileReportMetricQuery,
   compileReportRankQuery,
-} from '../src/db/report-config-service.js';
+} from '../src/modules/reporting/query-compiler.js';
 
 test('metric compiler uses server SQL fragments and parameters for selected group values', () => {
   const query = compileReportMetricQuery({

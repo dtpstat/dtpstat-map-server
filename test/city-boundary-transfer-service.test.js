@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createCityBoundaryTransferService } from '../src/db/city-boundary-transfer-service.js';
+import { createCityBoundaryTransferRuntime } from '../src/application/portable-ingestion-runtime.js';
 
 const snapshot = {
   type: 'FeatureCollection',
@@ -113,7 +113,7 @@ function createPool() {
 test('city transfer restores city attributes, boundaries, and geometry links atomically', async () => {
   const pool = createPool();
   const progress = [];
-  const service = createCityBoundaryTransferService(pool);
+  const service = createCityBoundaryTransferRuntime(pool);
   const result = await service.replaceFromGeoJson(snapshot, {
     onProgress(value) { progress.push(value); },
   });
@@ -169,7 +169,7 @@ test('city transfer stages large snapshots in bounded batches', async () => {
   }));
   const pool = createPool();
   const progress = [];
-  const service = createCityBoundaryTransferService(pool);
+  const service = createCityBoundaryTransferRuntime(pool);
 
   const result = await service.replaceFromGeoJson({
     type: 'FeatureCollection',
@@ -206,7 +206,7 @@ test('city transfer stages large snapshots in bounded batches', async () => {
 
 test('city transfer dryRun performs a full validation and rolls back', async () => {
   const pool = createPool();
-  const service = createCityBoundaryTransferService(pool);
+  const service = createCityBoundaryTransferRuntime(pool);
   const result = await service.replaceFromGeoJson(snapshot, { dryRun: true });
 
   assert.equal(result.dryRun, true);
@@ -239,7 +239,7 @@ test('streamed city transfer rolls back staged batches when trailing JSON is mal
   }
 
   const pool = createPool();
-  const service = createCityBoundaryTransferService(pool);
+  const service = createCityBoundaryTransferRuntime(pool);
 
   await assert.rejects(
     service.replaceFromGeoJsonStream(source(), {
@@ -262,7 +262,7 @@ test('streamed city transfer rolls back staged batches when trailing JSON is mal
 
 test('city transfer measures area once in staging and does not call legacy hierarchy function', async () => {
   const pool = createPool();
-  const service = createCityBoundaryTransferService(pool);
+  const service = createCityBoundaryTransferRuntime(pool);
   await service.replaceFromGeoJson(snapshot);
 
   const stageQuery = pool.queries.find((query) =>

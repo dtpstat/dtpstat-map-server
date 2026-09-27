@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createApp } from '../src/app.js';
-import { createAdminTaskManager } from '../src/data/admin-task-manager.js';
+import { createAdminTaskManager } from '../src/shared/tasks/admin-task-manager.js';
 
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -1059,25 +1059,4 @@ test('admin cancellation aborts the active task and keeps its log', async () => 
     );
     assert.equal(repeated.status, 409);
   }, { osmCityUpdateService });
-});
-
-
-test('public API loaders accept cache-control fetch options for explicit republish refresh', async () => {
-  const fs = await import('node:fs/promises');
-  const source = await fs.readFile(
-    new URL('../public/js/api.js', import.meta.url),
-    'utf8',
-  );
-  assert.match(source, /loadCities\(options = \{\}\)/);
-  assert.match(
-    source,
-    /getJson\('\/api\/cities', \{[\s\S]*?cache: 'no-store',[\s\S]*?\.\.\.options,[\s\S]*?\}\)/,
-  );
-  assert.match(source, /loadLineTypes\(options = \{\}\)/);
-  assert.match(
-    source,
-    /getJson\('\/api\/line-types', \{[\s\S]*?cache: 'no-store',[\s\S]*?\.\.\.options,[\s\S]*?\}\)/,
-  );
-  assert.match(source, /loadReportConfig\(options = \{\}\)/);
-  assert.match(source, /getJson\('\/api\/report-config', options\)/);
 });

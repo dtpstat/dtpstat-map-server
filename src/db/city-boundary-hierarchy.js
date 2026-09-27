@@ -1,4 +1,4 @@
-import { throwIfAdminTaskCancelled } from '../data/admin-task-manager.js';
+import { throwIfAdminTaskCancelled } from '../shared/tasks/admin-task-manager.js';
 
 export const CITY_BOUNDARY_HIERARCHY_BATCH_SIZE = 250;
 

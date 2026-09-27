@@ -4,7 +4,7 @@ import {
   downloadOsmCities,
   OsmCityDownloadError,
   parseRetryAfterMs,
-} from '../src/data/osm-city-downloader.js';
+} from '../src/modules/osm/osm-city-downloader.js';
 
 const options = {
   timeoutMs: 1000,

@@ -120,9 +120,10 @@ test('admin interface loads editors and helpers explicitly without transitive si
 });
 
 test('public page derives metadata, theme stylesheet, analytics and download links from project settings', async () => {
-  const [html, app, page, metrics, contentCss, retroCss, classicCss, modernCss] = await Promise.all([
+  const [html, publicSite, middleware, page, metrics, contentCss, retroCss, classicCss, modernCss] = await Promise.all([
     source('index.html'),
-    source('src/app.js'),
+    source('src/http/public-site.js'),
+    source('src/http/app-middleware.js'),
     source('src/http/project-page.js'),
     source('public/js/metrics.js'),
     source('public/css/project-content.css'),
@@ -143,7 +144,7 @@ test('public page derives metadata, theme stylesheet, analytics and download lin
     assert.ok(html.includes(marker), marker);
   }
   assert.doesNotMatch(html, /bus-lanes\.jpeg/);
-  assert.doesNotMatch(app, /bus-lanes\.jpeg/);
+  assert.doesNotMatch(publicSite, /bus-lanes\.jpeg/);
   assert.match(html, /name="twitter:card" content="summary"/);
   assert.match(html, /data-theme="\{\{PROJECT_THEME_NAME\}\}"/);
   assert.match(html, /\{\{PROJECT_THEME_STYLESHEET\}\}/);
@@ -153,14 +154,14 @@ test('public page derives metadata, theme stylesheet, analytics and download lin
   assert.match(html, /\{\{YANDEX_METRIKA_NOSCRIPT\}\}/);
   assert.match(html, /\{\{PROJECT_FOOTER_HTML\}\}/);
   assert.match(html, /\/css\/project-content\.css/);
-  assert.match(app, /projectManifest\(settings\)/);
-  assert.match(app, /renderProjectPage\(publicPageTemplate, settings\)/);
-  assert.match(app, /https:\/\/mc\.yandex\.ru/);
-  assert.match(app, /https:\/\/mc\.yandex\.com/);
-  assert.match(app, /wss:\/\/mc\.webvisor\.org/);
-  assert.match(app, /YANDEX_METRIKA_FRAME_ANCESTORS/);
-  assert.match(app, /frameAncestors/);
-  assert.match(app, /https:\/\/\*\.googletagmanager\.com/);
+  assert.match(publicSite, /projectManifest\(\s*settings,?\s*\)/s);
+  assert.match(publicSite, /renderProjectPage\(\s*publicPageTemplate,\s*settings,?\s*\)/s);
+  assert.match(middleware, /https:\/\/mc\.yandex\.ru/);
+  assert.match(middleware, /https:\/\/mc\.yandex\.com/);
+  assert.match(middleware, /wss:\/\/mc\.webvisor\.org/);
+  assert.match(middleware, /YANDEX_METRIKA_FRAME_ANCESTORS/);
+  assert.match(middleware, /frameAncestors/);
+  assert.match(middleware, /https:\/\/\*\.googletagmanager\.com/);
   assert.match(page, /publicDownloadFiles\(settings\.publicDownloadName\)/);
   assert.match(page, /replaceAll\('\{\{PUBLIC_GEOJSON_URL\}\}', files\.geoJsonUrl\)/);
   assert.match(page, /replaceAll\('\{\{PUBLIC_CSV_URL\}\}', files\.csvUrl\)/);
@@ -183,26 +184,43 @@ test('public page derives metadata, theme stylesheet, analytics and download lin
 });
 
 test('public GeoJSON and CSV routes and disk files are fully derived from the configured base name', async () => {
-  const [app, service] = await Promise.all([
-    source('src/app.js'),
-    source('src/data/public-download-service.js'),
+  const [publicSite, service, atomicFiles] = await Promise.all([
+    source('src/http/public-site.js'),
+    source('src/application/public-downloads/service.js'),
+    source('src/shared/files/atomic-snapshot.js'),
   ]);
 
-  assert.match(app, /app\.get\('\/:publicDownloadFile'/);
-  assert.match(app, /publicDownloadFiles\(settings\.publicDownloadName\)/);
-  assert.match(app, /\[files\.csvFileName, 'text\/csv; charset=utf-8'\]/);
-  assert.match(app, /\[files\.geoJsonFileName, 'application\/geo\+json; charset=utf-8'\]/);
-  assert.match(app, /response\.sendFile\(requestedFile, \{ root: publicDownloadDirectory \}/);
-  assert.doesNotMatch(app, /const PUBLIC_DOWNLOADS/);
-  assert.doesNotMatch(app, /\['\/bus-lanes\.csv', 'bus-lanes\.csv'\]/);
-  assert.doesNotMatch(app, /\['\/bus-lanes\.geojson', 'bus-lanes\.geojson'\]/);
+  assert.match(
+    publicSite,
+    /app\.get\(\s*'\/:publicDownloadFile'/s,
+  );
+  assert.match(
+    publicSite,
+    /publicDownloadFiles\(\s*settings\s*\.publicDownloadName,?\s*\)/s,
+  );
+  assert.match(
+    publicSite,
+    /files\.csvFileName,[\s\S]*?'text\/csv; charset=utf-8'/,
+  );
+  assert.match(
+    publicSite,
+    /files\.geoJsonFileName,[\s\S]*?'application\/geo\+json; charset=utf-8'/,
+  );
+  assert.match(
+    publicSite,
+    /response\.sendFile\([\s\S]*?requestedFile,[\s\S]*?root:\s*publicDownloadDirectory/s,
+  );
+  assert.doesNotMatch(publicSite, /const PUBLIC_DOWNLOADS/);
+  assert.doesNotMatch(publicSite, /bus-lanes\.csv/);
+  assert.doesNotMatch(publicSite, /bus-lanes\.geojson/);
 
-  assert.match(service, /files = publicDownloadFiles\(settings\?\.publicDownloadName\)/);
-  assert.match(service, /path\.join\(directory, files\.geoJsonFileName\)/);
-  assert.match(service, /path\.join\(directory, files\.csvFileName\)/);
-  assert.match(service, /removeObsoleteSnapshots/);
-  assert.match(service, /await Promise\.all\(entries/);
-  assert.doesNotMatch(service, /Promise\.allSettled\(entries/);
+  assert.match(service, /files = publicDownloadFiles\(/);
+  assert.match(service, /files\.geoJsonFileName/);
+  assert.match(service, /files\.csvFileName/);
+  assert.match(service, /replaceFiles\(\{/);
+  assert.match(atomicFiles, /removeObsoleteFiles/);
+  assert.match(atomicFiles, /await Promise\.all\(/);
+  assert.match(atomicFiles, /await fs\.rename\(/);
 });
 
 test('public map reloads independent line display settings without a page refresh', async () => {

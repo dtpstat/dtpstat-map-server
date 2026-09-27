@@ -27,24 +27,18 @@ export function loadProjectSettings() {
   return getJson('/api/project');
 }
 
-export async function loadCities(options = {}) {
-  const payload = await getJson('/api/cities', {
-    cache: 'no-store',
-    ...options,
-  });
+export async function loadCities() {
+  const payload = await getJson('/api/cities', { cache: 'no-store' });
   return payload.cities;
 }
 
-export async function loadLineTypes(options = {}) {
-  const payload = await getJson('/api/line-types', {
-    cache: 'no-store',
-    ...options,
-  });
+export async function loadLineTypes() {
+  const payload = await getJson('/api/line-types', { cache: 'no-store' });
   return payload.lineTypes;
 }
 
-export async function loadReportConfig(options = {}) {
-  return getJson('/api/report-config', options);
+export async function loadReportConfig() {
+  return getJson('/api/report-config');
 }
 
 export function loadCityGeometries(cityId, signal) {

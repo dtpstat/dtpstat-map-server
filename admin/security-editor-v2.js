@@ -126,19 +126,20 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           <form id="security-settings-form" class="security-settings-form">
             <h3>Защита входа и сессии</h3>
             <fieldset><legend>Политика паролей</legend>
-              <div class="security-password-lengths">
-                <label>Минимум символов
+              <div class="security-password-policy-row">
+                <label class="security-password-minimum">
+                  Минимум символов
                   <input name="passwordMinLength" type="number" min="1" max="4096" required>
                 </label>
                 <input name="passwordMaxLength" type="hidden">
+                <div class="security-password-requirements">
+                  <label class="check"><input name="passwordRequireLowercase" type="checkbox"> Строчная буква</label>
+                  <label class="check"><input name="passwordRequireUppercase" type="checkbox"> Прописная буква</label>
+                  <label class="check"><input name="passwordRequireDigit" type="checkbox"> Цифра</label>
+                  <label class="check"><input name="passwordRequireSpecial" type="checkbox"> Спецсимвол</label>
+                </div>
+                <p class="security-info">Требования показываются пользователю при смене пароля.</p>
               </div>
-              <div class="security-password-requirements">
-                <label class="check"><input name="passwordRequireLowercase" type="checkbox"> Строчная буква</label>
-                <label class="check"><input name="passwordRequireUppercase" type="checkbox"> Прописная буква</label>
-                <label class="check"><input name="passwordRequireDigit" type="checkbox"> Цифра</label>
-                <label class="check"><input name="passwordRequireSpecial" type="checkbox"> Спецсимвол</label>
-              </div>
-              <p class="security-info">Эти требования видит пользователь при смене временного или обычного пароля.</p>
             </fieldset>
 
             <details class="admin-advanced-settings">
@@ -343,8 +344,8 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           <div class="security-role-grid">
             ${roleCheckbox('canManageData', 'Управление данными', user.canManageData, protectedUser)}
             ${roleCheckbox('canManageInterface', 'Настройка интерфейса', user.canManageInterface, protectedUser)}
-            ${roleCheckbox('canEditGeometries', 'Редактирование геометрий', user.canEditGeometries, protectedUser)}
             ${roleCheckbox('canEditOsm', 'Объекты OSM', user.canEditOsm, protectedUser)}
+            ${roleCheckbox('canEditGeometries', 'Редактирование геометрий', user.canEditGeometries, protectedUser)}
             ${roleCheckbox('canManageUsers', 'Управление пользователями', user.canManageUsers, protectedUser)}
             ${roleCheckbox('canViewAudit', 'Просмотр аудита', user.canViewAudit, protectedUser)}
             ${roleCheckbox('canManageSecurity', 'Управление безопасностью', user.canManageSecurity, protectedUser)}
@@ -387,8 +388,8 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
             email: form.elements.email.value.trim() || null,
             canManageData: form.elements.canManageData.checked,
             canManageInterface: form.elements.canManageInterface.checked,
-            canEditGeometries: form.elements.canEditGeometries.checked,
             canEditOsm: form.elements.canEditOsm.checked,
+            canEditGeometries: form.elements.canEditGeometries.checked,
             canManageUsers: form.elements.canManageUsers.checked,
             canViewAudit: form.elements.canViewAudit.checked,
             canManageSecurity: form.elements.canManageSecurity.checked,
@@ -483,8 +484,8 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           <div class="security-role-grid">
             ${roleCheckbox('canManageData', 'Управление данными', false, false)}
             ${roleCheckbox('canManageInterface', 'Настройка интерфейса', false, false)}
-            ${roleCheckbox('canEditGeometries', 'Редактирование геометрий', false, false)}
             ${roleCheckbox('canEditOsm', 'Объекты OSM', false, false)}
+            ${roleCheckbox('canEditGeometries', 'Редактирование геометрий', false, false)}
             ${roleCheckbox('canManageUsers', 'Управление пользователями', false, false)}
             ${roleCheckbox('canViewAudit', 'Просмотр аудита', false, false)}
             ${roleCheckbox('canManageSecurity', 'Управление безопасностью', false, false)}
@@ -509,6 +510,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
             canManageData: form.elements.canManageData.checked,
             canManageInterface: form.elements.canManageInterface.checked,
             canEditOsm: form.elements.canEditOsm.checked,
+            canEditGeometries: form.elements.canEditGeometries.checked,
             canManageUsers: form.elements.canManageUsers.checked,
             canViewAudit: form.elements.canViewAudit.checked,
             canManageSecurity: form.elements.canManageSecurity.checked,

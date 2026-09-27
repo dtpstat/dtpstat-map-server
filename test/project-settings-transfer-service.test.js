@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  createProjectSettingsTransferService,
+  createProjectSettingsTransferRuntime,
+} from '../src/application/project-report-runtime.js';
+import {
   ProjectSettingsTransferValidationError,
-} from '../src/db/project-settings-transfer-service.js';
+} from '../src/application/data-transfer/project-settings-service.js';
 
 function exportPool() {
   const client = {
@@ -106,7 +108,7 @@ function exportPool() {
 }
 
 test('settings export contains download name, sequential ranking and line display settings but no private admin data', async () => {
-  const service = createProjectSettingsTransferService(exportPool());
+  const service = createProjectSettingsTransferRuntime(exportPool());
   const payload = await service.exportSettings();
 
   assert.equal(payload._dtpstat.kind, 'project-settings');
@@ -131,7 +133,7 @@ test('settings export contains download name, sequential ranking and line displa
 
 test('settings import rejects another transfer kind before opening a database transaction', async () => {
   let connected = false;
-  const service = createProjectSettingsTransferService({
+  const service = createProjectSettingsTransferRuntime({
     async connect() {
       connected = true;
       throw new Error('must not connect');
@@ -149,7 +151,7 @@ test('settings import rejects another transfer kind before opening a database tr
 
 test('settings import rejects unsupported schema versions before touching the database', async () => {
   let connected = false;
-  const service = createProjectSettingsTransferService({
+  const service = createProjectSettingsTransferRuntime({
     async connect() {
       connected = true;
       throw new Error('must not connect');
@@ -163,4 +165,87 @@ test('settings import rejects unsupported schema versions before touching the da
     (error) => error instanceof ProjectSettingsTransferValidationError && /schemaVersion/.test(error.message),
   );
   assert.equal(connected, false);
+});
+
+function exportServiceWithSnapshot(snapshot, queries) {
+  const client = {
+    async query(text) {
+      queries.push(text.trim());
+      return { rows: [] };
+    },
+    release() {},
+  };
+
+  return createProjectSettingsTransferRuntime(
+    {
+      async connect() {
+        return client;
+      },
+    },
+    {
+      repository: {
+        async exportSnapshot() {
+          return snapshot;
+        },
+      },
+      acquireLock: async () => {},
+    },
+  );
+}
+
+test('settings export treats a missing report row as incomplete project settings before commit', async () => {
+  const queries = [];
+  const service = exportServiceWithSnapshot(
+    {
+      projectSettings: { projectName: 'Test' },
+      lineTypes: [],
+      reportConfigPresent: false,
+      reportConfig: undefined,
+      securitySettings: { maxFailedAttempts: 5 },
+    },
+    queries,
+  );
+
+  await assert.rejects(
+    service.exportSettings(),
+    /Project settings are incomplete; run database migrations/u,
+  );
+
+  assert.equal(
+    queries.some((query) => /^COMMIT$/iu.test(query)),
+    false,
+  );
+  assert.equal(
+    queries.at(-1),
+    'ROLLBACK',
+  );
+});
+
+test('settings export validates a present null report config after committing the read snapshot', async () => {
+  const queries = [];
+  const service = exportServiceWithSnapshot(
+    {
+      projectSettings: { projectName: 'Test' },
+      lineTypes: [],
+      reportConfigPresent: true,
+      reportConfig: null,
+      securitySettings: { maxFailedAttempts: 5 },
+    },
+    queries,
+  );
+
+  await assert.rejects(
+    service.exportSettings(),
+    /Report configuration is incomplete; run database migrations/u,
+  );
+
+  const commitIndex = queries.findIndex(
+    (query) => /^COMMIT$/iu.test(query),
+  );
+  const rollbackIndex = queries.findIndex(
+    (query) => /^ROLLBACK$/iu.test(query),
+  );
+
+  assert.ok(commitIndex > 0);
+  assert.ok(rollbackIndex > commitIndex);
 });

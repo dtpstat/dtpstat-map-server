@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  createOsmBoundaryAdminRepository,
+  createOsmBoundaryAdminRuntime,
+} from '../src/application/osm-boundary-admin-runtime.js';
+import {
   OsmBoundaryAdminValidationError,
-} from '../src/db/osm-boundary-admin-repository.js';
+} from '../src/modules/osm/boundary-admin-policy.js';
 
 function createPool({
   currentActive = true,
@@ -11,6 +13,7 @@ function createPool({
   currentPopulationAsOf = '2026-01-01',
   currentPopulationSource = 'test',
   currentAttributes = { note: 'x' },
+  currentUpdatedAt = '2026-09-20T00:00:00.000Z',
   finalPopulation = currentPopulation,
   finalPopulationAsOf = currentPopulationAsOf,
   finalPopulationSource = currentPopulationSource,
@@ -65,6 +68,7 @@ function createPool({
             populationAsOf: currentPopulationAsOf,
             populationSource: currentPopulationSource,
             attributes: currentAttributes,
+            updatedAt: currentUpdatedAt,
           }],
           rowCount: 1,
         };
@@ -103,7 +107,7 @@ function createPool({
 
 test('OSM boundary list reads population metadata from the boundary itself', async () => {
   const pool = createPool();
-  const repository = createOsmBoundaryAdminRepository(pool);
+  const repository = createOsmBoundaryAdminRuntime(pool);
 
   const rows = await repository.list();
 
@@ -123,7 +127,7 @@ test('territory data can be edited on an inactive OSM boundary without activatin
     finalAttributes: { census: true },
     finalActive: false,
   });
-  const repository = createOsmBoundaryAdminRepository(pool);
+  const repository = createOsmBoundaryAdminRuntime(pool);
 
   const result = await repository.update(5, {
     population: 125000,
@@ -161,7 +165,7 @@ test('active state can change without modifying territory population', async () 
     finalPopulation: 1000,
     finalActive: true,
   });
-  const repository = createOsmBoundaryAdminRepository(pool);
+  const repository = createOsmBoundaryAdminRuntime(pool);
 
   const result = await repository.update(5, { active: true });
 
@@ -180,7 +184,7 @@ test('OSM boundary update can explicitly clear population while inactive', async
     finalPopulation: null,
     finalActive: false,
   });
-  const repository = createOsmBoundaryAdminRepository(pool);
+  const repository = createOsmBoundaryAdminRuntime(pool);
 
   const result = await repository.update(5, { population: null });
 
@@ -197,7 +201,7 @@ test('activating one OSM object never activates parents or descendants', async (
     currentActive: false,
     finalActive: true,
   });
-  const repository = createOsmBoundaryAdminRepository(pool);
+  const repository = createOsmBoundaryAdminRuntime(pool);
 
   await repository.update(5, { active: true });
 
@@ -220,7 +224,7 @@ test('OSM subtree deactivation updates selected node and descendants once', asyn
       { id: 7, active: false },
     ],
   });
-  const repository = createOsmBoundaryAdminRepository(pool);
+  const repository = createOsmBoundaryAdminRuntime(pool);
 
   const result = await repository.setSubtreeActive(5, false);
 
@@ -235,7 +239,7 @@ test('OSM subtree deactivation updates selected node and descendants once', asyn
 
 test('OSM subtree activation validates boolean state before transaction', async () => {
   const pool = createPool();
-  const repository = createOsmBoundaryAdminRepository(pool);
+  const repository = createOsmBoundaryAdminRuntime(pool);
 
   await assert.rejects(
     repository.setSubtreeActive(5, 'false'),
@@ -246,4 +250,89 @@ test('OSM subtree activation validates boolean state before transaction', async 
 
   assert.equal(pool.queries.length, 0);
   assert.equal(pool.released, false);
+});
+
+
+test('OSM boundary update rejects a stale optimistic revision before mutation', async () => {
+  const pool = createPool({
+    currentUpdatedAt:
+      '2026-09-25T10:00:01.000Z',
+  });
+  const repository =
+    createOsmBoundaryAdminRuntime(pool);
+
+  await assert.rejects(
+    repository.update(
+      5,
+      {
+        displayName:
+          'Новое имя',
+      },
+      {
+        expectedUpdatedAt:
+          '2026-09-25T10:00:00.000Z',
+      },
+    ),
+    (error) =>
+      error instanceof
+        OsmBoundaryAdminValidationError &&
+      error.statusCode === 409 &&
+      error.details
+        ?.conflicts?.[0]?.id === 5,
+  );
+
+  assert.equal(
+    pool.queries.some(
+      (query) =>
+        /^UPDATE city_boundaries/i
+          .test(query),
+    ),
+    false,
+  );
+  assert.equal(
+    pool.queries.at(-1),
+    'ROLLBACK',
+  );
+});
+
+test('OSM boundary bulk update locks revisions and commits one atomic derived sync', async () => {
+  const pool = createPool({
+    currentUpdatedAt:
+      '2026-09-20T00:00:00.000Z',
+  });
+  const repository =
+    createOsmBoundaryAdminRuntime(pool);
+
+  const result =
+    await repository.updateMany({
+      updates: [{
+        id: 5,
+        baseUpdatedAt:
+          '2026-09-20T00:00:00.000Z',
+        changes: {
+          population: 125001,
+        },
+      }],
+    });
+
+  assert.equal(
+    result.changedCount,
+    1,
+  );
+  assert.deepEqual(
+    result.entityIds,
+    [5],
+  );
+  assert.equal(
+    pool.queries.filter(
+      (query) =>
+        query ===
+        'SELECT sync_active_boundary_cities()',
+    ).length,
+    1,
+  );
+  assert.equal(
+    pool.queries.at(-1),
+    'COMMIT',
+  );
 });

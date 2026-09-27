@@ -5,7 +5,7 @@ import {
   buildRussianPlaceIdOverpassQueries,
   parseOsmCityResponse,
   parseOsmPlaceIdsResponse,
-} from '../src/data/osm-city-parser.js';
+} from '../src/modules/osm/osm-city-parser.js';
 
 const square = [
   { lon: 30, lat: 60 },

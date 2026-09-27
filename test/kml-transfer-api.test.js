@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import http from 'node:http';
 import test from 'node:test';
-import { parseLinesKml } from '../src/data/kml-transfer.js';
+import { parseLinesKml } from '../src/modules/lines/kml-transfer.js';
 import { createKmlTransferRouter } from '../src/routes/kml-transfer-api.js';
 
 const authorization = `Basic ${Buffer.from('importer:test-secret').toString('base64')}`;

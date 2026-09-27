@@ -5,7 +5,7 @@ import {
   parseKmlSourcesJson,
   resolveKmlUpdateRequest,
   validateKmlSources,
-} from '../src/data/kml-update-options.js';
+} from '../src/modules/lines/kml-update-options.js';
 
 const constraints = {
   maxSources: 3,

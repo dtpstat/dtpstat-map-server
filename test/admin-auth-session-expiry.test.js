@@ -111,53 +111,41 @@ test('admin authorization does not convert permission 403 into session expiry', 
 });
 
 
-test('geometry and OSM editor permissions are independent from data management', async () => {
-  const permissions = {
-    canManageData: false,
-    canEditGeometries: true,
-    canEditOsm: false,
-  };
+test('OSM editor permission is independent from broad data management', async () => {
   const adminAuth = createAdminAuthorization({
     async authenticateRequest() {
       return {
         status: 'success',
         authMethod: 'session',
-        sessionId: 22,
+        sessionId: 14,
         sessionEffectiveExpiresAt: '2026-09-20T10:30:00.000Z',
         user: {
-          id: 7,
-          username: 'geometry-editor',
+          id: 3,
+          username: 'osm-editor',
           isSuperuser: false,
+          canManageData: false,
+          canEditOsm: true,
           mustChangePassword: false,
-          ...permissions,
         },
       };
     },
   });
+  const req = request();
+  const res = response();
+  let osmNext = false;
 
-  const geometryRequest = request();
-  const geometryResponse = response();
-  let geometryAllowed = false;
-  await adminAuth.requireGeometryEditor(geometryRequest, geometryResponse, () => {
-    geometryAllowed = true;
+  await adminAuth.requireOsmEditor(req, res, () => {
+    osmNext = true;
   });
-  assert.equal(geometryAllowed, true);
 
-  const osmRequest = request();
-  const osmResponse = response();
-  let osmAllowed = false;
-  await adminAuth.requireOsmEditor(osmRequest, osmResponse, () => {
-    osmAllowed = true;
-  });
-  assert.equal(osmAllowed, false);
-  assert.equal(osmResponse.statusCode, 403);
+  assert.equal(osmNext, true);
 
-  const dataRequest = request();
-  const dataResponse = response();
-  let dataAllowed = false;
-  await adminAuth.requireData(dataRequest, dataResponse, () => {
-    dataAllowed = true;
+  const dataReq = request();
+  const dataRes = response();
+  let dataNext = false;
+  await adminAuth.requireData(dataReq, dataRes, () => {
+    dataNext = true;
   });
-  assert.equal(dataAllowed, false);
-  assert.equal(dataResponse.statusCode, 403);
+  assert.equal(dataNext, false);
+  assert.equal(dataRes.statusCode, 403);
 });

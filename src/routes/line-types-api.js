@@ -1,15 +1,15 @@
 import express, { Router } from 'express';
-import { LineTypeValidationError } from '../data/line-types.js';
+import { LineTypeValidationError } from '../modules/lines/type-policy.js';
 import {
   createAdminOperationAudit,
   recordAdminOperationChanges,
-} from '../http/admin-auth.js';
+} from '../http/admin-operation-audit.js';
 
 /**
  * @param {{
  *   lineTypesRepository: { list: () => Promise<any[]>, save: (payload: unknown) => Promise<any[]> },
  *   adminAuth: ReturnType<import('../http/admin-auth.js').createAdminAuthorization>,
- *   securityService: ReturnType<import('../data/admin-security.js').createAdminSecurityService>,
+ *   securityService: ReturnType<import('../modules/security/service.js').createAdminSecurityService>,
  *   maxBodyBytes: number
  * }} dependencies
  */

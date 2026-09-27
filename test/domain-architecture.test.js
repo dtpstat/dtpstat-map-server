@@ -1,0 +1,3854 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const srcRoot = path.join(root, 'src');
+
+async function jsFiles(directory) {
+  try {
+    const entries = await fs.readdir(directory, { withFileTypes: true });
+    const nested = await Promise.all(entries.map(async (entry) => {
+      const target = path.join(directory, entry.name);
+      if (entry.isDirectory()) return jsFiles(target);
+      return entry.isFile() && entry.name.endsWith('.js') ? [target] : [];
+    }));
+    return nested.flat();
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
+function importSpecifiers(source) {
+  const specifiers = [];
+  const staticImport =
+    /(?:import|export)\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/gu;
+  const dynamicImport = /import\(\s*['"]([^'"]+)['"]\s*\)/gu;
+  for (const pattern of [staticImport, dynamicImport]) {
+    for (const match of source.matchAll(pattern)) specifiers.push(match[1]);
+  }
+  return specifiers;
+}
+
+function resolveRelativeImport(file, specifier) {
+  if (!specifier.startsWith('.')) return null;
+  return path.resolve(path.dirname(file), specifier);
+}
+
+test('source layers keep dependency direction explicit', async () => {
+  const forbiddenByLayer = new Map([
+    [
+      'modules',
+      ['application', 'db', 'routes', 'http', 'testing', 'data'],
+    ],
+    [
+      'shared',
+      ['application', 'db', 'modules', 'routes', 'http', 'testing', 'data'],
+    ],
+    [
+      'db',
+      ['application', 'routes', 'http', 'testing', 'data'],
+    ],
+    [
+      'routes',
+      ['db', 'testing', 'data'],
+    ],
+    [
+      'http',
+      ['application', 'db', 'routes', 'testing', 'data'],
+    ],
+  ]);
+
+  for (const [layer, forbiddenLayers] of forbiddenByLayer) {
+    const layerFiles = await jsFiles(
+      path.join(srcRoot, layer),
+    );
+    for (const file of layerFiles) {
+      const source = await fs.readFile(
+        file,
+        'utf8',
+      );
+      for (const specifier of importSpecifiers(source)) {
+        const resolved =
+          resolveRelativeImport(
+            file,
+            specifier,
+          );
+        if (!resolved) continue;
+
+        for (const forbiddenLayer of forbiddenLayers) {
+          assert.ok(
+            !resolved.startsWith(
+              path.join(
+                srcRoot,
+                forbiddenLayer,
+              ) + path.sep,
+            ),
+            `${path.relative(root, file)} must not depend on src/${forbiddenLayer}`,
+          );
+        }
+      }
+    }
+  }
+
+  const moduleFiles = await jsFiles(
+    path.join(srcRoot, 'modules'),
+  );
+  for (const file of moduleFiles) {
+    const source = await fs.readFile(
+      file,
+      'utf8',
+    );
+    for (const specifier of importSpecifiers(source)) {
+      const importsHttpFramework =
+        specifier === 'express' ||
+        specifier.startsWith('express/') ||
+        specifier === 'node:http' ||
+        specifier.startsWith('node:http/') ||
+        specifier === 'node:https' ||
+        specifier.startsWith('node:https/');
+      assert.equal(
+        importsHttpFramework,
+        false,
+        `${path.relative(root, file)} must stay HTTP-framework independent`,
+      );
+    }
+  }
+
+  const databaseFiles = await jsFiles(
+    path.join(srcRoot, 'db'),
+  );
+  for (const file of databaseFiles) {
+    const fileName = path.basename(file);
+    for (const forbiddenSuffix of [
+      '-service.js',
+      '-runtime.js',
+      '-routes.js',
+    ]) {
+      assert.equal(
+        fileName.endsWith(forbiddenSuffix),
+        false,
+        `${path.relative(root, file)} must remain focused persistence/infrastructure, not a composition facade`,
+      );
+    }
+  }
+
+  const legacyDataFiles = await jsFiles(
+    path.join(srcRoot, 'data'),
+  );
+  assert.deepEqual(
+    legacyDataFiles,
+    [],
+    'src/data must stay retired; domain ownership belongs in canonical modules',
+  );
+});
+
+test('repository architecture instructions stay present and point to enforced checks', async () => {
+  const [agents, architecture] = await Promise.all([
+    fs.readFile(
+      path.join(root, 'AGENTS.md'),
+      'utf8',
+    ),
+    fs.readFile(
+      path.join(root, 'docs', 'architecture.md'),
+      'utf8',
+    ),
+  ]);
+
+  for (const marker of [
+    'docs/architecture.md',
+    'npm run test:architecture',
+    'npm run check',
+    'src/modules',
+    'src/application',
+    'src/db',
+    'src/shared',
+    'src/data',
+  ]) {
+    assert.equal(
+      agents.includes(marker),
+      true,
+      `AGENTS.md must document ${marker}`,
+    );
+  }
+
+  for (const marker of [
+    'src/modules',
+    'src/application',
+    'src/db',
+    'src/routes',
+    'src/http',
+    'src/shared',
+    'src/data',
+    'npm run test:architecture',
+    'npm run check',
+  ]) {
+    assert.equal(
+      architecture.includes(marker),
+      true,
+      `docs/architecture.md must document ${marker}`,
+    );
+  }
+});
+
+test('domain validation policies live in canonical modules without legacy data facades', async () => {
+  const canonicalPolicies = [
+    [
+      path.join(srcRoot, 'modules', 'lines', 'type-policy.js'),
+      /LineTypeValidationError/u,
+    ],
+    [
+      path.join(srcRoot, 'modules', 'reporting', 'config-policy.js'),
+      /ReportConfigValidationError/u,
+    ],
+    [
+      path.join(srcRoot, 'modules', 'project', 'settings-policy.js'),
+      /ProjectSettingsValidationError/u,
+    ],
+    [
+      path.join(srcRoot, 'modules', 'project', 'public-download-policy.js'),
+      /normalizePublicDownloadName/u,
+    ],
+    [
+      path.join(srcRoot, 'modules', 'project', 'mapbox-token-policy.js'),
+      /normalizeMapboxAccessToken/u,
+    ],
+  ];
+
+  for (const [file, marker] of canonicalPolicies) {
+    const source = await fs.readFile(
+      file,
+      'utf8',
+    );
+    assert.match(
+      source,
+      marker,
+      path.relative(root, file),
+    );
+  }
+
+  const legacyPolicies = [
+    'line-types.js',
+    'report-config.js',
+    'project-settings.js',
+    'public-download-name.js',
+    'mapbox-access-token.js',
+  ];
+
+  for (const fileName of legacyPolicies) {
+    await assert.rejects(
+      fs.access(
+        path.join(
+          srcRoot,
+          'data',
+          fileName,
+        ),
+      ),
+      (error) =>
+        error?.code === 'ENOENT',
+    );
+  }
+});
+
+test('line GeoJSON and KML ownership lives in the lines domain module', async () => {
+  const canonical = [
+    ['geojson-plan.js', /buildGeoJsonPlan/u],
+    ['kml-downloader.js', /downloadKml/u],
+    ['kml-parser.js', /parseKmlSource/u],
+    ['kml-transfer.js', /serializeLinesKml/u],
+    ['kml-update-options.js', /resolveKmlUpdateRequest/u],
+  ];
+
+  for (const [fileName, marker] of canonical) {
+    const source = await fs.readFile(
+      path.join(
+        srcRoot,
+        'modules',
+        'lines',
+        fileName,
+      ),
+      'utf8',
+    );
+    assert.match(source, marker, fileName);
+  }
+
+  for (const [fileName] of canonical) {
+    await assert.rejects(
+      fs.access(
+        path.join(
+          srcRoot,
+          'data',
+          fileName,
+        ),
+      ),
+      (error) => error?.code === 'ENOENT',
+    );
+  }
+});
+
+test('OSM transport parsing and request ownership lives in the OSM domain module', async () => {
+  const canonical = [
+    ['osm-city-downloader.js', /downloadOsmCities/u],
+    ['osm-city-parser.js', /parseOsmCityResponse/u],
+    ['osm-city-update-options.js', /resolveOsmCityUpdateRequest/u],
+  ];
+
+  for (const [fileName, marker] of canonical) {
+    const source = await fs.readFile(
+      path.join(
+        srcRoot,
+        'modules',
+        'osm',
+        fileName,
+      ),
+      'utf8',
+    );
+    assert.match(source, marker, fileName);
+  }
+
+  for (const [fileName] of canonical) {
+    await assert.rejects(
+      fs.access(
+        path.join(
+          srcRoot,
+          'data',
+          fileName,
+        ),
+      ),
+      (error) => error?.code === 'ENOENT',
+    );
+  }
+});
+
+test('geometry population and project data ownership lives in canonical domain modules', async () => {
+  const canonical = [
+    [
+      path.join(
+        srcRoot,
+        'modules',
+        'geometry',
+        'city-boundary-geojson-plan.js',
+      ),
+      /buildCityBoundaryGeoJsonPlan/u,
+    ],
+    [
+      path.join(
+        srcRoot,
+        'modules',
+        'population',
+        'population-plan.js',
+      ),
+      /buildPopulationPlan/u,
+    ],
+    [
+      path.join(
+        srcRoot,
+        'modules',
+        'project',
+        'city-marker-icon.js',
+      ),
+      /validateCityMarkerIcon/u,
+    ],
+  ];
+
+  for (const [file, marker] of canonical) {
+    const source = await fs.readFile(
+      file,
+      'utf8',
+    );
+    assert.match(
+      source,
+      marker,
+      path.relative(root, file),
+    );
+  }
+
+  for (const fileName of [
+    'city-boundary-geojson-plan.js',
+    'population-plan.js',
+    'city-marker-icon.js',
+  ]) {
+    await assert.rejects(
+      fs.access(
+        path.join(
+          srcRoot,
+          'data',
+          fileName,
+        ),
+      ),
+      (error) => error?.code === 'ENOENT',
+    );
+  }
+});
+
+test('legacy API file is a composition root for extracted route modules', async () => {
+  const source = await fs.readFile(path.join(srcRoot, 'routes', 'api.js'), 'utf8');
+
+  assert.match(source, /createAdminTaskHttpRuntime\(/u);
+  assert.match(source, /createPortableImportRuntime\(/u);
+  assert.match(source, /createStreamingExportRoute/u);
+  assert.doesNotMatch(
+    source,
+    /createDataTransferRuntime\(/u,
+  );
+  assert.doesNotMatch(
+    source,
+    /data-transfer\/(?:runtime|routes)\.js/u,
+  );
+  assert.doesNotMatch(
+    source,
+    /^import[\s\S]*?from ['"]\.\.\/(?:data|http)\//mu,
+  );
+
+  assert.match(source, /registerMapRoutes\(router,/u);
+  assert.match(source, /registerDataExportRoutes\(router,/u);
+  assert.match(source, /registerDataImportRoutes\(router,/u);
+  assert.match(source, /registerLineRoutes\(router,/u);
+  assert.match(source, /registerOsmRoutes\(router,/u);
+  assert.match(source, /registerAdminTaskRoutes\(router,/u);
+  assert.match(source, /registerPopulationRoutes\(router,/u);
+  assert.doesNotMatch(source, /\brouter\.(?:get|post|put|patch|delete)\s*\(/u);
+});
+
+
+test('OSM update facade delegates Overpass request lifecycle to the module', async () => {
+  const source = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-service.js'),
+    'utf8',
+  );
+  const requestSession = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'overpass-request-session.js'),
+    'utf8',
+  );
+
+  assert.match(source, /createOverpassRequestSession\(/u);
+  assert.doesNotMatch(source, /RETRYABLE_HTTP_STATUS_CODES/u);
+  assert.doesNotMatch(source, /GEOMETRY_504_RETRIES_BEFORE_SPLIT/u);
+  assert.match(requestSession, /RETRYABLE_HTTP_STATUS_CODES/u);
+  assert.match(requestSession, /GEOMETRY_504_RETRIES_BEFORE_SPLIT/u);
+  assert.match(requestSession, /async downloadQuery\(/u);
+});
+
+
+test('OSM update facade delegates checkpoint compatibility and lifecycle policy', async () => {
+  const source = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-service.js'),
+    'utf8',
+  );
+  const policy = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-checkpoint-policy.js'),
+    'utf8',
+  );
+  const session = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-checkpoint-session.js'),
+    'utf8',
+  );
+  const metrics = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-request-metrics.js'),
+    'utf8',
+  );
+
+  assert.match(source, /checkpointSettingsFingerprint\(options\)/u);
+  assert.match(source, /prepareOsmCheckpoint\(/u);
+  assert.match(source, /preparePendingOsmGeometry\(/u);
+  assert.match(source, /materializeReadyOsmCheckpoint\(/u);
+  assert.match(source, /persistOsmCheckpointFailure\(/u);
+  assert.match(source, /createOsmRequestMetricsState\(/u);
+  assert.doesNotMatch(source, /checkpointCompletionChecksum\(/u);
+  assert.doesNotMatch(source, /checkpointErrorDetails\(/u);
+  assert.doesNotMatch(source, /checkpointRepository\.getStagedKeys\(/u);
+  assert.doesNotMatch(source, /checkpointRepository\.addMetrics\(/u);
+  assert.doesNotMatch(source, /function checkpointMode\(/u);
+  assert.doesNotMatch(source, /function checkpointOptionSnapshot\(/u);
+  assert.match(policy, /export function checkpointMode\(/u);
+  assert.match(policy, /export function checkpointOptionSnapshot\(/u);
+  assert.match(policy, /export function checkpointCompletionChecksum\(/u);
+  assert.match(session, /checkpointCompletionChecksum\(/u);
+  assert.match(session, /checkpointErrorDetails\(/u);
+  assert.match(session, /checkpointRepository\.getStagedKeys\(/u);
+  assert.match(session, /checkpointRepository\.addMetrics\(/u);
+  assert.match(metrics, /export function createOsmRequestMetricsState\(/u);
+});
+
+
+test('OSM update facade delegates boundary persistence to repository', async () => {
+  const source = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-service.js'),
+    'utf8',
+  );
+  const geometrySession = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-geometry-session.js'),
+    'utf8',
+  );
+  const repository = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'boundary-update-repository.js'),
+    'utf8',
+  );
+
+  const commitSession = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-commit-session.js'),
+    'utf8',
+  );
+
+  assert.match(source, /createOsmBoundaryUpdateRepository\(/u);
+  assert.match(source, /boundaryUpdateRepository,\n\s+client,/u);
+  assert.doesNotMatch(source, /boundaryUpdateRepository\.insertBoundaries\(/u);
+  assert.doesNotMatch(source, /boundaryUpdateRepository\.stageBatch\(/u);
+  assert.doesNotMatch(source, /INSERT INTO city_boundaries/u);
+  assert.doesNotMatch(source, /osm_city_boundary_stage/u);
+  assert.match(commitSession, /boundaryUpdateRepository\.insertBoundaries\(/u);
+  assert.match(geometrySession, /boundaryUpdateRepository\.stageBatch\(/u);
+  assert.match(repository, /async stageBatch\(/u);
+  assert.match(repository, /INSERT INTO city_boundaries/u);
+  assert.match(repository, /osm_city_boundary_stage/u);
+});
+
+
+test('OSM update facade delegates index composition and batch policy', async () => {
+  const source = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-service.js'),
+    'utf8',
+  );
+  const indexSession = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-index-session.js'),
+    'utf8',
+  );
+  const geometrySession = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-geometry-session.js'),
+    'utf8',
+  );
+  const batchPolicy = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-batch-policy.js'),
+    'utf8',
+  );
+
+  assert.match(source, /loadOsmUpdateIndex\(/u);
+  assert.doesNotMatch(source, /createObjectBatches\(/u);
+  assert.doesNotMatch(source, /function combineIndexParts\(/u);
+  assert.doesNotMatch(source, /buildRussianPlaceIdOverpassQueries/u);
+  assert.match(indexSession, /buildRussianPlaceIdOverpassQueries\(/u);
+  assert.match(indexSession, /combineIndexParts\(/u);
+  assert.match(geometrySession, /createObjectBatches\(/u);
+  assert.match(batchPolicy, /export function assertCompleteBatch\(/u);
+  assert.match(batchPolicy, /export function createObjectBatches\(/u);
+});
+
+
+test('OSM update facade delegates geometry batch processing to session', async () => {
+  const source = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-service.js'),
+    'utf8',
+  );
+  const geometrySession = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-geometry-session.js'),
+    'utf8',
+  );
+
+  assert.match(source, /processOsmGeometryBatches\(/u);
+  assert.doesNotMatch(source, /buildOsmPlacesBatchQuery/u);
+  assert.doesNotMatch(source, /geometry-504-retry-limit/u);
+  assert.doesNotMatch(source, /const splitAt =/u);
+  assert.doesNotMatch(source, /geometryBatches\.splice\(/u);
+  assert.match(geometrySession, /buildOsmPlacesBatchQuery\(/u);
+  assert.match(geometrySession, /geometry-504-retry-limit/u);
+  assert.match(geometrySession, /const splitAt =/u);
+  assert.match(geometrySession, /geometryBatches\.splice\(/u);
+  assert.match(geometrySession, /splitSizes/u);
+  assert.match(geometrySession, /boundaryUpdateRepository\.stageBatch\(/u);
+  assert.match(geometrySession, /checkpointRepository\.stageBatch\(/u);
+});
+
+
+test('OSM update facade delegates atomic replacement transaction to commit session', async () => {
+  const source = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-service.js'),
+    'utf8',
+  );
+  const commitSession = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-commit-session.js'),
+    'utf8',
+  );
+  const checkpointRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'osm-checkpoint-runtime.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(source, /commitOsmBoundaryUpdate\(/u);
+  assert.doesNotMatch(source, /client\.query\('BEGIN'\)/u);
+  assert.doesNotMatch(source, /client\.query\('COMMIT'\)/u);
+  assert.doesNotMatch(source, /client\.query\('ROLLBACK'\)/u);
+  assert.doesNotMatch(source, /DELETE FROM osm_city_update_checkpoint_stage/u);
+  assert.match(commitSession, /client\.query\('BEGIN'\)/u);
+  assert.match(commitSession, /client\.query\('COMMIT'\)/u);
+  assert.match(commitSession, /client\.query\('ROLLBACK'\)/u);
+  assert.match(commitSession, /checkpointRepository\.complete\(/u);
+  assert.match(checkpointRuntime, /async complete\(client, checkpointId\)/u);
+});
+
+
+test('OSM update facade delegates runtime options progress and result assembly', async () => {
+  const source = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-service.js'),
+    'utf8',
+  );
+  const runtimeOptions = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-runtime-options.js'),
+    'utf8',
+  );
+  const progressReporter = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-progress-reporter.js'),
+    'utf8',
+  );
+  const resultBuilder = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'update-result.js'),
+    'utf8',
+  );
+
+  assert.match(source, /resolveOsmUpdateRuntimeOptions\(/u);
+  assert.match(source, /reportOsmUpdateProgress/u);
+  assert.match(source, /buildOsmUpdateRunValues\(/u);
+  assert.match(source, /buildOsmUpdateResult\(/u);
+  assert.match(source, /finalizeOsmUpdateResult\(/u);
+  assert.doesNotMatch(source, /Saved OSM URL is no longer allowed/u);
+  assert.doesNotMatch(source, /OSM city update index \$\{/u);
+  assert.doesNotMatch(source, /indexRequestCount:/u);
+  assert.match(runtimeOptions, /Saved OSM URL is no longer allowed/u);
+  assert.match(progressReporter, /OSM city update index \$\{/u);
+  assert.match(resultBuilder, /indexRequestCount:/u);
+});
+
+
+test('ingestion application runtimes share canonical DB infrastructure', async () => {
+  const databaseRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'ingestion-database-runtime.js',
+    ),
+    'utf8',
+  );
+  const lineRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'lines-ingestion-runtime.js',
+    ),
+    'utf8',
+  );
+  const portableRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'portable-ingestion-runtime.js',
+    ),
+    'utf8',
+  );
+  const osmRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'osm-update-runtime.js',
+    ),
+    'utf8',
+  );
+  const osmUseCase = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'osm',
+      'update-service.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    databaseRuntime,
+    /acquireDataImportLock/u,
+  );
+  assert.match(
+    databaseRuntime,
+    /rebuildCityBoundaryHierarchy/u,
+  );
+  assert.match(
+    databaseRuntime,
+    /RECALCULATE_CITY_STATISTICS_SQL/u,
+  );
+  assert.match(
+    databaseRuntime,
+    /sync_active_boundary_cities/u,
+  );
+  assert.match(
+    databaseRuntime,
+    /sync_active_boundary_populations/u,
+  );
+  assert.match(
+    databaseRuntime,
+    /withIngestionDatabaseDependencies/u,
+  );
+  assert.match(
+    databaseRuntime,
+    /withBoundaryIngestionDatabaseDependencies/u,
+  );
+
+  assert.match(
+    lineRuntime,
+    /withIngestionDatabaseDependencies\(/u,
+  );
+  assert.match(
+    portableRuntime,
+    /withBoundaryIngestionDatabaseDependencies\(/u,
+  );
+  assert.match(
+    portableRuntime,
+    /withIngestionDatabaseDependencies\(/u,
+  );
+  assert.match(
+    osmRuntime,
+    /createOsmCityUpdateService\(/u,
+  );
+  assert.match(
+    osmRuntime,
+    /createOsmCityUpdateRuntime/u,
+  );
+  assert.match(
+    osmRuntime,
+    /withBoundaryIngestionDatabaseDependencies\(/u,
+  );
+  assert.match(
+    osmRuntime,
+    /OsmCityGeometryError/u,
+  );
+
+  for (const runtime of [
+    lineRuntime,
+    portableRuntime,
+    osmRuntime,
+  ]) {
+    assert.doesNotMatch(
+      runtime,
+      /acquireDataImportLock/u,
+    );
+    assert.doesNotMatch(
+      runtime,
+      /RECALCULATE_CITY_STATISTICS_SQL/u,
+    );
+  }
+
+  assert.match(
+    osmUseCase,
+    /createOverpassRequestSession\(/u,
+  );
+  assert.match(
+    osmUseCase,
+    /processOsmGeometryBatches\(/u,
+  );
+  assert.match(
+    osmUseCase,
+    /loadOsmUpdateIndex\(/u,
+  );
+  assert.match(
+    osmUseCase,
+    /prepareOsmCheckpoint\(/u,
+  );
+  assert.doesNotMatch(
+    osmUseCase,
+    /\.\.\/\.\.\/db\//u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'osm-city-update-service.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
+});
+
+test('line import use case delegates SQL persistence to lines repository', async () => {
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'lines', 'import-service.js'),
+    'utf8',
+  );
+  const repository = await fs.readFile(
+    path.join(srcRoot, 'modules', 'lines', 'import-repository.js'),
+    'utf8',
+  );
+
+  assert.match(service, /createLineImportRepository\(/u);
+  assert.match(service, /repository\.insertRawBatch\(/u);
+  assert.match(service, /repository\.insertNormalizedBatch\(/u);
+  assert.match(service, /repository\.insertGeometries\(/u);
+  assert.doesNotMatch(service, /CREATE TEMP TABLE line_transfer_raw/u);
+  assert.doesNotMatch(service, /INSERT INTO city_geometries/u);
+  assert.doesNotMatch(service, /DELETE FROM line_types AS line_type/u);
+
+  assert.match(repository, /CREATE TEMP TABLE line_transfer_raw/u);
+  assert.match(repository, /INSERT INTO city_geometries/u);
+  assert.match(repository, /DELETE FROM line_types AS line_type/u);
+});
+
+test('line ingestion application runtime composes GeoJSON DB infrastructure', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'lines-ingestion-runtime.js',
+    ),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'lines',
+      'import-service.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    runtime,
+    /createLineImportService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createLineImportRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /withIngestionDatabaseDependencies\(/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /parseStreamingJsonObject/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /buildGeoJsonPlan/u,
+  );
+
+  assert.match(
+    service,
+    /parseStreamingJsonObject\(/u,
+  );
+  assert.match(
+    service,
+    /buildGeoJsonPlan\(/u,
+  );
+  assert.match(
+    service,
+    /repository\.insertGeometries\(/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /\.\.\/\.\.\/db\//u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'data-import-service.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
+});
+
+test('city boundary transfer use case delegates SQL persistence to geometry repository', async () => {
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'geometry',
+      'city-boundary-transfer-service.js',
+    ),
+    'utf8',
+  );
+  const repository = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'geometry',
+      'city-boundary-transfer-repository.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(service, /createCityBoundaryTransferRepository\(/u);
+  assert.match(service, /repository\.insertStageBatch\(/u);
+  assert.match(service, /repository\.insertBoundaries\(/u);
+  assert.match(service, /repository\.restoreGeometryLinks\(/u);
+  assert.doesNotMatch(
+    service,
+    /CREATE TEMP TABLE city_boundary_transfer_stage/u,
+  );
+  assert.doesNotMatch(service, /INSERT INTO city_boundaries/u);
+  assert.doesNotMatch(service, /UPDATE city_geometries/u);
+
+  assert.match(
+    repository,
+    /CREATE TEMP TABLE city_boundary_transfer_stage/u,
+  );
+  assert.match(repository, /INSERT INTO city_boundaries/u);
+  assert.match(repository, /UPDATE city_geometries/u);
+});
+
+test('portable ingestion application runtime composes city-boundary DB infrastructure', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'portable-ingestion-runtime.js',
+    ),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'geometry',
+      'city-boundary-transfer-service.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    runtime,
+    /createCityBoundaryTransferService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createCityBoundaryTransferRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /withBoundaryIngestionDatabaseDependencies\(/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /parseStreamingJsonObject/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /buildCityBoundaryGeoJsonPlan/u,
+  );
+
+  assert.match(
+    service,
+    /parseStreamingJsonObject\(/u,
+  );
+  assert.match(
+    service,
+    /buildCityBoundaryGeoJsonPlan\(/u,
+  );
+  assert.match(
+    service,
+    /repository\.insertStageBatch\(/u,
+  );
+  assert.match(
+    service,
+    /rebuildHierarchy\(client,/u,
+  );
+  assert.match(
+    service,
+    /syncDerivedData\(client\)/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /\.\.\/\.\.\/db\//u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'city-boundary-transfer-service.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
+});
+
+test('population import use case delegates SQL persistence to population repository', async () => {
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'population', 'import-service.js'),
+    'utf8',
+  );
+  const repository = await fs.readFile(
+    path.join(srcRoot, 'modules', 'population', 'import-repository.js'),
+    'utf8',
+  );
+
+  assert.match(service, /createPopulationImportRepository\(/u);
+  assert.match(service, /repository\.insertRawBatch\(/u);
+  assert.match(service, /repository\.insertStageBatch\(/u);
+  assert.match(service, /repository\.resolveStage\(/u);
+  assert.match(service, /repository\.updateCities\(/u);
+  assert.doesNotMatch(
+    service,
+    /CREATE TEMP TABLE population_transfer_raw/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /CREATE TEMP TABLE population_transfer_resolved/u,
+  );
+  assert.doesNotMatch(service, /UPDATE city_boundaries AS boundary/u);
+
+  assert.match(
+    repository,
+    /CREATE TEMP TABLE population_transfer_raw/u,
+  );
+  assert.match(
+    repository,
+    /CREATE TEMP TABLE population_transfer_resolved/u,
+  );
+  assert.match(repository, /UPDATE city_boundaries AS boundary/u);
+});
+
+test('portable ingestion application runtime composes population DB infrastructure', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'portable-ingestion-runtime.js',
+    ),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'population',
+      'import-service.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    runtime,
+    /createPopulationImportService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createPopulationImportRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /withIngestionDatabaseDependencies\(/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /parseStreamingJsonObject/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /buildPopulationPlan/u,
+  );
+
+  assert.match(
+    service,
+    /parseStreamingJsonObject\(/u,
+  );
+  assert.match(
+    service,
+    /buildPopulationPlan\(/u,
+  );
+  assert.match(
+    service,
+    /repository\.resolveStage\(/u,
+  );
+  assert.match(
+    service,
+    /recalculateStatistics\(client\)/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /\.\.\/\.\.\/db\//u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'population-import-service.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
+});
+
+test('KML update use case delegates SQL persistence to lines repository', async () => {
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'lines', 'kml-update-service.js'),
+    'utf8',
+  );
+  const repository = await fs.readFile(
+    path.join(srcRoot, 'modules', 'lines', 'kml-update-repository.js'),
+    'utf8',
+  );
+
+  assert.match(service, /createKmlUpdateRepository\(/u);
+  assert.match(service, /repository\.loadLineTypes\(/u);
+  assert.match(service, /repository\.matchGeometries\(/u);
+  assert.match(service, /repository\.insertGeometries\(/u);
+  assert.match(service, /repository\.insertUpdateRun\(/u);
+  assert.doesNotMatch(
+    service,
+    /CREATE TEMP TABLE kml_place_match_geometries/u,
+  );
+  assert.doesNotMatch(service, /INSERT INTO city_geometries/u);
+  assert.doesNotMatch(service, /INSERT INTO geometry_update_runs/u);
+
+  assert.match(
+    repository,
+    /CREATE TEMP TABLE kml_place_match_geometries/u,
+  );
+  assert.match(repository, /INSERT INTO city_geometries/u);
+  assert.match(repository, /INSERT INTO geometry_update_runs/u);
+});
+
+test('line ingestion application runtime composes KML DB infrastructure', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'lines-ingestion-runtime.js',
+    ),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'lines',
+      'kml-update-service.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    runtime,
+    /createKmlUpdateService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createKmlUpdateRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /withIngestionDatabaseDependencies\(/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /downloadKml/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /parseKmlSource/u,
+  );
+
+  assert.match(
+    service,
+    /downloadKml/u,
+  );
+  assert.match(
+    service,
+    /parseKmlSource/u,
+  );
+  assert.match(
+    service,
+    /repository\.matchGeometries\(/u,
+  );
+  assert.match(
+    service,
+    /recalculateStatistics\(client\)/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /\.\.\/\.\.\/db\//u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'kml-update-service.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
+});
+
+test('project settings transfer application service delegates policy and persistence', async () => {
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'project-settings-service.js',
+    ),
+    'utf8',
+  );
+  const policy = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'project',
+      'settings-transfer-policy.js',
+    ),
+    'utf8',
+  );
+  const repository = await fs.readFile(
+    path.join(srcRoot, 'db', 'project-settings-transfer-repository.js'),
+    'utf8',
+  );
+
+  assert.match(service, /validateProjectSettingsTransferEnvelope\(/u);
+  assert.match(service, /normalizeTransferredProjectSettings\(/u);
+  assert.match(service, /repository\.replaceLineTypes\(/u);
+  assert.match(service, /repository\.materializeReport\(/u);
+  assert.doesNotMatch(service, /UPDATE project_settings SET/u);
+  assert.doesNotMatch(service, /CREATE TEMP TABLE project_settings_line_types_stage/u);
+
+  assert.match(policy, /PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION = 8/u);
+  assert.match(policy, /normalizeTransferredSecuritySettings/u);
+  assert.doesNotMatch(
+    policy,
+    /data\/admin-security\.js/u,
+  );
+  assert.match(
+    policy,
+    /\.\.\/security\/policy\.js/u,
+  );
+  assert.match(repository, /UPDATE project_settings SET/u);
+  assert.match(repository, /CREATE TEMP TABLE project_settings_line_types_stage/u);
+});
+
+test('project report runtime composes project settings transfer persistence', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'project-report-runtime.js',
+    ),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'project-settings-service.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    runtime,
+    /createProjectSettingsTransferService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createProjectSettingsTransferRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /createProjectSettingsTransferRepository\(/u,
+  );
+  assert.match(
+    runtime,
+    /acquireDataImportLock/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /validateProjectSettingsTransferEnvelope/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /validateReportConfig/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /UPDATE project_settings SET/u,
+  );
+
+  assert.match(
+    service,
+    /validateProjectSettingsTransferEnvelope\(/u,
+  );
+  assert.match(
+    service,
+    /validateReportConfig\(/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /database-locks/u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'project-settings-transfer-service.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
+});
+
+test('reporting module separates config use case from query compiler and DB storage', async () => {
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'reporting', 'config-service.js'),
+    'utf8',
+  );
+  const compiler = await fs.readFile(
+    path.join(srcRoot, 'modules', 'reporting', 'query-compiler.js'),
+    'utf8',
+  );
+  const repository = await fs.readFile(
+    path.join(srcRoot, 'db', 'report-config-repository.js'),
+    'utf8',
+  );
+  const materializer = await fs.readFile(
+    path.join(srcRoot, 'db', 'report-materialization-repository.js'),
+    'utf8',
+  );
+
+  assert.match(service, /repository\.load\(/u);
+  assert.match(service, /repository\.save\(/u);
+  assert.match(service, /materialize\(client,/u);
+  assert.doesNotMatch(service, /jsonb_object_agg\(config_key/u);
+  assert.doesNotMatch(service, /INSERT INTO city_report_values/u);
+
+  assert.match(compiler, /compileReportMetricQuery/u);
+  assert.match(compiler, /compileReportRankQuery/u);
+  assert.doesNotMatch(compiler, /\.\.\/\.\.\/db\//u);
+
+  assert.match(repository, /jsonb_object_agg\(config_key, config_value\)/u);
+  assert.match(repository, /ON CONFLICT \(config_key\)/u);
+
+  assert.match(materializer, /INSERT INTO city_report_values/u);
+  assert.match(materializer, /compileReportMetricQuery\(/u);
+  assert.match(materializer, /compileReportRankQuery\(/u);
+});
+
+test('project report runtime composes report config persistence and materialization', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'project-report-runtime.js',
+    ),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'reporting',
+      'config-service.js',
+    ),
+    'utf8',
+  );
+  const compiler = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'reporting',
+      'query-compiler.js',
+    ),
+    'utf8',
+  );
+  const transferRepository = await fs.readFile(
+    path.join(
+      srcRoot,
+      'db',
+      'project-settings-transfer-repository.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    runtime,
+    /createReportConfigService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createReportConfigRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /createReportConfigRepository\(/u,
+  );
+  assert.match(
+    runtime,
+    /materializeReportValues/u,
+  );
+  assert.match(
+    runtime,
+    /acquireDataImportLock/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /compileReportMetricQuery/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /compileReportRankQuery/u,
+  );
+
+  assert.match(
+    service,
+    /validateReportConfig\(/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /database-locks/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /report-config-repository/u,
+  );
+
+  assert.match(
+    compiler,
+    /compileReportMetricQuery/u,
+  );
+  assert.match(
+    compiler,
+    /compileReportRankQuery/u,
+  );
+
+  assert.match(
+    transferRepository,
+    /materializeReportValues\(client, config\)/u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'report-config-service.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
+});
+
+test('project settings module separates update policy from DB storage', async () => {
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'project', 'settings-service.js'),
+    'utf8',
+  );
+  const policy = await fs.readFile(
+    path.join(srcRoot, 'modules', 'project', 'settings-update-policy.js'),
+    'utf8',
+  );
+  const storage = await fs.readFile(
+    path.join(srcRoot, 'db', 'project-settings-storage-repository.js'),
+    'utf8',
+  );
+
+  assert.match(service, /normalizeProjectSettingsUpdate\(/u);
+  assert.match(service, /storage\.updateSettings\(/u);
+  assert.match(service, /recalculateStatistics\(/u);
+  assert.doesNotMatch(service, /UPDATE project_settings/u);
+  assert.doesNotMatch(service, /\.\.\/\.\.\/db\//u);
+
+  assert.match(policy, /buildProjectSettingsPlan\(/u);
+  assert.match(policy, /normalizePublicThemePreset\(/u);
+  assert.doesNotMatch(policy, /UPDATE project_settings/u);
+
+  assert.match(storage, /SELECT[\s\S]*FROM project_settings/u);
+  assert.match(storage, /UPDATE project_settings/u);
+  assert.doesNotMatch(storage, /buildProjectSettingsPlan/u);
+});
+
+test('project runtime composes settings storage and public download publication', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'project-runtime.js',
+    ),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'project',
+      'settings-service.js',
+    ),
+    'utf8',
+  );
+  const storage = await fs.readFile(
+    path.join(
+      srcRoot,
+      'db',
+      'project-settings-storage-repository.js',
+    ),
+    'utf8',
+  );
+  const downloadRepository = await fs.readFile(
+    path.join(
+      srcRoot,
+      'db',
+      'public-download-repository.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    runtime,
+    /createProjectSettingsService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createProjectSettingsRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /createProjectRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /createProjectSettingsStorageRepository\(/u,
+  );
+  assert.match(
+    runtime,
+    /withIngestionDatabaseDependencies\(/u,
+  );
+  assert.match(
+    runtime,
+    /createPublicDownloadRepository\(/u,
+  );
+  assert.match(
+    runtime,
+    /createPublicDownloadService\(/u,
+  );
+  assert.match(
+    runtime,
+    /var[\s\S]*public-downloads/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /UPDATE project_settings/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /SELECT json_build_object/u,
+  );
+
+  assert.match(
+    service,
+    /storage\.get\(database\)/u,
+  );
+  assert.match(
+    service,
+    /storage\.updateSettings\(/u,
+  );
+  assert.match(
+    service,
+    /storage\.updateCityMarkerIcon\(/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /\.\.\/\.\.\/db\//u,
+  );
+
+  assert.match(
+    storage,
+    /UPDATE project_settings/u,
+  );
+  assert.match(
+    downloadRepository,
+    /SELECT json_build_object/u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'project-settings-repository.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
+});
+
+test('portable export application service separates JSON framing from DB storage', async () => {
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'export-service.js',
+    ),
+    'utf8',
+  );
+  const storage = await fs.readFile(
+    path.join(srcRoot, 'db', 'data-export-storage-repository.js'),
+    'utf8',
+  );
+
+  assert.match(service, /streamCityBoundaries/u);
+  assert.match(service, /streamPopulationRegions/u);
+  assert.match(service, /storage\.streamLineItems\(/u);
+  assert.match(service, /schemaVersion":3/u);
+  assert.doesNotMatch(service, /DECLARE portable_/u);
+  assert.doesNotMatch(service, /ST_AsGeoJSON/u);
+  assert.doesNotMatch(service, /WITH RECURSIVE ancestry/u);
+
+  assert.match(storage, /DECLARE \$\{cursorName\} NO SCROLL CURSOR/u);
+  assert.match(storage, /ST_AsGeoJSON/u);
+  assert.match(storage, /WITH RECURSIVE ancestry/u);
+  assert.doesNotMatch(storage, /createDataExportService/u);
+});
+
+test('portable export runtime composes application service with SQL storage', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'export-runtime.js',
+    ),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'export-service.js',
+    ),
+    'utf8',
+  );
+  const storage = await fs.readFile(
+    path.join(
+      srcRoot,
+      'db',
+      'data-export-storage-repository.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    runtime,
+    /createDataExportService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createDataExportRuntime/u,
+  );
+  assert.match(
+    runtime,
+    /createDataExportStorageRepository\(/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /ST_AsGeoJSON/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /WITH RECURSIVE ancestry/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /streamPopulationRegions/u,
+  );
+
+  assert.match(
+    service,
+    /storage\.exportCityBoundaries\(/u,
+  );
+  assert.match(
+    service,
+    /storage\.populationRows\(/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /ST_AsGeoJSON/u,
+  );
+
+  assert.match(
+    storage,
+    /ST_AsGeoJSON/u,
+  );
+  assert.match(
+    storage,
+    /WITH RECURSIVE ancestry/u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'data-export-repository.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
+});
+
+test('admin security persistence is split by bounded responsibility', async () => {
+  const users = await fs.readFile(
+    path.join(srcRoot, 'db', 'admin-user-repository.js'),
+    'utf8',
+  );
+  const sessions = await fs.readFile(
+    path.join(srcRoot, 'db', 'admin-session-repository.js'),
+    'utf8',
+  );
+  const accessControl = await fs.readFile(
+    path.join(srcRoot, 'db', 'admin-access-control-repository.js'),
+    'utf8',
+  );
+  const audit = await fs.readFile(
+    path.join(srcRoot, 'db', 'admin-audit-repository.js'),
+    'utf8',
+  );
+
+  assert.match(users, /FROM admin_users/u);
+  assert.match(users, /can_edit_osm = \$6/u);
+  assert.doesNotMatch(users, /FROM admin_sessions/u);
+  assert.doesNotMatch(users, /FROM admin_audit_log/u);
+
+  assert.match(sessions, /FROM admin_sessions/u);
+  assert.match(sessions, /JOIN admin_users AS users/u);
+  assert.doesNotMatch(sessions, /admin_security_settings/u);
+  assert.doesNotMatch(sessions, /admin_audit_log/u);
+
+  assert.match(accessControl, /admin_security_settings/u);
+  assert.match(accessControl, /admin_login_ip_state/u);
+  assert.match(accessControl, /admin_blocked_ips/u);
+  assert.doesNotMatch(accessControl, /admin_audit_log/u);
+
+  assert.match(audit, /admin_audit_log/u);
+  assert.match(audit, /admin_user\.avatar_data IS NOT NULL/u);
+  assert.doesNotMatch(audit, /admin_sessions/u);
+  assert.doesNotMatch(audit, /admin_security_settings/u);
+});
+
+test('security runtime composes focused persistence service and HTTP authorization', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'security-runtime.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    runtime,
+    /createAdminUserRepository\(/u,
+  );
+  assert.match(
+    runtime,
+    /createAdminSessionRepository\(/u,
+  );
+  assert.match(
+    runtime,
+    /createAdminAccessControlRepository\(/u,
+  );
+  assert.match(
+    runtime,
+    /createAdminAuditRepository\(/u,
+  );
+  assert.match(
+    runtime,
+    /createAdminSecurityPersistence/u,
+  );
+  assert.match(
+    runtime,
+    /createAdminSecurityService\(/u,
+  );
+  assert.match(
+    runtime,
+    /createAdminAuthorization\(/u,
+  );
+  assert.match(
+    runtime,
+    /createSecurityRuntime/u,
+  );
+
+  assert.doesNotMatch(
+    runtime,
+    /SELECT .*admin_users/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /INSERT INTO admin_sessions/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /admin_login_ip_state/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /admin_audit_log/u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'admin-security-repository.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
+});
+
+test('OSM checkpoint persistence separates record state from staged geometry', async () => {
+  const record = await fs.readFile(
+    path.join(srcRoot, 'db', 'osm-checkpoint-record-repository.js'),
+    'utf8',
+  );
+  const stage = await fs.readFile(
+    path.join(srcRoot, 'db', 'osm-checkpoint-stage-repository.js'),
+    'utf8',
+  );
+
+  assert.match(record, /osm_city_update_checkpoints/u);
+  assert.match(record, /settings_fingerprint/u);
+  assert.match(record, /request_attempt_count/u);
+  assert.doesNotMatch(record, /ST_BuildArea/u);
+  assert.doesNotMatch(record, /ST_GeomFromGeoJSON/u);
+
+  assert.match(stage, /osm_city_update_checkpoint_stage/u);
+  assert.match(stage, /ST_BuildArea/u);
+  assert.match(stage, /content_checksum/u);
+  assert.doesNotMatch(stage, /settings_fingerprint/u);
+  assert.doesNotMatch(stage, /source_url/u);
+});
+
+test('OSM checkpoint runtime orchestrates atomic persistence slices', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'osm-checkpoint-runtime.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(runtime, /db\/osm-checkpoint-record-repository\.js/u);
+  assert.match(runtime, /db\/osm-checkpoint-stage-repository\.js/u);
+  assert.match(runtime, /createOsmCheckpointRecordRepository\(pool\)/u);
+  assert.match(runtime, /createOsmCheckpointStageRepository\(pool\)/u);
+  assert.match(runtime, /records\.lockResumable\(/u);
+  assert.match(runtime, /stage\.stageBatch\(/u);
+  assert.match(runtime, /records\.addBatchMetrics\(/u);
+  assert.match(runtime, /stage\.deleteByCheckpoint\(/u);
+  assert.doesNotMatch(runtime, /ST_BuildArea/u);
+  assert.doesNotMatch(runtime, /settings_fingerprint/u);
+  assert.doesNotMatch(
+    runtime,
+    /INSERT INTO osm_city_update_checkpoint_stage/u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'osm-city-checkpoint-repository.js',
+      ),
+    ),
+    (error) => error?.code === 'ENOENT',
+  );
+});
+
+
+test('OSM boundary admin module separates policy use case and DB storage', async () => {
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'boundary-admin-service.js'),
+    'utf8',
+  );
+  const policy = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'boundary-admin-policy.js'),
+    'utf8',
+  );
+  const storage = await fs.readFile(
+    path.join(srcRoot, 'db', 'osm-boundary-admin-storage.js'),
+    'utf8',
+  );
+
+  assert.match(service, /normalizeOsmBoundaryChanges\(/u);
+  assert.match(service, /storage\.lockSubtree\(/u);
+  assert.match(service, /storage\.updateBoundary\(/u);
+  assert.match(service, /syncDerivedData\(client\)/u);
+  assert.doesNotMatch(service, /WITH RECURSIVE subtree/u);
+  assert.doesNotMatch(service, /UPDATE city_boundaries/u);
+  assert.doesNotMatch(service, /\.\.\/\.\.\/db\//u);
+
+  assert.match(policy, /normalizeOsmBoundaryChanges/u);
+  assert.match(policy, /normalizeOsmBoundaryId/u);
+  assert.doesNotMatch(policy, /city_boundaries/u);
+
+  assert.match(storage, /WITH RECURSIVE subtree/u);
+  assert.match(storage, /UPDATE city_boundaries/u);
+  assert.match(storage, /ST_AsGeoJSON/u);
+  assert.doesNotMatch(storage, /OsmBoundaryAdminValidationError/u);
+});
+
+test('OSM boundary admin runtime composes service storage and shared DB infrastructure', async () => {
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'osm-boundary-admin-runtime.js',
+    ),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'boundary-admin-service.js'),
+    'utf8',
+  );
+
+  assert.match(runtime, /createOsmBoundaryAdminService\(\s*pool,/u);
+  assert.match(runtime, /createOsmBoundaryAdminStorage\(pool\)/u);
+  assert.match(
+    runtime,
+    /withBoundaryIngestionDatabaseDependencies\(/u,
+  );
+  assert.doesNotMatch(runtime, /acquireDataImportLock/u);
+  assert.doesNotMatch(runtime, /RECALCULATE_CITY_STATISTICS_SQL/u);
+  assert.doesNotMatch(runtime, /WITH RECURSIVE subtree/u);
+  assert.doesNotMatch(runtime, /UPDATE city_boundaries/u);
+  assert.doesNotMatch(runtime, /ST_AsGeoJSON/u);
+
+  assert.match(service, /storage\.getGeometry\(/u);
+  assert.match(service, /storage\.getBoundary\(/u);
+  assert.match(service, /storage\.updateSubtreeActive\(/u);
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'db',
+        'osm-boundary-admin-repository.js',
+      ),
+    ),
+    (error) => error?.code === 'ENOENT',
+  );
+});
+
+
+test('security module separates policy credentials and focused use cases', async () => {
+  const policy = await fs.readFile(
+    path.join(srcRoot, 'modules', 'security', 'policy.js'),
+    'utf8',
+  );
+  const credentials = await fs.readFile(
+    path.join(srcRoot, 'modules', 'security', 'credentials.js'),
+    'utf8',
+  );
+  const auth = await fs.readFile(
+    path.join(srcRoot, 'modules', 'security', 'auth-service.js'),
+    'utf8',
+  );
+  const accounts = await fs.readFile(
+    path.join(srcRoot, 'modules', 'security', 'account-service.js'),
+    'utf8',
+  );
+  const administration = await fs.readFile(
+    path.join(srcRoot, 'modules', 'security', 'admin-service.js'),
+    'utf8',
+  );
+  const audit = await fs.readFile(
+    path.join(srcRoot, 'modules', 'security', 'audit-service.js'),
+    'utf8',
+  );
+  const facade = await fs.readFile(
+    path.join(srcRoot, 'modules', 'security', 'service.js'),
+    'utf8',
+  );
+
+  assert.match(policy, /normalizeAdminSecuritySettings/u);
+  assert.match(policy, /publicAdminUser/u);
+  assert.match(policy, /canEditOsm: Boolean\(user\.canEditOsm\)/u);
+  assert.match(policy, /canEditGeometries: Boolean/u);
+  assert.doesNotMatch(policy, /crypto\.scrypt/u);
+  assert.doesNotMatch(policy, /repository\./u);
+
+  assert.match(credentials, /promisify\(crypto\.scrypt\)/u);
+  assert.match(credentials, /hashAdminPassword/u);
+  assert.match(credentials, /verifyAdminPassword/u);
+  assert.match(credentials, /generateAdminSessionToken/u);
+  assert.doesNotMatch(credentials, /repository\./u);
+
+  assert.match(auth, /repository\.findUserByUsername\(/u);
+  assert.match(auth, /repository\.createSession\(/u);
+  assert.match(auth, /authenticateSession/u);
+  assert.doesNotMatch(auth, /createIpBlock/u);
+
+  assert.match(accounts, /repository\.createUser\(/u);
+  assert.match(accounts, /canEditOsm/u);
+  assert.match(accounts, /canEditGeometries/u);
+  assert.match(accounts, /changeOwnPassword/u);
+  assert.doesNotMatch(accounts, /findSession/u);
+
+  assert.match(administration, /repository\.saveSecuritySettings\(/u);
+  assert.match(administration, /repository\.createIpBlock\(/u);
+  assert.doesNotMatch(administration, /createSession/u);
+
+  assert.match(audit, /repository\.appendAudit\(/u);
+  assert.match(audit, /repository\.listAudit\(/u);
+
+  assert.match(facade, /createSecurityAuthService/u);
+  assert.match(facade, /createSecurityAccountService/u);
+  assert.match(facade, /createSecurityAdministrationService/u);
+  assert.match(facade, /createSecurityAuditService/u);
+  assert.doesNotMatch(facade, /repository\.findUserByUsername/u);
+  assert.doesNotMatch(facade, /repository\.saveSecuritySettings/u);
+  assert.doesNotMatch(facade, /\.\.\/\.\.\/db\//u);
+});
+
+test('admin security uses canonical policy credential and service modules', async () => {
+  const policy = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'security',
+      'policy.js',
+    ),
+    'utf8',
+  );
+  const credentials = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'security',
+      'credentials.js',
+    ),
+    'utf8',
+  );
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'security',
+      'service.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    policy,
+    /normalizeAdminUsername/u,
+  );
+  assert.match(
+    credentials,
+    /hashAdminPassword/u,
+  );
+  assert.match(
+    service,
+    /createAdminSecurityService/u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'data',
+        'admin-security.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
+});
+
+test('shared admin task runtime separates lifecycle policy from audit sanitization', async () => {
+  const manager = await fs.readFile(
+    path.join(srcRoot, 'shared', 'tasks', 'admin-task-manager.js'),
+    'utf8',
+  );
+  const policy = await fs.readFile(
+    path.join(srcRoot, 'shared', 'tasks', 'admin-task-policy.js'),
+    'utf8',
+  );
+  const audit = await fs.readFile(
+    path.join(srcRoot, 'shared', 'logging', 'admin-audit-details.js'),
+    'utf8',
+  );
+
+  assert.match(manager, /adminTaskSnapshot\(/u);
+  assert.match(manager, /isAdminTaskActiveStatus\(/u);
+  assert.match(manager, /sanitizeAdminAuditData/u);
+  assert.match(manager, /sanitizeAdminAuditLog/u);
+  assert.match(manager, /recordSuccessfulUpdate/u);
+  assert.match(manager, /afterSuccessfulUpdate/u);
+  assert.doesNotMatch(manager, /\.\.\/\.\.\/data\//u);
+
+  assert.match(policy, /AdminTaskAlreadyRunningError/u);
+  assert.match(policy, /AdminTaskCancelledError/u);
+  assert.match(policy, /throwIfAdminTaskCancelled/u);
+  assert.match(policy, /adminTaskSnapshot/u);
+  assert.doesNotMatch(policy, /sanitizeAdminAuditData/u);
+  assert.doesNotMatch(policy, /serviceLog/u);
+
+  assert.match(audit, /sanitizeAdminAuditData/u);
+  assert.match(audit, /adminAuditPayloadFingerprint/u);
+  assert.doesNotMatch(audit, /adminTaskSnapshot/u);
+});
+
+test('admin task and audit helpers use canonical shared modules without legacy data facades', async () => {
+  const legacyFacades = [
+    path.join(
+      srcRoot,
+      'data',
+      'admin-task-manager.js',
+    ),
+    path.join(
+      srcRoot,
+      'data',
+      'admin-audit-details.js',
+    ),
+  ];
+
+  const sourceFiles = await jsFiles(
+    srcRoot,
+  );
+  for (const file of sourceFiles) {
+    const source = await fs.readFile(
+      file,
+      'utf8',
+    );
+    for (const specifier of importSpecifiers(source)) {
+      const resolved =
+        resolveRelativeImport(
+          file,
+          specifier,
+        );
+
+      assert.ok(
+        !resolved ||
+          !legacyFacades.includes(
+            resolved,
+          ),
+        `${path.relative(root, file)} must import canonical admin task/audit modules`,
+      );
+    }
+  }
+
+  for (const facade of legacyFacades) {
+    await assert.rejects(
+      fs.access(facade),
+      (error) =>
+        error?.code === 'ENOENT',
+    );
+  }
+});
+
+
+test('shared streaming owns ZIP transport and streaming JSON parsing', async () => {
+  const zip = await fs.readFile(
+    path.join(srcRoot, 'shared', 'streaming', 'single-file-zip.js'),
+    'utf8',
+  );
+  const json = await fs.readFile(
+    path.join(srcRoot, 'shared', 'streaming', 'streaming-json.js'),
+    'utf8',
+  );
+
+  assert.match(zip, /openSingleFileZip/u);
+  assert.match(zip, /createSingleFileZipStream/u);
+  assert.match(zip, /createInflateRaw/u);
+  assert.match(zip, /createDeflateRaw/u);
+  assert.doesNotMatch(zip, /\.\.\/\.\.\/data\//u);
+
+  assert.match(json, /parseStreamingJsonObject/u);
+  assert.match(json, /TextDecoder/u);
+  assert.match(
+    json,
+    /\.\.\/tasks\/admin-task-manager\.js/u,
+  );
+  assert.doesNotMatch(json, /\.\.\/\.\.\/data\//u);
+});
+
+test('removed compatibility and legacy ownership paths stay absent from source tests and scripts', async () => {
+  const removedFacades = new Set([
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'routes.js',
+    ),
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'runtime.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'data-import-service.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'kml-update-service.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'city-boundary-transfer-service.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'population-import-service.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'osm-city-update-service.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'project-settings-transfer-service.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'report-config-service.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'project-settings-repository.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'data-export-repository.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'admin-security-repository.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'osm-city-checkpoint-repository.js',
+    ),
+    path.join(
+      srcRoot,
+      'db',
+      'osm-boundary-admin-repository.js',
+    ),
+    path.join(srcRoot, 'data', 'geojson-plan.js'),
+    path.join(srcRoot, 'data', 'kml-downloader.js'),
+    path.join(srcRoot, 'data', 'kml-parser.js'),
+    path.join(srcRoot, 'data', 'kml-transfer.js'),
+    path.join(srcRoot, 'data', 'kml-update-options.js'),
+    path.join(srcRoot, 'data', 'osm-city-downloader.js'),
+    path.join(srcRoot, 'data', 'osm-city-parser.js'),
+    path.join(srcRoot, 'data', 'osm-city-update-options.js'),
+    path.join(srcRoot, 'data', 'city-boundary-geojson-plan.js'),
+    path.join(srcRoot, 'data', 'population-plan.js'),
+    path.join(srcRoot, 'data', 'city-marker-icon.js'),
+    path.join(srcRoot, 'data', 'admin-security.js'),
+    path.join(srcRoot, 'data', 'line-types.js'),
+    path.join(srcRoot, 'data', 'mapbox-access-token.js'),
+    path.join(srcRoot, 'data', 'project-settings.js'),
+    path.join(srcRoot, 'data', 'public-download-name.js'),
+    path.join(srcRoot, 'data', 'public-download-service.js'),
+    path.join(srcRoot, 'data', 'report-config.js'),
+    path.join(srcRoot, 'data', 'single-file-zip.js'),
+    path.join(srcRoot, 'data', 'streaming-json.js'),
+  ]);
+
+  const removedReferences = [
+    'src/application/data-transfer/routes.js',
+    'src/application/data-transfer/runtime.js',
+    'src/db/data-import-service.js',
+    'src/db/kml-update-service.js',
+    'src/db/city-boundary-transfer-service.js',
+    'src/db/population-import-service.js',
+    'src/db/osm-city-update-service.js',
+    'src/db/project-settings-transfer-service.js',
+    'src/db/report-config-service.js',
+    'src/db/project-settings-repository.js',
+    'src/db/data-export-repository.js',
+    'src/db/admin-security-repository.js',
+    'src/db/osm-city-checkpoint-repository.js',
+    'src/db/osm-boundary-admin-repository.js',
+    'src/data/geojson-plan.js',
+    'src/data/kml-downloader.js',
+    'src/data/kml-parser.js',
+    'src/data/kml-transfer.js',
+    'src/data/kml-update-options.js',
+    'src/data/osm-city-downloader.js',
+    'src/data/osm-city-parser.js',
+    'src/data/osm-city-update-options.js',
+    'src/data/city-boundary-geojson-plan.js',
+    'src/data/population-plan.js',
+    'src/data/city-marker-icon.js',
+    'src/data/admin-security.js',
+    'src/data/line-types.js',
+    'src/data/mapbox-access-token.js',
+    'src/data/project-settings.js',
+    'src/data/public-download-name.js',
+    'src/data/public-download-service.js',
+    'src/data/report-config.js',
+    'src/data/single-file-zip.js',
+    'src/data/streaming-json.js',
+  ];
+
+  const sourceFiles = (
+    await Promise.all([
+      jsFiles(srcRoot),
+      jsFiles(
+        path.join(root, 'test'),
+      ),
+      jsFiles(
+        path.join(root, 'scripts'),
+      ),
+    ])
+  ).flat();
+
+  const architectureTest =
+    path.join(
+      root,
+      'test',
+      'domain-architecture.test.js',
+    );
+
+  for (const filePath of sourceFiles) {
+    const fileSource = await fs.readFile(
+      filePath,
+      'utf8',
+    );
+
+    for (const specifier of importSpecifiers(fileSource)) {
+      const resolved =
+        resolveRelativeImport(
+          filePath,
+          specifier,
+        );
+      assert.ok(
+        !resolved ||
+          !removedFacades.has(resolved),
+        `${path.relative(root, filePath)} must import the canonical module instead of a removed compatibility facade`,
+      );
+    }
+
+    if (filePath !== architectureTest) {
+      for (const reference of removedReferences) {
+        assert.equal(
+          fileSource.includes(reference),
+          false,
+          `${path.relative(root, filePath)} must not reference removed compatibility path ${reference}`,
+        );
+      }
+    }
+  }
+
+  for (const facade of removedFacades) {
+    await assert.rejects(
+      fs.access(facade),
+      (error) =>
+        error?.code === 'ENOENT',
+    );
+  }
+});
+
+
+test('public download application separates report CSV rendering from filesystem publication', async () => {
+  const service = await fs.readFile(
+    path.join(srcRoot, 'application', 'public-downloads', 'service.js'),
+    'utf8',
+  );
+  const csv = await fs.readFile(
+    path.join(srcRoot, 'shared', 'streaming', 'csv.js'),
+    'utf8',
+  );
+  const files = await fs.readFile(
+    path.join(srcRoot, 'shared', 'files', 'atomic-snapshot.js'),
+    'utf8',
+  );
+
+  assert.match(service, /publicDownloadFiles\(/u);
+  assert.match(service, /serializePublicCsv\(/u);
+  assert.match(service, /replaceFiles\(\{/u);
+  assert.doesNotMatch(service, /fs\.writeFile/u);
+  assert.doesNotMatch(service, /fs\.rename/u);
+  assert.doesNotMatch(service, /crypto\.randomUUID/u);
+
+  assert.match(csv, /serializePublicCsv/u);
+  assert.match(csv, /LEGACY_PUBLIC_CSV_COLUMNS/u);
+  assert.doesNotMatch(csv, /fs\./u);
+  assert.doesNotMatch(csv, /publicDownloadFiles/u);
+
+  assert.match(files, /replaceAtomicSnapshotFiles/u);
+  assert.match(files, /fs\.writeFile/u);
+  assert.match(files, /fs\.rename/u);
+  assert.match(files, /removeObsoleteFiles/u);
+  assert.doesNotMatch(files, /serializePublicCsv/u);
+});
+
+test('public download service has no legacy data compatibility facade', async () => {
+  const service = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'public-downloads',
+      'service.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    service,
+    /createPublicDownloadService/u,
+  );
+  assert.match(
+    service,
+    /serializePublicCsv/u,
+  );
+
+  await assert.rejects(
+    fs.access(
+      path.join(
+        srcRoot,
+        'data',
+        'public-download-service.js',
+      ),
+    ),
+    (error) =>
+      error?.code === 'ENOENT',
+  );
+});
+
+test('admin HTTP auth delegates session CSRF response permission and audit concerns', async () => {
+  const auth = await fs.readFile(
+    path.join(srcRoot, 'http', 'admin-auth.js'),
+    'utf8',
+  );
+  const authorizationPolicy = await fs.readFile(
+    path.join(
+      srcRoot,
+      'modules',
+      'security',
+      'authorization-policy.js',
+    ),
+    'utf8',
+  );
+  const audit = await fs.readFile(
+    path.join(srcRoot, 'http', 'admin-operation-audit.js'),
+    'utf8',
+  );
+  const session = await fs.readFile(
+    path.join(srcRoot, 'http', 'admin-session-http.js'),
+    'utf8',
+  );
+  const csrf = await fs.readFile(
+    path.join(srcRoot, 'http', 'admin-csrf.js'),
+    'utf8',
+  );
+  const authResponse = await fs.readFile(
+    path.join(srcRoot, 'http', 'admin-auth-response.js'),
+    'utf8',
+  );
+  const clientIp = await fs.readFile(
+    path.join(srcRoot, 'shared', 'http', 'client-ip.js'),
+    'utf8',
+  );
+
+  assert.match(auth, /adminHasPermission\(/u);
+  assert.match(auth, /requestClientIp\(/u);
+  assert.match(auth, /adminCsrfAllowed\(/u);
+  assert.match(auth, /respondAdminAuthenticationFailure\(/u);
+  assert.match(auth, /applyAdminSessionContext\(/u);
+  assert.match(auth, /authenticateUpgrade/u);
+  assert.match(
+    auth,
+    /from '\.\/admin-operation-audit\.js'/u,
+  );
+  assert.doesNotMatch(auth, /serviceLog\(/u);
+  assert.doesNotMatch(auth, /createAdminAuditChangeSet/u);
+  assert.doesNotMatch(auth, /SESSION_COOKIE/u);
+  assert.doesNotMatch(auth, /sec-fetch-site/u);
+  assert.doesNotMatch(auth, /WWW-Authenticate/u);
+  assert.doesNotMatch(auth, /canManageData/u);
+  assert.doesNotMatch(auth, /canEditOsm/u);
+  assert.doesNotMatch(
+    auth,
+    /adminSessionCookieName/u,
+  );
+  assert.doesNotMatch(
+    auth,
+    /export function adminClientIp/u,
+  );
+  assert.doesNotMatch(
+    auth,
+    /export\s*\{[\s\S]*?adminSessionToken[\s\S]*?\}\s*from '\.\/admin-session-http\.js'/u,
+  );
+
+  assert.match(session, /SESSION_COOKIE/u);
+  assert.match(session, /parseCookies/u);
+  assert.match(session, /adminSessionToken/u);
+  assert.match(session, /X-DTPStat-Admin-Session-Expires-At/u);
+  assert.doesNotMatch(session, /adminHasPermission/u);
+  assert.doesNotMatch(session, /sec-fetch-site/u);
+
+  assert.match(csrf, /adminCsrfAllowed/u);
+  assert.match(csrf, /sec-fetch-site/u);
+  assert.match(csrf, /same-origin/u);
+  assert.match(csrf, /new URL\(origin\)/u);
+  assert.doesNotMatch(csrf, /adminHasPermission/u);
+  assert.doesNotMatch(csrf, /WWW-Authenticate/u);
+
+  assert.match(authResponse, /respondAdminAuthenticationFailure/u);
+  assert.match(authResponse, /WWW-Authenticate/u);
+  assert.match(authResponse, /Retry-After/u);
+  assert.match(authResponse, /Too many failed login attempts/u);
+  assert.doesNotMatch(authResponse, /request\.get/u);
+  assert.doesNotMatch(authResponse, /adminHasPermission/u);
+
+  assert.match(
+    authorizationPolicy,
+    /permission === 'osm-editor'/u,
+  );
+  assert.match(
+    authorizationPolicy,
+    /user\.canManageData/u,
+  );
+  assert.match(
+    authorizationPolicy,
+    /user\.canManageSecurity/u,
+  );
+  assert.doesNotMatch(
+    authorizationPolicy,
+    /request\.get/u,
+  );
+  assert.doesNotMatch(
+    authorizationPolicy,
+    /response\./u,
+  );
+
+  assert.match(audit, /createAdminAuditChangeSet/u);
+  assert.match(audit, /sanitizeAdminAuditData/u);
+  assert.match(audit, /serviceLog\(/u);
+  assert.match(audit, /securityService[\s\S]*appendAudit/u);
+  assert.doesNotMatch(audit, /authenticateRequest/u);
+  assert.doesNotMatch(audit, /adminHasPermission/u);
+
+  assert.match(clientIp, /request\.ip/u);
+  assert.match(clientIp, /remoteAddress/u);
+  assert.doesNotMatch(clientIp, /securityService/u);
+});
+
+test('security routes use canonical session and client IP HTTP helpers', async () => {
+  const profile = await fs.readFile(
+    path.join(
+      srcRoot,
+      'routes',
+      'security',
+      'profile-routes.js',
+    ),
+    'utf8',
+  );
+  const controls = await fs.readFile(
+    path.join(
+      srcRoot,
+      'routes',
+      'security',
+      'control-routes.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    profile,
+    /shared\/http\/client-ip\.js/u,
+  );
+  assert.match(
+    profile,
+    /http\/admin-session-http\.js/u,
+  );
+  assert.match(
+    controls,
+    /shared\/http\/client-ip\.js/u,
+  );
+
+  assert.doesNotMatch(
+    profile,
+    /http\/admin-auth\.js/u,
+  );
+  assert.doesNotMatch(
+    controls,
+    /http\/admin-auth\.js/u,
+  );
+
+  assert.match(
+    profile,
+    /requestClientIp\(request\)/u,
+  );
+  assert.match(
+    profile,
+    /adminSessionToken\(request\)/u,
+  );
+  assert.match(
+    controls,
+    /requestClientIp\(request\)/u,
+  );
+});
+
+
+test('admin mutating routes import operation audit from its dedicated HTTP module', async () => {
+  const paths = [
+    'line-types-api.js',
+    'report-config-api.js',
+    'project/settings-routes.js',
+    'project/download-name-routes.js',
+    'project/city-marker-routes.js',
+    'project/transfer-export-routes.js',
+    'project/transfer-import-routes.js',
+    'osm/settings-routes.js',
+    'osm/boundary-routes.js',
+    'kml/export-routes.js',
+    'security/profile-routes.js',
+    'security/user-routes.js',
+    'security/control-routes.js',
+  ];
+
+  for (const file of paths) {
+    const source = await fs.readFile(
+      path.join(srcRoot, 'routes', file),
+      'utf8',
+    );
+
+    assert.match(
+      source,
+      /admin-operation-audit\.js/u,
+      file,
+    );
+
+    const auditImportBlock =
+      source.match(
+        /import \{[\s\S]*?createAdminOperationAudit[\s\S]*?\} from '[^']+';/u,
+      )?.[0] ?? '';
+
+    assert.match(
+      auditImportBlock,
+      /admin-operation-audit\.js/u,
+      file,
+    );
+  }
+});
+
+
+test('admin security HTTP routes are split by profile users controls and audit', async () => {
+  const composition = await fs.readFile(
+    path.join(srcRoot, 'routes', 'admin-security-api.js'),
+    'utf8',
+  );
+  const profile = await fs.readFile(
+    path.join(srcRoot, 'routes', 'security', 'profile-routes.js'),
+    'utf8',
+  );
+  const users = await fs.readFile(
+    path.join(srcRoot, 'routes', 'security', 'user-routes.js'),
+    'utf8',
+  );
+  const controls = await fs.readFile(
+    path.join(srcRoot, 'routes', 'security', 'control-routes.js'),
+    'utf8',
+  );
+  const audit = await fs.readFile(
+    path.join(srcRoot, 'routes', 'security', 'audit-routes.js'),
+    'utf8',
+  );
+
+  assert.match(composition, /registerAdminProfileRoutes\(/u);
+  assert.match(composition, /registerAdminUserRoutes\(/u);
+  assert.match(composition, /registerAdminSecurityControlRoutes\(/u);
+  assert.match(composition, /registerAdminAuditRoutes\(/u);
+  assert.doesNotMatch(composition, /router\.post\(\s*'\/admin\/login'/u);
+  assert.doesNotMatch(composition, /\/admin\/security\/audit\/export\.csv/u);
+
+  assert.match(profile, /'\/admin\/login'/u);
+  assert.match(profile, /'\/admin\/profile\/password'/u);
+  assert.match(profile, /'\/admin\/profile\/sessions\/:sessionId'/u);
+  assert.doesNotMatch(profile, /'\/admin\/security\/settings'/u);
+  assert.doesNotMatch(profile, /'\/admin\/security\/audit'/u);
+
+  assert.match(users, /'\/admin\/security\/users'/u);
+  assert.match(users, /temporary-password/u);
+  assert.match(users, /requireUsersOrAudit/u);
+  assert.doesNotMatch(users, /'\/admin\/security\/settings'/u);
+  assert.doesNotMatch(users, /audit\/export\.csv/u);
+
+  assert.match(controls, /'\/admin\/security\/settings'/u);
+  assert.match(controls, /'\/admin\/security\/ip-blocks'/u);
+  assert.doesNotMatch(controls, /temporary-password/u);
+  assert.doesNotMatch(controls, /audit\/export\.csv/u);
+
+  assert.match(audit, /'\/admin\/security\/audit\/facets'/u);
+  assert.match(audit, /'\/admin\/security\/audit\/export\.csv'/u);
+  assert.match(audit, /parseAuditFilters/u);
+  assert.doesNotMatch(audit, /createIpBlock/u);
+  assert.doesNotMatch(audit, /changeOwnPassword/u);
+});
+
+
+test('project settings HTTP routes separate public reads settings downloads and marker upload', async () => {
+  const composition = await fs.readFile(
+    path.join(srcRoot, 'routes', 'project-settings-api.js'),
+    'utf8',
+  );
+  const publicRoutes = await fs.readFile(
+    path.join(srcRoot, 'routes', 'project', 'public-routes.js'),
+    'utf8',
+  );
+  const settingsRoutes = await fs.readFile(
+    path.join(srcRoot, 'routes', 'project', 'settings-routes.js'),
+    'utf8',
+  );
+  const downloadRoutes = await fs.readFile(
+    path.join(srcRoot, 'routes', 'project', 'download-name-routes.js'),
+    'utf8',
+  );
+  const markerRoutes = await fs.readFile(
+    path.join(srcRoot, 'routes', 'project', 'city-marker-routes.js'),
+    'utf8',
+  );
+
+  assert.match(composition, /registerProjectPublicRoutes\(/u);
+  assert.match(composition, /registerProjectSettingsAdminRoutes\(/u);
+  assert.match(composition, /registerProjectDownloadNameRoutes\(/u);
+  assert.match(composition, /registerProjectCityMarkerRoutes\(/u);
+  assert.doesNotMatch(composition, /router\.get\(\s*'\/project'/u);
+  assert.doesNotMatch(composition, /recordAdminOperationChanges/u);
+
+  assert.match(publicRoutes, /'\/config'/u);
+  assert.match(publicRoutes, /'\/project'/u);
+  assert.match(publicRoutes, /'\/city-marker-icon'/u);
+  assert.doesNotMatch(publicRoutes, /requireInterface/u);
+  assert.doesNotMatch(publicRoutes, /createAdminOperationAudit/u);
+
+  assert.match(settingsRoutes, /'\/admin\/project-settings'/u);
+  assert.match(settingsRoutes, /PROJECT_CONTENT_TAGS/u);
+  assert.match(settingsRoutes, /afterSettingsSave/u);
+  assert.doesNotMatch(settingsRoutes, /savePublicDownloadName/u);
+  assert.doesNotMatch(settingsRoutes, /validateCityMarkerIcon/u);
+
+  assert.match(downloadRoutes, /public-download-name/u);
+  assert.match(downloadRoutes, /savePublicDownloadName/u);
+  assert.match(downloadRoutes, /afterPublicDownloadNameSave/u);
+  assert.doesNotMatch(downloadRoutes, /validateCityMarkerIcon/u);
+
+  assert.match(markerRoutes, /city-marker-icon/u);
+  assert.match(markerRoutes, /validateCityMarkerIcon/u);
+  assert.match(markerRoutes, /clearCityMarkerIcon/u);
+  assert.doesNotMatch(markerRoutes, /savePublicDownloadName/u);
+});
+
+
+test('project settings transfer HTTP separates export and import orchestration', async () => {
+  const composition = await fs.readFile(
+    path.join(srcRoot, 'routes', 'project-settings-transfer-api.js'),
+    'utf8',
+  );
+  const exportRoutes = await fs.readFile(
+    path.join(
+      srcRoot,
+      'routes',
+      'project',
+      'transfer-export-routes.js',
+    ),
+    'utf8',
+  );
+  const importRoutes = await fs.readFile(
+    path.join(
+      srcRoot,
+      'routes',
+      'project',
+      'transfer-import-routes.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    composition,
+    /registerProjectSettingsTransferExportRoutes\(/u,
+  );
+  assert.match(
+    composition,
+    /registerProjectSettingsTransferImportRoutes\(/u,
+  );
+  assert.doesNotMatch(
+    composition,
+    /router\.(?:get|post)\(/u,
+  );
+  assert.doesNotMatch(
+    composition,
+    /express\.json/u,
+  );
+
+  assert.match(
+    exportRoutes,
+    /'\/admin\/settings\/export'/u,
+  );
+  assert.match(
+    exportRoutes,
+    /settings\.export/u,
+  );
+  assert.doesNotMatch(
+    exportRoutes,
+    /importSettings/u,
+  );
+
+  assert.match(
+    importRoutes,
+    /'\/admin\/settings\/import'/u,
+  );
+  assert.match(
+    importRoutes,
+    /settings\.import/u,
+  );
+  assert.match(
+    importRoutes,
+    /recordAdminOperationChanges\(/u,
+  );
+  assert.match(
+    importRoutes,
+    /recordAdminOperationDetails\(/u,
+  );
+  assert.match(
+    importRoutes,
+    /afterImport/u,
+  );
+  assert.match(
+    importRoutes,
+    /application\/data-transfer\/project-settings-service\.js/u,
+  );
+  assert.doesNotMatch(
+    importRoutes,
+    /db\/project-settings-transfer-service\.js/u,
+  );
+  assert.doesNotMatch(
+    importRoutes,
+    /\.\.\/\.\.\/data\//u,
+  );
+  assert.doesNotMatch(
+    importRoutes,
+    /Content-Disposition/u,
+  );
+});
+
+
+test('OSM admin HTTP separates import settings policy from boundary editing routes', async () => {
+  const composition = await fs.readFile(
+    path.join(srcRoot, 'routes', 'osm-boundaries-api.js'),
+    'utf8',
+  );
+  const settingsRoutes = await fs.readFile(
+    path.join(srcRoot, 'routes', 'osm', 'settings-routes.js'),
+    'utf8',
+  );
+  const boundaryRoutes = await fs.readFile(
+    path.join(srcRoot, 'routes', 'osm', 'boundary-routes.js'),
+    'utf8',
+  );
+  const settingsPolicy = await fs.readFile(
+    path.join(srcRoot, 'modules', 'osm', 'import-settings-policy.js'),
+    'utf8',
+  );
+
+  assert.match(composition, /registerOsmSettingsRoutes\(/u);
+  assert.match(composition, /registerOsmBoundaryRoutes\(/u);
+  assert.doesNotMatch(composition, /normalizeOsmUpdateUrl/u);
+  assert.doesNotMatch(composition, /recordAdminOperationChanges/u);
+  assert.doesNotMatch(composition, /router\.patch\(/u);
+
+  assert.match(settingsRoutes, /'\/admin\/osm-settings'/u);
+  assert.match(settingsRoutes, /normalizeOsmImportSettingsPayload\(/u);
+  assert.match(settingsRoutes, /requireOsmEditor/u);
+  assert.doesNotMatch(settingsRoutes, /setSubtreeActive/u);
+  assert.doesNotMatch(settingsRoutes, /getGeometry/u);
+
+  assert.match(boundaryRoutes, /'\/admin\/osm-boundaries'/u);
+  assert.match(boundaryRoutes, /setSubtreeActive/u);
+  assert.match(boundaryRoutes, /getGeometry/u);
+  assert.match(boundaryRoutes, /afterBoundaryChange/u);
+  assert.doesNotMatch(boundaryRoutes, /normalizeOsmUpdateUrl/u);
+  assert.doesNotMatch(boundaryRoutes, /allowedURLs/u);
+
+  assert.match(settingsPolicy, /normalizeOsmUpdateUrl\(/u);
+  assert.match(settingsPolicy, /maxResponseBytes/u);
+  assert.match(settingsPolicy, /retryBaseDelayMs/u);
+  assert.match(settingsPolicy, /At least one OSM object class must be enabled/u);
+  assert.doesNotMatch(settingsPolicy, /router\./u);
+  assert.doesNotMatch(settingsPolicy, /response\./u);
+});
+
+
+test('portable KML HTTP separates export from task-backed import orchestration', async () => {
+  const composition = await fs.readFile(
+    path.join(srcRoot, 'routes', 'kml-transfer-api.js'),
+    'utf8',
+  );
+  const exportRoutes = await fs.readFile(
+    path.join(srcRoot, 'routes', 'kml', 'export-routes.js'),
+    'utf8',
+  );
+  const importRoutes = await fs.readFile(
+    path.join(srcRoot, 'routes', 'kml', 'import-routes.js'),
+    'utf8',
+  );
+  const taskHttp = await fs.readFile(
+    path.join(srcRoot, 'application', 'admin-tasks', 'http-runtime.js'),
+    'utf8',
+  );
+
+  assert.match(composition, /createAdminTaskHttpRuntime\(/u);
+  assert.match(composition, /registerKmlExportRoutes\(/u);
+  assert.match(composition, /registerKmlImportRoutes\(/u);
+  assert.doesNotMatch(composition, /AdminTaskAlreadyRunningError/u);
+  assert.doesNotMatch(composition, /Another data-management task/u);
+  assert.doesNotMatch(composition, /router\.(?:get|post)\(/u);
+
+  assert.match(exportRoutes, /serializeLinesKml\(/u);
+  assert.match(exportRoutes, /data\.export\.lines-kml/u);
+  assert.doesNotMatch(exportRoutes, /startAdminTask/u);
+  assert.doesNotMatch(exportRoutes, /parseLinesKml/u);
+
+  assert.match(importRoutes, /parseLinesKml\(/u);
+  assert.match(importRoutes, /rejectWhileAdminTaskActive/u);
+  assert.match(importRoutes, /startAdminTask\(/u);
+  assert.match(importRoutes, /adminAuditPayloadFingerprint\(/u);
+  assert.doesNotMatch(importRoutes, /AdminTaskAlreadyRunningError/u);
+  assert.doesNotMatch(importRoutes, /Another data-management task/u);
+
+  assert.match(
+    taskHttp,
+    /\.\.\/\.\.\/shared\/tasks\/admin-task-manager\.js/u,
+  );
+  assert.match(
+    taskHttp,
+    /\.\.\/\.\.\/shared\/http\/client-ip\.js/u,
+  );
+  assert.match(
+    taskHttp,
+    /\.\.\/\.\.\/http\/admin-operation-audit\.js/u,
+  );
+  assert.doesNotMatch(
+    taskHttp,
+    /\.\.\/\.\.\/data\/admin-task-manager\.js/u,
+  );
+  assert.doesNotMatch(
+    taskHttp,
+    /from '\.\.\/\.\.\/http\/admin-auth\.js'/u,
+  );
+});
+
+
+test('portable data transfer uses focused runtimes and route families without compatibility facades', async () => {
+  const legacyFacades = [
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'runtime.js',
+    ),
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'routes.js',
+    ),
+  ];
+  const exportRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'export-http-runtime.js',
+    ),
+    'utf8',
+  );
+  const importRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'import-runtime.js',
+    ),
+    'utf8',
+  );
+  const exportRoutes = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'export-routes.js',
+    ),
+    'utf8',
+  );
+  const importRoutes = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'import-routes.js',
+    ),
+    'utf8',
+  );
+  const populationRoutes = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'population-routes.js',
+    ),
+    'utf8',
+  );
+
+  for (const legacyFacade of legacyFacades) {
+    await assert.rejects(
+      fs.access(legacyFacade),
+      (error) =>
+        error?.code === 'ENOENT',
+    );
+  }
+
+  assert.match(
+    exportRuntime,
+    /createSingleFileZipStream/u,
+  );
+  assert.match(
+    exportRuntime,
+    /pipeline\(/u,
+  );
+  assert.doesNotMatch(
+    exportRuntime,
+    /receiveStreamUpload/u,
+  );
+
+  assert.match(
+    importRuntime,
+    /receiveStreamUpload/u,
+  );
+  assert.match(
+    importRuntime,
+    /openUploadedJson/u,
+  );
+  assert.match(
+    importRuntime,
+    /removeStreamUpload/u,
+  );
+  assert.doesNotMatch(
+    importRuntime,
+    /createSingleFileZipStream/u,
+  );
+
+  assert.match(
+    exportRoutes,
+    /router\.get\(/u,
+  );
+  assert.doesNotMatch(
+    exportRoutes,
+    /startAdminTask/u,
+  );
+
+  assert.match(
+    importRoutes,
+    /geojson-import/u,
+  );
+  assert.match(
+    importRoutes,
+    /city-geojson-import/u,
+  );
+  assert.doesNotMatch(
+    importRoutes,
+    /population-update/u,
+  );
+
+  assert.match(
+    populationRoutes,
+    /population-update/u,
+  );
+  assert.doesNotMatch(
+    populationRoutes,
+    /city-geojson-import/u,
+  );
+});
+
+
+test('stream upload HTTP adapter delegates transport policy and spool persistence', async () => {
+  const adapter = await fs.readFile(
+    path.join(srcRoot, 'http', 'stream-upload.js'),
+    'utf8',
+  );
+  const policy = await fs.readFile(
+    path.join(srcRoot, 'shared', 'http', 'upload-policy.js'),
+    'utf8',
+  );
+  const staging = await fs.readFile(
+    path.join(srcRoot, 'shared', 'files', 'upload-staging.js'),
+    'utf8',
+  );
+  const importRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'import-runtime.js',
+    ),
+    'utf8',
+  );
+  const exportRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'data-transfer',
+      'export-http-runtime.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(adapter, /validateStreamUploadTransport\(/u);
+  assert.match(adapter, /stageUploadStream\(/u);
+  assert.match(adapter, /openSingleFileZip\(/u);
+  assert.match(adapter, /createGunzip\(/u);
+  assert.doesNotMatch(adapter, /crypto\.createHash/u);
+  assert.doesNotMatch(adapter, /randomUUID/u);
+  assert.doesNotMatch(adapter, /createWriteStream/u);
+  assert.doesNotMatch(adapter, /fsp\.readdir/u);
+
+  assert.match(policy, /validateStreamUploadTransport/u);
+  assert.match(policy, /supportedEncodings/u);
+  assert.match(policy, /application\/zip/u);
+  assert.doesNotMatch(policy, /node:fs/u);
+  assert.doesNotMatch(policy, /createWriteStream/u);
+
+  assert.match(staging, /stageUploadStream/u);
+  assert.match(staging, /crypto\.createHash\('sha256'\)/u);
+  assert.match(staging, /createWriteStream/u);
+  assert.match(staging, /cleanupStagedUploads/u);
+  assert.doesNotMatch(staging, /createGunzip/u);
+  assert.doesNotMatch(staging, /openSingleFileZip/u);
+
+  assert.match(
+    exportRuntime,
+    /\.\.\/\.\.\/shared\/streaming\/single-file-zip\.js/u,
+  );
+  assert.match(
+    exportRuntime,
+    /createSingleFileZipStream/u,
+  );
+  assert.doesNotMatch(
+    exportRuntime,
+    /openUploadedJson/u,
+  );
+
+  assert.match(
+    importRuntime,
+    /\.\.\/\.\.\/http\/stream-upload\.js/u,
+  );
+  assert.match(
+    importRuntime,
+    /openUploadedJson/u,
+  );
+  assert.doesNotMatch(
+    importRuntime,
+    /createSingleFileZipStream/u,
+  );
+  assert.doesNotMatch(
+    importRuntime,
+    /\.\.\/\.\.\/data\/single-file-zip\.js/u,
+  );
+});
+
+
+test('application composition delegates test-only defaults to the testing module', async () => {
+  const app = await fs.readFile(
+    path.join(srcRoot, 'app.js'),
+    'utf8',
+  );
+  const defaults = await fs.readFile(
+    path.join(srcRoot, 'testing', 'app-defaults.js'),
+    'utf8',
+  );
+
+  assert.match(
+    app,
+    /createTestAppDefaults\(/u,
+  );
+  assert.match(
+    app,
+    /config\.environment === 'test'/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /TEST_PROJECT_SETTINGS/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /function testSecurity/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /createBasicAuth\(/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /Temp-Password-1234/u,
+  );
+
+  assert.match(
+    defaults,
+    /TEST_PROJECT_SETTINGS/u,
+  );
+  assert.match(
+    defaults,
+    /createBasicAuth\(/u,
+  );
+  assert.match(
+    defaults,
+    /createTestAppDefaults/u,
+  );
+  assert.match(
+    defaults,
+    /environment|importApi/u,
+  );
+  assert.doesNotMatch(
+    defaults,
+    /express\(/u,
+  );
+  assert.doesNotMatch(
+    defaults,
+    /createApp\(/u,
+  );
+});
+
+
+test('application composition delegates CSP compression and static asset middleware', async () => {
+  const app = await fs.readFile(
+    path.join(srcRoot, 'app.js'),
+    'utf8',
+  );
+  const middleware = await fs.readFile(
+    path.join(srcRoot, 'http', 'app-middleware.js'),
+    'utf8',
+  );
+
+  assert.match(
+    app,
+    /installAppHttpMiddleware\(/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /helmet\(/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /compression\(/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /YANDEX_METRIKA_HTTPS_ORIGINS/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /CITY_MARKER_PNG/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /express\.static\(/u,
+  );
+
+  assert.match(
+    middleware,
+    /helmet\(/u,
+  );
+  assert.match(
+    middleware,
+    /compression\(\)/u,
+  );
+  assert.match(
+    middleware,
+    /YANDEX_METRIKA_HTTPS_ORIGINS/u,
+  );
+  assert.match(
+    middleware,
+    /YANDEX_METRIKA_WSS_ORIGINS/u,
+  );
+  assert.match(
+    middleware,
+    /YANDEX_METRIKA_FRAME_ANCESTORS/u,
+  );
+  assert.match(
+    middleware,
+    /express\.static\(/u,
+  );
+  assert.match(
+    middleware,
+    /requireAdminEntry/u,
+  );
+  assert.match(
+    middleware,
+    /\/images\/city-marker\.png/u,
+  );
+  assert.doesNotMatch(
+    middleware,
+    /createApiRouter/u,
+  );
+  assert.doesNotMatch(
+    middleware,
+    /createProjectSettingsRouter/u,
+  );
+});
+
+
+test('server composition root delegates startup runtime and derived-state orchestration', async () => {
+  const server = await fs.readFile(
+    path.join(srcRoot, 'server.js'),
+    'utf8',
+  );
+  const bootstrap = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'server-bootstrap.js',
+    ),
+    'utf8',
+  );
+  const runtime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'server-runtime.js',
+    ),
+    'utf8',
+  );
+  const projectRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'project-runtime.js',
+    ),
+    'utf8',
+  );
+  const securityRuntime = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'security-runtime.js',
+    ),
+    'utf8',
+  );
+  const derived = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'derived-state-refresh.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    server,
+    /createServerRuntime\(/u,
+  );
+  assert.match(
+    server,
+    /prepareServerDatabase\(/u,
+  );
+  assert.match(
+    server,
+    /bootstrapServerApplication\(\s*bootstrapDependencies/u,
+  );
+  assert.match(
+    server,
+    /\.\.\.appDependencies/u,
+  );
+  assert.match(
+    server,
+    /createAdminRuntime\(/u,
+  );
+  assert.match(
+    server,
+    /\.\.\.adminRuntimeDependencies/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /runtime\.(?:adminTaskSuccessRepository|securityService|adminAuth|derivedState)/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /createAdminTaskManager\(/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /createAdminTaskDerivedRefresh\(/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /createAdminWebSocketGateway\(/u,
+  );
+
+  assert.doesNotMatch(
+    server,
+    /node:path/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /modules\/security\/service\.js/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /createDerivedStateRefresh\(/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /from '\.\/db\/(?!pool\.js)[^']+\.js'/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /http\/admin-auth\.js/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /http\/stream-upload\.js/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /shared\/files\/upload-staging\.js/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /migrateDatabase/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /verifyDatabaseMigrationState/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /cleanupStagedUploads/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /database\.migrations\.apply/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /portable-import-spool\.cleanup/u,
+  );
+
+  assert.match(
+    runtime,
+    /db\/cities-repository\.js/u,
+  );
+  assert.match(
+    runtime,
+    /from '\.\/project-runtime\.js'/u,
+  );
+  assert.match(
+    runtime,
+    /from '\.\/data-transfer\/export-runtime\.js'/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /db\/data-export-repository\.js/u,
+  );
+  assert.match(
+    runtime,
+    /from '\.\/project-report-runtime\.js'/u,
+  );
+  assert.match(
+    runtime,
+    /from '\.\/osm-update-runtime\.js'/u,
+  );
+  assert.match(
+    runtime,
+    /from '\.\/osm-boundary-admin-runtime\.js'/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /db\/osm-boundary-admin-repository\.js/u,
+  );
+  assert.match(
+    runtime,
+    /from '\.\/osm-checkpoint-runtime\.js'/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /db\/osm-city-checkpoint-repository\.js/u,
+  );
+  assert.match(
+    runtime,
+    /from '\.\/security-runtime\.js'/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /modules\/security\/service\.js/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /http\/admin-auth\.js/u,
+  );
+  assert.match(
+    securityRuntime,
+    /modules\/security\/service\.js/u,
+  );
+  assert.match(
+    securityRuntime,
+    /http\/admin-auth\.js/u,
+  );
+  assert.match(
+    runtime,
+    /createDerivedStateRefresh\(/u,
+  );
+  assert.match(
+    runtime,
+    /bootstrapDependencies/u,
+  );
+  assert.match(
+    runtime,
+    /appDependencies/u,
+  );
+  assert.match(
+    runtime,
+    /adminRuntimeDependencies/u,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /public-downloads/u,
+  );
+  assert.match(
+    projectRuntime,
+    /\.\/public-downloads\/service\.js/u,
+  );
+  assert.match(
+    projectRuntime,
+    /createPublicDownloadRepository/u,
+  );
+
+  assert.match(
+    bootstrap,
+    /db\/migration-runner\.js/u,
+  );
+  assert.match(
+    bootstrap,
+    /db\/migration-state\.js/u,
+  );
+  assert.match(
+    bootstrap,
+    /shared\/files\/upload-staging\.js/u,
+  );
+  assert.match(
+    bootstrap,
+    /database\.migrations\.apply/u,
+  );
+  assert.match(
+    bootstrap,
+    /portable-import-spool\.cleanup/u,
+  );
+  assert.match(
+    bootstrap,
+    /derivedState\.refreshAll/u,
+  );
+
+  assert.match(
+    derived,
+    /city-report\.refresh/u,
+  );
+  assert.match(
+    derived,
+    /public-downloads\.refresh/u,
+  );
+  assert.match(
+    derived,
+    /DERIVED_REFRESH_TASK_TYPES/u,
+  );
+  assert.doesNotMatch(
+    derived,
+    /createApp\(/u,
+  );
+});
+
+
+test('admin runtime owns task persistence derived refresh and websocket wiring', async () => {
+  const server = await fs.readFile(
+    path.join(srcRoot, 'server.js'),
+    'utf8',
+  );
+  const adminRuntime =
+    await fs.readFile(
+      path.join(
+        srcRoot,
+        'application',
+        'admin-runtime.js',
+      ),
+      'utf8',
+    );
+
+  assert.match(
+    server,
+    /createAdminRuntime\(/u,
+  );
+  assert.match(
+    server,
+    /adminRuntime\.adminTasks/u,
+  );
+  assert.match(
+    server,
+    /adminRuntime\.adminWebSocket/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /shared\/tasks\/admin-task-manager\.js/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /http\/admin-websocket\.js/u,
+  );
+
+  assert.match(
+    adminRuntime,
+    /shared\/tasks\/admin-task-manager\.js/u,
+  );
+  assert.match(
+    adminRuntime,
+    /http\/admin-websocket\.js/u,
+  );
+  assert.match(
+    adminRuntime,
+    /createAdminTaskDerivedRefresh\(/u,
+  );
+  assert.match(
+    adminRuntime,
+    /adminTaskSuccessRepository[\s\S]*\.record\(update\)/u,
+  );
+  assert.match(
+    adminRuntime,
+    /securityService[\s\S]*\.appendAudit\(entry\)/u,
+  );
+});
+
+
+test('server composition root delegates process shutdown lifecycle', async () => {
+  const server = await fs.readFile(
+    path.join(srcRoot, 'server.js'),
+    'utf8',
+  );
+  const lifecycle = await fs.readFile(
+    path.join(
+      srcRoot,
+      'application',
+      'server-lifecycle.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    server,
+    /createServerShutdown\(/u,
+  );
+  assert.match(
+    server,
+    /installProcessShutdownHandlers\(/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /process\.once\(/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /Promise\.allSettled\(/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /shutdown:duplicate/u,
+  );
+  assert.doesNotMatch(
+    server,
+    /database\.pool\.close/u,
+  );
+
+  assert.match(
+    lifecycle,
+    /processRuntime\.once\(/u,
+  );
+  assert.match(
+    lifecycle,
+    /Promise\.allSettled\(/u,
+  );
+  assert.match(
+    lifecycle,
+    /shutdown:duplicate/u,
+  );
+  assert.match(
+    lifecycle,
+    /database\.pool\.close/u,
+  );
+  assert.match(
+    lifecycle,
+    /admin-websocket\.close/u,
+  );
+});
+
+
+test('app composition root delegates API public-site and terminal HTTP assembly', async () => {
+  const app = await fs.readFile(
+    path.join(srcRoot, 'app.js'),
+    'utf8',
+  );
+  const apiComposition = await fs.readFile(
+    path.join(srcRoot, 'application', 'http', 'api-composition.js'),
+    'utf8',
+  );
+  const publicSite = await fs.readFile(
+    path.join(srcRoot, 'http', 'public-site.js'),
+    'utf8',
+  );
+  const terminal = await fs.readFile(
+    path.join(srcRoot, 'http', 'app-terminal-handlers.js'),
+    'utf8',
+  );
+
+  assert.match(app, /installAppHttpMiddleware\(/u);
+  assert.match(app, /installApplicationApiRoutes\(/u);
+  assert.match(app, /installPublicSiteRoutes\(/u);
+  assert.match(app, /installAppTerminalHandlers\(/u);
+  assert.doesNotMatch(app, /createAdminSecurityRouter/u);
+  assert.doesNotMatch(app, /createProjectSettingsRouter/u);
+  assert.doesNotMatch(app, /createApiRouter/u);
+  assert.doesNotMatch(app, /projectManifest/u);
+  assert.doesNotMatch(app, /renderProjectPage/u);
+  assert.doesNotMatch(app, /API endpoint not found/u);
+  assert.doesNotMatch(app, /Service temporarily unavailable/u);
+
+  assert.match(apiComposition, /createAdminSecurityRouter\(/u);
+  assert.match(apiComposition, /createProjectSettingsTransferRouter\(/u);
+  assert.match(apiComposition, /createLineTypesRouter\(/u);
+  assert.match(apiComposition, /createProjectSettingsRouter\(/u);
+  assert.match(apiComposition, /createOsmBoundariesRouter\(/u);
+  assert.match(apiComposition, /createReportConfigRouter\(/u);
+  assert.match(apiComposition, /createKmlTransferRouter\(/u);
+  assert.match(apiComposition, /createApiRouter\(/u);
+  assert.doesNotMatch(apiComposition, /renderProjectPage/u);
+
+  assert.match(publicSite, /publicDownloadFiles\(/u);
+  assert.match(publicSite, /projectManifest\(/u);
+  assert.match(publicSite, /renderProjectPage\(/u);
+  assert.match(publicSite, /site\.webmanifest/u);
+  assert.doesNotMatch(publicSite, /createApiRouter/u);
+
+  assert.match(terminal, /API endpoint not found/u);
+  assert.match(terminal, /Request body is too large/u);
+  assert.match(terminal, /Request body is not valid JSON/u);
+  assert.match(terminal, /Service temporarily unavailable/u);
+  assert.doesNotMatch(terminal, /projectManifest/u);
+  assert.doesNotMatch(terminal, /createApiRouter/u);
+});
+
+
+test('PostgreSQL integration harness uses the configured database and an isolated temporary schema', async () => {
+  const script = await fs.readFile(
+    path.join(
+      root,
+      'scripts',
+      'postgres-integration.js',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    script,
+    /loadAdminDatabaseConnection/u,
+  );
+  assert.match(
+    script,
+    /process\.env[\s\S]*DATABASE_NAME/u,
+  );
+  assert.match(
+    script,
+    /dtpstat_it_/u,
+  );
+  assert.match(
+    script,
+    /applyMigrations\(/u,
+  );
+  assert.match(
+    script,
+    /PostGIS_Version\(\)/u,
+  );
+  assert.match(
+    script,
+    /DROP SCHEMA IF EXISTS/u,
+  );
+  assert.match(
+    script,
+    /createProjectSettingsTransferRepository\(/u,
+  );
+  assert.match(
+    script,
+    /createDataExportStorageRepository\(/u,
+  );
+
+  assert.doesNotMatch(
+    script,
+    /CREATE DATABASE/u,
+  );
+  assert.doesNotMatch(
+    script,
+    /DROP DATABASE/u,
+  );
+  assert.doesNotMatch(
+    script,
+    /CREATE EXTENSION/u,
+  );
+  assert.doesNotMatch(
+    script,
+    /loadDatabaseSchema/u,
+  );
+  assert.doesNotMatch(
+    script,
+    /process\.env\.DATABASE_SCHEMA/u,
+  );
+});
+

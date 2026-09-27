@@ -60,6 +60,25 @@ IMPORT_API_PASSWORD=replace-with-a-long-random-password
 
 `MAPBOX_ACCESS_TOKEN` начиная с `V019` используется только для одноразового bootstrap DB-настройки. После инициализации token меняется через админку/перенос настроек.
 
+## Архитектура разработки
+
+Архитектурные границы проекта являются частью контракта разработки, а не
+рекомендацией. Каноническое описание слоёв, правил зависимостей и размещения
+нового кода находится в [docs/architecture.md](docs/architecture.md).
+Инструкции для coding agents находятся в корневом [AGENTS.md](AGENTS.md).
+
+Перед отправкой изменений можно отдельно проверить архитектурные ограничения:
+
+```bash
+npm run test:architecture
+```
+
+Полная обязательная проверка остаётся:
+
+```bash
+npm run check
+```
+
 ## Экземпляры
 
 Рекомендуемая модель:
@@ -90,7 +109,7 @@ HTTP_PORT=3002
 
 ## Миграции
 
-Текущая последовательность: `V001…V042`.
+Текущая последовательность: `V001…V033`.
 
 Последние изменения:
 
@@ -114,16 +133,8 @@ HTTP_PORT=3002
 | `V033` | вертикальное key/value-хранилище `REPORT_CONFIG` вместо растущей singleton-строки |
 | `V034` | настраиваемая политика паролей администраторов |
 | `V035` | отдельное право редактора OSM-дерева |
-| `V036` | отдельное право редактора геометрий |
-| `V037` | универсальная модель `CITY_GEOMETRIES` для Point/Line/Polygon |
-| `V038` | staging/conflict model для geometry import |
-| `V039` | синхронизация городов редактора геометрий |
-| `V040` | invariants и derived normalization geometry model |
-| `V041` | identity/pending guards для city/boundary/geometry |
-| `V042` | effective geometry ownership для public/metrics |
-| `V043` | финальные ограничения geometry model |
 
-Следующая migration: **V044+**. Уже опубликованные migrations не редактируются задним числом.
+Следующая migration: **V036+**. Уже опубликованные migrations не редактируются задним числом.
 
 История хранится в:
 
@@ -385,7 +396,30 @@ npm run admin:set-superuser
 npm run lint
 npm test
 npm run check
+npm run test:integration
 ```
+
+### PostgreSQL/PostGIS integration regression
+
+Обычный `npm test` не подключается к PostgreSQL. Для проверки реальных migrations,
+PostGIS SQL, project-settings transfer repository/service, временного line-type
+staging и spatial/cursor export используется отдельный opt-in harness:
+
+```bash
+npm run test:integration
+```
+
+Harness подключается к существующей БД, указанной в `.env`: `DATABASE_HOST`,
+`DATABASE_PORT`, `DATABASE_NAME` и SSL-настройки берутся из database config,
+а подключение выполняется административной ролью PostgreSQL из
+`POSTGRES_ADMIN_USER` / `POSTGRES_ADMIN_PASSWORD`.
+
+Рабочая `DATABASE_SCHEMA` приложения не используется и не изменяется. Для
+каждого запуска создаётся случайная schema `dtpstat_it_*`, в неё применяются все
+migrations и выполняются integration checks. В `finally` временная schema
+удаляется через `DROP SCHEMA ... CASCADE`. PostGIS ожидается уже установленным в
+этой БД штатным `npm run db:init`.
+
 
 Импорт и перенос application data выполняются через административные API/UI. Отдельного repository-snapshot import script нет.
 
