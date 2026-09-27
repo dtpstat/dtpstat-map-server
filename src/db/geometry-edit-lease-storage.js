@@ -154,7 +154,6 @@ export function createGeometryEditLeaseStorage(
            WHERE geometry_id = $1
              AND token = $2
              AND user_id = $3
-             AND expires_at > NOW()
            RETURNING geometry_id`,
           [
             geometryId,

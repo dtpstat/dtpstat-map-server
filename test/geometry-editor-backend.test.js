@@ -363,6 +363,30 @@ test('geometry editor backend exposes atomic create-update sync and edit leases'
     leaseStorage,
     /expires_at > NOW\(\)[\s\S]*FOR SHARE/u,
   );
+
+  const renewStart =
+    leaseStorage.indexOf(
+      'async renew(',
+    );
+  const ownsStart =
+    leaseStorage.indexOf(
+      'async owns(',
+      renewStart,
+    );
+  const renewSql =
+    leaseStorage.slice(
+      renewStart,
+      ownsStart,
+    );
+
+  assert.match(
+    renewSql,
+    /token = \$2[\s\S]*user_id = \$3/u,
+  );
+  assert.doesNotMatch(
+    renewSql,
+    /expires_at > NOW\(\)/u,
+  );
   assert.match(
     migration,
     /GEOMETRY_EDIT_LEASES/u,
