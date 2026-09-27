@@ -16,6 +16,10 @@ const DETAIL_COLUMNS_SQL = `
   geometry.city_id::integer AS "cityId",
   geometry.boundary_id::integer AS "boundaryId",
   (geometry.boundary_id IS NULL) AS suspended,
+  (
+    geometry.city_id IS NULL
+    AND geometry.boundary_id IS NULL
+  ) AS unlinked,
   ${FAMILY_SQL} AS family,
   GeometryType(geometry.geom) AS "geometryType",
   geometry.display_name AS "displayName",
@@ -169,6 +173,36 @@ const GEOMETRY_SUMMARIES_SQL = `
   LEFT JOIN line_types AS line_type
     ON line_type.id = geometry.line_type_id
   WHERE geometry.city_id = $1
+  ORDER BY
+    COALESCE(NULLIF(BTRIM(geometry.display_name), ''), ''),
+    geometry.id
+`;
+
+const UNLINKED_GEOMETRY_SUMMARIES_SQL = `
+  SELECT
+    geometry.id::integer AS id,
+    geometry.city_id::integer AS "cityId",
+    geometry.boundary_id::integer AS "boundaryId",
+    (geometry.boundary_id IS NULL) AS suspended,
+    (
+      geometry.city_id IS NULL
+      AND geometry.boundary_id IS NULL
+    ) AS unlinked,
+    ${FAMILY_SQL} AS family,
+    GeometryType(geometry.geom) AS "geometryType",
+    geometry.display_name AS "displayName",
+    geometry.is_visible AS "isVisible",
+    geometry.updated_at AS "updatedAt",
+    geometry.line_type_id::integer AS "lineTypeId",
+    geometry.lanes,
+    line_type.name AS "lineTypeName",
+    line_type.color AS "lineTypeColor",
+    line_type.width::double precision AS "lineTypeWidth",
+    ST_AsGeoJSON(geometry.geom)::json AS geometry
+  FROM city_geometries AS geometry
+  LEFT JOIN line_types AS line_type
+    ON line_type.id = geometry.line_type_id
+  WHERE geometry.city_id IS NULL
   ORDER BY
     COALESCE(NULLIF(BTRIM(geometry.display_name), ''), ''),
     geometry.id
@@ -446,6 +480,14 @@ export function createGeometryEditorStorage(
       return result.rows;
     },
 
+    async listUnlinkedGeometries() {
+      const result =
+        await database.query(
+          UNLINKED_GEOMETRY_SUMMARIES_SQL,
+        );
+      return result.rows;
+    },
+
     async getCity(cityId) {
       const result =
         await database.query(
@@ -527,14 +569,13 @@ export function createGeometryEditorStorage(
     async createGeometry(
       client,
       payload,
-      boundaryId,
     ) {
       const result =
         await client.query(
           CREATE_GEOMETRY_SQL,
           [
-            payload.cityId,
-            boundaryId,
+            null,
+            null,
             JSON.stringify(
               payload.geometry,
             ),
@@ -582,6 +623,24 @@ export function createGeometryEditorStorage(
           geometryId,
         )
         : null;
+    },
+
+    relinkGeometry(
+      client,
+      geometryId,
+    ) {
+      return client.query(
+        'SELECT relink_city_geometry($1)',
+        [geometryId],
+      );
+    },
+
+    relinkAllGeometries(
+      client,
+    ) {
+      return client.query(
+        'SELECT relink_all_city_geometries()',
+      );
     },
 
     async deleteGeometry(
@@ -677,6 +736,9 @@ export function createGeometryEditorStorage(
     ) {
       await client.query(
         'SELECT sync_active_boundary_cities()',
+      );
+      await client.query(
+        'SELECT relink_all_city_geometries()',
       );
       await client.query(
         'SELECT assert_city_geometry_invariants()',

@@ -558,10 +558,14 @@ export function normalizeGeometryCreatePayload(
 
   const value = {
     cityId:
-      positiveInteger(
-        source.cityId,
-        'cityId',
-      ),
+      source.cityId === undefined ||
+      source.cityId === null ||
+      source.cityId === ''
+        ? null
+        : positiveInteger(
+          source.cityId,
+          'cityId',
+        ),
     geometry:
       changes.geometry,
     displayName:
@@ -851,4 +855,281 @@ export function normalizeGeometryCutRequest(
   }
 
   return geometry;
+}
+
+
+export function normalizeGeometryEditToken(
+  value,
+  label = 'editToken',
+) {
+  if (
+    typeof value !== 'string' ||
+    value.trim().length < 16 ||
+    value.trim().length > 256
+  ) {
+    throw new GeometryEditorValidationError(
+      `${label} must contain 16-256 characters`,
+    );
+  }
+  return value.trim();
+}
+
+export function normalizeGeometryEditorClientId(
+  value,
+) {
+  if (
+    typeof value !== 'string' ||
+    value.trim().length < 1 ||
+    value.trim().length > 128
+  ) {
+    throw new GeometryEditorValidationError(
+      'x-dtpstat-realtime-client is required and must contain 1-128 characters',
+    );
+  }
+  return value.trim();
+}
+
+function normalizeLocalGeometryId(
+  value,
+  label,
+) {
+  if (
+    typeof value !== 'string' ||
+    value.trim().length < 1 ||
+    value.trim().length > 128
+  ) {
+    throw new GeometryEditorValidationError(
+      `${label} must contain 1-128 characters`,
+    );
+  }
+  return value.trim();
+}
+
+export function normalizeGeometrySyncRequest(
+  payload,
+) {
+  const source =
+    object(
+      payload,
+      'Request body',
+    );
+
+  const unknown =
+    Object.keys(source)
+      .filter(
+        (key) =>
+          key !== 'items',
+      );
+
+  if (unknown.length > 0) {
+    throw new GeometryEditorValidationError(
+      'Unsupported geometry sync fields: ' +
+        unknown.join(', '),
+    );
+  }
+
+  if (
+    !Array.isArray(source.items) ||
+    source.items.length < 1 ||
+    source.items.length > 500
+  ) {
+    throw new GeometryEditorValidationError(
+      'items must contain 1-500 operations',
+    );
+  }
+
+  const geometryIds =
+    new Set();
+  const localIds =
+    new Set();
+
+  return source.items.map(
+    (entry, index) => {
+      object(
+        entry,
+        `items[${index}]`,
+      );
+
+      if (
+        entry.kind ===
+        'create'
+      ) {
+        const entryUnknown =
+          Object.keys(entry)
+            .filter(
+              (key) =>
+                ![
+                  'kind',
+                  'localId',
+                  'value',
+                ].includes(key),
+            );
+
+        if (
+          entryUnknown.length > 0
+        ) {
+          throw new GeometryEditorValidationError(
+            `items[${index}] contains unsupported fields: ` +
+              entryUnknown.join(', '),
+          );
+        }
+
+        const localId =
+          normalizeLocalGeometryId(
+            entry.localId,
+            `items[${index}].localId`,
+          );
+
+        if (
+          localIds.has(
+            localId,
+          )
+        ) {
+          throw new GeometryEditorValidationError(
+            `Duplicate local geometry id: ${localId}`,
+          );
+        }
+        localIds.add(localId);
+
+        return {
+          kind:
+            'create',
+          localId,
+          value:
+            normalizeGeometryCreatePayload(
+              entry.value,
+            ),
+        };
+      }
+
+      if (
+        entry.kind ===
+        'update'
+      ) {
+        const entryUnknown =
+          Object.keys(entry)
+            .filter(
+              (key) =>
+                ![
+                  'kind',
+                  'id',
+                  'baseUpdatedAt',
+                  'editToken',
+                  'changes',
+                ].includes(key),
+            );
+
+        if (
+          entryUnknown.length > 0
+        ) {
+          throw new GeometryEditorValidationError(
+            `items[${index}] contains unsupported fields: ` +
+              entryUnknown.join(', '),
+          );
+        }
+
+        const id =
+          normalizeGeometryId(
+            entry.id,
+          );
+
+        if (
+          geometryIds.has(id)
+        ) {
+          throw new GeometryEditorValidationError(
+            `Duplicate geometry id in sync: ${id}`,
+          );
+        }
+        geometryIds.add(id);
+
+        return {
+          kind:
+            'update',
+          id,
+          baseUpdatedAt:
+            normalizeGeometryRevision(
+              entry.baseUpdatedAt,
+            ),
+          editToken:
+            normalizeGeometryEditToken(
+              entry.editToken,
+              `items[${index}].editToken`,
+            ),
+          changes:
+            normalizeGeometryChanges(
+              entry.changes,
+            ),
+        };
+      }
+
+      throw new GeometryEditorValidationError(
+        `items[${index}].kind must be create or update`,
+      );
+    },
+  );
+}
+
+export function normalizeGeometryEditTokenValidation(
+  payload,
+) {
+  const source =
+    object(
+      payload,
+      'Request body',
+    );
+
+  if (
+    Object.keys(source)
+      .some(
+        (key) =>
+          key !== 'items',
+      )
+  ) {
+    throw new GeometryEditorValidationError(
+      'Unsupported token validation fields',
+    );
+  }
+
+  if (
+    !Array.isArray(source.items) ||
+    source.items.length < 1 ||
+    source.items.length > 500
+  ) {
+    throw new GeometryEditorValidationError(
+      'items must contain 1-500 edit tokens',
+    );
+  }
+
+  const seen =
+    new Set();
+
+  return source.items.map(
+    (entry, index) => {
+      object(
+        entry,
+        `items[${index}]`,
+      );
+
+      const id =
+        normalizeGeometryId(
+          entry.id,
+        );
+
+      if (seen.has(id)) {
+        throw new GeometryEditorValidationError(
+          `Duplicate geometry id in token validation: ${id}`,
+        );
+      }
+      seen.add(id);
+
+      return {
+        id,
+        token:
+          normalizeGeometryEditToken(
+            entry.token,
+            `items[${index}].token`,
+          ),
+      };
+    },
+  );
 }

@@ -21,6 +21,15 @@ import {
 import {
   createProjectSettingsTransferRepository,
 } from '../src/db/project-settings-transfer-repository.js';
+import {
+  createGeometryEditorStorage,
+} from '../src/db/geometry-editor-storage.js';
+import {
+  createGeometryEditLeaseStorage,
+} from '../src/db/geometry-edit-lease-storage.js';
+import {
+  createGeometryEditorService,
+} from '../src/modules/geometry/editor-service.js';
 
 const {
   Client,
@@ -362,6 +371,548 @@ async function verifySpatialExports(
   }
 }
 
+async function verifyGeometryEditorInfrastructure(
+  pool,
+) {
+  const storage =
+    createGeometryEditorStorage(
+      pool,
+    );
+  const leaseStorage =
+    createGeometryEditLeaseStorage(
+      pool,
+    );
+
+  const client =
+    await pool.connect();
+
+  let parentBoundaryId;
+  let childBoundaryId;
+
+  try {
+    await client.query(
+      'BEGIN',
+    );
+
+    const parent =
+      await client.query(
+        `
+          WITH prepared AS (
+            SELECT ST_Multi(
+              ST_GeomFromText(
+                'POLYGON((30 50,30.1 50,30.1 50.1,30 50.1,30 50))',
+                4326
+              )
+            ) AS geom
+          )
+          INSERT INTO city_boundaries (
+            place_type,
+            admin_level,
+            osm_type,
+            osm_id,
+            osm_name,
+            tags,
+            geom,
+            bounds,
+            is_active,
+            display_name,
+            display_type,
+            area_m2
+          )
+          SELECT
+            NULL,
+            4,
+            'relation',
+            998000001,
+            'Integration Region',
+            '{"name":"Integration Region"}'::jsonb,
+            geom,
+            ST_Envelope(geom),
+            TRUE,
+            'Integration Region',
+            'administrative',
+            ST_Area(geom::geography)
+          FROM prepared
+          RETURNING id::bigint AS id
+        `,
+      );
+
+    parentBoundaryId =
+      Number(
+        parent.rows[0]
+          .id,
+      );
+
+    const child =
+      await client.query(
+        `
+          WITH prepared AS (
+            SELECT ST_Multi(
+              ST_GeomFromText(
+                'POLYGON((30.02 50.02,30.04 50.02,30.04 50.04,30.02 50.04,30.02 50.02))',
+                4326
+              )
+            ) AS geom
+          )
+          INSERT INTO city_boundaries (
+            place_type,
+            admin_level,
+            osm_type,
+            osm_id,
+            osm_name,
+            tags,
+            geom,
+            bounds,
+            is_active,
+            display_name,
+            display_type,
+            area_m2
+          )
+          SELECT
+            'city',
+            8,
+            'relation',
+            998000002,
+            'Integration City',
+            '{"name":"Integration City"}'::jsonb,
+            geom,
+            ST_Envelope(geom),
+            TRUE,
+            'Integration City',
+            'city',
+            ST_Area(geom::geography)
+          FROM prepared
+          RETURNING id::bigint AS id
+        `,
+      );
+
+    childBoundaryId =
+      Number(
+        child.rows[0]
+          .id,
+      );
+
+    await client.query(
+      'SELECT rebuild_city_boundary_hierarchy()',
+    );
+    await client.query(
+      'SELECT sync_active_boundary_cities()',
+    );
+    await client.query(
+      'SELECT relink_all_city_geometries()',
+    );
+    await client.query(
+      'COMMIT',
+    );
+  } catch (error) {
+    await client.query(
+      'ROLLBACK',
+    ).catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  const lineType =
+    await pool.query(
+      `
+        SELECT id::bigint AS id
+        FROM line_types
+        ORDER BY id
+        LIMIT 1
+      `,
+    );
+  const lineTypeId =
+    Number(
+      lineType.rows[0]
+        ?.id,
+    );
+
+  assert.ok(
+    lineTypeId > 0,
+    'Geometry integration requires one line type',
+  );
+
+  const editUser =
+    await pool.query(
+      `
+        INSERT INTO admin_users (
+          username,
+          password_hash,
+          can_edit_geometries
+        )
+        VALUES (
+          $1,
+          'integration-hash',
+          TRUE
+        )
+        RETURNING id::bigint AS id
+      `,
+      [
+        `geometry-integration-${process.pid}`,
+      ],
+    );
+  const editUserId =
+    Number(
+      editUser.rows[0]
+        .id,
+    );
+
+  const service =
+    createGeometryEditorService(
+      pool,
+      {
+        storage,
+        leaseStorage,
+        acquireLock:
+          async () => {},
+        randomUUID:
+          (() => {
+            let sequence = 0;
+            return () =>
+              `00000000-0000-4000-8000-${String(
+                ++sequence,
+              ).padStart(
+                12,
+                '0',
+              )}`;
+          })(),
+        leaseSeconds: 90,
+      },
+    );
+
+  const created =
+    await service.sync(
+      {
+        items: [{
+          kind: 'create',
+          localId: 'integration-local-line',
+          value: {
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [
+                  30.019,
+                  50.03,
+                ],
+                [
+                  30.039,
+                  50.03,
+                ],
+              ],
+            },
+            lineTypeId,
+            lanes: 1,
+            displayName:
+              'Integration nested line',
+          },
+        }],
+      },
+      {
+        id: editUserId,
+        username:
+          'geometry-integration',
+        isSuperuser: false,
+      },
+    );
+
+  assert.equal(
+    created.createdCount,
+    1,
+  );
+
+  const geometry =
+    created.created[0]
+      .geometry;
+
+  assert.equal(
+    geometry.boundaryId,
+    childBoundaryId,
+    'Nested active city must beat the containing region for majority coverage',
+  );
+
+  const initialRevision =
+    new Date(
+      geometry.updatedAt,
+    ).toISOString();
+
+  const lease =
+    await service.beginEdit(
+      geometry.id,
+      {
+        id: editUserId,
+        username:
+          'geometry-integration',
+        isSuperuser: false,
+      },
+      'integration-client',
+    );
+
+  assert.ok(
+    lease?.token,
+    'Explicit edit start did not issue a token',
+  );
+
+  const updated =
+    await service.sync(
+      {
+        items: [{
+          kind: 'update',
+          id: geometry.id,
+          baseUpdatedAt:
+            initialRevision,
+          editToken:
+            lease.token,
+          changes: {
+            displayName:
+              'Integration edited line',
+          },
+        }],
+      },
+      {
+        id: editUserId,
+        username:
+          'geometry-integration',
+        isSuperuser: false,
+      },
+    );
+
+  assert.equal(
+    updated.updatedCount,
+    1,
+  );
+  assert.equal(
+    updated.updated[0]
+      .boundaryId,
+    childBoundaryId,
+  );
+
+  const validated =
+    await service
+      .validateEditTokens(
+        {
+          items: [{
+            id:
+              geometry.id,
+            token:
+              lease.token,
+          }],
+        },
+        {
+          id:
+            editUserId,
+          username:
+            'geometry-integration',
+          isSuperuser:
+            false,
+        },
+        'integration-client-reloaded',
+      );
+
+  assert.equal(
+    validated.results[0]
+      .status,
+    'valid',
+  );
+  assert.equal(
+    validated.results[0]
+      .lease
+      .clientId,
+    'integration-client-reloaded',
+  );
+
+  const revisionBeforeAdministrativeRelink =
+    new Date(
+      updated.updated[0]
+        .updatedAt,
+    ).toISOString();
+
+  const boundaryClient =
+    await pool.connect();
+
+  try {
+    await boundaryClient.query(
+      'BEGIN',
+    );
+    await boundaryClient.query(
+      `
+        UPDATE city_boundaries
+        SET is_active = FALSE
+        WHERE id = $1
+      `,
+      [childBoundaryId],
+    );
+    await boundaryClient.query(
+      'SELECT relink_all_city_geometries()',
+    );
+    await boundaryClient.query(
+      'COMMIT',
+    );
+  } catch (error) {
+    await boundaryClient.query(
+      'ROLLBACK',
+    ).catch(() => {});
+    throw error;
+  } finally {
+    boundaryClient.release();
+  }
+
+  const parentLinked =
+    await storage.getGeometry(
+      pool,
+      geometry.id,
+    );
+
+  assert.equal(
+    parentLinked.boundaryId,
+    parentBoundaryId,
+    'Deactivating the nested city must spatially fall back to the containing active region',
+  );
+  assert.equal(
+    new Date(
+      parentLinked.updatedAt,
+    ).toISOString(),
+    revisionBeforeAdministrativeRelink,
+    'Administrative relinking changed the editable geometry revision',
+  );
+
+  const reactivateClient =
+    await pool.connect();
+
+  try {
+    await reactivateClient.query(
+      'BEGIN',
+    );
+    await reactivateClient.query(
+      `
+        UPDATE city_boundaries
+        SET is_active = TRUE
+        WHERE id = $1
+      `,
+      [childBoundaryId],
+    );
+    await reactivateClient.query(
+      'SELECT relink_all_city_geometries()',
+    );
+    await reactivateClient.query(
+      'COMMIT',
+    );
+  } catch (error) {
+    await reactivateClient.query(
+      'ROLLBACK',
+    ).catch(() => {});
+    throw error;
+  } finally {
+    reactivateClient.release();
+  }
+
+  const childLinkedAgain =
+    await storage.getGeometry(
+      pool,
+      geometry.id,
+    );
+
+  assert.equal(
+    childLinkedAgain.boundaryId,
+    childBoundaryId,
+    'Reactivated nested city did not regain the geometry',
+  );
+
+  const takeover =
+    await service.forceTakeover(
+      geometry.id,
+      {
+        id: editUserId,
+        username:
+          'geometry-integration',
+        isSuperuser: true,
+      },
+      'integration-superuser-client',
+    );
+
+  assert.equal(
+    takeover.previous
+      ?.clientId,
+    'integration-client-reloaded',
+  );
+  assert.ok(
+    takeover.lease
+      .generation >
+      lease.generation,
+    'Forced takeover did not advance the edit generation',
+  );
+
+  const revoked =
+    await service
+      .validateEditTokens(
+        {
+          items: [{
+            id:
+              geometry.id,
+            token:
+              lease.token,
+          }],
+        },
+        {
+          id:
+            editUserId,
+          username:
+            'geometry-integration',
+          isSuperuser:
+            false,
+        },
+        'integration-old-client',
+      );
+
+  assert.equal(
+    revoked.results[0]
+      .status,
+    'revoked',
+    'Old token remained valid after forced takeover',
+  );
+
+  const unlinked =
+    await service.sync(
+      {
+        items: [{
+          kind: 'create',
+          localId:
+            'integration-local-point',
+          value: {
+            geometry: {
+              type: 'Point',
+              coordinates: [
+                31,
+                51,
+              ],
+            },
+            displayName:
+              'Integration unlinked point',
+          },
+        }],
+      },
+      {
+        id: editUserId,
+        username:
+          'geometry-integration',
+        isSuperuser: false,
+      },
+    );
+
+  assert.equal(
+    unlinked.created[0]
+      .geometry
+      .cityId,
+    null,
+  );
+  assert.equal(
+    unlinked.created[0]
+      .geometry
+      .boundaryId,
+    null,
+  );
+}
+
 async function main() {
   const connection =
     integrationConnection();
@@ -441,6 +992,10 @@ async function main() {
     );
 
     await verifySpatialExports(
+      pool,
+    );
+
+    await verifyGeometryEditorInfrastructure(
       pool,
     );
 

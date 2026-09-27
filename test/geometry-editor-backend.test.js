@@ -235,3 +235,136 @@ test('geometry editor exposes suspended cities and geometries without an active 
     /geometry\.boundary_id IS NULL\) AS suspended/u,
   );
 });
+
+
+test('geometry server model treats administrative links as optional derived state', async () => {
+  const [
+    migration,
+    storage,
+    ingestion,
+  ] =
+    await Promise.all([
+      read(
+        'db/migrations/V045__spatial_geometry_links.sql',
+      ),
+      read(
+        'src/db/geometry-editor-storage.js',
+      ),
+      read(
+        'src/application/ingestion-database-runtime.js',
+      ),
+    ]);
+
+  assert.match(
+    migration,
+    /RESOLVE_GEOMETRY_ADMIN_LINKS/u,
+  );
+  assert.match(
+    migration,
+    /ACTIVE_DESCENDANTS/u,
+  );
+  assert.match(
+    migration,
+    /MATCHED_MEASURE[\s\S]*BOUNDARY_ID ASC/u,
+  );
+  assert.match(
+    migration,
+    /RELINK_ALL_CITY_GEOMETRIES/u,
+  );
+  assert.doesNotMatch(
+    migration,
+    /SET[\s\S]*UPDATED_AT = NOW\(\)[\s\S]*BOUNDARY_ID/u,
+  );
+  assert.match(
+    storage,
+    /SELECT relink_city_geometry\(\$1\)/u,
+  );
+  assert.match(
+    ingestion,
+    /sync_active_boundary_cities\(\)[\s\S]*relink_all_city_geometries\(\)/u,
+  );
+});
+
+test('geometry editor backend exposes atomic create-update sync and edit leases', async () => {
+  const [
+    policy,
+    service,
+    route,
+    runtime,
+    leaseStorage,
+    migration,
+  ] =
+    await Promise.all([
+      read(
+        'src/modules/geometry/editor-policy.js',
+      ),
+      read(
+        'src/modules/geometry/editor-service.js',
+      ),
+      read(
+        'src/routes/geometry-editor-api.js',
+      ),
+      read(
+        'src/application/geometry-editor-runtime.js',
+      ),
+      read(
+        'src/db/geometry-edit-lease-storage.js',
+      ),
+      read(
+        'db/migrations/V046__geometry_edit_leases.sql',
+      ),
+    ]);
+
+  assert.match(
+    policy,
+    /normalizeGeometrySyncRequest/u,
+  );
+  assert.match(
+    policy,
+    /editToken/u,
+  );
+  assert.match(
+    service,
+    /async sync\(/u,
+  );
+  assert.match(
+    service,
+    /leaseStorage[\s\S]*\.owns/u,
+  );
+  assert.match(
+    route,
+    /'\/admin\/geometry-editor\/sync'/u,
+  );
+  assert.match(
+    route,
+    /edit-lock\/heartbeat/u,
+  );
+  assert.match(
+    route,
+    /edit-locks\/validate/u,
+  );
+  assert.match(
+    route,
+    /edit-lock\/takeover[\s\S]*requireSuperuser/u,
+  );
+  assert.match(
+    route,
+    /resource:\s*'geometry-edit-leases'/u,
+  );
+  assert.match(
+    runtime,
+    /createGeometryEditLeaseStorage/u,
+  );
+  assert.match(
+    leaseStorage,
+    /generation = geometry_edit_leases\.generation \+ 1/u,
+  );
+  assert.match(
+    leaseStorage,
+    /expires_at > NOW\(\)[\s\S]*FOR SHARE/u,
+  );
+  assert.match(
+    migration,
+    /GEOMETRY_EDIT_LEASES/u,
+  );
+});

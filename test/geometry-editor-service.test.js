@@ -33,9 +33,41 @@ function geometry(
   };
 }
 
+function serviceDependencies(
+  storage,
+  tokenSuffix = '1',
+) {
+  return {
+    storage,
+    leaseStorage: {
+      async owns() {
+        return true;
+      },
+    },
+    async acquireLock() {},
+    randomUUID:
+      () =>
+        `00000000-0000-4000-8000-${tokenSuffix.padStart(
+          12,
+          '0',
+        )}`,
+    leaseSeconds: 90,
+  };
+}
+
 function fixture(rows) {
   const queries = [];
   const writes = [];
+  const current =
+    new Map(
+      rows.map(
+        (row) => [
+          row.id,
+          structuredClone(row),
+        ],
+      ),
+    );
+
   const client = {
     async query(text) {
       queries.push(text);
@@ -54,8 +86,19 @@ function fixture(rows) {
   const storage = {
     async assertNoPendingImport() {},
     async assertInvariants() {},
+    async relinkGeometry() {},
+    async getGeometry(
+      _queryable,
+      id,
+    ) {
+      return structuredClone(
+        current.get(id),
+      );
+    },
     async lockGeometries() {
-      return structuredClone(rows);
+      return structuredClone(
+        rows,
+      );
     },
     async lineTypeExists() {
       return true;
@@ -70,22 +113,29 @@ function fixture(rows) {
         value:
           structuredClone(value),
       });
-      return {
+      const updated = {
         ...geometry(
           id,
           '2026-09-25T13:00:00.000Z',
         ),
         ...structuredClone(value),
       };
+      current.set(
+        id,
+        updated,
+      );
+      return structuredClone(
+        updated,
+      );
     },
   };
   const service =
     createGeometryEditorService(
       pool,
-      {
+      serviceDependencies(
         storage,
-        async acquireLock() {},
-      },
+        '1',
+      ),
     );
 
   return {
@@ -221,7 +271,6 @@ test('geometry bulk conflict rolls back before the first write', async () => {
   );
 });
 
-
 function polygonGeometry(
   id,
   updatedAt,
@@ -264,6 +313,15 @@ function operationFixture(
   const queries = [];
   const merges = [];
   const cuts = [];
+  const current =
+    new Map(
+      rows.map(
+        (row) => [
+          row.id,
+          structuredClone(row),
+        ],
+      ),
+    );
 
   const client = {
     async query(text) {
@@ -285,6 +343,15 @@ function operationFixture(
   const storage = {
     async assertNoPendingImport() {},
     async assertInvariants() {},
+    async relinkGeometry() {},
+    async getGeometry(
+      _queryable,
+      id,
+    ) {
+      return structuredClone(
+        current.get(id),
+      );
+    },
     async lockGeometries() {
       return structuredClone(
         rows,
@@ -303,7 +370,7 @@ function operationFixture(
         preserveSourceTags,
       });
 
-      return {
+      const merged = {
         ...structuredClone(
           rows.find(
             (item) =>
@@ -314,6 +381,21 @@ function operationFixture(
         updatedAt:
           '2026-09-25T13:00:00.000Z',
       };
+      current.set(
+        ids[0],
+        merged,
+      );
+      for (
+        const sourceId of
+        ids.slice(1)
+      ) {
+        current.delete(
+          sourceId,
+        );
+      }
+      return structuredClone(
+        merged,
+      );
     },
     async cutGeometry(
       _client,
@@ -328,7 +410,7 @@ function operationFixture(
           ),
       });
 
-      return {
+      const cut = {
         ...structuredClone(
           rows.find(
             (item) =>
@@ -338,6 +420,13 @@ function operationFixture(
         updatedAt:
           '2026-09-25T13:00:00.000Z',
       };
+      current.set(
+        id,
+        cut,
+      );
+      return structuredClone(
+        cut,
+      );
     },
   };
 
@@ -345,10 +434,10 @@ function operationFixture(
     service:
       createGeometryEditorService(
         pool,
-        {
+        serviceDependencies(
           storage,
-          async acquireLock() {},
-        },
+          '2',
+        ),
       ),
     queries,
     merges,

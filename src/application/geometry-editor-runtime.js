@@ -1,6 +1,12 @@
 import {
+  randomUUID,
+} from 'node:crypto';
+import {
   createGeometryEditorStorage,
 } from '../db/geometry-editor-storage.js';
+import {
+  createGeometryEditLeaseStorage,
+} from '../db/geometry-edit-lease-storage.js';
 import {
   acquireDataImportLock,
 } from '../db/database-locks.js';
@@ -20,9 +26,20 @@ export function createGeometryEditorRuntime(
         createGeometryEditorStorage(
           pool,
         ),
+      leaseStorage:
+        dependencies.leaseStorage ??
+        createGeometryEditLeaseStorage(
+          pool,
+        ),
       acquireLock:
         dependencies.acquireLock ??
         acquireDataImportLock,
+      randomUUID:
+        dependencies.randomUUID ??
+        randomUUID,
+      leaseSeconds:
+        dependencies.leaseSeconds ??
+        90,
     },
   );
 }

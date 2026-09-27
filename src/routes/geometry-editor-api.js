@@ -64,6 +64,19 @@ function realtimeClientId(
     );
 }
 
+function editToken(
+  request,
+) {
+  return (
+    request.body
+      ?.token ??
+    request.get?.(
+      'x-dtpstat-edit-token',
+    ) ??
+    null
+  );
+}
+
 function expectedRevision(
   request,
 ) {
@@ -102,6 +115,14 @@ function publishChange(
  *     recalculate: Function,
  *     listCities: Function,
  *     listCityGeometries: Function,
+ *     listUnlinkedGeometries: Function,
+ *     listEditLeases: Function,
+ *     beginEdit: Function,
+ *     heartbeatEdit: Function,
+ *     validateEditTokens: Function,
+ *     releaseEdit: Function,
+ *     forceTakeover: Function,
+ *     sync: Function,
  *     create: Function,
  *     update: Function,
  *     updateMany: Function,
@@ -226,6 +247,57 @@ export function createGeometryEditorRouter({
   );
 
   router.get(
+    '/admin/geometry-editor/unlinked/geometries',
+    adminAuth
+      .requireGeometryEditor,
+    async (
+      _request,
+      response,
+      next,
+    ) => {
+      try {
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json(
+            await geometryEditorService
+              .listUnlinkedGeometries(),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.get(
+    '/admin/geometry-editor/edit-locks',
+    adminAuth
+      .requireGeometryEditor,
+    async (
+      _request,
+      response,
+      next,
+    ) => {
+      try {
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            leases:
+              await geometryEditorService
+                .listEditLeases(),
+          });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.get(
     '/admin/geometry-editor/geometries/:geometryId',
     adminAuth
       .requireGeometryEditor,
@@ -260,6 +332,407 @@ export function createGeometryEditorRouter({
           .json({
             geometry,
           });
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/geometry-editor/geometries/:geometryId/edit-lock',
+    adminAuth
+      .requireGeometryEditor,
+    audit(
+      'geometry.edit-lock.acquire',
+    ),
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const lease =
+          await geometryEditorService
+            .beginEdit(
+              request.params
+                .geometryId,
+              request.adminUser,
+              realtimeClientId(
+                request,
+              ),
+            );
+
+        if (!lease) {
+          response
+            .status(404)
+            .json({
+              error:
+                'Geometry not found',
+            });
+          return;
+        }
+
+        realtimeEvents?.publish({
+          resource:
+            'geometry-edit-leases',
+          permission:
+            'geometry-editor',
+          originClientId:
+            realtimeClientId(
+              request,
+            ),
+          action:
+            'acquired',
+          entityIds:
+            [lease.geometryId],
+          lease: {
+            ...lease,
+            token:
+              undefined,
+          },
+          message:
+            'Редактирование геометрии начато.',
+        });
+
+        response
+          .status(201)
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            lease,
+          });
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/geometry-editor/geometries/:geometryId/edit-lock/heartbeat',
+    adminAuth
+      .requireGeometryEditor,
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const lease =
+          await geometryEditorService
+            .heartbeatEdit(
+              request.params
+                .geometryId,
+              editToken(
+                request,
+              ),
+              request.adminUser,
+              realtimeClientId(
+                request,
+              ),
+            );
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            lease,
+          });
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/geometry-editor/edit-locks/validate',
+    adminAuth
+      .requireGeometryEditor,
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json(
+            await geometryEditorService
+              .validateEditTokens(
+                request.body,
+                request.adminUser,
+                realtimeClientId(
+                  request,
+                ),
+              ),
+          );
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/geometry-editor/geometries/:geometryId/edit-lock/release',
+    adminAuth
+      .requireGeometryEditor,
+    audit(
+      'geometry.edit-lock.release',
+    ),
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const released =
+          await geometryEditorService
+            .releaseEdit(
+              request.params
+                .geometryId,
+              editToken(
+                request,
+              ),
+              request.adminUser,
+            );
+
+        if (released) {
+          realtimeEvents?.publish({
+            resource:
+              'geometry-edit-leases',
+            permission:
+              'geometry-editor',
+            originClientId:
+              realtimeClientId(
+                request,
+              ),
+            action:
+              'released',
+            entityIds: [
+              Number(
+                request.params
+                  .geometryId,
+              ),
+            ],
+            message:
+              'Редактирование геометрии завершено.',
+          });
+        }
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            released,
+          });
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/geometry-editor/geometries/:geometryId/edit-lock/takeover',
+    adminAuth
+      .requireSuperuser,
+    audit(
+      'geometry.edit-lock.takeover',
+    ),
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const result =
+          await geometryEditorService
+            .forceTakeover(
+              request.params
+                .geometryId,
+              request.adminUser,
+              realtimeClientId(
+                request,
+              ),
+            );
+
+        if (!result) {
+          response
+            .status(404)
+            .json({
+              error:
+                'Geometry not found',
+            });
+          return;
+        }
+
+        recordAdminOperationDetails(
+          response,
+          {
+            geometryId:
+              result.lease
+                .geometryId,
+            previousUserId:
+              result.previous
+                ?.userId ??
+              null,
+            previousUsername:
+              result.previous
+                ?.username ??
+              null,
+          },
+        );
+
+        realtimeEvents?.publish({
+          resource:
+            'geometry-edit-leases',
+          permission:
+            'geometry-editor',
+          originClientId:
+            realtimeClientId(
+              request,
+            ),
+          action:
+            'force-takeover',
+          entityIds:
+            [result.lease.geometryId],
+          revokedUserId:
+            result.previous
+              ?.userId ??
+            null,
+          revokedClientId:
+            result.previous
+              ?.clientId ??
+            null,
+          lease: {
+            ...result.lease,
+            token:
+              undefined,
+          },
+          message:
+            'Суперадминистратор принудительно перехватил редактирование геометрии.',
+        });
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json(result);
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/geometry-editor/sync',
+    adminAuth
+      .requireGeometryEditor,
+    audit(
+      'geometry.bulk-sync',
+    ),
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const result =
+          await geometryEditorService
+            .sync(
+              request.body,
+              request.adminUser,
+            );
+
+        recordAdminOperationDetails(
+          response,
+          {
+            createdCount:
+              result.createdCount,
+            updatedCount:
+              result.updatedCount,
+            geometryIds:
+              result.entityIds,
+          },
+        );
+
+        publishChange(
+          realtimeEvents,
+          request,
+          {
+            action:
+              'bulk-sync',
+            entityIds:
+              result.entityIds,
+          },
+        );
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json(result);
       } catch (error) {
         if (
           validationError(

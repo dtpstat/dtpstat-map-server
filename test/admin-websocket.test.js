@@ -434,6 +434,18 @@ test('geometry realtime snapshots and live changes require the dedicated geometr
         'Geometry changed',
     });
 
+    realtimeEvents.publish({
+      resource:
+        'geometry-edit-leases',
+      permission:
+        'geometry-editor',
+      entityIds: [12],
+      action:
+        'acquired',
+      message:
+        'Geometry edit lock changed',
+    });
+
     await new Promise(
       (resolve) =>
         setImmediate(
@@ -474,6 +486,19 @@ test('geometry realtime snapshots and live changes require the dedicated geometr
           message.change
             ?.permission ===
             'geometry-editor',
+      ),
+    );
+    assert.ok(
+      geometryMessages.some(
+        (message) =>
+          message.type ===
+            'data-change' &&
+          message.change
+            ?.resource ===
+            'geometry-edit-leases' &&
+          message.change
+            ?.action ===
+            'acquired',
       ),
     );
 

@@ -3,11 +3,15 @@ import {
   geometryFamily,
   normalizeGeometryBulkUpdates,
   normalizeGeometryChanges,
+  normalizeGeometryEditToken,
+  normalizeGeometryEditTokenValidation,
+  normalizeGeometryEditorClientId,
   normalizeGeometryCreatePayload,
   normalizeGeometryCutRequest,
   normalizeGeometryId,
   normalizeGeometryMergeRequest,
   normalizeGeometryRevision,
+  normalizeGeometrySyncRequest,
   validateGeometryLineState,
 } from './editor-policy.js';
 
@@ -230,7 +234,10 @@ function conflictDetails(
  * @param {{ connect: () => Promise<any> }} pool
  * @param {{
  *   storage: any,
- *   acquireLock: (client: any, pool: any) => Promise<void>
+ *   leaseStorage: any,
+ *   acquireLock: (client: any, pool: any) => Promise<void>,
+ *   randomUUID: () => string,
+ *   leaseSeconds?: number
  * }} dependencies
  */
 export function createGeometryEditorService(
@@ -241,10 +248,41 @@ export function createGeometryEditorService(
     dependencies?.storage;
   const acquireLock =
     dependencies?.acquireLock;
+  const leaseStorage =
+    dependencies?.leaseStorage;
+  const randomUUID =
+    dependencies?.randomUUID;
+  const leaseSeconds =
+    Number(
+      dependencies?.leaseSeconds ??
+      90,
+    );
 
   if (!storage) {
     throw new TypeError(
       'Geometry editor storage dependency is required',
+    );
+  }
+  if (!leaseStorage) {
+    throw new TypeError(
+      'Geometry edit lease storage dependency is required',
+    );
+  }
+  if (
+    typeof randomUUID !==
+    'function'
+  ) {
+    throw new TypeError(
+      'Geometry editor randomUUID dependency is required',
+    );
+  }
+  if (
+    !Number.isInteger(leaseSeconds) ||
+    leaseSeconds < 30 ||
+    leaseSeconds > 600
+  ) {
+    throw new TypeError(
+      'Geometry editor leaseSeconds must be 30-600',
     );
   }
   if (
@@ -328,6 +366,72 @@ export function createGeometryEditorService(
     }
   }
 
+  async function leaseTransaction(
+    operation,
+  ) {
+    const client =
+      await pool.connect();
+
+    try {
+      await client.query(
+        'BEGIN',
+      );
+      const result =
+        await operation(
+          client,
+        );
+      await client.query(
+        'COMMIT',
+      );
+      return result;
+    } catch (error) {
+      await rollbackQuietly(
+        client,
+      );
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  function actorId(actor) {
+    return normalizeGeometryId(
+      actor?.id,
+      'userId',
+    );
+  }
+
+  function publicLease(
+    lease,
+    includeToken = false,
+  ) {
+    if (!lease) return null;
+    return {
+      geometryId:
+        lease.geometryId,
+      userId:
+        lease.userId,
+      username:
+        lease.username,
+      clientId:
+        lease.clientId,
+      generation:
+        lease.generation,
+      acquiredAt:
+        lease.acquiredAt,
+      lastSeenAt:
+        lease.lastSeenAt,
+      expiresAt:
+        lease.expiresAt,
+      ...(includeToken
+        ? {
+          token:
+            lease.token,
+        }
+        : {}),
+    };
+  }
+
   async function ensureActiveBoundaryCities() {
     const initial =
       await storage
@@ -370,6 +474,10 @@ export function createGeometryEditorService(
       ) {
         await storage
           .syncActiveBoundaryCities(
+            client,
+          );
+        await storage
+          .relinkAllGeometries(
             client,
           );
       }
@@ -444,7 +552,17 @@ export function createGeometryEditorService(
       );
     }
 
-    return result;
+    await storage
+      .relinkGeometry(
+        client,
+        previous.id,
+      );
+
+    return storage
+      .getGeometry(
+        client,
+        previous.id,
+      );
   }
 
   return {
@@ -457,6 +575,15 @@ export function createGeometryEditorService(
           await storage
             .listCities(),
         linkState,
+      };
+    },
+
+    async listUnlinkedGeometries() {
+      return {
+        city: null,
+        geometries:
+          await storage
+            .listUnlinkedGeometries(),
       };
     },
 
@@ -514,26 +641,11 @@ export function createGeometryEditorService(
             normalized,
           );
 
-          const boundary =
-            await storage
-              .activeBoundaryForCity(
-                client,
-                normalized.cityId,
-              );
-
-          if (!boundary) {
-            throw new GeometryEditorValidationError(
-              'Selected city has no active OSM boundary',
-              409,
-            );
-          }
-
           const geometry =
             await storage
               .createGeometry(
                 client,
                 normalized,
-                boundary.id,
               );
 
           if (!geometry) {
@@ -542,7 +654,17 @@ export function createGeometryEditorService(
             );
           }
 
-          return geometry;
+          await storage
+            .relinkGeometry(
+              client,
+              geometry.id,
+            );
+
+          return storage
+            .getGeometry(
+              client,
+              geometry.id,
+            );
         },
       );
     },
@@ -791,16 +913,12 @@ export function createGeometryEditorService(
           if (
             ordered.some(
               (item) =>
-                item.cityId !==
-                  first.cityId ||
-                item.boundaryId !==
-                  first.boundaryId ||
                 item.family !==
                   first.family,
             )
           ) {
             throw new GeometryEditorValidationError(
-              'Merged geometries must belong to the same city, OSM boundary and geometry family',
+              'Merged geometries must have the same geometry family',
             );
           }
 
@@ -861,8 +979,19 @@ export function createGeometryEditorService(
             );
           }
 
+          await storage
+            .relinkGeometry(
+              client,
+              geometry.id,
+            );
+
           return {
-            geometry,
+            geometry:
+              await storage
+                .getGeometry(
+                  client,
+                  geometry.id,
+                ),
             sourceGeometryIds:
               ids,
           };
@@ -954,7 +1083,17 @@ export function createGeometryEditorService(
             );
           }
 
-          return geometry;
+          await storage
+            .relinkGeometry(
+              client,
+              id,
+            );
+
+          return storage
+            .getGeometry(
+              client,
+              id,
+            );
         },
       );
     },
@@ -1033,6 +1172,517 @@ export function createGeometryEditorService(
             );
 
           return previous;
+        },
+      );
+    },
+
+    async sync(
+      payload,
+      actor,
+    ) {
+      const items =
+        normalizeGeometrySyncRequest(
+          payload,
+        );
+      const userId =
+        actorId(actor);
+
+      return write(
+        async (client) => {
+          const updates =
+            items.filter(
+              (item) =>
+                item.kind ===
+                'update',
+            );
+          const updateIds =
+            updates
+              .map(
+                (item) =>
+                  item.id,
+              )
+              .sort(
+                (
+                  left,
+                  right,
+                ) =>
+                  left - right,
+              );
+
+          const locked =
+            updateIds.length > 0
+              ? await storage
+                .lockGeometries(
+                  client,
+                  updateIds,
+                )
+              : [];
+
+          const conflicts =
+            conflictDetails(
+              updates,
+              locked,
+            );
+
+          if (
+            conflicts.length > 0
+          ) {
+            throw new GeometryEditorValidationError(
+              'One or more geometries changed after the local drafts were created',
+              409,
+              {
+                conflicts,
+              },
+            );
+          }
+
+          for (
+            const update of updates
+          ) {
+            const ownsLease =
+              await leaseStorage
+                .owns(
+                  client,
+                  {
+                    geometryId:
+                      update.id,
+                    token:
+                      update.editToken,
+                    userId,
+                  },
+                );
+
+            if (!ownsLease) {
+              throw new GeometryEditorValidationError(
+                'One or more edit tokens are no longer valid',
+                409,
+                {
+                  conflicts: [{
+                    id:
+                      update.id,
+                    reason:
+                      'edit-lock',
+                    lease:
+                      publicLease(
+                        await leaseStorage
+                          .active(
+                            client,
+                            update.id,
+                          ),
+                      ),
+                  }],
+                },
+              );
+            }
+          }
+
+          const byId =
+            new Map(
+              locked.map(
+                (item) => [
+                  item.id,
+                  item,
+                ],
+              ),
+            );
+          const created = [];
+          const updated = [];
+
+          for (
+            const item of items
+          ) {
+            if (
+              item.kind ===
+              'create'
+            ) {
+              await assertLineType(
+                client,
+                item.value,
+              );
+
+              const geometry =
+                await storage
+                  .createGeometry(
+                    client,
+                    item.value,
+                  );
+
+              if (!geometry) {
+                throw new GeometryEditorValidationError(
+                  'Geometry must be non-empty and valid',
+                );
+              }
+
+              await storage
+                .relinkGeometry(
+                  client,
+                  geometry.id,
+                );
+
+              created.push({
+                localId:
+                  item.localId,
+                geometry:
+                  await storage
+                    .getGeometry(
+                      client,
+                      geometry.id,
+                    ),
+              });
+              continue;
+            }
+
+            updated.push(
+              await updateLocked(
+                client,
+                byId.get(
+                  item.id,
+                ),
+                item.changes,
+              ),
+            );
+          }
+
+          const entityIds = [
+            ...created.map(
+              (item) =>
+                item.geometry.id,
+            ),
+            ...updated.map(
+              (item) =>
+                item.id,
+            ),
+          ];
+
+          return {
+            createdCount:
+              created.length,
+            updatedCount:
+              updated.length,
+            changedCount:
+              entityIds.length,
+            entityIds,
+            created,
+            updated,
+          };
+        },
+      );
+    },
+
+    async listEditLeases() {
+      return (
+        await leaseStorage
+          .listActive()
+      ).map(
+        (lease) =>
+          publicLease(
+            lease,
+          ),
+      );
+    },
+
+    async beginEdit(
+      geometryId,
+      actor,
+      clientIdValue,
+    ) {
+      const id =
+        normalizeGeometryId(
+          geometryId,
+        );
+      const userId =
+        actorId(actor);
+      const clientId =
+        normalizeGeometryEditorClientId(
+          clientIdValue,
+        );
+      const token =
+        randomUUID();
+
+      return leaseTransaction(
+        async (client) => {
+          const lease =
+            await leaseStorage
+              .acquire(
+                client,
+                {
+                  geometryId:
+                    id,
+                  token,
+                  userId,
+                  clientId,
+                  leaseSeconds,
+                },
+              );
+
+          if (!lease) {
+            return null;
+          }
+
+          if (
+            lease.token !==
+            token
+          ) {
+            throw new GeometryEditorValidationError(
+              'Geometry is already being edited',
+              409,
+              {
+                lease:
+                  publicLease(
+                    lease,
+                  ),
+              },
+            );
+          }
+
+          return publicLease(
+            lease,
+            true,
+          );
+        },
+      );
+    },
+
+    async heartbeatEdit(
+      geometryId,
+      tokenValue,
+      actor,
+      clientIdValue,
+    ) {
+      const id =
+        normalizeGeometryId(
+          geometryId,
+        );
+      const userId =
+        actorId(actor);
+      const token =
+        normalizeGeometryEditToken(
+          tokenValue,
+        );
+      const clientId =
+        normalizeGeometryEditorClientId(
+          clientIdValue,
+        );
+
+      return leaseTransaction(
+        async (client) => {
+          const lease =
+            await leaseStorage
+              .renew(
+                client,
+                {
+                  geometryId:
+                    id,
+                  token,
+                  userId,
+                  clientId,
+                  leaseSeconds,
+                },
+              );
+
+          if (!lease) {
+            throw new GeometryEditorValidationError(
+              'Edit token is no longer valid',
+              409,
+              {
+                lease:
+                  publicLease(
+                    await leaseStorage
+                      .active(
+                        client,
+                        id,
+                      ),
+                  ),
+              },
+            );
+          }
+
+          return publicLease(
+            lease,
+            true,
+          );
+        },
+      );
+    },
+
+    async validateEditTokens(
+      payload,
+      actor,
+      clientIdValue,
+    ) {
+      const items =
+        normalizeGeometryEditTokenValidation(
+          payload,
+        );
+      const userId =
+        actorId(actor);
+      const clientId =
+        normalizeGeometryEditorClientId(
+          clientIdValue,
+        );
+
+      return leaseTransaction(
+        async (client) => {
+          const results = [];
+
+          for (
+            const item of items
+          ) {
+            const lease =
+              await leaseStorage
+                .renew(
+                  client,
+                  {
+                    geometryId:
+                      item.id,
+                    token:
+                      item.token,
+                    userId,
+                    clientId,
+                    leaseSeconds,
+                  },
+                );
+
+            if (lease) {
+              results.push({
+                id:
+                  item.id,
+                status:
+                  'valid',
+                lease:
+                  publicLease(
+                    lease,
+                    true,
+                  ),
+              });
+              continue;
+            }
+
+            const current =
+              await leaseStorage
+                .active(
+                  client,
+                  item.id,
+                );
+            const exists =
+              await leaseStorage
+                .geometryExists(
+                  client,
+                  item.id,
+                );
+
+            results.push({
+              id:
+                item.id,
+              status:
+                !exists
+                  ? 'geometry-deleted'
+                  : current
+                    ? 'revoked'
+                    : 'expired',
+              lease:
+                publicLease(
+                  current,
+                ),
+            });
+          }
+
+          return {
+            results,
+          };
+        },
+      );
+    },
+
+    async releaseEdit(
+      geometryId,
+      tokenValue,
+      actor,
+    ) {
+      const id =
+        normalizeGeometryId(
+          geometryId,
+        );
+      const userId =
+        actorId(actor);
+      const token =
+        normalizeGeometryEditToken(
+          tokenValue,
+        );
+
+      return leaseTransaction(
+        (client) =>
+          leaseStorage
+            .release(
+              client,
+              {
+                geometryId:
+                  id,
+                token,
+                userId,
+              },
+            ),
+      );
+    },
+
+    async forceTakeover(
+      geometryId,
+      actor,
+      clientIdValue,
+    ) {
+      if (
+        !actor?.isSuperuser
+      ) {
+        throw new GeometryEditorValidationError(
+          'Superuser permission is required for forced edit takeover',
+          403,
+        );
+      }
+
+      const id =
+        normalizeGeometryId(
+          geometryId,
+        );
+      const userId =
+        actorId(actor);
+      const clientId =
+        normalizeGeometryEditorClientId(
+          clientIdValue,
+        );
+      const token =
+        randomUUID();
+
+      return leaseTransaction(
+        async (client) => {
+          const result =
+            await leaseStorage
+              .forceTakeover(
+                client,
+                {
+                  geometryId:
+                    id,
+                  token,
+                  userId,
+                  clientId,
+                  leaseSeconds,
+                },
+              );
+
+          if (!result.lease) {
+            return null;
+          }
+
+          return {
+            previous:
+              publicLease(
+                result.previous,
+              ),
+            lease:
+              publicLease(
+                result.lease,
+                true,
+              ),
+          };
         },
       );
     },

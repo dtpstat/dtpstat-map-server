@@ -16,42 +16,58 @@ const root =
     '..',
   );
 
-test('geometry boundary ownership migration suspends and reattaches durable geometries', async () => {
+test('geometry administrative links are optional spatially derived state', async () => {
   const migration =
     await fs.readFile(
       path.join(
         root,
-        'db/migrations/V044__suspended_geometry_rebinding.sql',
+        'db/migrations/V045__spatial_geometry_links.sql',
       ),
       'utf8',
     );
 
   assert.match(
     migration,
-    /RECONCILE_GEOMETRY_BOUNDARY_OWNERSHIP/u,
+    /DROP TRIGGER IF EXISTS CITY_BOUNDARIES_RECONCILE_GEOMETRIES_UPDATE/u,
   );
   assert.match(
     migration,
-    /OLD\.IS_ACTIVE[\s\S]*NOT NEW\.IS_ACTIVE/u,
+    /RESOLVE_GEOMETRY_ADMIN_LINKS/u,
   );
   assert.match(
     migration,
-    /SET BOUNDARY_ID = NULL/u,
+    /ACTIVE_DESCENDANTS/u,
   );
   assert.match(
     migration,
-    /NEW\.IS_ACTIVE[\s\S]*NEW\.CITY_ID IS NOT NULL/u,
+    /ST_DIFFERENCE/u,
   );
   assert.match(
     migration,
-    /SET BOUNDARY_ID = NEW\.ID/u,
+    /MATCHED_MEASURE/u,
   );
   assert.match(
     migration,
-    /WHERE CITY_ID = NEW\.CITY_ID[\s\S]*BOUNDARY_ID IS NULL/u,
+    /BOUNDARY_ID ASC/u,
   );
   assert.match(
     migration,
-    /ASSERT_CITY_GEOMETRY_INVARIANTS/u,
+    /RELINK_CITY_GEOMETRY/u,
+  );
+  assert.match(
+    migration,
+    /RELINK_ALL_CITY_GEOMETRIES/u,
+  );
+  assert.match(
+    migration,
+    /CITY_ID IS DISTINCT FROM RESOLVED\.CITY_ID/u,
+  );
+  assert.doesNotMatch(
+    migration,
+    /SET[\s\S]{0,180}UPDATED_AT = NOW\(\)[\s\S]{0,180}(?:BOUNDARY_ID|CITY_ID)/u,
+  );
+  assert.match(
+    migration,
+    /NULL is a normal editable state/u,
   );
 });

@@ -155,6 +155,7 @@ try {
       'geometry_import_conflicts',
       'geometry_model_integrity',
       'effective_city_geometries',
+      'geometry_edit_leases',
     ]
   ) {
     assert.equal(
@@ -279,6 +280,9 @@ try {
 
   await client.query(
     'SELECT sync_active_boundary_cities()',
+  );
+  await client.query(
+    'SELECT relink_all_city_geometries()',
   );
   await client.query(
     'COMMIT',
@@ -429,6 +433,9 @@ try {
     'SELECT sync_active_boundary_cities()',
   );
   await client.query(
+    'SELECT relink_all_city_geometries()',
+  );
+  await client.query(
     'COMMIT',
   );
 
@@ -501,6 +508,9 @@ try {
     );
 
   await client.query(
+    'BEGIN',
+  );
+  await client.query(
     `
       UPDATE city_geometries
       SET city_id = $2
@@ -510,6 +520,13 @@ try {
       geometryId,
       otherCityId,
     ],
+  );
+  await client.query(
+    'SELECT relink_city_geometry($1)',
+    [geometryId],
+  );
+  await client.query(
+    'COMMIT',
   );
 
   const normalizedOwner =
@@ -528,7 +545,7 @@ try {
         ?.city_id,
     ),
     canonicalCityId,
-    'Boundary-owned geometry did not normalize its city link',
+    'Spatial resolver did not restore the derived city link',
   );
 
   await expectDeferredFailure(
@@ -592,6 +609,16 @@ try {
   await client.query(
     'BEGIN',
   );
+  const revisionBeforeRelink =
+    await client.query(
+      `
+        SELECT updated_at
+        FROM city_geometries
+        WHERE id = $1
+      `,
+      [geometryId],
+    );
+
   await client.query(
     `
       UPDATE city_boundaries
@@ -599,6 +626,9 @@ try {
       WHERE id = $1
     `,
     [boundaryId],
+  );
+  await client.query(
+    'SELECT relink_all_city_geometries()',
   );
   await client.query(
     'COMMIT',
@@ -642,15 +672,35 @@ try {
     durable.rows[0]
       ?.boundary_id,
     null,
-    'Boundary deactivation must suspend geometry by clearing BOUNDARY_ID',
+    'Boundary deactivation relink must clear BOUNDARY_ID when nothing matches',
   );
   assert.equal(
-    Number(
-      durable.rows[0]
-        ?.city_id,
-    ),
-    canonicalCityId,
-    'Suspended geometry must retain its logical CITY_ID',
+    durable.rows[0]
+      ?.city_id,
+    null,
+    'Unlinked geometry must not retain a synthetic logical owner',
+  );
+
+  const revisionAfterRelink =
+    await client.query(
+      `
+        SELECT updated_at
+        FROM city_geometries
+        WHERE id = $1
+      `,
+      [geometryId],
+    );
+
+  assert.equal(
+    new Date(
+      revisionAfterRelink.rows[0]
+        ?.updated_at,
+    ).toISOString(),
+    new Date(
+      revisionBeforeRelink.rows[0]
+        ?.updated_at,
+    ).toISOString(),
+    'Administrative relinking must not change the editable geometry revision',
   );
 
   await client.query(
@@ -710,6 +760,9 @@ try {
     'SELECT sync_active_boundary_cities()',
   );
   await client.query(
+    'SELECT relink_all_city_geometries()',
+  );
+  await client.query(
     'COMMIT',
   );
 
@@ -717,12 +770,18 @@ try {
     await client.query(
       `
         SELECT
-          city_id::bigint AS city_id,
-          boundary_id::bigint AS boundary_id
-        FROM city_geometries
-        WHERE id = $1
+          geometry.city_id::bigint AS city_id,
+          geometry.boundary_id::bigint AS boundary_id,
+          boundary.city_id::bigint AS expected_city_id
+        FROM city_geometries AS geometry
+        JOIN city_boundaries AS boundary
+          ON boundary.id = $2
+        WHERE geometry.id = $1
       `,
-      [geometryId],
+      [
+        geometryId,
+        replacementBoundaryId,
+      ],
     );
 
   assert.equal(
@@ -730,8 +789,11 @@ try {
       reboundGeometry.rows[0]
         ?.city_id,
     ),
-    canonicalCityId,
-    'Replacement boundary changed the logical geometry city',
+    Number(
+      reboundGeometry.rows[0]
+        ?.expected_city_id,
+    ),
+    'Replacement boundary did not derive the matching city link',
   );
   assert.equal(
     Number(
@@ -739,7 +801,7 @@ try {
         ?.boundary_id,
     ),
     replacementBoundaryId,
-    'Suspended geometry was not rebound to the new active boundary',
+    'Unlinked geometry was not spatially rebound to the new active boundary',
   );
 
   const activeEffective =
@@ -755,7 +817,7 @@ try {
   assert.equal(
     activeEffective.rowCount,
     1,
-    'Geometry rebound to a replacement boundary did not become effective',
+    'Spatially rebound geometry did not become effective',
   );
 
   await client.query(
@@ -826,6 +888,8 @@ try {
         boundaryId,
         geometryId,
         canonicalCityId,
+        spatialResolver:
+          true,
         integrityIssues:
           finalIntegrity.rowCount,
       },

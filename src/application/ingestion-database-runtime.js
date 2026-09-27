@@ -60,6 +60,9 @@ export function withBoundaryIngestionDatabaseDependencies(
           'SELECT sync_active_boundary_cities()',
         );
         await client.query(
+          'SELECT relink_all_city_geometries()',
+        );
+        await client.query(
           'SELECT sync_active_boundary_populations()',
         );
         await recalculateStatistics(
