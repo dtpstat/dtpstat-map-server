@@ -607,3 +607,13 @@
       minmax(0, 1fr);
   }
 }
+
+
+.geometry-editor-row.is-suspended {
+  border-color: #8f6d2d;
+  background: #211b10;
+}
+
+.geometry-editor-row.is-suspended .geometry-editor-row-tags {
+  color: #d9b66c;
+}

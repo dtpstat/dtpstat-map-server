@@ -452,3 +452,40 @@ test('geometry editor does not overwrite a cross-tab draft after an in-progress 
     /drawing\.mode === 'cut'[\s\S]*state\.pendingExternalDraftSync[\s\S]*Вырезание отменено/u,
   );
 });
+
+
+test('geometry editor marks suspended geometries and blocks creation until a boundary is active', async () => {
+  const [
+    editor,
+    styles,
+  ] =
+    await Promise.all([
+      read(
+        'admin/geometry-editor.js',
+      ),
+      read(
+        'admin/geometry-editor.css',
+      ),
+    ]);
+
+  assert.match(
+    editor,
+    /item\.suspended \? 'подвешена · нет активной OSM-области'/u,
+  );
+  assert.match(
+    editor,
+    /подвешено: \$\{suspended\}/u,
+  );
+  assert.match(
+    editor,
+    /!state\.city\?\.boundaryId/u,
+  );
+  assert.match(
+    editor,
+    /После активации области этого города она будет перепривязана автоматически/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-editor-row\.is-suspended/u,
+  );
+});

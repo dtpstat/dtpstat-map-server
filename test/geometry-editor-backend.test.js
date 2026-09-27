@@ -180,3 +180,58 @@ test('geometry editor city catalog includes active linked cities before their fi
     /EXISTS \([\s\S]*FROM city_geometries AS geometry_presence/u,
   );
 });
+
+
+test('geometry editor exposes suspended cities and geometries without an active boundary', async () => {
+  const storage =
+    await read(
+      'src/db/geometry-editor-storage.js',
+    );
+
+  const citiesStart =
+    storage.indexOf(
+      'const CITIES_SQL',
+    );
+  const cityStart =
+    storage.indexOf(
+      'const CITY_SQL',
+      citiesStart,
+    );
+  const summariesStart =
+    storage.indexOf(
+      'const GEOMETRY_SUMMARIES_SQL',
+      cityStart,
+    );
+
+  const citiesQuery =
+    storage.slice(
+      citiesStart,
+      cityStart,
+    );
+  const cityQuery =
+    storage.slice(
+      cityStart,
+      summariesStart,
+    );
+
+  assert.match(
+    citiesQuery,
+    /"suspendedGeometryCount"/u,
+  );
+  assert.match(
+    citiesQuery,
+    /geometry_presence/u,
+  );
+  assert.match(
+    citiesQuery,
+    /"activeBoundaryId"/u,
+  );
+  assert.match(
+    cityQuery,
+    /LEFT JOIN LATERAL/u,
+  );
+  assert.match(
+    storage,
+    /geometry\.boundary_id IS NULL\) AS suspended/u,
+  );
+});

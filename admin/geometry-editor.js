@@ -1378,6 +1378,16 @@ if (section) {
     meta.replaceChildren(
       metaItem('Тип', typeLabel(pseudo)),
       metaItem('ID', item?.id ?? 'ещё не сохранена'),
+      metaItem(
+        'Привязка к области',
+        item?.id
+          ? item?.suspended
+            ? 'подвешена — ожидает активной OSM-области'
+            : item?.boundaryId
+              ? 'OSM-область #' + item.boundaryId
+              : '—'
+          : 'будет назначена при сохранении',
+      ),
       metaItem('Изменялась вручную', item?.wasEdited ? 'да' : (item?.id ? 'нет' : 'новая')),
       metaItem('Длина', family === 'line' ? numeric(item?.lengthMeters, 'м') : '—'),
       metaItem('Периметр', family === 'polygon' ? numeric(item?.perimeterMeters, 'м') : '—'),
@@ -1406,6 +1416,7 @@ if (section) {
       item.lineTypeName,
       item._draft ? 'черновик' : null,
       item._conflict ? 'конфликт' : null,
+      item.suspended ? 'подвешена без активной области' : null,
     ].filter(Boolean).join(' ').toLocaleLowerCase('ru-RU');
     return haystack.includes(query);
   }
@@ -1429,6 +1440,7 @@ if (section) {
       row.classList.toggle('is-hidden', item.isVisible === false);
       row.classList.toggle('has-draft', Boolean(item._draft));
       row.classList.toggle('has-conflict', Boolean(item._conflict));
+      row.classList.toggle('is-suspended', Boolean(item.suspended));
 
       const check = document.createElement('input');
       check.type = 'checkbox';
@@ -1467,6 +1479,7 @@ if (section) {
         item.lineTypeName,
         item._draft ? 'черновик' : null,
         item._conflict ? 'конфликт' : null,
+        item.suspended ? 'подвешена · нет активной OSM-области' : null,
         item.isVisible === false ? 'скрыта' : null,
       ].filter(Boolean).join(' · ') || typeLabel(item);
       copy.append(name, details);
@@ -1671,6 +1684,14 @@ if (section) {
       if (state.selectedId !== id) return;
 
       adoptGeometryDetail(item);
+      if (
+        item.suspended &&
+        !draftFor(item.id)?.conflict
+      ) {
+        setMessage(
+          'Геометрия подвешена: активной OSM-области сейчас нет. После активации области этого города она будет перепривязана автоматически.',
+        );
+      }
     } catch (error) {
       if (state.selectedId !== id) return;
       clearSelection();
@@ -1848,12 +1869,15 @@ if (section) {
 
     citySelect.disabled =
       Boolean(session);
+    const cannotCreate =
+      Boolean(session) ||
+      !state.city?.boundaryId;
     newPointButton.disabled =
-      Boolean(session);
+      cannotCreate;
     newLineButton.disabled =
-      Boolean(session);
+      cannotCreate;
     newPolygonButton.disabled =
-      Boolean(session);
+      cannotCreate;
     recalculateButton.disabled =
       Boolean(session);
 
@@ -2392,9 +2416,13 @@ if (section) {
       citySelect.replaceChildren(option);
     } else {
       citySelect.replaceChildren(...state.cities.map((city) => {
-      const option = document.createElement('option');
-      option.value = String(city.id);
-        option.textContent = `${city.name} (${city.geometryCount})`;
+        const option = document.createElement('option');
+        option.value = String(city.id);
+        const suspended = Number(city.suspendedGeometryCount ?? 0);
+        option.textContent =
+          `${city.name} (${city.geometryCount})` +
+          (suspended > 0 ? ` · подвешено: ${suspended}` : '') +
+          (!city.activeBoundaryId ? ' · нет активной области' : '');
         return option;
       }));
     }
@@ -2421,6 +2449,7 @@ if (section) {
 
     state.city = payload.city;
     state.serverGeometries = payload.geometries ?? [];
+    renderImportConflicts();
     const currentIds = new Set(
       state.serverGeometries.map((item) => item.id),
     );
@@ -2505,7 +2534,7 @@ if (section) {
         );
       } else {
         setMessage(
-          'В редакторе нет активных городов. Проверьте активность объектов в OSM-дереве.',
+          'В редакторе нет городов с активными областями или сохранёнными геометриями.',
           'error',
         );
       }
@@ -2542,6 +2571,17 @@ if (section) {
     }
     if (!state.city) {
       setMessage('Сначала выберите город.', 'error');
+      return;
+    }
+
+    if (
+      mode !== 'cut' &&
+      !state.city.boundaryId
+    ) {
+      setMessage(
+        'У города нет активной OSM-области. Существующие геометрии доступны как подвешенные, но создавать новые можно только после активации области.',
+        'error',
+      );
       return;
     }
 

@@ -15,6 +15,7 @@ const DETAIL_COLUMNS_SQL = `
   geometry.id::integer AS id,
   geometry.city_id::integer AS "cityId",
   geometry.boundary_id::integer AS "boundaryId",
+  (geometry.boundary_id IS NULL) AS suspended,
   ${FAMILY_SQL} AS family,
   GeometryType(geometry.geom) AS "geometryType",
   geometry.display_name AS "displayName",
@@ -62,10 +63,24 @@ const CITIES_SQL = `
     city.name,
     city.full_name AS "fullName",
     (
+      SELECT boundary.id::integer
+      FROM city_boundaries AS boundary
+      WHERE boundary.city_id = city.id
+        AND boundary.is_active
+      ORDER BY boundary.id
+      LIMIT 1
+    ) AS "activeBoundaryId",
+    (
       SELECT COUNT(*)::integer
       FROM city_geometries AS geometry_count
       WHERE geometry_count.city_id = city.id
-    ) AS "geometryCount"
+    ) AS "geometryCount",
+    (
+      SELECT COUNT(*)::integer
+      FROM city_geometries AS suspended_geometry
+      WHERE suspended_geometry.city_id = city.id
+        AND suspended_geometry.boundary_id IS NULL
+    ) AS "suspendedGeometryCount"
   FROM cities AS city
   WHERE EXISTS (
     SELECT 1
@@ -73,7 +88,20 @@ const CITIES_SQL = `
     WHERE boundary.city_id = city.id
       AND boundary.is_active
   )
-  ORDER BY city.name, city.id
+     OR EXISTS (
+       SELECT 1
+       FROM city_geometries AS geometry_presence
+       WHERE geometry_presence.city_id = city.id
+     )
+  ORDER BY
+    (EXISTS (
+      SELECT 1
+      FROM city_boundaries AS boundary
+      WHERE boundary.city_id = city.id
+        AND boundary.is_active
+    )) DESC,
+    city.name,
+    city.id
 `;
 
 const CITY_SQL = `
@@ -83,21 +111,39 @@ const CITY_SQL = `
     city.name,
     city.full_name AS "fullName",
     boundary.id::integer AS "boundaryId",
-    json_build_array(
-      ST_XMin(boundary.bounds),
-      ST_YMin(boundary.bounds),
-      ST_XMax(boundary.bounds),
-      ST_YMax(boundary.bounds)
-    ) AS bounds,
-    json_build_array(
-      ST_X(ST_PointOnSurface(boundary.geom)),
-      ST_Y(ST_PointOnSurface(boundary.geom))
-    ) AS center,
-    ST_AsGeoJSON(boundary.geom)::json AS "boundaryGeometry"
+    CASE
+      WHEN boundary.id IS NULL THEN NULL
+      ELSE json_build_array(
+        ST_XMin(boundary.bounds),
+        ST_YMin(boundary.bounds),
+        ST_XMax(boundary.bounds),
+        ST_YMax(boundary.bounds)
+      )
+    END AS bounds,
+    CASE
+      WHEN boundary.id IS NULL THEN NULL
+      ELSE json_build_array(
+        ST_X(ST_PointOnSurface(boundary.geom)),
+        ST_Y(ST_PointOnSurface(boundary.geom))
+      )
+    END AS center,
+    CASE
+      WHEN boundary.id IS NULL THEN NULL
+      ELSE ST_AsGeoJSON(boundary.geom)::json
+    END AS "boundaryGeometry"
   FROM cities AS city
-  JOIN city_boundaries AS boundary
-    ON boundary.city_id = city.id
-   AND boundary.is_active
+  LEFT JOIN LATERAL (
+    SELECT
+      candidate.id,
+      candidate.bounds,
+      candidate.geom
+    FROM city_boundaries AS candidate
+    WHERE candidate.city_id = city.id
+      AND candidate.is_active
+    ORDER BY candidate.id
+    LIMIT 1
+  ) AS boundary
+    ON TRUE
   WHERE city.id = $1
   LIMIT 1
 `;
@@ -107,6 +153,7 @@ const GEOMETRY_SUMMARIES_SQL = `
     geometry.id::integer AS id,
     geometry.city_id::integer AS "cityId",
     geometry.boundary_id::integer AS "boundaryId",
+    (geometry.boundary_id IS NULL) AS suspended,
     ${FAMILY_SQL} AS family,
     GeometryType(geometry.geom) AS "geometryType",
     geometry.display_name AS "displayName",
