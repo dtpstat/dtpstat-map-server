@@ -1315,7 +1315,13 @@ if (section) {
   }
 
   function undo() {
-    if (!state.history.length || !state.draft) return;
+    if (
+      !state.editing ||
+      !state.history.length ||
+      !state.draft
+    ) {
+      return;
+    }
     state.future.push(clone(state.draft));
     state.draft = state.history.pop();
     state.selectedVertexPath = null;
@@ -1326,7 +1332,13 @@ if (section) {
 
 
   function redo() {
-    if (!state.future.length || !state.draft) return;
+    if (
+      !state.editing ||
+      !state.future.length ||
+      !state.draft
+    ) {
+      return;
+    }
     state.history.push(clone(state.draft));
     state.draft = state.future.pop();
     state.selectedVertexPath = null;
@@ -1337,6 +1349,7 @@ if (section) {
 
 
   function selectVertex(path) {
+    if (!state.editing) return;
     state.selectedVertexPath = path;
     updateMapSources();
     renderHistoryControls();
@@ -1345,7 +1358,7 @@ if (section) {
   }
 
   function moveVertex(path, coordinate, { record = true } = {}) {
-    if (!state.draft) return;
+    if (!state.editing || !state.draft) return;
     if (record) pushHistory();
     if (state.draft.type === 'Point') {
       state.draft.coordinates = coordinate;
@@ -1365,7 +1378,13 @@ if (section) {
 
 
   function insertMidpoint(prefixAndIndex, coordinate) {
-    if (!state.draft || state.draft.type === 'Point') return;
+    if (
+      !state.editing ||
+      !state.draft ||
+      state.draft.type === 'Point'
+    ) {
+      return;
+    }
     pushHistory();
     const prefix = prefixAndIndex.slice(0, -1);
     const index = prefixAndIndex[prefixAndIndex.length - 1];
@@ -1389,7 +1408,13 @@ if (section) {
 
 
   function deleteVertexAtPath(path) {
-    if (!path || !state.draft) return;
+    if (
+      !state.editing ||
+      !path ||
+      !state.draft
+    ) {
+      return;
+    }
     if (state.draft.type === 'Point') {
       setMessage(
         'У Point нельзя удалить единственную координату. Удалите всю геометрию.',
@@ -3013,10 +3038,16 @@ if (section) {
     }
     if (mode === 'cut') {
       if (
+        !state.editing ||
         !state.current?.id ||
+        isLocalGeometryId(state.current.id) ||
+        !draftFor(state.current.id)?.editToken ||
         familyOf(state.draft) !== 'polygon'
       ) {
-        setMessage('Для вырезания выберите сохранённый полигон.', 'error');
+        setMessage(
+          'Для вырезания сначала начните редактирование сохранённого полигона.',
+          'error',
+        );
         return;
       }
 

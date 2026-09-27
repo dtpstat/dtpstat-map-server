@@ -458,6 +458,47 @@ test('geometry editor does not overwrite a cross-tab draft after an in-progress 
 });
 
 
+test('geometry editor keeps existing geometry read-only until explicit edit starts', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /function captureCurrentDraft\(\)[\s\S]*!state\.editing/u,
+  );
+  assert.match(
+    editor,
+    /const enabled =[\s\S]*state\.editing/u,
+  );
+  assert.match(
+    editor,
+    /function moveVertex[\s\S]*!state\.editing \|\| !state\.draft/u,
+  );
+  assert.match(
+    editor,
+    /function insertMidpoint[\s\S]*!state\.editing/u,
+  );
+  assert.match(
+    editor,
+    /function deleteVertexAtPath[\s\S]*!state\.editing/u,
+  );
+  assert.match(
+    editor,
+    /function undo\(\)[\s\S]*!state\.editing/u,
+  );
+  assert.match(
+    editor,
+    /function redo\(\)[\s\S]*!state\.editing/u,
+  );
+  assert.match(
+    editor,
+    /if \(mode === 'cut'\)[\s\S]*!state\.editing[\s\S]*editToken/u,
+  );
+});
+
+
 test('geometry editor exposes normal unlinked geometry and persistent explicit editing', async () => {
   const [
     editor,
