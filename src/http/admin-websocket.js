@@ -321,10 +321,6 @@ export function createAdminWebSocketGateway({
                 socket,
                 401,
                 'Unauthorized',
-                [[
-                  'WWW-Authenticate',
-                  'Basic realm="dtpstat-admin", charset="UTF-8"',
-                ]],
               );
             })
             .catch((error) => {
