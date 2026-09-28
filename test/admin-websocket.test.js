@@ -12,12 +12,12 @@ import {
   createAdminWebSocketGateway,
 } from '../src/http/admin-websocket.js';
 
-const dataAuthorization =
-  `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
-const osmAuthorization =
-  `Basic ${Buffer.from('osm:test:secret').toString('base64')}`;
-const geometryAuthorization =
-  `Basic ${Buffer.from('geometry:test:secret').toString('base64')}`;
+const dataSession =
+  'data-session';
+const osmSession =
+  'osm-session';
+const geometrySession =
+  'geometry-session';
 
 function testAdminAuth() {
   return {
@@ -31,8 +31,13 @@ function testAdminAuth() {
       );
 
       if (
-        request.headers.authorization ===
-        dataAuthorization
+        String(
+          request.headers.cookie ??
+          '',
+        ).includes(
+          'dtpstat_admin_session=' +
+          dataSession,
+        )
       ) {
         return {
           status: 'success',
@@ -48,8 +53,13 @@ function testAdminAuth() {
       }
 
       if (
-        request.headers.authorization ===
-        osmAuthorization
+        String(
+          request.headers.cookie ??
+          '',
+        ).includes(
+          'dtpstat_admin_session=' +
+          osmSession,
+        )
       ) {
         return {
           status: 'success',
@@ -65,8 +75,13 @@ function testAdminAuth() {
       }
 
       if (
-        request.headers.authorization ===
-        geometryAuthorization
+        String(
+          request.headers.cookie ??
+          '',
+        ).includes(
+          'dtpstat_admin_session=' +
+          geometrySession,
+        )
       ) {
         return {
           status: 'success',
@@ -91,7 +106,7 @@ function testAdminAuth() {
 
 async function openSocket(
   url,
-  authorization,
+  session,
   messages,
 ) {
   const socket =
@@ -100,8 +115,16 @@ async function openSocket(
       'dtpstat-api-v1',
       {
         headers: {
-          Authorization:
-            authorization,
+          Cookie:
+            'dtpstat_admin_session=' +
+            session,
+          Origin:
+            new URL(url)
+              .origin
+              .replace(
+                /^ws/u,
+                'http',
+              ),
         },
       },
     );
@@ -177,6 +200,13 @@ test('admin WebSocket streams task events only to data managers and resource eve
     new WebSocket(
       url,
       'dtpstat-api-v1',
+      {
+        headers: {
+          Origin:
+            'http://127.0.0.1:' +
+            address.port,
+        },
+      },
     );
   await assert.rejects(
     new Promise(
@@ -198,6 +228,13 @@ test('admin WebSocket streams task events only to data managers and resource eve
     new WebSocket(
       url,
       'dtpstat-api-v0',
+      {
+        headers: {
+          Origin:
+            'http://127.0.0.1:' +
+            address.port,
+        },
+      },
     );
   await assert.rejects(
     new Promise(
@@ -215,18 +252,48 @@ test('admin WebSocket streams task events only to data managers and resource eve
     /426/u,
   );
 
+  const foreignOrigin =
+    new WebSocket(
+      url,
+      'dtpstat-api-v1',
+      {
+        headers: {
+          Origin:
+            'https://evil.example',
+          Cookie:
+            'dtpstat_admin_session=' +
+            dataSession,
+        },
+      },
+    );
+  await assert.rejects(
+    new Promise(
+      (resolve, reject) => {
+        foreignOrigin.once(
+          'open',
+          resolve,
+        );
+        foreignOrigin.once(
+          'error',
+          reject,
+        );
+      },
+    ),
+    /403/u,
+  );
+
   const dataMessages = [];
   const osmMessages = [];
   const dataSocket =
     await openSocket(
       url,
-      dataAuthorization,
+      dataSession,
       dataMessages,
     );
   const osmSocket =
     await openSocket(
       url,
-      osmAuthorization,
+      osmSession,
       osmMessages,
     );
 
@@ -410,19 +477,19 @@ test('geometry realtime snapshots and live changes require the dedicated geometr
   const dataSocket =
     await openSocket(
       url,
-      dataAuthorization,
+      dataSession,
       dataMessages,
     );
   const osmSocket =
     await openSocket(
       url,
-      osmAuthorization,
+      osmSession,
       osmMessages,
     );
   const geometrySocket =
     await openSocket(
       url,
-      geometryAuthorization,
+      geometrySession,
       geometryMessages,
     );
 
