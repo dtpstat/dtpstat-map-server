@@ -42,8 +42,8 @@ export async function materializeReportValues(client, config) {
     `
       UPDATE city_report_values
       SET rank_value = CASE
-        WHEN jsonb_typeof(values -> $1) = 'number'
-          THEN (values ->> $1)::double precision
+        WHEN jsonb_typeof(values -> $1::text) = 'number'
+          THEN (values ->> $1::text)::double precision
         ELSE NULL
       END,
       updated_at = now()
