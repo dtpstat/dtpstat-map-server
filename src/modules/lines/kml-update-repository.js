@@ -264,7 +264,7 @@ const INSERT_UPDATE_RUN_SQL = `
     ignored_non_lines,
     city_buffer_m
   )
-  VALUES ($1::jsonb, $2, $3, $4, $5, $6, $7, $8, $9)
+  VALUES ($1::jsonb, $2::text, $3::bigint, $4::integer, $5::integer, $6::integer, $7::integer, $8::integer, $9::double precision)
   RETURNING id::integer AS id, created_at AS "createdAt"
 `;
 
