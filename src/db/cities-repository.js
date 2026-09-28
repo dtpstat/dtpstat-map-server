@@ -95,15 +95,15 @@ const CITY_GEOMETRIES_SQL = `
        AND active_boundary.is_active
    )
   LEFT JOIN line_types AS line_type ON line_type.id = city_geometries.line_type_id
-  WHERE cities.id = $1
+  WHERE cities.id = $1::bigint
   GROUP BY cities.id
 `;
 
 const VIEWPORT_GEOMETRIES_SQL = `
   WITH viewport AS (
     SELECT
-      ST_MakeEnvelope($1, $2, $3, $4, 4326) AS geom,
-      ST_SetSRID(ST_MakePoint($5, $6), 4326) AS center
+      ST_MakeEnvelope($1::double precision, $2::double precision, $3::double precision, $4::double precision, 4326) AS geom,
+      ST_SetSRID(ST_MakePoint($5::double precision, $6::double precision), 4326) AS center
   ),
   visible_geometries AS (
     SELECT
@@ -145,7 +145,7 @@ const VIEWPORT_GEOMETRIES_SQL = `
   )
   SELECT json_build_object(
     'type', 'FeatureCollection',
-    'bbox', json_build_array($1, $2, $3, $4),
+    'bbox', json_build_array($1::double precision, $2::double precision, $3::double precision, $4::double precision),
     'centerCityId', (SELECT id FROM center_city),
     'features', COALESCE(
       json_agg(
