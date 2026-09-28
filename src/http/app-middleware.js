@@ -195,6 +195,12 @@ export function installAppHttpMiddleware(
     compression(),
   );
 
+  app.use(
+    '/api/admin',
+    adminAuth
+      .limitGlobalRequest,
+  );
+
   app.get(
     '/images/city-marker.png',
     (
@@ -222,6 +228,8 @@ export function installAppHttpMiddleware(
   ) {
     app.get(
       route,
+      adminAuth
+        .limitGlobalRequest,
       adminAuth
         .requireAdminEntry,
       (
