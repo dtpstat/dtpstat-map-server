@@ -45,6 +45,10 @@ function versionedFetch(
     DTPSTAT_API_VERSION_HEADER,
     DTPSTAT_API_VERSION,
   );
+  headers.set(
+    'Origin',
+    new URL(url).origin,
+  );
 
   return fetch(
     input,
@@ -59,7 +63,7 @@ const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
 );
-const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+const authorization = 'dtpstat_admin_session=test-session-token';
 
 const citySnapshot = {
   type: 'FeatureCollection',
@@ -246,6 +250,8 @@ async function postChunked(baseUrl, pathname, source, headers = {}) {
       method: 'POST',
       headers: {
         ...headers,
+        Origin:
+          target.origin,
         'Transfer-Encoding': 'chunked',
         [DTPSTAT_API_VERSION_HEADER]:
           DTPSTAT_API_VERSION,
@@ -331,7 +337,7 @@ async function readZipBuffer(buffer) {
 async function waitForTask(baseUrl, accepted) {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     const response = await versionedFetch(`${baseUrl}${accepted.task.statusURL}`, {
-      headers: { Authorization: authorization },
+      headers: { Cookie: authorization },
     });
     assert.equal(response.status, 200);
     const payload = await response.json();
@@ -356,7 +362,7 @@ test('transfer exports require auth and expose portable download files', async (
     for (const [endpoint, fileName, expected] of expectations) {
       const response = await versionedFetch(`${baseUrl}${endpoint}`, {
         headers: {
-          Authorization: authorization,
+          Cookie: authorization,
           'Accept-Encoding': 'gzip',
         },
       });
@@ -386,7 +392,7 @@ test('portable ZIP exports contain exactly one JSON/GeoJSON file', async () => {
 
     for (const [endpoint, downloadName, entryName, expected] of expectations) {
       const response = await versionedFetch(`${baseUrl}${endpoint}`, {
-        headers: { Authorization: authorization },
+        headers: { Cookie: authorization },
       });
       assert.equal(response.status, 200);
       assert.match(response.headers.get('content-type') ?? '', /application\/zip/);
@@ -428,7 +434,7 @@ test('single-file ZIP import is decoded before the transactional service task', 
     const response = await versionedFetch(`${baseUrl}/api/admin/import/lines`, {
       method: 'POST',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/zip',
       },
       body: archive,
@@ -470,7 +476,7 @@ test('chunked ZIP64 import accepts an stdin-style entry with unknown source size
       '/api/admin/import/lines',
       archive,
       {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/zip',
       },
     );
@@ -522,7 +528,7 @@ test(
           '/api/admin/import/lines',
           createReadStream(archivePath, { highWaterMark: 17 }),
           {
-            Authorization: authorization,
+            Cookie: authorization,
             'Content-Type': 'application/zip',
           },
         );
@@ -560,7 +566,7 @@ test('ZIP import with more than one entry fails the admin task', async () => {
     const response = await versionedFetch(`${baseUrl}/api/admin/import/lines`, {
       method: 'POST',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/zip',
       },
       body: archive,
@@ -580,7 +586,7 @@ test('large transfer export is gzip-compressed when the receiver accepts gzip', 
   await withServer(async (baseUrl) => {
     const response = await versionedFetch(`${baseUrl}/api/admin/export/cities`, {
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Accept-Encoding': 'gzip',
       },
     });
@@ -618,7 +624,7 @@ test('city GeoJSON import accepts a gzip request body and forwards dryRun', asyn
       {
         method: 'POST',
         headers: {
-          Authorization: authorization,
+          Cookie: authorization,
           'Content-Type': 'application/geo+json',
           'Content-Encoding': 'gzip',
           'X-DTPStat-Dry-Run': 'true',
@@ -665,7 +671,7 @@ test('line and population imports accept gzip request bodies', async () => {
     const lineResponse = await versionedFetch(`${baseUrl}/api/admin/import/lines`, {
       method: 'POST',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/geo+json',
         'Content-Encoding': 'gzip',
       },
@@ -678,7 +684,7 @@ test('line and population imports accept gzip request bodies', async () => {
     const populationResponse = await versionedFetch(`${baseUrl}/api/admin/populations`, {
       method: 'POST',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/json',
         'Content-Encoding': 'gzip',
       },
