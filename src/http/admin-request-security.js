@@ -414,7 +414,7 @@ export function installAdminRequestSecurityContext(
   );
 }
 
-export function rejectAdminTransportTampering(
+export async function rejectAdminTransportTampering(
   request,
   response,
 ) {
@@ -429,27 +429,81 @@ export function rejectAdminTransportTampering(
     return false;
   }
 
-  request
-    .recordAdminSecurityIncident?.(
-      'admin.request.tamper',
-      {
-        statusCode: 400,
-        fields:
-          findings,
-      },
-    );
+  if (
+    typeof request
+      .recordApiContractIncident ===
+    'function'
+  ) {
+    const securityState =
+      await request
+        .recordApiContractIncident({
+          reason:
+            'security-context-tamper',
+          method:
+            request.method,
+          path:
+            requestPath(
+              request,
+            ),
+          fields:
+            findings.map(
+              (item) =>
+                item.source +
+                ':' +
+                item.key,
+            ),
+        });
+
+    if (
+      securityState?.locked
+    ) {
+      response.set(
+        'Retry-After',
+        String(
+          securityState
+            .retryAfterSeconds ??
+          1,
+        ),
+      );
+      response
+        .status(429)
+        .json({
+          error:
+            'This IP address is temporarily locked after repeated invalid API requests',
+          code:
+            'api_request_ip_locked',
+          retryAfterSeconds:
+            securityState
+              .retryAfterSeconds ??
+            1,
+        });
+      return true;
+    }
+  } else {
+    request
+      .recordAdminSecurityIncident?.(
+        'admin.request.tamper',
+        {
+          statusCode: 400,
+          fields:
+            findings,
+        },
+      );
+  }
 
   response
     .status(400)
     .json({
       error:
         'Request must not assert server-owned authentication or authorization attributes',
+      code:
+        'api_contract_violation',
     });
 
   return true;
 }
 
-export function adminJsonBodySecurityGuard(
+export async function adminJsonBodySecurityGuard(
   request,
   response,
   next,
@@ -464,6 +518,56 @@ export function adminJsonBodySecurityGuard(
   ) {
     if (
       typeof request
+        .recordApiContractIncident ===
+      'function'
+    ) {
+      const securityState =
+        await request
+          .recordApiContractIncident({
+            reason:
+              'server-owned-security-attribute',
+            method:
+              request.method,
+            path:
+              requestPath(
+                request,
+              ),
+            fields:
+              findings.map(
+                (item) =>
+                  item.source +
+                  ':' +
+                  item.key,
+              ),
+          });
+
+      if (
+        securityState?.locked
+      ) {
+        response.set(
+          'Retry-After',
+          String(
+            securityState
+              .retryAfterSeconds ??
+            1,
+          ),
+        );
+        response
+          .status(429)
+          .json({
+            error:
+              'This IP address is temporarily locked after repeated invalid API requests',
+            code:
+              'api_request_ip_locked',
+            retryAfterSeconds:
+              securityState
+                .retryAfterSeconds ??
+              1,
+          });
+        return;
+      }
+    } else if (
+      typeof request
         .recordAdminSecurityIncident ===
       'function'
     ) {
@@ -476,27 +580,6 @@ export function adminJsonBodySecurityGuard(
               findings,
           },
         );
-    } else if (
-      typeof request
-        .recordApiContractIncident ===
-      'function'
-    ) {
-      request
-        .recordApiContractIncident({
-          reason:
-            'server-owned-security-attribute',
-          method:
-            request.method,
-          path:
-            requestPath(
-              request,
-            ),
-          fields:
-            findings.map(
-              (item) =>
-                item.key,
-            ),
-        });
     } else {
       securityLog(
         'admin.request.tamper',
@@ -557,10 +640,37 @@ export function adminJsonBodySecurityGuard(
         .recordApiContractIncident ===
       'function'
     ) {
-      request
-        .recordApiContractIncident(
-          incident,
+      const securityState =
+        await request
+          .recordApiContractIncident(
+            incident,
+          );
+
+      if (
+        securityState?.locked
+      ) {
+        response.set(
+          'Retry-After',
+          String(
+            securityState
+              .retryAfterSeconds ??
+            1,
+          ),
         );
+        response
+          .status(429)
+          .json({
+            error:
+              'This IP address is temporarily locked after repeated invalid API requests',
+            code:
+              'api_request_ip_locked',
+            retryAfterSeconds:
+              securityState
+                .retryAfterSeconds ??
+              1,
+          });
+        return;
+      }
     } else if (
       typeof request
         .recordAdminSecurityIncident ===
