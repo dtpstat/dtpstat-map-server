@@ -9,12 +9,6 @@ export function sendAdminAuthorizationError(
     'no-store',
   );
 
-  if (options.challenge) {
-    response.set(
-      'WWW-Authenticate',
-      'Basic realm="dtpstat-admin", charset="UTF-8"',
-    );
-  }
 
   if (
     options.retryAfterSeconds
@@ -53,9 +47,6 @@ export function sendAdminAuthorizationError(
 export function respondAdminAuthenticationFailure(
   response,
   result,
-  {
-    challengeOnMissing = false,
-  } = {},
 ) {
   if (
     result.status ===
@@ -69,10 +60,7 @@ export function respondAdminAuthenticationFailure(
       response,
       401,
       'Authentication required',
-      {
-        challenge:
-          challengeOnMissing,
-      },
+      {},
     );
 
     return true;
@@ -150,9 +138,7 @@ export function respondAdminAuthenticationFailure(
       response,
       401,
       'Invalid username or password',
-      {
-        challenge: true,
-      },
+      {},
     );
 
     return true;
