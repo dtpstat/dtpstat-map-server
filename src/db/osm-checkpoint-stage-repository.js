@@ -47,7 +47,7 @@ const STAGE_BATCH_SQL = `
     staged_at
   )
   SELECT
-    $1,
+    $1::bigint,
     "osmType",
     "osmId",
     name,
@@ -85,7 +85,7 @@ export function createOsmCheckpointStageRepository(database) {
            osm_type AS "osmType",
            osm_id::bigint::text AS "osmId"
          FROM osm_city_update_checkpoint_stage
-         WHERE checkpoint_id = $1`,
+         WHERE checkpoint_id = $1::bigint`,
         [checkpointId],
       );
       return new Set(
@@ -127,7 +127,7 @@ export function createOsmCheckpointStageRepository(database) {
          JOIN identities
            ON identities."osmType" = stage.osm_type
           AND identities."osmId" = stage.osm_id
-         WHERE stage.checkpoint_id = $1
+         WHERE stage.checkpoint_id = $1::bigint
            AND stage.geometry_status = 'ready'
            AND (
              ST_IsEmpty(stage.geom)
@@ -158,7 +158,7 @@ export function createOsmCheckpointStageRepository(database) {
     deleteByCheckpoint(queryable, checkpointId) {
       return queryable.query(
         `DELETE FROM osm_city_update_checkpoint_stage
-         WHERE checkpoint_id = $1`,
+         WHERE checkpoint_id = $1::bigint`,
         [checkpointId],
       );
     },
@@ -190,14 +190,14 @@ export function createOsmCheckpointStageRepository(database) {
              FROM (
                SELECT name
                FROM osm_city_update_checkpoint_stage
-               WHERE checkpoint_id = $1
+               WHERE checkpoint_id = $1::bigint
                  AND geometry_status = 'ready'
                GROUP BY name
                HAVING COUNT(*) > 1
              ) AS duplicate_names
            ) AS "duplicateNames"
          FROM osm_city_update_checkpoint_stage
-         WHERE checkpoint_id = $1`,
+         WHERE checkpoint_id = $1::bigint`,
         [checkpointId],
       );
       return result.rows[0];
@@ -210,7 +210,7 @@ export function createOsmCheckpointStageRepository(database) {
            osm_id::bigint::text AS "osmId",
            content_checksum AS "contentChecksum"
          FROM osm_city_update_checkpoint_stage
-         WHERE checkpoint_id = $1
+         WHERE checkpoint_id = $1::bigint
          ORDER BY osm_type, osm_id`,
         [checkpointId],
       );
