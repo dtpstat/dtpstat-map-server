@@ -3,7 +3,7 @@ import express, {
 } from 'express';
 import {
   jsonBody as createJsonBody,
-} from '../shared/http/express.js';
+} from '../http/admin-json-body.js';
 import {
   CITY_MARKER_ICON_MAX_BYTES,
 } from '../modules/project/city-marker-icon.js';
