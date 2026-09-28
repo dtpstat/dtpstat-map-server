@@ -170,3 +170,94 @@ test('admin session activity hold keeps idle session alive and resumes expiry ti
   assert.equal(interval, null);
   assert.equal(timeout.delay, 60_000);
 });
+
+
+test('admin session fetch guard injects API version and blocks further work after 426', async () => {
+  const location =
+    fakeLocation();
+  const calls = [];
+  const mismatches = [];
+  const guard =
+    createAdminSessionFetchGuard({
+      fetchImpl:
+        async (
+          input,
+          init,
+        ) => {
+          calls.push({
+            input:
+              String(input),
+            headers:
+              new Headers(
+                init?.headers ??
+                {},
+              ),
+          });
+
+          return new Response(
+            JSON.stringify({
+              code:
+                'api_client_reload_required',
+            }),
+            {
+              status: 426,
+              headers: {
+                'X-DTPStat-API-Version-Required':
+                  '2',
+              },
+            },
+          );
+        },
+      location,
+      onVersionMismatch(
+        details,
+      ) {
+        mismatches.push(
+          details,
+        );
+      },
+    });
+
+  const first =
+    await guard.fetch(
+      '/api/admin/me',
+    );
+
+  assert.equal(
+    first.status,
+    426,
+  );
+  assert.equal(
+    calls[0]
+      .headers
+      .get(
+        'x-dtpstat-api-version',
+      ),
+    '1',
+  );
+  assert.equal(
+    guard.isVersionStale(),
+    true,
+  );
+  assert.deepEqual(
+    mismatches,
+    [{
+      requiredVersion:
+        '2',
+    }],
+  );
+
+  await assert.rejects(
+    guard.fetch(
+      '/api/admin/status',
+    ),
+    (error) =>
+      error.code ===
+      'api_client_reload_required',
+  );
+
+  assert.equal(
+    calls.length,
+    1,
+  );
+});
