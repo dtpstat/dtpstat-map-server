@@ -5,6 +5,15 @@ import {
 import {
   DTPSTAT_API_VERSION,
 } from '../../public/js/api-contract.js';
+import {
+  adminWebSocketOriginAllowed,
+} from './admin-origin.js';
+import {
+  requestClientIp,
+} from '../shared/http/client-ip.js';
+import {
+  securityLog,
+} from '../service-log.js';
 
 /** @param {import('ws').WebSocket} socket @param {object} payload */
 function send(socket, payload) {
@@ -63,6 +72,8 @@ export function createAdminWebSocketGateway({
   adminTasks,
   adminAuth,
   realtimeEvents,
+  allowedOrigins = new Set(),
+  securityService = null,
   path = '/api/admin/ws',
 }) {
   const webSocketServer =
@@ -198,6 +209,66 @@ export function createAdminWebSocketGateway({
             return;
           }
           if (pathname !== path) {
+            return;
+          }
+
+          if (
+            !adminWebSocketOriginAllowed(
+              request,
+              allowedOrigins,
+            )
+          ) {
+            const ipAddress =
+              requestClientIp(
+                request,
+              );
+
+            securityLog(
+              'admin.websocket.origin_rejected',
+              {
+                ip:
+                  ipAddress,
+                origin:
+                  request.headers
+                    .origin ??
+                  null,
+                path,
+              },
+            );
+
+            void Promise.resolve(
+              securityService
+                ?.recordRequestSecurityIncident?.(
+                  ipAddress,
+                  {
+                    reason:
+                      'websocket-origin-rejected',
+                    method:
+                      'GET',
+                    path,
+                    fields: [
+                      {
+                        source:
+                          'header',
+                        key:
+                          'origin',
+                      },
+                    ],
+                  },
+                ),
+            ).catch(
+              (error) =>
+                console.error(
+                  'Admin WebSocket security incident recording failed',
+                  error,
+                ),
+            );
+
+            rejectUpgrade(
+              socket,
+              403,
+              'Forbidden',
+            );
             return;
           }
 
