@@ -43,6 +43,67 @@ export function createAdminAuthorization(
   const requestRateLimiter =
     dependencies.requestRateLimiter ??
     createAdminRequestRateLimiter();
+  const rateSettingsCacheMs =
+    dependencies.rateSettingsCacheMs ??
+    5_000;
+  let cachedRateSettings =
+    null;
+  let cachedRateSettingsUntil =
+    0;
+  let rateSettingsPromise =
+    null;
+
+  const loadRateSettings =
+    async () => {
+      const now =
+        Date.now();
+
+      if (
+        cachedRateSettings &&
+        now <
+          cachedRateSettingsUntil
+      ) {
+        return cachedRateSettings;
+      }
+
+      if (!rateSettingsPromise) {
+        rateSettingsPromise =
+          Promise.resolve(
+            securityService
+              .getSecuritySettings(),
+          )
+            .then(
+              (settings) => {
+                cachedRateSettings =
+                  settings ?? {};
+                cachedRateSettingsUntil =
+                  Date.now() +
+                  rateSettingsCacheMs;
+                return cachedRateSettings;
+              },
+            )
+            .catch(
+              (error) => {
+                console.error(
+                  'Admin request rate settings refresh failed',
+                  error,
+                );
+                return (
+                  cachedRateSettings ??
+                  {}
+                );
+              },
+            )
+            .finally(
+              () => {
+                rateSettingsPromise =
+                  null;
+              },
+            );
+      }
+
+      return rateSettingsPromise;
+    };
 
   const recordRateLimit =
     (
@@ -121,7 +182,7 @@ export function createAdminAuthorization(
       }
     };
 
-  const enforceRequestRate =
+  const enforceUserRequestRate =
     (
       request,
       response,
@@ -129,7 +190,7 @@ export function createAdminAuthorization(
     ) => {
       const rateLimit =
         requestRateLimiter
-          .consume({
+          .consumeUser({
             userId:
               result.user.id,
             settings:
@@ -164,6 +225,100 @@ export function createAdminAuthorization(
       );
 
       return false;
+    };
+
+  const limitGlobalRequest =
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const settings =
+          await loadRateSettings();
+        const rateLimit =
+          requestRateLimiter
+            .consumeGlobal({
+              settings,
+            });
+
+        if (
+          rateLimit.allowed
+        ) {
+          next();
+          return;
+        }
+
+        const ipAddress =
+          requestClientIp(
+            request,
+          );
+        const details = {
+          scope: 'global',
+          limit:
+            rateLimit.limit,
+          retryAfterSeconds:
+            rateLimit
+              .retryAfterSeconds,
+          method:
+            request.method,
+          path:
+            String(
+              request.originalUrl ??
+              request.path ??
+              request.url ??
+              '',
+            ).split('?')[0],
+        };
+
+        securityLog(
+          'admin.request.rate_limited',
+          {
+            ...details,
+            ip:
+              ipAddress,
+            userId: null,
+            username: null,
+          },
+        );
+
+        if (
+          typeof securityService
+            .appendAudit ===
+          'function'
+        ) {
+          await securityService
+            .appendAudit({
+              eventType:
+                'security',
+              operationType:
+                'admin.request.rate-limit',
+              status:
+                'blocked',
+              durationMs:
+                null,
+              ipAddress,
+              userId: null,
+              username: null,
+              details,
+            });
+        }
+
+        sendAdminAuthorizationError(
+          response,
+          429,
+          'Administrative request rate limit exceeded',
+          {
+            code:
+              'admin_request_rate_limited',
+            retryAfterSeconds:
+              rateLimit
+                .retryAfterSeconds,
+          },
+        );
+      } catch (error) {
+        next(error);
+      }
     };
 
   const authenticateRequest =
@@ -241,7 +396,7 @@ export function createAdminAuthorization(
           }
 
           if (
-            !enforceRequestRate(
+            !enforceUserRequestRate(
               request,
               response,
               result,
@@ -356,7 +511,7 @@ export function createAdminAuthorization(
         }
 
         if (
-          !enforceRequestRate(
+          !enforceUserRequestRate(
             request,
             response,
             result,
@@ -385,6 +540,8 @@ export function createAdminAuthorization(
       middleware('any'),
 
     requireAdminEntry,
+
+    limitGlobalRequest,
 
     requireProfile:
       middleware(
