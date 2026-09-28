@@ -63,7 +63,12 @@ export function createAdminAuthorization(
         method:
           request.method,
         path:
-          request.path,
+          String(
+            request.originalUrl ??
+            request.path ??
+            request.url ??
+            '',
+          ).split('?')[0],
       };
 
       securityLog(

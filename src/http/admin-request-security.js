@@ -49,31 +49,31 @@ const USER_MANAGEMENT_CAPABILITIES =
 
 const RESERVED_HEADERS =
   new Set([
-    'x-user-id',
-    'x-admin-user-id',
-    'x-current-user-id',
-    'x-auth-user-id',
-    'x-role',
-    'x-role-id',
-    'x-role-ir',
-    'x-tole-ir',
-    'x-role-mode',
-    'x-user-role',
-    'x-admin-role',
-    'x-permission',
-    'x-permissions',
-    'x-is-superuser',
-    'x-is-bootstrap',
-    'x-auth-method',
-    'x-session-id',
-    'x-admin-user',
-    'x-can-manage-data',
-    'x-can-manage-interface',
-    'x-can-edit-osm',
-    'x-can-edit-geometries',
-    'x-can-manage-users',
-    'x-can-view-audit',
-    'x-can-manage-security',
+    'xuserid',
+    'xadminuserid',
+    'xcurrentuserid',
+    'xauthuserid',
+    'xrole',
+    'xroleid',
+    'xroleir',
+    'xtoleir',
+    'xrolemode',
+    'xuserrole',
+    'xadminrole',
+    'xpermission',
+    'xpermissions',
+    'xissuperuser',
+    'xisbootstrap',
+    'xauthmethod',
+    'xsessionid',
+    'xadminuser',
+    'xcanmanagedata',
+    'xcanmanageinterface',
+    'xcaneditosm',
+    'xcaneditgeometries',
+    'xcanmanageusers',
+    'xcanviewaudit',
+    'xcanmanagesecurity',
   ]);
 
 function normalizedKey(value) {
@@ -178,9 +178,7 @@ export function detectAdminTransportTampering(
   ) {
     if (
       RESERVED_HEADERS.has(
-        key.toLocaleLowerCase(
-          'en-US',
-        ),
+        normalizedKey(key),
       )
     ) {
       findings.push({

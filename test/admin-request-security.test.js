@@ -55,7 +55,7 @@ test('admin transport guard detects identity and role assertions without values'
         headers: {
           'x-admin-user-id':
             '999',
-          'x-role-mode':
+          'x-rolemode':
             'superuser',
         },
         query: {
@@ -79,7 +79,7 @@ test('admin transport guard detects identity and role assertions without values'
       {
         source: 'header',
         key:
-          'x-role-mode',
+          'x-rolemode',
       },
       {
         source: 'query',
