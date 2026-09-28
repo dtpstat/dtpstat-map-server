@@ -1,3 +1,6 @@
+export const SECURITY_JOURNAL_MARKER =
+  'DTPSTAT_SECURITY_V1';
+
 const LEVEL_METHODS = Object.freeze({
   info: 'info',
   warning: 'warn',
@@ -41,7 +44,14 @@ export function serviceLog(level, event, details = {}, output = console) {
  * @param {Pick<Console, 'warn'>} [output]
  */
 export function securityLog(event, details = {}, output = console) {
-  output.warn(`[security] ${JSON.stringify({ event, ...details })}`);
+  output.warn(
+    `[security] ${JSON.stringify({
+      marker:
+        SECURITY_JOURNAL_MARKER,
+      event,
+      ...details,
+    })}`,
+  );
 }
 
 /**
