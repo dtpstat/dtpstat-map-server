@@ -202,11 +202,11 @@ test('admin audit repository parameterizes filters and exposes avatar availabili
   assert.equal(rows[0].hasAvatar, true);
   assert.match(
     queryText,
-    /event_type = \$1/u,
+    /event_type = \$1::text/u,
   );
   assert.match(
     queryText,
-    /LOWER\(username\) = LOWER\(\$2\)/u,
+    /LOWER\(username\) = LOWER\(\$2::text\)/u,
   );
   assert.match(
     queryText,
