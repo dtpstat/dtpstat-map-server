@@ -53,19 +53,19 @@ const EXPORT_SECURITY_SETTINGS_SQL = `
 
 const UPDATE_PROJECT_SETTINGS_SQL = `
   UPDATE project_settings SET
-    project_name=$1, keywords=$2::text[], footer_html=$3,
-    yandex_metrika_id=$4, google_analytics_id=$5,
-    theme_preset=$6,
-    show_line_labels=$7,
-    show_line_popups=$8,
+    project_name=$1::text, keywords=$2::text[], footer_html=$3::text,
+    yandex_metrika_id=$4::text, google_analytics_id=$5::text,
+    theme_preset=$6::text,
+    show_line_labels=$7::boolean,
+    show_line_popups=$8::boolean,
     public_download_name=CASE WHEN $9::boolean THEN $10::text ELSE public_download_name END,
     mapbox_access_token=CASE WHEN $11::boolean THEN $12::text ELSE mapbox_access_token END,
     mapbox_access_token_initialized=CASE
       WHEN $11::boolean THEN TRUE
       ELSE mapbox_access_token_initialized
     END,
-    large_city_population_threshold=$13,
-    large_city_area_km2_threshold=$14,
+    large_city_population_threshold=$13::integer,
+    large_city_area_km2_threshold=$14::double precision,
     updated_at=NOW()
   WHERE id=1
 `;
@@ -117,23 +117,23 @@ const SAVE_REPORT_CONFIG_SQL = `
 
 const UPDATE_SECURITY_SETTINGS_SQL = `
   UPDATE admin_security_settings SET
-    max_failed_attempts=$1,
-    failure_window_seconds=$2,
-    lockout_seconds=$3,
-    ip_max_failed_attempts=$4,
-    ip_failure_window_seconds=$5,
-    ip_lockout_seconds=$6,
-    session_idle_seconds=$7,
-    session_absolute_seconds=$8,
-    audit_retention_days=$9,
-    request_rate_limit_user_per_minute=$10,
-    request_rate_limit_global_per_minute=$11,
-    password_min_length=$12,
-    password_max_length=$13,
-    password_require_lowercase=$14,
-    password_require_uppercase=$15,
-    password_require_digit=$16,
-    password_require_special=$17,
+    max_failed_attempts=$1::integer,
+    failure_window_seconds=$2::integer,
+    lockout_seconds=$3::integer,
+    ip_max_failed_attempts=$4::integer,
+    ip_failure_window_seconds=$5::integer,
+    ip_lockout_seconds=$6::integer,
+    session_idle_seconds=$7::integer,
+    session_absolute_seconds=$8::integer,
+    audit_retention_days=$9::integer,
+    request_rate_limit_user_per_minute=$10::integer,
+    request_rate_limit_global_per_minute=$11::integer,
+    password_min_length=$12::integer,
+    password_max_length=$13::integer,
+    password_require_lowercase=$14::boolean,
+    password_require_uppercase=$15::boolean,
+    password_require_digit=$16::boolean,
+    password_require_special=$17::boolean,
     updated_at=NOW()
   WHERE id=1
 `;
