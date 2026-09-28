@@ -121,6 +121,71 @@ if (section) {
   const drafts = createDraftStore({
     namespace: 'city-geometries',
   });
+
+  function blockForDraftStorage(
+    compatibility,
+  ) {
+    const found =
+      compatibility
+        ?.foundVersion;
+    const expected =
+      compatibility
+        ?.expectedVersion;
+
+    message.textContent =
+      compatibility?.corrupt
+        ? 'Локальное хранилище геометрий повреждено. Оно сохранено без изменений; обновите страницу или восстановите localStorage вручную.'
+        : 'Локальная схема геометрий новее текущего клиента' +
+          (
+            found === null ||
+            found === undefined
+              ? ''
+              : ' (v' + found + ')'
+          ) +
+          '. Требуется обновить страницу' +
+          (
+            expected
+              ? ' до клиента с поддержкой v' +
+                expected
+              : ''
+          ) +
+          '.';
+
+    message.className =
+      'notice notice-error';
+
+    section
+      .querySelectorAll(
+        'button,input,select,textarea',
+      )
+      .forEach(
+        (control) => {
+          control.disabled =
+            true;
+        },
+      );
+
+    section.dataset
+      .storageBlocked =
+      'true';
+  }
+
+  const draftCompatibility =
+    drafts.compatibility();
+
+  if (
+    !draftCompatibility
+      .compatible
+  ) {
+    blockForDraftStorage(
+      draftCompatibility,
+    );
+    throw new Error(
+      draftCompatibility
+        .message,
+    );
+  }
+
   drafts.setPersistent(true);
 
   function isLocalGeometryId(value) {
@@ -4238,6 +4303,16 @@ if (section) {
     ) {
       return;
     }
+
+    if (
+      change.incompatible
+    ) {
+      blockForDraftStorage(
+        drafts.compatibility(),
+      );
+      return;
+    }
+
     handleExternalDraftChange(
       change,
     );
