@@ -5,6 +5,10 @@ import {
   createAdminRequestRateLimiter,
 } from './admin-request-rate-limit.js';
 import {
+  installAdminRequestSecurityContext,
+  rejectAdminTransportTampering,
+} from './admin-request-security.js';
+import {
   securityLog,
 } from '../service-log.js';
 import {
@@ -212,6 +216,25 @@ export function createAdminAuthorization(
             return;
           }
 
+          installAdminRequestSecurityContext(
+            request,
+            response,
+            {
+              securityService,
+              user:
+                result.user,
+            },
+          );
+
+          if (
+            rejectAdminTransportTampering(
+              request,
+              response,
+            )
+          ) {
+            return;
+          }
+
           if (
             !enforceRequestRate(
               request,
@@ -219,6 +242,9 @@ export function createAdminAuthorization(
               result,
             )
           ) {
+            request
+              .adminSecurityIncidentRecorded =
+              true;
             return;
           }
 
@@ -305,6 +331,25 @@ export function createAdminAuthorization(
           return;
         }
 
+        installAdminRequestSecurityContext(
+          request,
+          response,
+          {
+            securityService,
+            user:
+              result.user,
+          },
+        );
+
+        if (
+          rejectAdminTransportTampering(
+            request,
+            response,
+          )
+        ) {
+          return;
+        }
+
         if (
           !enforceRequestRate(
             request,
@@ -312,6 +357,9 @@ export function createAdminAuthorization(
             result,
           )
         ) {
+          request
+            .adminSecurityIncidentRecorded =
+            true;
           return;
         }
 

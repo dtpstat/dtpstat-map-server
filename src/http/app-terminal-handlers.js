@@ -1,3 +1,78 @@
+import {
+  requestClientIp,
+} from '../shared/http/client-ip.js';
+import {
+  securityLog,
+  serviceLog,
+} from '../service-log.js';
+
+function requestPath(request) {
+  return String(
+    request.path ??
+    request.originalUrl ??
+    request.url ??
+    '',
+  ).split('?')[0];
+}
+
+function logRejectedRequest(
+  request,
+  statusCode,
+  reason,
+) {
+  if (
+    typeof request
+      .recordAdminSecurityIncident ===
+    'function'
+  ) {
+    request
+      .recordAdminSecurityIncident(
+        'admin.request.rejected',
+        {
+          statusCode,
+          reason,
+        },
+      );
+    return;
+  }
+
+  const details = {
+    method:
+      request.method,
+    path:
+      requestPath(
+        request,
+      ),
+    statusCode,
+    reason,
+    ip:
+      requestClientIp(
+        request,
+      ),
+  };
+
+  if (
+    requestPath(request)
+      .startsWith(
+        '/api/admin',
+      )
+  ) {
+    securityLog(
+      'admin.request.rejected',
+      details,
+    );
+    return;
+  }
+
+  serviceLog(
+    statusCode >= 500
+      ? 'error'
+      : 'warning',
+    'http.request.rejected',
+    details,
+  );
+}
+
 export function installAppTerminalHandlers(
   app,
 ) {
@@ -10,6 +85,11 @@ export function installAppTerminalHandlers(
         request.path
           .startsWith('/api/')
       ) {
+        logRejectedRequest(
+          request,
+          404,
+          'api-endpoint-not-found',
+        );
         response
           .status(404)
           .json({
@@ -38,6 +118,11 @@ export function installAppTerminalHandlers(
         error?.type ===
         'entity.too.large'
       ) {
+        logRejectedRequest(
+          request,
+          413,
+          'request-body-too-large',
+        );
         response
           .status(413)
           .json({
@@ -52,6 +137,11 @@ export function installAppTerminalHandlers(
         error?.type ===
         'entity.parse.failed'
       ) {
+        logRejectedRequest(
+          request,
+          400,
+          'invalid-json',
+        );
         response
           .status(400)
           .json({
@@ -67,6 +157,11 @@ export function installAppTerminalHandlers(
         error?.type ===
           'encoding.unsupported'
       ) {
+        logRejectedRequest(
+          request,
+          415,
+          'unsupported-content-encoding',
+        );
         response
           .status(415)
           .json({
@@ -78,18 +173,10 @@ export function installAppTerminalHandlers(
         return;
       }
 
-      console.error(
-        'Request failed',
-        {
-          method:
-            request.method,
-          path:
-            request.path,
-          error:
-            error instanceof Error
-              ? error.message
-              : String(error),
-        },
+      logRejectedRequest(
+        request,
+        503,
+        'request-handler-failed',
       );
 
       response
