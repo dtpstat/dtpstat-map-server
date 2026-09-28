@@ -221,7 +221,25 @@ function connect() {
 
   current.addEventListener(
     'error',
-    () => current.close(),
+    () => {
+      current.close();
+
+      void fetch(
+        '/api/admin/me',
+        {
+          credentials:
+            'same-origin',
+          headers: {
+            Accept:
+              'application/json',
+          },
+        },
+      ).catch(
+        () => {
+          // Network failures are handled by the normal reconnect loop.
+        },
+      );
+    },
   );
 }
 
