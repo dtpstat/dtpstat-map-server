@@ -25,18 +25,18 @@ const config = {
 };
 
 test('OSM request uses ENV defaults and accepts bounded request overrides', () => {
-  const resolved = resolveOsmCityUpdateRequest(undefined, {
-    dryRun: 'true',
-    timeoutMs: '5000',
-    queryTimeoutSeconds: '30',
-    maxResponseBytes: '300000',
-    maxTotalBytes: '500000',
-    batchSize: '25',
-    minDelayMs: '6000',
-    maxRetries: '3',
-    retryBaseDelayMs: '40000',
-    retryMaxDelayMs: '300000',
-  }, config);
+  const resolved = resolveOsmCityUpdateRequest({
+    dryRun: true,
+    timeoutMs: 5000,
+    queryTimeoutSeconds: 30,
+    maxResponseBytes: 300000,
+    maxTotalBytes: 500000,
+    batchSize: 25,
+    minDelayMs: 6000,
+    maxRetries: 3,
+    retryBaseDelayMs: 40000,
+    retryMaxDelayMs: 300000,
+  }, {}, config);
 
   assert.equal(resolved.url, config.url);
   assert.equal(resolved.dryRun, true);
@@ -72,33 +72,28 @@ test('OSM request URL override is allowlisted and cannot raise ENV limits', () =
     /not in the allowed URL list/,
   );
   assert.throws(
-    () => resolveOsmCityUpdateRequest(undefined, { timeoutMs: '180001' }, config),
+    () => resolveOsmCityUpdateRequest({ timeoutMs: 180001 }, {}, config),
     OsmCityUpdateValidationError,
   );
   assert.throws(
-    () => resolveOsmCityUpdateRequest(undefined, { batchSize: '201' }, config),
+    () => resolveOsmCityUpdateRequest({ batchSize: 201 }, {}, config),
     /batchSize must be an integer between 1 and 200/,
   );
   assert.throws(
-    () => resolveOsmCityUpdateRequest(undefined, { minDelayMs: '4999' }, config),
+    () => resolveOsmCityUpdateRequest({ minDelayMs: 4999 }, {}, config),
     /minDelayMs must be an integer between 5000 and 300000/,
   );
   assert.throws(
-    () => resolveOsmCityUpdateRequest(undefined, { maxRetries: '7' }, config),
+    () => resolveOsmCityUpdateRequest({ maxRetries: 7 }, {}, config),
     /maxRetries must be an integer between 0 and 6/,
   );
   assert.throws(
-    () => resolveOsmCityUpdateRequest(undefined, {
-      maxResponseBytes: '400000',
-      maxTotalBytes: '300000',
-    }, config),
+    () => resolveOsmCityUpdateRequest({
+      maxResponseBytes: 400000,
+      maxTotalBytes: 300000,
+    }, {}, config),
     /maxResponseBytes must not exceed maxTotalBytes/,
   );
-  const legacy = resolveOsmCityUpdateRequest(
-    undefined,
-    { maxBytes: '500000' },
-    config,
-  );
-  assert.equal(legacy.maxTotalBytes, 500000);
+
 });
 
