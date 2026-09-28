@@ -277,7 +277,7 @@ test('geometry server model treats administrative links as optional derived stat
   );
   assert.match(
     storage,
-    /SELECT relink_city_geometry\(\$1\)/u,
+    /SELECT relink_city_geometry\(\$1::bigint\)/u,
   );
   assert.match(
     ingestion,
