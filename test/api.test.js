@@ -36,6 +36,10 @@ function versionedFetch(
     DTPSTAT_API_VERSION_HEADER,
     DTPSTAT_API_VERSION,
   );
+  headers.set(
+    'Origin',
+    new URL(url).origin,
+  );
 
   return fetch(
     input,
@@ -263,7 +267,7 @@ async function waitForAdminTask(baseUrl, accepted, authorization) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const statusResponse = await versionedFetch(
       `${baseUrl}${accepted.task.statusURL}`,
-      { headers: { Authorization: authorization } },
+      { headers: { Cookie: authorization } },
     );
     assert.equal(statusResponse.status, 200);
     statusBody = await statusResponse.json();
@@ -449,14 +453,14 @@ test('root serves the optimized client without embedded GeoJSON', async () => {
 });
 
 test('admin entry requires auth while static admin assets remain public', async () => {
-  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const authorization = 'dtpstat_admin_session=test-session-token';
   await withServer(async (baseUrl) => {
     const unauthorized = await versionedFetch(`${baseUrl}/admin/`);
     assert.equal(unauthorized.status, 401);
     const publicScript = await versionedFetch(`${baseUrl}/admin/admin.js`);
     assert.equal(publicScript.status, 200);
     const authorized = await versionedFetch(`${baseUrl}/admin/`, {
-      headers: { Authorization: authorization },
+      headers: { Cookie: authorization },
     });
     assert.equal(authorized.status, 200);
     const csp = authorized.headers.get('content-security-policy') ?? '';
@@ -478,13 +482,13 @@ test('admin entry requires auth while static admin assets remain public', async 
 });
 
 test('admin config exposes safe ENV defaults and exact OSM URLs', async () => {
-  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const authorization = 'dtpstat_admin_session=test-session-token';
   await withServer(async (baseUrl) => {
     const unauthorized = await versionedFetch(`${baseUrl}/api/admin/config`);
     assert.equal(unauthorized.status, 401);
 
     const response = await versionedFetch(`${baseUrl}/api/admin/config`, {
-      headers: { Authorization: authorization },
+      headers: { Cookie: authorization },
     });
     assert.equal(response.status, 200);
     assert.match(response.headers.get('cache-control'), /no-store/);
@@ -508,7 +512,7 @@ test('admin config exposes safe ENV defaults and exact OSM URLs', async () => {
 });
 
 test('admin status always exposes persistent successful update timestamps', async () => {
-  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const authorization = 'dtpstat_admin_session=test-session-token';
   const initial = {
     taskType: 'kml-update',
     taskId: null,
@@ -520,7 +524,7 @@ test('admin status always exposes persistent successful update timestamps', asyn
   });
   await withServer(async (baseUrl) => {
     const response = await versionedFetch(`${baseUrl}/api/admin/status`, {
-      headers: { Authorization: authorization },
+      headers: { Cookie: authorization },
     });
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), {
@@ -532,7 +536,7 @@ test('admin status always exposes persistent successful update timestamps', asyn
   }, { adminTasks });
 });
 
-test('import endpoint requires Basic Auth before processing the body', async () => {
+test('import endpoint requires a session before processing the body', async () => {
   let calls = 0;
   const importService = {
     async replaceFromGeoJson() {
@@ -549,7 +553,6 @@ test('import endpoint requires Basic Auth before processing the body', async () 
     });
 
     assert.equal(response.status, 401);
-    assert.match(response.headers.get('www-authenticate'), /^Basic /);
     assert.equal(calls, 0);
   }, { importService });
 });
@@ -562,13 +565,13 @@ test('authenticated import accepts GeoJSON and returns update statistics', async
       return importResult;
     },
   };
-  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const authorization = 'dtpstat_admin_session=test-session-token';
 
   await withServer(async (baseUrl) => {
     const response = await versionedFetch(`${baseUrl}/api/admin/import`, {
       method: 'POST',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/geo+json',
       },
       body: JSON.stringify(geojson),
@@ -588,13 +591,13 @@ test('authenticated import accepts GeoJSON and returns update statistics', async
 });
 
 test('import endpoint rejects unsupported and malformed bodies', async () => {
-  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const authorization = 'dtpstat_admin_session=test-session-token';
 
   await withServer(async (baseUrl) => {
     const unsupported = await versionedFetch(`${baseUrl}/api/admin/import`, {
       method: 'POST',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'text/plain',
       },
       body: '{}',
@@ -604,7 +607,7 @@ test('import endpoint rejects unsupported and malformed bodies', async () => {
     const malformed = await versionedFetch(`${baseUrl}/api/admin/import`, {
       method: 'POST',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/json',
       },
       body: '{',
@@ -624,13 +627,13 @@ test('import endpoint rejects unsupported and malformed bodies', async () => {
 });
 
 test('import endpoint enforces the configured upload limit', async () => {
-  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const authorization = 'dtpstat_admin_session=test-session-token';
 
   await withServer(async (baseUrl) => {
     const response = await versionedFetch(`${baseUrl}/api/admin/import`, {
       method: 'POST',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/geo+json',
       },
       body: JSON.stringify(geojson),
@@ -648,7 +651,7 @@ test('authenticated population endpoint updates a separate data source', async (
       return populationResult;
     },
   };
-  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const authorization = 'dtpstat_admin_session=test-session-token';
   const body = {
     schemaVersion: 2,
     asOf: '2026-01-01',
@@ -668,7 +671,7 @@ test('authenticated population endpoint updates a separate data source', async (
     const response = await versionedFetch(`${baseUrl}/api/admin/populations`, {
       method: 'POST',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
@@ -707,7 +710,7 @@ test('KML update endpoint is protected and forwards explicit sources and overrid
       ],
     },
   ];
-  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const authorization = 'dtpstat_admin_session=test-session-token';
 
   await withServer(async (baseUrl) => {
     const unauthorized = await versionedFetch(`${baseUrl}/api/admin/update`, {
@@ -728,7 +731,7 @@ test('KML update endpoint is protected and forwards explicit sources and overrid
       {
         method: 'POST',
         headers: {
-          Authorization: authorization,
+          Cookie: authorization,
           'Content-Type': 'application/json',
         },
         body:
@@ -758,7 +761,7 @@ test('KML update endpoint is protected and forwards explicit sources and overrid
 });
 
 test('OSM subtree endpoint toggles the whole selected branch once', async () => {
-  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const authorization = 'dtpstat_admin_session=test-session-token';
   const calls = [];
   let derivedCalls = 0;
   const osmImportSettingsRepository = {
@@ -802,7 +805,7 @@ test('OSM subtree endpoint toggles the whole selected branch once', async () => 
       {
         method: 'PATCH',
         headers: {
-          Authorization: authorization,
+          Cookie: authorization,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ active: false }),
@@ -822,7 +825,7 @@ test('OSM subtree endpoint toggles the whole selected branch once', async () => 
       {
         method: 'PATCH',
         headers: {
-          Authorization: authorization,
+          Cookie: authorization,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ active: 'false' }),
@@ -861,9 +864,7 @@ test('OSM checkpoint API exposes and explicitly discards resumable progress', as
       return value;
     },
   };
-  const authorization = `Basic ${Buffer.from(
-    'importer:test:secret',
-  ).toString('base64')}`;
+  const authorization = 'dtpstat_admin_session=test-session-token';
 
   await withServer(async (baseUrl) => {
     const unauthorized = await versionedFetch(
@@ -873,7 +874,7 @@ test('OSM checkpoint API exposes and explicitly discards resumable progress', as
 
     const response = await versionedFetch(
       `${baseUrl}/api/admin/osm-checkpoint`,
-      { headers: { Authorization: authorization } },
+      { headers: { Cookie: authorization } },
     );
     assert.equal(response.status, 200);
     assert.match(response.headers.get('cache-control'), /no-store/);
@@ -883,7 +884,7 @@ test('OSM checkpoint API exposes and explicitly discards resumable progress', as
       `${baseUrl}/api/admin/osm-checkpoint`,
       {
         method: 'DELETE',
-        headers: { Authorization: authorization },
+        headers: { Cookie: authorization },
       },
     );
     assert.equal(discarded.status, 200);
@@ -893,7 +894,7 @@ test('OSM checkpoint API exposes and explicitly discards resumable progress', as
 
     const after = await versionedFetch(
       `${baseUrl}/api/admin/osm-checkpoint`,
-      { headers: { Authorization: authorization } },
+      { headers: { Cookie: authorization } },
     );
     assert.equal((await after.json()).checkpoint, null);
   }, { osmCityUpdateService });
@@ -929,7 +930,7 @@ test('OSM city update endpoint is protected and forwards URL and safe overrides'
     },
   };
   const body = { URL: 'https://overpass-api.de/api/interpreter' };
-  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const authorization = 'dtpstat_admin_session=test-session-token';
   const adminTasks = createAdminTaskManager();
 
   await withServer(async (baseUrl) => {
@@ -952,7 +953,7 @@ test('OSM city update endpoint is protected and forwards URL and safe overrides'
       {
         method: 'POST',
         headers: {
-          Authorization: authorization,
+          Cookie: authorization,
           'Content-Type': 'application/json',
         },
         body:
@@ -1003,7 +1004,7 @@ test('one active admin task blocks every other mutating admin route', async () =
       });
     },
   };
-  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const authorization = 'dtpstat_admin_session=test-session-token';
   const kmlBody = [{
     URL: 'https://www.google.com/maps/d/viewer?mid=single-lock',
     layers: [{ name: 'Линии', multiple: 1 }],
@@ -1025,7 +1026,7 @@ test('one active admin task blocks every other mutating admin route', async () =
     const firstResponse = await versionedFetch(`${baseUrl}/api/admin/update`, {
       method: 'POST',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -1039,7 +1040,7 @@ test('one active admin task blocks every other mutating admin route', async () =
     const blockedResponse = await versionedFetch(`${baseUrl}/api/admin/populations`, {
       method: 'POST',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(populationBody),
@@ -1058,7 +1059,7 @@ test('one active admin task blocks every other mutating admin route', async () =
     const secondResponse = await versionedFetch(`${baseUrl}/api/admin/populations`, {
       method: 'POST',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(populationBody),
@@ -1066,7 +1067,7 @@ test('one active admin task blocks every other mutating admin route', async () =
     const second = await secondResponse.clone().json();
     assert.equal(secondResponse.status, 202);
     const oldStatus = await versionedFetch(`${baseUrl}${first.task.statusURL}`, {
-      headers: { Authorization: authorization },
+      headers: { Cookie: authorization },
     });
     assert.equal(oldStatus.status, 404);
     const secondCompleted = await acceptAndWaitForAdminTask(
@@ -1097,7 +1098,7 @@ test('admin cancellation aborts the active task and keeps its log', async () => 
       });
     },
   };
-  const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+  const authorization = 'dtpstat_admin_session=test-session-token';
 
   await withServer(async (baseUrl) => {
     const startResponse = await versionedFetch(
@@ -1105,7 +1106,7 @@ test('admin cancellation aborts the active task and keeps its log', async () => 
       {
         method: 'POST',
         headers: {
-          Authorization: authorization,
+          Cookie: authorization,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -1120,7 +1121,7 @@ test('admin cancellation aborts the active task and keeps its log', async () => 
 
     const cancelResponse = await versionedFetch(
       `${baseUrl}/api/admin/cancel/${started.taskId}`,
-      { method: 'POST', headers: { Authorization: authorization } },
+      { method: 'POST', headers: { Cookie: authorization } },
     );
     assert.equal(cancelResponse.status, 202);
     assert.equal((await cancelResponse.json()).taskId, started.taskId);
@@ -1134,7 +1135,7 @@ test('admin cancellation aborts the active task and keeps its log', async () => 
 
     const repeated = await versionedFetch(
       `${baseUrl}/api/admin/cancel/${started.taskId}`,
-      { method: 'POST', headers: { Authorization: authorization } },
+      { method: 'POST', headers: { Cookie: authorization } },
     );
     assert.equal(repeated.status, 409);
   }, { osmCityUpdateService });
