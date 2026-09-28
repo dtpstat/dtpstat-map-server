@@ -432,6 +432,51 @@ export function createGeometryEditorService(
     };
   }
 
+  async function requireOwnedEditLease(
+    client,
+    {
+      geometryId,
+      token,
+      userId,
+    },
+  ) {
+    const ownsLease =
+      await leaseStorage
+        .owns(
+          client,
+          {
+            geometryId,
+            token,
+            userId,
+          },
+        );
+
+    if (ownsLease) {
+      return;
+    }
+
+    throw new GeometryEditorValidationError(
+      'Edit token is no longer valid',
+      409,
+      {
+        conflicts: [{
+          id:
+            geometryId,
+          reason:
+            'edit-lock',
+          lease:
+            publicLease(
+              await leaseStorage
+                .active(
+                  client,
+                  geometryId,
+                ),
+            ),
+        }],
+      },
+    );
+  }
+
   async function ensureActiveBoundaryCities() {
     const initial =
       await storage
@@ -837,10 +882,20 @@ export function createGeometryEditorService(
       );
     },
 
-    async merge(payload) {
+    async merge(
+      payload,
+      actor,
+      clientIdValue,
+    ) {
       const items =
         normalizeGeometryMergeRequest(
           payload,
+        );
+      const userId =
+        actorId(actor);
+      const clientId =
+        normalizeGeometryEditorClientId(
+          clientIdValue,
         );
 
       return write(
@@ -879,6 +934,53 @@ export function createGeometryEditorService(
               {
                 conflicts,
               },
+            );
+          }
+
+          const mergeLeaseTokens =
+            new Map();
+
+          for (const id of ids) {
+            const token =
+              randomUUID();
+            const lease =
+              await leaseStorage
+                .acquire(
+                  client,
+                  {
+                    geometryId:
+                      id,
+                    token,
+                    userId,
+                    clientId,
+                    leaseSeconds,
+                  },
+                );
+
+            if (
+              !lease ||
+              lease.token !== token
+            ) {
+              throw new GeometryEditorValidationError(
+                'One or more geometries are already being edited',
+                409,
+                {
+                  conflicts: [{
+                    id,
+                    reason:
+                      'edit-lock',
+                    lease:
+                      publicLease(
+                        lease,
+                      ),
+                  }],
+                },
+              );
+            }
+
+            mergeLeaseTokens.set(
+              id,
+              token,
             );
           }
 
@@ -985,6 +1087,23 @@ export function createGeometryEditorService(
               geometry.id,
             );
 
+          for (
+            const [
+              geometryId,
+              token,
+            ] of mergeLeaseTokens
+          ) {
+            await leaseStorage
+              .release(
+                client,
+                {
+                  geometryId,
+                  token,
+                  userId,
+                },
+              );
+          }
+
           return {
             geometry:
               await storage
@@ -1003,6 +1122,7 @@ export function createGeometryEditorService(
       geometryId,
       payload,
       options = {},
+      actor,
     ) {
       const id =
         normalizeGeometryId(
@@ -1017,6 +1137,12 @@ export function createGeometryEditorService(
           options
             .expectedUpdatedAt,
         );
+      const token =
+        normalizeGeometryEditToken(
+          options.editToken,
+        );
+      const userId =
+        actorId(actor);
 
       return write(
         async (client) => {
@@ -1060,6 +1186,16 @@ export function createGeometryEditorService(
             );
           }
 
+          await requireOwnedEditLease(
+            client,
+            {
+              geometryId:
+                id,
+              token,
+              userId,
+            },
+          );
+
           if (
             previous.family !==
             'polygon'
@@ -1101,11 +1237,18 @@ export function createGeometryEditorService(
     async delete(
       geometryId,
       options = {},
+      actor,
     ) {
       const id =
         normalizeGeometryId(
           geometryId,
         );
+      const token =
+        normalizeGeometryEditToken(
+          options.editToken,
+        );
+      const userId =
+        actorId(actor);
       const expected =
         options
           .expectedUpdatedAt ===
@@ -1164,6 +1307,16 @@ export function createGeometryEditorService(
               },
             );
           }
+
+          await requireOwnedEditLease(
+            client,
+            {
+              geometryId:
+                id,
+              token,
+              userId,
+            },
+          );
 
           await storage
             .deleteGeometry(

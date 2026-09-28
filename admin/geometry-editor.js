@@ -3670,11 +3670,21 @@ if (section) {
     if (!confirmed) return;
 
     const local = draftFor(item.id);
+    if (!local?.editToken) {
+      setMessage(
+        'Для удаления сначала начните редактирование геометрии.',
+        'error',
+      );
+      return;
+    }
+
     try {
       await api('/api/admin/geometry-editor/geometries/' + item.id, {
         method: 'DELETE',
         headers: {
-          'X-DTPStat-Base-Revision': local?.baseUpdatedAt ?? item.updatedAt,
+          'X-DTPStat-Base-Revision': local.baseUpdatedAt ?? item.updatedAt,
+          'X-DTPStat-Edit-Token':
+            local.editToken,
         },
       });
       drafts.remove(item.id);

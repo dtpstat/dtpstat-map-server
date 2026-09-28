@@ -989,7 +989,12 @@ export function createGeometryEditorRouter({
                   expectedRevision(
                     request,
                   ),
+                editToken:
+                  editToken(
+                    request,
+                  ),
               },
+              request.adminUser,
             );
 
         if (!geometry) {
@@ -1068,6 +1073,10 @@ export function createGeometryEditorRouter({
           await geometryEditorService
             .merge(
               request.body,
+              request.adminUser,
+              realtimeClientId(
+                request,
+              ),
             );
 
         recordAdminOperationDetails(
@@ -1148,7 +1157,12 @@ export function createGeometryEditorRouter({
                   expectedRevision(
                     request,
                   ),
+                editToken:
+                  editToken(
+                    request,
+                  ),
               },
+              request.adminUser,
             );
 
         if (!geometry) {

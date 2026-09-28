@@ -602,6 +602,27 @@ test('geometry workspace validates exact persisted tokens and scopes takeover to
 });
 
 
+test('geometry destructive actions preserve the explicit lease contract', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /Для удаления сначала начните редактирование геометрии/u,
+  );
+  assert.match(
+    editor,
+    /method: 'DELETE'[\s\S]*X-DTPStat-Edit-Token/u,
+  );
+  assert.match(
+    editor,
+    /\/cut[\s\S]*X-DTPStat-Edit-Token/u,
+  );
+});
+
+
 test('geometry editor exposes normal unlinked geometry and persistent explicit editing', async () => {
   const [
     editor,

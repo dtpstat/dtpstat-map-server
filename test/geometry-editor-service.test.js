@@ -43,6 +43,37 @@ function serviceDependencies(
       async owns() {
         return true;
       },
+      async active() {
+        return null;
+      },
+      async acquire(
+        _client,
+        {
+          geometryId,
+          token,
+          userId,
+          clientId,
+        },
+      ) {
+        return {
+          geometryId,
+          token,
+          userId,
+          username:
+            'tester',
+          clientId,
+          generation: 1,
+          acquiredAt:
+            '2026-09-25T12:00:00.000Z',
+          lastSeenAt:
+            '2026-09-25T12:00:00.000Z',
+          expiresAt:
+            '2026-09-25T12:01:30.000Z',
+        };
+      },
+      async release() {
+        return true;
+      },
     },
     async acquireLock() {},
     randomUUID:
@@ -489,7 +520,9 @@ test('geometry merge validates every source revision before one transactional me
             first.updatedAt,
         },
       ],
-    });
+    }, {
+      id: 77,
+    }, 'test-client');
 
   assert.deepEqual(
     result
@@ -552,7 +585,9 @@ test('geometry merge conflict rolls back before spatial merge', async () => {
             second.updatedAt,
         },
       ],
-    }),
+    }, {
+      id: 77,
+    }, 'test-client'),
     (error) => {
       assert.equal(
         error.statusCode,
@@ -614,6 +649,11 @@ test('geometry cut requires current polygon revision before spatial difference',
       {
         expectedUpdatedAt:
           current.updatedAt,
+        editToken:
+          '0123456789abcdef',
+      },
+      {
+        id: 77,
       },
     );
 
@@ -647,6 +687,11 @@ test('geometry cut requires current polygon revision before spatial difference',
       {
         expectedUpdatedAt:
           '2026-09-25T12:00:00.000Z',
+        editToken:
+          '0123456789abcdef',
+      },
+      {
+        id: 77,
       },
     ),
     (error) => {

@@ -391,4 +391,28 @@ test('geometry editor backend exposes atomic create-update sync and edit leases'
     migration,
     /GEOMETRY_EDIT_LEASES/u,
   );
+  assert.match(
+    route,
+    /\.delete\([\s\S]*editToken:[\s\S]*editToken\([\s\S]*request\.adminUser/u,
+  );
+  assert.match(
+    route,
+    /\.cut\([\s\S]*editToken:[\s\S]*editToken\([\s\S]*request\.adminUser/u,
+  );
+  assert.match(
+    route,
+    /\.merge\([\s\S]*request\.adminUser[\s\S]*realtimeClientId/u,
+  );
+  assert.match(
+    service,
+    /async merge\([\s\S]*leaseStorage[\s\S]*\.acquire[\s\S]*mergeLeaseTokens[\s\S]*\.release/u,
+  );
+  assert.match(
+    service,
+    /async cut\([\s\S]*normalizeGeometryEditToken[\s\S]*requireOwnedEditLease/u,
+  );
+  assert.match(
+    service,
+    /async delete\([\s\S]*normalizeGeometryEditToken[\s\S]*requireOwnedEditLease/u,
+  );
 });
