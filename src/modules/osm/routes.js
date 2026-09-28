@@ -13,7 +13,6 @@ export function registerOsmRoutes(router, {
   osmCityUpdate,
   osmCityUpdateService,
   startAdminTask,
-  parseBoolean,
   progressLog,
 }) {
   router.get(
