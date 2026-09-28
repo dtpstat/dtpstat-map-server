@@ -9,7 +9,7 @@ import {
 import { normalizeMapboxAccessToken } from './mapbox-token-policy.js';
 import { normalizePublicDownloadName } from './public-download-policy.js';
 
-export const PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION = 8;
+export const PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION = 9;
 export const PROJECT_SETTINGS_TRANSFER_KIND = 'project-settings';
 
 const LEGACY_SECURITY_DEFAULTS = Object.freeze({
@@ -20,6 +20,14 @@ const LEGACY_SECURITY_DEFAULTS = Object.freeze({
   sessionAbsoluteSeconds: 43200,
   auditRetentionDays: 365,
 });
+
+const LEGACY_REQUEST_RATE_DEFAULTS =
+  Object.freeze({
+    requestRateLimitUserPerMinute:
+      600,
+    requestRateLimitGlobalPerMinute:
+      5000,
+  });
 
 export class ProjectSettingsTransferValidationError extends Error {
   constructor(message) {
@@ -59,10 +67,13 @@ export function validateProjectSettingsTransferEnvelope(payload) {
       `_dtpstat.kind must be ${PROJECT_SETTINGS_TRANSFER_KIND}`,
     );
   }
-  const supportedVersions = [1, 2, 3, 4, 5, 6, 7, PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION];
+  const supportedVersions = [
+    1, 2, 3, 4, 5, 6, 7, 8,
+    PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION,
+  ];
   if (!supportedVersions.includes(metadata.schemaVersion)) {
     throw new ProjectSettingsTransferValidationError(
-      '_dtpstat.schemaVersion must be 1, 2, 3, 4, 5, 6, 7 or ' +
+      '_dtpstat.schemaVersion must be 1, 2, 3, 4, 5, 6, 7, 8 or ' +
       PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION,
     );
   }
@@ -160,10 +171,19 @@ export function normalizeTransferredSecuritySettings(
   const input = object(payload, 'securitySettings');
   const defaults =
     schemaVersion === 1
-      ? { ...LEGACY_SECURITY_DEFAULTS, ...DEFAULT_ADMIN_PASSWORD_POLICY }
+      ? {
+          ...LEGACY_SECURITY_DEFAULTS,
+          ...LEGACY_REQUEST_RATE_DEFAULTS,
+          ...DEFAULT_ADMIN_PASSWORD_POLICY,
+        }
       : schemaVersion < 8
-        ? DEFAULT_ADMIN_PASSWORD_POLICY
-        : {};
+        ? {
+            ...LEGACY_REQUEST_RATE_DEFAULTS,
+            ...DEFAULT_ADMIN_PASSWORD_POLICY,
+          }
+        : schemaVersion < 9
+          ? LEGACY_REQUEST_RATE_DEFAULTS
+          : {};
 
   return normalizeAdminSecuritySettings({
     ...defaults,

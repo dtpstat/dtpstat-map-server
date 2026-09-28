@@ -138,6 +138,10 @@ function securitySettings() {
     sessionIdleSeconds: 1800,
     sessionAbsoluteSeconds: 43200,
     auditRetentionDays: 365,
+    requestRateLimitUserPerMinute:
+      600,
+    requestRateLimitGlobalPerMinute:
+      5000,
     passwordMinLength: 12,
     passwordMaxLength: 1024,
     passwordRequireLowercase: false,
@@ -154,7 +158,7 @@ function settingsTransferService() {
         _dtpstat: {
           kind:
             'project-settings',
-          schemaVersion: 8,
+          schemaVersion: 9,
           exportedAt:
             '2026-01-01T00:00:00.000Z',
         },
