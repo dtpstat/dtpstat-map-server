@@ -2539,7 +2539,7 @@ test('admin HTTP auth delegates session CSRF response permission and audit conce
   assert.doesNotMatch(csrf, /WWW-Authenticate/u);
 
   assert.match(authResponse, /respondAdminAuthenticationFailure/u);
-  assert.match(authResponse, /WWW-Authenticate/u);
+  assert.doesNotMatch(authResponse, /WWW-Authenticate/u);
   assert.match(authResponse, /Retry-After/u);
   assert.match(authResponse, /Too many failed login attempts/u);
   assert.doesNotMatch(authResponse, /request\.get/u);
