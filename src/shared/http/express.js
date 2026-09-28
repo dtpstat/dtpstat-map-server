@@ -4,7 +4,7 @@ import {
 } from '../../http/admin-request-security.js';
 import {
   verifyNoDuplicateJsonKeys,
-} from '../../http/json-duplicate-key-guard.js';
+} from './json-duplicate-key-guard.js';
 
 export function jsonBody(
   limit,
