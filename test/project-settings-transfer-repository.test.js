@@ -263,3 +263,36 @@ test('project settings transfer repository preserves report row presence separat
   assert.equal(missing.reportConfigPresent, false);
   assert.equal(missing.reportConfig, undefined);
 });
+
+
+test('project settings transfer repository includes request rate limits in security SQL', async () => {
+  const fs =
+    await import(
+      'node:fs/promises'
+    );
+  const source =
+    await fs.readFile(
+      new URL(
+        '../src/db/project-settings-transfer-repository.js',
+        import.meta.url,
+      ),
+      'utf8',
+    );
+
+  assert.match(
+    source,
+    /request_rate_limit_user_per_minute AS "requestRateLimitUserPerMinute"/u,
+  );
+  assert.match(
+    source,
+    /request_rate_limit_global_per_minute AS "requestRateLimitGlobalPerMinute"/u,
+  );
+  assert.match(
+    source,
+    /request_rate_limit_user_per_minute=\$10/u,
+  );
+  assert.match(
+    source,
+    /request_rate_limit_global_per_minute=\$11/u,
+  );
+});
