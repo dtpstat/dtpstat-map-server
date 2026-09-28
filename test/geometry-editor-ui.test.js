@@ -565,6 +565,43 @@ test('geometry editor exposes foreign lease owner and blocks ordinary begin edit
 });
 
 
+test('geometry workspace validates exact persisted tokens and scopes takeover to the revoked geometry', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /validatedEditTokens: new Map\(\)/u,
+  );
+  assert.match(
+    editor,
+    /state\.validatedEditTokens\.get\([\s\S]*String\(item\.id\)[\s\S]*=== local\.editToken/u,
+  );
+  assert.match(
+    editor,
+    /result\.status === 'valid'[\s\S]*state\.validatedEditTokens\.set/u,
+  );
+  assert.match(
+    editor,
+    /invalid\.push\(result\);[\s\S]*drafts\.remove\(result\.id\);[\s\S]*state\.validatedEditTokens\.delete/u,
+  );
+  assert.match(
+    editor,
+    /const selectedRevoked =[\s\S]*revokedIds\.has[\s\S]*if \(selectedRevoked\)/u,
+  );
+  assert.match(
+    editor,
+    /state\.history = \[\];[\s\S]*state\.future = \[\];[\s\S]*state\.selectedVertexPath = null/u,
+  );
+  assert.match(
+    editor,
+    /drafts\.clear\(\);[\s\S]*state\.validatedEditTokens\.clear\(\)/u,
+  );
+});
+
+
 test('geometry editor exposes normal unlinked geometry and persistent explicit editing', async () => {
   const [
     editor,

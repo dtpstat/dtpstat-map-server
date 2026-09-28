@@ -106,6 +106,7 @@ if (section) {
     editLease: null,
     blockedLease: null,
     editLeases: new Map(),
+    validatedEditTokens: new Map(),
     beginEditPendingId: null,
   };
 
@@ -294,7 +295,13 @@ if (section) {
         currentDraft,
       );
 
-    state.editing = Boolean(currentDraft?.editToken);
+    state.editing =
+      Boolean(
+        currentDraft?.editToken &&
+        state.validatedEditTokens.get(
+          String(state.selectedId),
+        ) === currentDraft.editToken,
+      );
     state.draft = clone(effective.geometry);
     state.history = [];
     state.future = [];
@@ -1882,7 +1889,13 @@ if (section) {
     state.selectedId = item.id;
     state.current = item;
     state.draft = clone(effective.geometry);
-    state.editing = Boolean(local?.editToken);
+    state.editing =
+      Boolean(
+        local?.editToken &&
+        state.validatedEditTokens.get(
+          String(item.id),
+        ) === local.editToken,
+      );
     state.editLease =
       state.editing
         ? {
@@ -2049,6 +2062,10 @@ if (section) {
         changes: existing?.changes ?? {},
         conflict: Boolean(existing?.conflict),
       });
+      state.validatedEditTokens.set(
+        String(requestedId),
+        lease.token,
+      );
       state.editing = true;
       state.editLease = lease;
       state.blockedLease = null;
@@ -2142,6 +2159,10 @@ if (section) {
         conflict: false,
       });
 
+      state.validatedEditTokens.set(
+        String(item.id),
+        payload.lease.token,
+      );
       state.editing = true;
       state.editLease = payload.lease;
       state.blockedLease = null;
@@ -3558,6 +3579,17 @@ if (section) {
       ),
     );
 
+    for (const entry of entries) {
+      if (
+        updatedIds.has(String(entry.id)) ||
+        createdIds.has(String(entry.id))
+      ) {
+        state.validatedEditTokens.delete(
+          String(entry.id),
+        );
+      }
+    }
+
     state.editing = false;
     state.editLease = null;
     state.blockedLease = null;
@@ -3611,6 +3643,9 @@ if (section) {
     }
 
     drafts.remove(item.id);
+    state.validatedEditTokens.delete(
+      String(item.id),
+    );
     state.editing = false;
     state.editLease = null;
     state.blockedLease = null;
@@ -3643,6 +3678,9 @@ if (section) {
         },
       });
       drafts.remove(item.id);
+      state.validatedEditTokens.delete(
+        String(item.id),
+      );
       state.selectedSet.delete(item.id);
       state.serverGeometries = state.serverGeometries.filter(
         (candidate) => candidate.id !== item.id,
@@ -3944,6 +3982,7 @@ if (section) {
       ),
     );
     drafts.clear();
+    state.validatedEditTokens.clear();
     state.editing = false;
     state.editLease = null;
     state.blockedLease = null;
@@ -4004,6 +4043,16 @@ if (section) {
       payload.results ?? []
     ) {
       if (result.status === 'valid') {
+        const token =
+          result.lease?.token ??
+          draftFor(result.id)?.editToken ??
+          null;
+        if (token) {
+          state.validatedEditTokens.set(
+            String(result.id),
+            token,
+          );
+        }
         state.editLeases.set(
           Number(result.id),
           {
@@ -4016,6 +4065,9 @@ if (section) {
 
       invalid.push(result);
       drafts.remove(result.id);
+      state.validatedEditTokens.delete(
+        String(result.id),
+      );
       state.editLeases.delete(
         Number(result.id),
       );
@@ -4031,6 +4083,9 @@ if (section) {
       state.editing = false;
       state.editLease = null;
       state.blockedLease = null;
+      state.history = [];
+      state.future = [];
+      state.selectedVertexPath = null;
       await refresh({
         keepSelection: true,
         fit: false,
@@ -4091,27 +4146,67 @@ if (section) {
         change.revokedClientId ===
           realtimeClientId()
       ) {
+        const revokedIds =
+          new Set(
+            (change.entityIds ?? [])
+              .map(
+                (id) =>
+                  String(id),
+              ),
+          );
+        const selectedRevoked =
+          revokedIds.has(
+            String(state.selectedId),
+          );
+
         for (
           const id of
-          change.entityIds ?? []
+          revokedIds
         ) {
           drafts.remove(id);
+          state.validatedEditTokens.delete(
+            String(id),
+          );
           state.editLeases.delete(
             Number(id),
           );
         }
-        state.editing = false;
-        state.editLease = null;
-        state.blockedLease = null;
-        void refresh({
-          keepSelection: true,
-          fit: false,
-        }).then(() => {
+
+        if (selectedRevoked) {
+          state.editing = false;
+          state.editLease = null;
+          state.blockedLease = null;
+          state.history = [];
+          state.future = [];
+          state.selectedVertexPath = null;
+          void refresh({
+            keepSelection: true,
+            fit: false,
+          }).then(() => {
+            setMessage(
+              'Суперадминистратор перехватил редактирование. Ваш локальный черновик этой геометрии отменён.',
+              'error',
+            );
+          });
+        } else {
+          rebuildDraftOverlay();
+          refreshDraftControls();
+          renderList();
+          updateMapSources();
+          renderFormState();
+          void loadEditLeases()
+            .catch(
+              (error) =>
+                console.warn(
+                  'Geometry edit lease refresh failed after takeover',
+                  error,
+                ),
+            );
           setMessage(
-            'Суперадминистратор перехватил редактирование. Ваш локальный черновик этой геометрии отменён.',
+            'Суперадминистратор перехватил одну из ваших геометрий. Её локальный черновик отменён.',
             'error',
           );
-        });
+        }
         return;
       }
 
