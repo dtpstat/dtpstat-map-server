@@ -63,14 +63,12 @@ async function javascriptFiles(
 }
 
 test('every literal HTTP API route has exactly one strict request contract and vice versa', async () => {
-  const routeDirectory =
-    path.join(
-      root,
-      'src/routes',
-    );
   const routeFiles =
     await javascriptFiles(
-      routeDirectory,
+      path.join(
+        root,
+        'src',
+      ),
     );
   const routeKeys =
     new Map();
