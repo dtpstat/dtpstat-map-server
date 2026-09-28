@@ -32,14 +32,14 @@ const USER_FIELDS_SQL = `
 const AUTH_USER_SQL = `
   SELECT ${USER_FIELDS_SQL}, password_hash AS "passwordHash"
   FROM admin_users
-  WHERE LOWER(BTRIM(username)) = LOWER(BTRIM($1))
+  WHERE LOWER(BTRIM(username)) = LOWER(BTRIM($1::text))
   LIMIT 1
 `;
 
 const AUTH_USER_BY_ID_SQL = `
   SELECT ${USER_FIELDS_SQL}, password_hash AS "passwordHash"
   FROM admin_users
-  WHERE id = $1
+  WHERE id = $1::bigint
 `;
 
 const LIST_USERS_SQL = `
@@ -50,7 +50,7 @@ const LIST_USERS_SQL = `
 `;
 
 const GET_USER_SQL =
-  `SELECT ${USER_FIELDS_SQL} FROM admin_users WHERE id = $1`;
+  `SELECT ${USER_FIELDS_SQL} FROM admin_users WHERE id = $1::bigint`;
 
 const CREATE_USER_SQL = `
   INSERT INTO admin_users (
@@ -59,50 +59,50 @@ const CREATE_USER_SQL = `
     can_manage_users, can_view_audit, can_manage_security,
     is_superuser, is_bootstrap, must_change_password
   )
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+  VALUES ($1::text,$2::text,$3::text,$4::text,$5::boolean,$6::boolean,$7::boolean,$8::boolean,$9::boolean,$10::boolean,$11::boolean,$12::boolean,$13::boolean,$14::boolean)
   RETURNING ${USER_FIELDS_SQL}
 `;
 
 const UPDATE_USER_SQL = `
   UPDATE admin_users
   SET
-    display_name = $2,
-    email = $3,
-    can_manage_data = $4,
-    can_manage_interface = $5,
-    can_edit_osm = $6,
-    can_edit_geometries = $7,
-    can_manage_users = $8,
-    can_view_audit = $9,
-    can_manage_security = $10,
-    is_blocked = $11,
-    manual_blocked_at = $12,
-    manual_blocked_until = $13,
-    manual_block_reason = $14,
-    manual_blocked_by = $15,
+    display_name = $2::text,
+    email = $3::text,
+    can_manage_data = $4::boolean,
+    can_manage_interface = $5::boolean,
+    can_edit_osm = $6::boolean,
+    can_edit_geometries = $7::boolean,
+    can_manage_users = $8::boolean,
+    can_view_audit = $9::boolean,
+    can_manage_security = $10::boolean,
+    is_blocked = $11::boolean,
+    manual_blocked_at = $12::timestamptz,
+    manual_blocked_until = $13::timestamptz,
+    manual_block_reason = $14::text,
+    manual_blocked_by = $15::bigint,
     updated_at = NOW()
-  WHERE id = $1
+  WHERE id = $1::bigint
   RETURNING ${USER_FIELDS_SQL}
 `;
 
 const UPDATE_PROFILE_SQL = `
   UPDATE admin_users
-  SET display_name = $2, email = $3, updated_at = NOW()
-  WHERE id = $1
+  SET display_name = $2::text, email = $3::text, updated_at = NOW()
+  WHERE id = $1::bigint
   RETURNING ${USER_FIELDS_SQL}
 `;
 
 const UPDATE_PASSWORD_SQL = `
   UPDATE admin_users
   SET
-    password_hash = $2,
-    must_change_password = $3,
+    password_hash = $2::text,
+    must_change_password = $3::boolean,
     password_changed_at = NOW(),
     failed_login_count = 0,
     failed_login_window_started_at = NULL,
     locked_until = NULL,
     updated_at = NOW()
-  WHERE id = $1
+  WHERE id = $1::bigint
   RETURNING ${USER_FIELDS_SQL}
 `;
 
@@ -114,7 +114,7 @@ const RECORD_SUCCESSFUL_LOGIN_SQL = `
     locked_until = NULL,
     last_login_at = $2::timestamptz,
     updated_at = NOW()
-  WHERE id = $1
+  WHERE id = $1::bigint
   RETURNING ${USER_FIELDS_SQL}
 `;
 
@@ -127,7 +127,7 @@ const RECORD_FAILED_LOGIN_SQL = `
         OR (locked_until IS NOT NULL AND locked_until <= $2::timestamptz)
       ) AS reset_window
     FROM admin_users
-    WHERE id = $1
+    WHERE id = $1::bigint
     FOR UPDATE
   ), next_state AS (
     SELECT id AS user_id,
@@ -238,7 +238,7 @@ export function createAdminUserRepository(database) {
     async deleteUser(userId) {
       const result = await database.query(
         `DELETE FROM admin_users
-         WHERE id = $1
+         WHERE id = $1::bigint
          RETURNING ${USER_FIELDS_SQL}`,
         [userId],
       );
@@ -283,8 +283,8 @@ export function createAdminUserRepository(database) {
     async saveAvatar(userId, mime, data) {
       const result = await database.query(
         `UPDATE admin_users
-         SET avatar_mime=$2, avatar_data=$3, updated_at=NOW()
-         WHERE id=$1
+         SET avatar_mime=$2::text, avatar_data=$3::bytea, updated_at=NOW()
+         WHERE id=$1::bigint
          RETURNING ${USER_FIELDS_SQL}`,
         [userId, mime, data],
       );
@@ -295,7 +295,7 @@ export function createAdminUserRepository(database) {
       const result = await database.query(
         `UPDATE admin_users
          SET avatar_mime=NULL, avatar_data=NULL, updated_at=NOW()
-         WHERE id=$1
+         WHERE id=$1::bigint
          RETURNING ${USER_FIELDS_SQL}`,
         [userId],
       );
@@ -305,7 +305,7 @@ export function createAdminUserRepository(database) {
     async getAvatar(userId) {
       const result = await database.query(
         'SELECT avatar_mime AS mime, avatar_data AS data ' +
-          'FROM admin_users WHERE id=$1',
+          'FROM admin_users WHERE id=$1::bigint',
         [userId],
       );
       return result.rows[0] ?? null;
