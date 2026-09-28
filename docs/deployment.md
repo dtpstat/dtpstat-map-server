@@ -155,6 +155,7 @@ HOST=127.0.0.1
 HTTP_ENABLED=true
 HTTP_PORT=3002
 HTTP_TRUST_PROXY_HOPS=1
+ADMIN_ALLOWED_ORIGINS=https://tramlanes.example
 ```
 
 ```nginx
@@ -180,7 +181,12 @@ location / {
 
 WebSocket headers нужны для `/api/admin/ws`.
 
-### CSRF / X-Forwarded-Proto
+### Admin Origin / CSRF / X-Forwarded-Proto
+
+Production startup требует `ADMIN_ALLOWED_ORIGINS` с точными HTTPS origins
+админки. Это значение используется и для admin HTTP, и для WebSocket handshake.
+Нельзя использовать wildcard или origin с path/query.
+
 
 Session-auth mutating requests проверяют same-origin. Если nginx завершает TLS, а Express не доверяет proxy, browser отправит `Origin: https://...`, тогда как Node будет считать protocol `http` и вернёт:
 
@@ -212,6 +218,13 @@ client_max_body_size 30m;
 sudo nginx -t
 sudo systemctl reload nginx
 ```
+
+### Security events in journald
+
+Приложение пишет security events в stderr одной строкой с marker
+`DTPSTAT_SECURITY_V1`. Если process supervisor направляет stderr в journald,
+эти сообщения можно использовать внешним fail2ban/journal tooling. Само
+приложение fail2ban не конфигурирует.
 
 ## PM2
 
