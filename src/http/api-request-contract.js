@@ -215,7 +215,10 @@ export const API_REQUEST_CONTRACTS =
       'PUT',
       '/admin/line-types',
       {
-        body: 'json-array',
+        body: 'json-object',
+        bodyKeys: [
+          'lineTypes',
+        ],
       },
     ),
     c(
