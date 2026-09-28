@@ -27,6 +27,21 @@ const adminAuth = {
 };
 const securityService = { async appendAudit() {} };
 
+function editableReportConfig(
+  config,
+) {
+  return {
+    metrics:
+      config.metrics,
+    tableColumns:
+      config.tableColumns,
+    csvColumns:
+      config.csvColumns,
+    rank:
+      config.rank,
+  };
+}
+
 async function withServer(callback, options = {}) {
   let config = structuredClone(DEFAULT_REPORT_CONFIG);
   let afterSaveCalls = 0;
@@ -168,7 +183,11 @@ test('saving report materializes values, sequential ranking and public snapshots
         Authorization: authorization,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(config),
+      body: JSON.stringify(
+        editableReportConfig(
+          config,
+        ),
+      ),
     });
     assert.equal(response.status, 200);
     const payload = await response.json();
@@ -196,7 +215,11 @@ test('saving report rejects arbitrary technical field names', async () => {
         Authorization: authorization,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(config),
+      body: JSON.stringify(
+        editableReportConfig(
+          config,
+        ),
+      ),
     });
     assert.equal(response.status, 400);
     assert.match((await response.json()).error, /not allowed/);
