@@ -235,7 +235,7 @@ CAN_MANAGE_SECURITY
 IS_SUPERUSER
 ```
 
-Web UI использует HttpOnly session cookie. HTTP Basic остаётся для scripted API.
+Web UI и защищённый admin API используют только HttpOnly session cookie; online HTTP Basic удалён.
 
 Длительные mutating data operations выполняются через process-local single-task manager. Один экземпляр Node не должен блокировать задачи другого экземпляра/БД.
 
