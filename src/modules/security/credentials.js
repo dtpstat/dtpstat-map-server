@@ -140,62 +140,6 @@ export async function burnUnknownPasswordCheck(
   );
 }
 
-export function parseBasicAuthorization(
-  authorization,
-) {
-  if (!authorization) {
-    return {
-      status: 'missing',
-      username: null,
-      password: null,
-    };
-  }
-
-  const [scheme, encoded, extra] =
-    authorization.trim().split(/\s+/);
-
-  if (
-    scheme?.toLocaleLowerCase('en-US') !== 'basic' ||
-    !encoded ||
-    extra
-  ) {
-    return {
-      status: 'invalid',
-      username: null,
-      password: null,
-    };
-  }
-
-  let decoded;
-  try {
-    decoded = Buffer.from(
-      encoded,
-      'base64',
-    ).toString('utf8');
-  } catch {
-    return {
-      status: 'invalid',
-      username: null,
-      password: null,
-    };
-  }
-
-  const separator = decoded.indexOf(':');
-  if (separator < 0) {
-    return {
-      status: 'invalid',
-      username: null,
-      password: null,
-    };
-  }
-
-  return {
-    status: 'credentials',
-    username: decoded.slice(0, separator),
-    password: decoded.slice(separator + 1),
-  };
-}
-
 export function adminSessionTokenHash(token) {
   return crypto
     .createHash('sha256')
