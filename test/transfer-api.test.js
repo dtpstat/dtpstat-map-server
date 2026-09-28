@@ -11,9 +11,49 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { createApp } from '../src/app.js';
 import {
+  DTPSTAT_API_VERSION,
+  DTPSTAT_API_VERSION_HEADER,
+} from '../public/js/api-contract.js';
+import {
   createSingleFileZipStream,
   openSingleFileZip,
 } from '../src/shared/streaming/single-file-zip.js';
+
+function versionedFetch(
+  input,
+  init = {},
+) {
+  const url =
+    String(input);
+  if (
+    !url.includes(
+      '/api/admin/',
+    )
+  ) {
+    return fetch(
+      input,
+      init,
+    );
+  }
+
+  const headers =
+    new Headers(
+      init.headers ??
+      {},
+    );
+  headers.set(
+    DTPSTAT_API_VERSION_HEADER,
+    DTPSTAT_API_VERSION,
+  );
+
+  return fetch(
+    input,
+    {
+      ...init,
+      headers,
+    },
+  );
+}
 
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -207,6 +247,8 @@ async function postChunked(baseUrl, pathname, source, headers = {}) {
       headers: {
         ...headers,
         'Transfer-Encoding': 'chunked',
+        [DTPSTAT_API_VERSION_HEADER]:
+          DTPSTAT_API_VERSION,
       },
     }, (response) => {
       const chunks = [];
@@ -288,7 +330,7 @@ async function readZipBuffer(buffer) {
 
 async function waitForTask(baseUrl, accepted) {
   for (let attempt = 0; attempt < 30; attempt += 1) {
-    const response = await fetch(`${baseUrl}${accepted.task.statusURL}`, {
+    const response = await versionedFetch(`${baseUrl}${accepted.task.statusURL}`, {
       headers: { Authorization: authorization },
     });
     assert.equal(response.status, 200);
@@ -303,7 +345,7 @@ async function waitForTask(baseUrl, accepted) {
 
 test('transfer exports require auth and expose portable download files', async () => {
   await withServer(async (baseUrl) => {
-    const unauthorized = await fetch(`${baseUrl}/api/admin/export/cities`);
+    const unauthorized = await versionedFetch(`${baseUrl}/api/admin/export/cities`);
     assert.equal(unauthorized.status, 401);
 
     const expectations = [
@@ -312,7 +354,7 @@ test('transfer exports require auth and expose portable download files', async (
       ['/api/admin/export/populations', 'populations.json', populationSnapshot],
     ];
     for (const [endpoint, fileName, expected] of expectations) {
-      const response = await fetch(`${baseUrl}${endpoint}`, {
+      const response = await versionedFetch(`${baseUrl}${endpoint}`, {
         headers: {
           Authorization: authorization,
           'Accept-Encoding': 'gzip',
@@ -343,7 +385,7 @@ test('portable ZIP exports contain exactly one JSON/GeoJSON file', async () => {
     ];
 
     for (const [endpoint, downloadName, entryName, expected] of expectations) {
-      const response = await fetch(`${baseUrl}${endpoint}`, {
+      const response = await versionedFetch(`${baseUrl}${endpoint}`, {
         headers: { Authorization: authorization },
       });
       assert.equal(response.status, 200);
@@ -383,7 +425,7 @@ test('single-file ZIP import is decoded before the transactional service task', 
   const archive = await zipBuffer('lines.geojson', payload);
 
   await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/admin/import/lines`, {
+    const response = await versionedFetch(`${baseUrl}/api/admin/import/lines`, {
       method: 'POST',
       headers: {
         Authorization: authorization,
@@ -515,7 +557,7 @@ test('ZIP import with more than one entry fails the admin task', async () => {
   }
 
   await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/admin/import/lines`, {
+    const response = await versionedFetch(`${baseUrl}/api/admin/import/lines`, {
       method: 'POST',
       headers: {
         Authorization: authorization,
@@ -536,7 +578,7 @@ test('ZIP import with more than one entry fails the admin task', async () => {
 
 test('large transfer export is gzip-compressed when the receiver accepts gzip', async () => {
   await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/admin/export/cities`, {
+    const response = await versionedFetch(`${baseUrl}/api/admin/export/cities`, {
       headers: {
         Authorization: authorization,
         'Accept-Encoding': 'gzip',
@@ -571,7 +613,7 @@ test('city GeoJSON import accepts a gzip request body and forwards dryRun', asyn
   };
 
   await withServer(async (baseUrl) => {
-    const response = await fetch(
+    const response = await versionedFetch(
       `${baseUrl}/api/admin/import/cities?dryRun=true`,
       {
         method: 'POST',
@@ -619,7 +661,7 @@ test('line and population imports accept gzip request bodies', async () => {
   };
 
   await withServer(async (baseUrl) => {
-    const lineResponse = await fetch(`${baseUrl}/api/admin/import/lines`, {
+    const lineResponse = await versionedFetch(`${baseUrl}/api/admin/import/lines`, {
       method: 'POST',
       headers: {
         Authorization: authorization,
@@ -632,7 +674,7 @@ test('line and population imports accept gzip request bodies', async () => {
     assert.equal((await waitForTask(baseUrl, lineAccepted)).status, 'succeeded');
     assert.deepEqual(receivedLines, lines);
 
-    const populationResponse = await fetch(`${baseUrl}/api/admin/populations`, {
+    const populationResponse = await versionedFetch(`${baseUrl}/api/admin/populations`, {
       method: 'POST',
       headers: {
         Authorization: authorization,
