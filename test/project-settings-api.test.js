@@ -6,7 +6,7 @@ import { buildProjectSettingsPlan } from '../src/modules/project/settings-policy
 import { normalizePublicDownloadName } from '../src/modules/project/public-download-policy.js';
 import { createProjectSettingsRouter } from '../src/routes/project-settings-api.js';
 
-const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
+const authorization = 'dtpstat_admin_session=test-session-token';
 
 function createRepository() {
   let settings = {
@@ -66,12 +66,12 @@ function createRepository() {
 function adminAuth() {
   return {
     requireInterface(request, response, next) {
-      if (request.get('authorization') !== authorization) {
+      if (request.get('cookie') !== authorization) {
         response.status(401).json({ error: 'Unauthorized' });
         return;
       }
       request.adminUser = { id: 1, username: 'importer' };
-      request.adminAuthMethod = 'basic';
+      request.adminAuthMethod = 'session';
       next();
     },
   };
@@ -116,7 +116,7 @@ test('public project settings are readable while admin editor remains protected'
     assert.equal(unauthorized.status, 401);
 
     const response = await fetch(`${baseUrl}/api/admin/project-settings`, {
-      headers: { Authorization: authorization },
+      headers: { Cookie: authorization },
     });
     assert.equal(response.status, 200);
     const payload = await response.json();
@@ -138,7 +138,7 @@ test('admin can update project settings including independent line labels and po
     const valid = await fetch(`${baseUrl}/api/admin/project-settings`, {
       method: 'PUT',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -165,7 +165,7 @@ test('admin can update project settings including independent line labels and po
     const invalidTheme = await fetch(`${baseUrl}/api/admin/project-settings`, {
       method: 'PUT',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -186,7 +186,7 @@ test('saving large-city thresholds waits for derived report refresh', async () =
     const response = await fetch(`${baseUrl}/api/admin/project-settings`, {
       method: 'PUT',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -237,7 +237,7 @@ test('download base name has a protected dedicated editor endpoint and refreshes
     const valid = await fetch(`${baseUrl}/api/admin/project-settings/public-download-name`, {
       method: 'PUT',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ publicDownloadName: '  Трамвайные   линии  ' }),
@@ -251,7 +251,7 @@ test('download base name has a protected dedicated editor endpoint and refreshes
     const invalid = await fetch(`${baseUrl}/api/admin/project-settings/public-download-name`, {
       method: 'PUT',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ publicDownloadName: 'tram-lines.csv' }),
@@ -272,7 +272,7 @@ test('admin still rejects invalid analytics and unsafe footer HTML', async () =>
     const invalidAnalytics = await fetch(`${baseUrl}/api/admin/project-settings`, {
       method: 'PUT',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -289,7 +289,7 @@ test('admin still rejects invalid analytics and unsafe footer HTML', async () =>
     const invalidHtml = await fetch(`${baseUrl}/api/admin/project-settings`, {
       method: 'PUT',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
