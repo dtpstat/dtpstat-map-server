@@ -188,7 +188,7 @@ export function createOsmCheckpointRecordRepository(database) {
       const result = await query(
         `SELECT index_objects AS objects
          FROM osm_city_update_checkpoints
-         WHERE id = $1`,
+         WHERE id = $1::bigint`,
         [checkpointId],
       );
       return result.rows[0]?.objects ?? null;
@@ -233,7 +233,7 @@ export function createOsmCheckpointRecordRepository(database) {
              last_error = NULL,
              updated_at = NOW(),
              completed_at = NOW()
-         WHERE id = $1`,
+         WHERE id = $1::bigint`,
         [checkpointId],
       );
     },
@@ -246,7 +246,7 @@ export function createOsmCheckpointRecordRepository(database) {
              last_error = NULL,
              completed_at = NOW(),
              updated_at = NOW()
-         WHERE id = $1`,
+         WHERE id = $1::bigint`,
         [checkpointId],
       );
     },
@@ -264,7 +264,7 @@ export function createOsmCheckpointRecordRepository(database) {
              staged_batch_count = staged_batch_count + 1,
              last_error = NULL,
              updated_at = NOW()
-         WHERE id = $1`,
+         WHERE id = $1::bigint`,
         [
           checkpointId,
           metrics.downloadedBytes ?? 0,
@@ -286,7 +286,7 @@ export function createOsmCheckpointRecordRepository(database) {
              retry_wait_ms = retry_wait_ms + $5::bigint,
              throttle_wait_ms = throttle_wait_ms + $6::bigint,
              updated_at = NOW()
-         WHERE id = $1`,
+         WHERE id = $1::bigint`,
         [
           checkpointId,
           metrics.downloadedBytes ?? 0,
@@ -304,7 +304,7 @@ export function createOsmCheckpointRecordRepository(database) {
          SET status = $2::text,
              last_error = $3::jsonb,
              updated_at = NOW()
-         WHERE id = $1`,
+         WHERE id = $1::bigint`,
         [
           checkpointId,
           status,
