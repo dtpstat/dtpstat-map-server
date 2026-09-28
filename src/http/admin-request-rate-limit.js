@@ -48,95 +48,152 @@ export function createAdminRequestRateLimiter({
     perUser.clear();
   }
 
+  function retryAfterSeconds(
+    timestamp,
+  ) {
+    return Math.max(
+      1,
+      Math.ceil(
+        (
+          (
+            windowId + 1
+          ) *
+          WINDOW_MS -
+          timestamp
+        ) /
+        1000,
+      ),
+    );
+  }
+
+  function consumeGlobal({
+    settings = {},
+  } = {}) {
+    const timestamp =
+      Number(now());
+    resetIfNeeded(
+      timestamp,
+    );
+
+    const globalLimit =
+      positiveLimit(
+        settings
+          .requestRateLimitGlobalPerMinute,
+        DEFAULT_GLOBAL_LIMIT,
+      );
+
+    if (
+      globalCount >=
+      globalLimit
+    ) {
+      return {
+        allowed: false,
+        scope: 'global',
+        limit: globalLimit,
+        retryAfterSeconds:
+          retryAfterSeconds(
+            timestamp,
+          ),
+      };
+    }
+
+    globalCount += 1;
+
+    return {
+      allowed: true,
+      globalRemaining:
+        Math.max(
+          0,
+          globalLimit -
+          globalCount,
+        ),
+    };
+  }
+
+  function consumeUser({
+    userId,
+    settings = {},
+  }) {
+    const timestamp =
+      Number(now());
+    resetIfNeeded(
+      timestamp,
+    );
+
+    const userLimit =
+      positiveLimit(
+        settings
+          .requestRateLimitUserPerMinute,
+        DEFAULT_USER_LIMIT,
+      );
+    const key =
+      String(userId);
+    const userCount =
+      perUser.get(key) ??
+      0;
+
+    if (
+      userCount >=
+      userLimit
+    ) {
+      return {
+        allowed: false,
+        scope: 'user',
+        limit: userLimit,
+        retryAfterSeconds:
+          retryAfterSeconds(
+            timestamp,
+          ),
+      };
+    }
+
+    perUser.set(
+      key,
+      userCount + 1,
+    );
+
+    return {
+      allowed: true,
+      userRemaining:
+        Math.max(
+          0,
+          userLimit -
+          userCount -
+          1,
+        ),
+    };
+  }
+
   return {
+    consumeGlobal,
+    consumeUser,
+
     consume({
       userId,
       settings = {},
     }) {
-      const timestamp =
-        Number(now());
-      resetIfNeeded(
-        timestamp,
-      );
+      const global =
+        consumeGlobal({
+          settings,
+        });
 
-      const userLimit =
-        positiveLimit(
-          settings
-            .requestRateLimitUserPerMinute,
-          DEFAULT_USER_LIMIT,
-        );
-      const globalLimit =
-        positiveLimit(
-          settings
-            .requestRateLimitGlobalPerMinute,
-          DEFAULT_GLOBAL_LIMIT,
-        );
-      const key =
-        String(userId);
-      const userCount =
-        perUser.get(key) ??
-        0;
-      const retryAfterSeconds =
-        Math.max(
-          1,
-          Math.ceil(
-            (
-              (
-                windowId + 1
-              ) *
-              WINDOW_MS -
-              timestamp
-            ) /
-            1000,
-          ),
-        );
-
-      if (
-        userCount >=
-        userLimit
-      ) {
-        return {
-          allowed: false,
-          scope: 'user',
-          limit: userLimit,
-          retryAfterSeconds,
-        };
+      if (!global.allowed) {
+        return global;
       }
 
-      if (
-        globalCount >=
-        globalLimit
-      ) {
-        return {
-          allowed: false,
-          scope: 'global',
-          limit: globalLimit,
-          retryAfterSeconds,
-        };
-      }
+      const user =
+        consumeUser({
+          userId,
+          settings,
+        });
 
-      perUser.set(
-        key,
-        userCount + 1,
-      );
-      globalCount += 1;
-
-      return {
-        allowed: true,
-        userRemaining:
-          Math.max(
-            0,
-            userLimit -
-            userCount -
-            1,
-          ),
-        globalRemaining:
-          Math.max(
-            0,
-            globalLimit -
-            globalCount,
-          ),
-      };
+      return user.allowed
+        ? {
+            ...user,
+            globalRemaining:
+              global.globalRemaining,
+          }
+        : user;
     },
   };
 }
