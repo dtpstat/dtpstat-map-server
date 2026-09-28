@@ -23,8 +23,12 @@ export function createAdminRequestRateLimiter({
 } = {}) {
   let windowId = null;
   let globalCount = 0;
+  let globalBlockedLogged =
+    false;
   const perUser =
     new Map();
+  const userBlockedLogged =
+    new Set();
 
   function resetIfNeeded(
     timestamp,
@@ -45,7 +49,10 @@ export function createAdminRequestRateLimiter({
     windowId =
       nextWindow;
     globalCount = 0;
+    globalBlockedLogged =
+      false;
     perUser.clear();
+    userBlockedLogged.clear();
   }
 
   function retryAfterSeconds(
@@ -86,10 +93,16 @@ export function createAdminRequestRateLimiter({
       globalCount >=
       globalLimit
     ) {
+      const shouldLog =
+        !globalBlockedLogged;
+      globalBlockedLogged =
+        true;
+
       return {
         allowed: false,
         scope: 'global',
         limit: globalLimit,
+        shouldLog,
         retryAfterSeconds:
           retryAfterSeconds(
             timestamp,
@@ -136,10 +149,18 @@ export function createAdminRequestRateLimiter({
       userCount >=
       userLimit
     ) {
+      const shouldLog =
+        !userBlockedLogged
+          .has(key);
+      userBlockedLogged.add(
+        key,
+      );
+
       return {
         allowed: false,
         scope: 'user',
         limit: userLimit,
+        shouldLog,
         retryAfterSeconds:
           retryAfterSeconds(
             timestamp,
