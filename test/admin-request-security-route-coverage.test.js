@@ -17,17 +17,37 @@ const root =
   );
 
 test('admin JSON routes use the common request body security guard', async () => {
-  const shared =
-    await fs.readFile(
-      path.join(
-        root,
-        'src/shared/http/express.js',
+  const [
+    shared,
+    adminJson,
+  ] =
+    await Promise.all([
+      fs.readFile(
+        path.join(
+          root,
+          'src/shared/http/express.js',
+        ),
+        'utf8',
       ),
-      'utf8',
-    );
+      fs.readFile(
+        path.join(
+          root,
+          'src/http/admin-json-body.js',
+        ),
+        'utf8',
+      ),
+    ]);
 
+  assert.doesNotMatch(
+    shared,
+    /adminJsonBodySecurityGuard/u,
+  );
   assert.match(
     shared,
+    /verifyNoDuplicateJsonKeys/u,
+  );
+  assert.match(
+    adminJson,
     /adminJsonBodySecurityGuard/u,
   );
 
