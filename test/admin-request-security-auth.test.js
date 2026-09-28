@@ -210,3 +210,108 @@ test('admin authorization returns 429 when request budget is exhausted', async (
     'admin_request_rate_limited',
   );
 });
+
+
+test('global admin request limiter blocks before authentication and uses cached security settings', async () => {
+  let authenticated = 0;
+  let settingsReads = 0;
+  const audits = [];
+  const service = {
+    async getSecuritySettings() {
+      settingsReads += 1;
+      return {
+        requestRateLimitUserPerMinute:
+          10,
+        requestRateLimitGlobalPerMinute:
+          20,
+      };
+    },
+    async authenticateRequest() {
+      authenticated += 1;
+      throw new Error(
+        'authentication must not run',
+      );
+    },
+    async appendAudit(entry) {
+      audits.push(entry);
+    },
+  };
+  const adminAuth =
+    createAdminAuthorization(
+      service,
+      {
+        requestRateLimiter: {
+          consumeGlobal() {
+            return {
+              allowed: false,
+              scope: 'global',
+              limit: 20,
+              shouldLog: true,
+              retryAfterSeconds:
+                12,
+            };
+          },
+          consumeUser() {
+            throw new Error(
+              'user limiter must not run',
+            );
+          },
+        },
+        rateSettingsCacheMs:
+          60_000,
+      },
+    );
+
+  const first =
+    response();
+  await adminAuth
+    .limitGlobalRequest(
+      request(),
+      first,
+      () => {
+        throw new Error(
+          'next must not run',
+        );
+      },
+    );
+
+  assert.equal(
+    first.statusCode,
+    429,
+  );
+  assert.equal(
+    authenticated,
+    0,
+  );
+  assert.equal(
+    settingsReads,
+    1,
+  );
+  assert.equal(
+    audits.length,
+    1,
+  );
+  assert.equal(
+    audits[0]
+      .details.scope,
+    'global',
+  );
+
+  const second =
+    response();
+  await adminAuth
+    .limitGlobalRequest(
+      request(),
+      second,
+      () => {
+        throw new Error(
+          'next must not run',
+        );
+      },
+    );
+
+  assert.equal(
+    settingsReads,
+    1,
+  );
+});
