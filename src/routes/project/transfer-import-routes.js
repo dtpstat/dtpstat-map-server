@@ -1,6 +1,6 @@
 import {
   jsonBody,
-} from '../../shared/http/express.js';
+} from '../../http/admin-json-body.js';
 import {
   isProjectSettingsTransferInputValidationError,
 } from '../../application/data-transfer/project-settings-service.js';
