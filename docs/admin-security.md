@@ -32,11 +32,12 @@ Cookie использует `SameSite=Strict`; при HTTPS — `Secure`.
 
 В `ADMIN_SESSIONS` хранится SHA-256 hash token, а не plaintext token.
 
-### HTTP Basic
+### Session-only online authentication
 
-DB-backed Basic остаётся для `curl`/automation/compatibility clients. Он проверяет `ADMIN_USERS`.
-
-Bootstrap credentials из `.env` после создания DB user не являются параллельным login fallback.
+Защищённый admin HTTP API и WebSocket **не принимают HTTP Basic**.
+Пароль передаётся только в `POST /api/admin/login`; успешный login создаёт
+DB-backed session cookie. Bootstrap credentials из `.env` используются только
+для initial bootstrap/recovery tooling и не являются online-login fallback.
 
 ## Права
 
@@ -191,14 +192,23 @@ unsupported encodings and unknown admin API routes are also recorded. Raw and
 streaming upload bodies are not reparsed as JSON; their headers/query remain
 covered and their own schema/size validators remain authoritative.
 
-## CSRF / same-origin
+## Origin / CSRF boundary
 
-Mutating requests с **session cookie** дополнительно проверяют same-origin:
+Production требует явный allowlist:
 
-- cross-site `Sec-Fetch-Site` запрещён;
-- `Origin`, если присутствует, должен совпасть с `${request.protocol}://${Host}`.
+```dotenv
+ADMIN_ALLOWED_ORIGINS=https://admin.example.com
+```
 
-Для HTTP Basic эта browser ambient-credential проверка не применяется.
+Для mutating `/api/admin/*` запросов `Origin` обязателен и должен точно
+совпасть с allowlist. Wildcards не поддерживаются. `Sec-Fetch-Site` допускает
+только `same-origin` / `none`; `same-site` недостаточно.
+
+Admin WebSocket использует тот же allowlist и отклоняет handshake без `Origin`
+или с чужим origin до authentication/upgrade.
+
+В development/test при пустом allowlist используется только динамический
+same-origin fallback; production без `ADMIN_ALLOWED_ORIGINS` не стартует.
 
 ### Reverse proxy
 
@@ -223,6 +233,26 @@ Cross-site administrative request rejected
 ```
 
 Не доверяйте forwarded headers, если Node port доступен клиенту напрямую.
+
+## Journal security events / fail2ban integration
+
+Security-significant события пишутся одной строкой в stderr:
+
+```text
+[security] {"marker":"DTPSTAT_SECURITY_V1","event":"admin.request.ip_lockout","ip":"203.0.113.10",...}
+```
+
+При запуске процесса под systemd stderr автоматически попадает в journald.
+Stable marker `DTPSTAT_SECURITY_V1`, `event` и `ip` предназначены для
+внешнего анализа и fail2ban. Конфигурация fail2ban находится за рамками
+приложения; приложение не запускает `systemd-cat` и не создаёт subprocess ради
+логирования.
+
+Проверка потока journal, если deployment использует systemd:
+
+```bash
+journalctl -o cat -u <service> | grep 'DTPSTAT_SECURITY_V1'
+```
 
 ## Audit
 
@@ -314,3 +344,14 @@ npm run admin:unblock -- --ip 203.0.113.10
 - [project-settings-transfer.md](project-settings-transfer.md)
 
 Текущая security migration в этой ветке — `V047__admin_request_security.sql`; следующее изменение DB schema должно использовать **V048+**.
+
+
+## Future security backlog
+
+Отложено намеренно:
+
+- MFA/passkeys/TOTP для admin/superuser;
+- dependency/CodeQL/Dependabot policy в CI/CD;
+- optional external audit/security collectors (например Zabbix/SIEM);
+- `__Host-` session cookie migration;
+- отдельный расширенный regression suite для всех production security headers.
