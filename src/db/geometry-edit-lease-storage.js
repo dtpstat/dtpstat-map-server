@@ -10,21 +10,48 @@ const LEASE_COLUMNS_SQL = `
   lease.expires_at AS "expiresAt"
 `;
 
+const LEASE_BY_GEOMETRY_SQL = `
+  SELECT
+    ${LEASE_COLUMNS_SQL}
+  FROM geometry_edit_leases AS lease
+  JOIN admin_users AS user_account
+    ON user_account.id = lease.user_id
+  WHERE lease.geometry_id = $1
+`;
+
+const ACTIVE_LEASE_BY_GEOMETRY_SQL =
+  LEASE_BY_GEOMETRY_SQL +
+  ' AND lease.expires_at > NOW()';
+
+const LEASE_BY_GEOMETRY_FOR_UPDATE_SQL =
+  LEASE_BY_GEOMETRY_SQL +
+  ' FOR UPDATE OF lease';
+
+const ACTIVE_LEASE_BY_GEOMETRY_FOR_UPDATE_SQL =
+  ACTIVE_LEASE_BY_GEOMETRY_SQL +
+  ' FOR UPDATE OF lease';
+
 async function leaseByGeometry(
   queryable,
   geometryId,
   { activeOnly = true, forUpdate = false } = {},
 ) {
+  const sql =
+    activeOnly
+      ? (
+          forUpdate
+            ? ACTIVE_LEASE_BY_GEOMETRY_FOR_UPDATE_SQL
+            : ACTIVE_LEASE_BY_GEOMETRY_SQL
+        )
+      : (
+          forUpdate
+            ? LEASE_BY_GEOMETRY_FOR_UPDATE_SQL
+            : LEASE_BY_GEOMETRY_SQL
+        );
+
   const result =
     await queryable.query(
-      `SELECT
-         ${LEASE_COLUMNS_SQL}
-       FROM geometry_edit_leases AS lease
-       JOIN admin_users AS user_account
-         ON user_account.id = lease.user_id
-       WHERE lease.geometry_id = $1
-         ${activeOnly ? 'AND lease.expires_at > NOW()' : ''}
-       ${forUpdate ? 'FOR UPDATE OF lease' : ''}`,
+      sql,
       [geometryId],
     );
   return result.rows[0] ?? null;
