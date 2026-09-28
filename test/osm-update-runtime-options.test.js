@@ -61,11 +61,11 @@ test('OSM runtime options overlay saved settings before bounded request override
       },
     },
     config,
-    body: undefined,
-    query: {
-      batchSize: '5',
-      maxRetries: '2',
+    body: {
+      batchSize: 5,
+      maxRetries: 2,
     },
+    query: {},
   });
 
   assert.equal(options.includeTown, false);
