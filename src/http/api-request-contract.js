@@ -29,6 +29,12 @@ const COMMON_MUTATION_HEADERS =
     'x-dtpstat-realtime-client',
   ]);
 
+const FORBIDDEN_METHOD_OVERRIDE_HEADERS =
+  new Set([
+    'x-http-method-override',
+    'x-method-override',
+  ]);
+
 function c(
   method,
   path,
@@ -1190,6 +1196,65 @@ function validateDtpstatHeaders(
   );
 }
 
+function unsafeRequestPath(
+  request,
+) {
+  const path =
+    String(
+      request.originalUrl ??
+      request.url ??
+      request.path ??
+      '',
+    ).split('?')[0];
+
+  if (
+    /%(?:2f|5c|00|0a|0d)/iu
+      .test(path)
+  ) {
+    return true;
+  }
+
+  let decoded;
+  try {
+    decoded =
+      decodeURIComponent(path);
+  } catch {
+    return true;
+  }
+
+  if (
+    /[\\\u0000-\u001f\u007f]/u
+      .test(decoded)
+  ) {
+    return true;
+  }
+
+  return decoded
+    .split('/')
+    .some(
+      (segment) =>
+        segment === '.' ||
+        segment === '..',
+    );
+}
+
+function forbiddenMethodOverrideHeaders(
+  request,
+) {
+  return Object.keys(
+    request.headers ??
+    {},
+  ).filter(
+    (name) =>
+      FORBIDDEN_METHOD_OVERRIDE_HEADERS
+        .has(
+          name.toLocaleLowerCase(
+            'en-US',
+          ),
+        ),
+  );
+}
+
 export async function enforceApiRequestContract(
   request,
   response,
@@ -1200,6 +1265,39 @@ export async function enforceApiRequestContract(
       request.method ??
       '',
     ).toUpperCase();
+
+  if (
+    unsafeRequestPath(
+      request,
+    )
+  ) {
+    await reject(
+      request,
+      response,
+      'unsafe-request-path',
+    );
+    return;
+  }
+
+  const overrideHeaders =
+    forbiddenMethodOverrideHeaders(
+      request,
+    );
+  if (
+    overrideHeaders.length > 0
+  ) {
+    await reject(
+      request,
+      response,
+      'method-override-not-allowed',
+      {
+        fields:
+          overrideHeaders,
+      },
+    );
+    return;
+  }
+
   const path =
     apiPath(request);
   const pathContracts =
