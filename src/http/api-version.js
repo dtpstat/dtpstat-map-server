@@ -7,12 +7,6 @@ import {
   serviceLog,
 } from '../service-log.js';
 
-const VERSION_EXEMPT_ADMIN_GET =
-  Object.freeze([
-    '/api/admin/export/',
-    '/api/admin/settings/export',
-  ]);
-
 function requestPath(
   request,
 ) {
@@ -24,46 +18,11 @@ function requestPath(
   ).split('?')[0];
 }
 
-function versionExempt(
-  request,
-) {
-  if (
-    String(
-      request.method ??
-      '',
-    ).toUpperCase() !==
-    'GET'
-  ) {
-    return false;
-  }
-
-  const path =
-    requestPath(request);
-
-  return VERSION_EXEMPT_ADMIN_GET
-    .some(
-      (prefix) =>
-        path === prefix ||
-        path.startsWith(
-          prefix,
-        ),
-    );
-}
-
 export function requireAdminApiVersion(
   request,
   response,
   next,
 ) {
-  if (
-    versionExempt(
-      request,
-    )
-  ) {
-    next();
-    return;
-  }
-
   const supplied =
     request.get?.(
       DTPSTAT_API_VERSION_HEADER,
