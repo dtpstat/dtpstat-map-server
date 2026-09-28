@@ -31,7 +31,7 @@ export function registerLineRoutes(router, {
       try {
         const options = resolveKmlUpdateRequest(
           request.body,
-          request.query,
+          {},
           kmlUpdate,
         );
         startAdminTask(request, response, next, {
@@ -48,7 +48,7 @@ export function registerLineRoutes(router, {
           },
         }, async (context) => kmlUpdateService.update(
           request.body,
-          request.query,
+          {},
           {
             signal: context.signal,
             onCommit: () => context.beginCommit(),
