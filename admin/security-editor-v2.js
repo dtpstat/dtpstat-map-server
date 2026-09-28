@@ -156,6 +156,11 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
                   <label>Окно IP, сек. <input name="ipFailureWindowSeconds" type="number" min="10" max="86400" required data-human-unit="seconds"></label>
                   <label>IP lockout, сек. <input name="ipLockoutSeconds" type="number" min="10" max="604800" required data-human-unit="seconds"></label>
                 </fieldset>
+                <fieldset><legend>HTTP rate limit</legend>
+                  <label>На пользователя, запросов/мин <input name="requestRateLimitUserPerMinute" type="number" min="10" max="60000" required></label>
+                  <label>Суммарно, запросов/мин <input name="requestRateLimitGlobalPerMinute" type="number" min="10" max="1000000" required></label>
+                  <p class="security-info">Лимиты применяются к успешно аутентифицированным HTTP-запросам админки. Глобальный лимит должен быть не меньше пользовательского.</p>
+                </fieldset>
                 <fieldset><legend>Сессии и аудит</legend>
                   <label>Idle timeout, сек. <input name="sessionIdleSeconds" type="number" min="60" max="86400" required data-human-unit="seconds"></label>
                   <label>Максимальная жизнь сессии, сек. <input name="sessionAbsoluteSeconds" type="number" min="300" max="2592000" required data-human-unit="seconds"></label>
@@ -1048,6 +1053,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       'maxFailedAttempts','failureWindowSeconds','lockoutSeconds',
       'ipMaxFailedAttempts','ipFailureWindowSeconds','ipLockoutSeconds',
       'sessionIdleSeconds','sessionAbsoluteSeconds','auditRetentionDays',
+      'requestRateLimitUserPerMinute','requestRateLimitGlobalPerMinute',
       'passwordMinLength','passwordMaxLength',
     ];
     const booleanKeys = [

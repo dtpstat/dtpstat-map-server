@@ -323,6 +323,8 @@ export function createSecurityAuthService(
       status: 'success',
       user: publicAdminUser(authenticated),
       rawUser: authenticated,
+      securitySettings:
+        settings,
     };
   }
 
@@ -530,6 +532,8 @@ export function createSecurityAuthService(
     return {
       status: 'success',
       user,
+      securitySettings:
+        settings,
       sessionId: session.sessionId,
       authMethod: 'session',
       token,

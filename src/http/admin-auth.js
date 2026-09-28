@@ -2,6 +2,12 @@ import {
   adminHasPermission,
 } from '../modules/security/authorization-policy.js';
 import {
+  createAdminRequestRateLimiter,
+} from './admin-request-rate-limit.js';
+import {
+  securityLog,
+} from '../service-log.js';
+import {
   requestClientIp,
 } from '../shared/http/client-ip.js';
 import {
@@ -28,7 +34,129 @@ export {
  */
 export function createAdminAuthorization(
   securityService,
+  dependencies = {},
 ) {
+  const requestRateLimiter =
+    dependencies.requestRateLimiter ??
+    createAdminRequestRateLimiter();
+
+  const recordRateLimit =
+    (
+      request,
+      result,
+      rateLimit,
+    ) => {
+      const ipAddress =
+        requestClientIp(request);
+      const details = {
+        scope:
+          rateLimit.scope,
+        limit:
+          rateLimit.limit,
+        retryAfterSeconds:
+          rateLimit
+            .retryAfterSeconds,
+        method:
+          request.method,
+        path:
+          request.path,
+      };
+
+      securityLog(
+        'admin.request.rate_limited',
+        {
+          ...details,
+          ip:
+            ipAddress,
+          userId:
+            result.user?.id ??
+            null,
+          username:
+            result.user?.username ??
+            null,
+        },
+      );
+
+      if (
+        typeof securityService
+          .appendAudit ===
+        'function'
+      ) {
+        void Promise.resolve(
+          securityService
+            .appendAudit({
+              eventType:
+                'security',
+              operationType:
+                'admin.request.rate-limit',
+              status:
+                'blocked',
+              durationMs:
+                null,
+              ipAddress,
+              userId:
+                result.user?.id ??
+                null,
+              username:
+                result.user?.username ??
+                null,
+              details,
+            }),
+        ).catch(
+          (error) =>
+            console.error(
+              'Admin rate-limit audit write failed',
+              error,
+            ),
+        );
+      }
+    };
+
+  const enforceRequestRate =
+    (
+      request,
+      response,
+      result,
+    ) => {
+      const rateLimit =
+        requestRateLimiter
+          .consume({
+            userId:
+              result.user.id,
+            settings:
+              result
+                .securitySettings ??
+              {},
+          });
+
+      if (
+        rateLimit.allowed
+      ) {
+        return true;
+      }
+
+      recordRateLimit(
+        request,
+        result,
+        rateLimit,
+      );
+
+      sendAdminAuthorizationError(
+        response,
+        429,
+        'Administrative request rate limit exceeded',
+        {
+          code:
+            'admin_request_rate_limited',
+          retryAfterSeconds:
+            rateLimit
+              .retryAfterSeconds,
+        },
+      );
+
+      return false;
+    };
+
   const authenticateRequest =
     async (request) =>
       securityService.authenticateRequest({
@@ -79,6 +207,16 @@ export function createAdminAuthorization(
                     ),
                   ),
               },
+            )
+          ) {
+            return;
+          }
+
+          if (
+            !enforceRequestRate(
+              request,
+              response,
+              result,
             )
           ) {
             return;
@@ -164,6 +302,16 @@ export function createAdminAuthorization(
             302,
             '/admin/login.html',
           );
+          return;
+        }
+
+        if (
+          !enforceRequestRate(
+            request,
+            response,
+            result,
+          )
+        ) {
           return;
         }
 

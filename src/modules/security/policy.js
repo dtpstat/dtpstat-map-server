@@ -241,6 +241,8 @@ export function normalizeAdminSecuritySettings(payload) {
     'sessionIdleSeconds',
     'sessionAbsoluteSeconds',
     'auditRetentionDays',
+    'requestRateLimitUserPerMinute',
+    'requestRateLimitGlobalPerMinute',
     'passwordMinLength',
     'passwordMaxLength',
     'passwordRequireLowercase',
@@ -314,6 +316,18 @@ export function normalizeAdminSecuritySettings(payload) {
       0,
       3650,
     ),
+    requestRateLimitUserPerMinute: integerField(
+      payload.requestRateLimitUserPerMinute,
+      'requestRateLimitUserPerMinute',
+      10,
+      60000,
+    ),
+    requestRateLimitGlobalPerMinute: integerField(
+      payload.requestRateLimitGlobalPerMinute,
+      'requestRateLimitGlobalPerMinute',
+      10,
+      1000000,
+    ),
     passwordMinLength: integerField(
       payload.passwordMinLength,
       'passwordMinLength',
@@ -343,6 +357,15 @@ export function normalizeAdminSecuritySettings(payload) {
       'passwordRequireSpecial',
     ),
   };
+
+  if (
+    normalized.requestRateLimitGlobalPerMinute <
+    normalized.requestRateLimitUserPerMinute
+  ) {
+    throw new AdminSecurityValidationError(
+      'requestRateLimitGlobalPerMinute must not be lower than requestRateLimitUserPerMinute',
+    );
+  }
 
   if (
     normalized.passwordMinLength >
