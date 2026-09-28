@@ -405,7 +405,7 @@ test('KML dry run uses OSM place names without creating city or line-type record
   });
   const service = createKmlUpdateRuntime(pool, config, parserFor(typedFeatures));
 
-  const result = await service.update(undefined, { dryRun: 'true' });
+  const result = await service.update({ dryRun: true }, {});
 
   assert.equal(result.dryRun, true);
   assert.equal(result.importedGeometries, 2);
