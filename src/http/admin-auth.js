@@ -399,7 +399,7 @@ export function createAdminAuthorization(
           );
 
           if (
-            rejectAdminTransportTampering(
+            await rejectAdminTransportTampering(
               request,
               response,
             )
@@ -514,7 +514,7 @@ export function createAdminAuthorization(
         );
 
         if (
-          rejectAdminTransportTampering(
+          await rejectAdminTransportTampering(
             request,
             response,
           )
