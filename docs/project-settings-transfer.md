@@ -15,10 +15,10 @@ POST /api/admin/settings/import
 
 ```text
 _dtpstat.kind = project-settings
-_dtpstat.schemaVersion = 7
+_dtpstat.schemaVersion = 9
 ```
 
-Import принимает `v1…v7`.
+Import принимает `v1…v9`.
 
 Ключевые изменения:
 
@@ -26,7 +26,9 @@ Import принимает `v1…v7`.
 - `v4` — независимый `showLinePopups`;
 - `v5` — ordered `reportConfig.rank.sort`;
 - `v6` — `projectSettings.publicDownloadName`;
-- `v7` — `largeCityPopulationThreshold` и `largeCityAreaKm2Threshold`.
+- `v7` — `largeCityPopulationThreshold` и `largeCityAreaKm2Threshold`;
+- `v8` — password policy в `securitySettings`;
+- `v9` — per-user/global HTTP request rate limits.
 
 Legacy packages нормализуются к текущей модели.
 
@@ -238,13 +240,13 @@ Import:
 
 Post-commit snapshot refresh не может физически откатить уже committed DB transaction; API должен сообщать post-processing failure отдельно.
 
-## Пример v7
+## Пример v9
 
 ```json
 {
   "_dtpstat": {
     "kind": "project-settings",
-    "schemaVersion": 7,
+    "schemaVersion": 9,
     "exportedAt": "2026-09-08T03:00:00.000Z"
   },
   "projectSettings": {
@@ -281,7 +283,15 @@ Post-commit snapshot refresh не может физически откатить
     "ipLockoutSeconds": 3600,
     "sessionIdleSeconds": 1800,
     "sessionAbsoluteSeconds": 43200,
-    "auditRetentionDays": 365
+    "auditRetentionDays": 365,
+    "requestRateLimitUserPerMinute": 600,
+    "requestRateLimitGlobalPerMinute": 5000,
+    "passwordMinLength": 12,
+    "passwordMaxLength": 1024,
+    "passwordRequireLowercase": false,
+    "passwordRequireUppercase": false,
+    "passwordRequireDigit": false,
+    "passwordRequireSpecial": false
   }
 }
 ```
