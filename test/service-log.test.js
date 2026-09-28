@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   runServiceOperation,
+  SECURITY_JOURNAL_MARKER,
+  securityLog,
   serviceErrorDetails,
   serviceLog,
 } from '../src/service-log.js';
@@ -23,6 +25,59 @@ function captureOutput() {
     },
   };
 }
+
+test('securityLog emits one journald/fail2ban-friendly JSON line', () => {
+  const { entries, output } =
+    captureOutput();
+
+  securityLog(
+    'admin.request.ip_lockout',
+    {
+      ip: '203.0.113.10',
+      attempts: 5,
+    },
+    output,
+  );
+
+  assert.equal(
+    entries.length,
+    1,
+  );
+  assert.equal(
+    entries[0].level,
+    'warning',
+  );
+  assert.match(
+    entries[0].message,
+    /^\[security\] \{/u,
+  );
+
+  const payload =
+    JSON.parse(
+      entries[0].message
+        .slice(
+          '[security] '.length,
+        ),
+    );
+
+  assert.deepEqual(
+    payload,
+    {
+      marker:
+        SECURITY_JOURNAL_MARKER,
+      event:
+        'admin.request.ip_lockout',
+      ip:
+        '203.0.113.10',
+      attempts: 5,
+    },
+  );
+  assert.equal(
+    entries[0].message
+      .includes('\n'),
+    false,
+  );
+});
 
 test('serviceLog emits a stable grep-friendly prefix', () => {
   const { entries, output } = captureOutput();
