@@ -792,7 +792,7 @@ test('OSM dry run validates the complete staged replacement and rolls it back', 
   const pool = createPool();
   const service = createOsmCityUpdateRuntime(pool, config, createDependencies());
 
-  const result = await service.update(undefined, { dryRun: 'true' });
+  const result = await service.update({ dryRun: true }, {});
 
   assert.equal(result.dryRun, true);
   assert.equal(pool.queries.at(-2), 'ROLLBACK');
