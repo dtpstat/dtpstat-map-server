@@ -241,3 +241,93 @@ test('known dynamic SQL identifiers are internal infrastructure only', async () 
     /'portable_population_export'/u,
   );
 });
+
+
+function runtimeSqlBoundaryFile(
+  relative,
+) {
+  return (
+    relative.startsWith(
+      'src/db/',
+    ) &&
+    (
+      /(?:repository|storage)\.js$/u
+        .test(relative) ||
+      [
+        'src/db/cities-repository.js',
+        'src/db/city-boundary-hierarchy.js',
+        'src/db/database-locks.js',
+      ].includes(relative)
+    )
+  ) ||
+  (
+    relative.startsWith(
+      'src/modules/',
+    ) &&
+    /(?:repository|storage)\.js$/u
+      .test(relative)
+  );
+}
+
+test('runtime SQL bind parameters always declare an explicit PostgreSQL type', async () => {
+  const directories = [
+    path.join(
+      root,
+      'src/db',
+    ),
+    path.join(
+      root,
+      'src/modules',
+    ),
+  ];
+  const violations = [];
+
+  for (const directory of directories) {
+    for (
+      const file of
+      await javascriptFiles(
+        directory,
+      )
+    ) {
+      const relative =
+        path.relative(
+          root,
+          file,
+        );
+
+      if (
+        !runtimeSqlBoundaryFile(
+          relative,
+        )
+      ) {
+        continue;
+      }
+
+      const source =
+        await fs.readFile(
+          file,
+          'utf8',
+        );
+
+      for (
+        const match of
+        source.matchAll(
+          /\$(\d+)(?!\d)(?!::)/gmu,
+        )
+      ) {
+        violations.push({
+          file:
+            relative,
+          parameter:
+            '$' + match[1],
+        });
+      }
+    }
+  }
+
+  assert.deepEqual(
+    violations,
+    [],
+    'Every runtime SQL bind parameter must use an explicit PostgreSQL cast such as $1::bigint or $2::text',
+  );
+});
