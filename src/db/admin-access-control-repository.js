@@ -320,7 +320,7 @@ export function createAdminAccessControlRepository(database) {
         `INSERT INTO admin_blocked_ips(
            ip_address,expires_at,blocked_by,reason,source_audit_id
          )
-         VALUES($1::inet,$2::integer,$3::integer,$4::integer,$5)
+         VALUES($1::inet,$2::timestamptz,$3::bigint,$4::text,$5::bigint)
          RETURNING
            id::integer AS id,
            host(ip_address) AS "ipAddress",
