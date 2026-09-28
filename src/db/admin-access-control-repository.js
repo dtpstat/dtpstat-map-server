@@ -73,6 +73,70 @@ const RECORD_FAILED_IP_SQL = `
     locked_until AS "lockedUntil"
 `;
 
+const RECORD_REQUEST_INCIDENT_SQL = `
+  INSERT INTO admin_login_ip_state (
+    ip_address,
+    request_incident_count,
+    request_incident_window_started_at,
+    request_locked_until,
+    updated_at
+  )
+  VALUES (
+    $1::inet,
+    1,
+    $2::timestamptz,
+    NULL,
+    NOW()
+  )
+  ON CONFLICT (ip_address) DO UPDATE SET
+    request_incident_count = CASE
+      WHEN admin_login_ip_state.request_incident_window_started_at IS NULL
+        OR admin_login_ip_state.request_incident_window_started_at <
+          $2::timestamptz - make_interval(secs => $3::integer)
+        OR (
+          admin_login_ip_state.request_locked_until IS NOT NULL
+          AND admin_login_ip_state.request_locked_until <= $2::timestamptz
+        )
+        THEN 1
+      ELSE admin_login_ip_state.request_incident_count + 1
+    END,
+    request_incident_window_started_at = CASE
+      WHEN admin_login_ip_state.request_incident_window_started_at IS NULL
+        OR admin_login_ip_state.request_incident_window_started_at <
+          $2::timestamptz - make_interval(secs => $3::integer)
+        OR (
+          admin_login_ip_state.request_locked_until IS NOT NULL
+          AND admin_login_ip_state.request_locked_until <= $2::timestamptz
+        )
+        THEN $2::timestamptz
+      ELSE admin_login_ip_state.request_incident_window_started_at
+    END,
+    request_locked_until = CASE
+      WHEN (
+        CASE
+          WHEN admin_login_ip_state.request_incident_window_started_at IS NULL
+            OR admin_login_ip_state.request_incident_window_started_at <
+              $2::timestamptz - make_interval(secs => $3::integer)
+            OR (
+              admin_login_ip_state.request_locked_until IS NOT NULL
+              AND admin_login_ip_state.request_locked_until <= $2::timestamptz
+            )
+            THEN 1
+          ELSE admin_login_ip_state.request_incident_count + 1
+        END
+      ) >= $4::integer
+        THEN $2::timestamptz + make_interval(secs => $5::integer)
+      ELSE NULL
+    END,
+    updated_at = NOW()
+  RETURNING
+    host(ip_address) AS "ipAddress",
+    request_incident_count AS "requestIncidentCount",
+    request_incident_window_started_at AS "requestIncidentWindowStartedAt",
+    request_locked_until AS "requestLockedUntil"
+`;
+
+
 /** @param {{ query: Function }} database */
 export function createAdminAccessControlRepository(database) {
   return {
@@ -149,7 +213,10 @@ export function createAdminAccessControlRepository(database) {
            host(ip_address) AS "ipAddress",
            failed_login_count AS "failedLoginCount",
            failure_window_started_at AS "failureWindowStartedAt",
-           locked_until AS "lockedUntil"
+           locked_until AS "lockedUntil",
+           request_incident_count AS "requestIncidentCount",
+           request_incident_window_started_at AS "requestIncidentWindowStartedAt",
+           request_locked_until AS "requestLockedUntil"
          FROM admin_login_ip_state
          WHERE ip_address=$1::inet`,
         [ipAddress],
@@ -172,11 +239,40 @@ export function createAdminAccessControlRepository(database) {
       return result.rows[0] ?? null;
     },
 
+    async recordRequestSecurityIncident(
+      ipAddress,
+      timestamp,
+      settings,
+      threshold = 5,
+    ) {
+      if (!ipAddress) return null;
+
+      const result =
+        await database.query(
+          RECORD_REQUEST_INCIDENT_SQL,
+          [
+            ipAddress,
+            timestamp,
+            settings.ipFailureWindowSeconds,
+            threshold,
+            settings.ipLockoutSeconds,
+          ],
+        );
+
+      return result.rows[0] ?? null;
+    },
+
     async clearIpFailures(ipAddress) {
       if (!ipAddress) return;
+
       await database.query(
-        'DELETE FROM admin_login_ip_state ' +
-          'WHERE ip_address=$1::inet',
+        `UPDATE admin_login_ip_state
+         SET
+           failed_login_count=0,
+           failure_window_started_at=NULL,
+           locked_until=NULL,
+           updated_at=NOW()
+         WHERE ip_address=$1::inet`,
         [ipAddress],
       );
     },
