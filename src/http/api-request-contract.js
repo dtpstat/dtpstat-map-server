@@ -208,6 +208,8 @@ export const API_REQUEST_CONTRACTS =
     ),
     c('GET', '/line-types'),
     c('GET', '/report-config'),
+    c('GET', '/project'),
+    c('GET', '/city-marker-icon'),
 
     c(
       'PUT',
@@ -1377,7 +1379,7 @@ export async function enforceApiRequestContract(
         key,
       )
     ) {
-      reject(
+      await reject(
         request,
         response,
         'unsafe-query-parameter-name',
@@ -1391,7 +1393,7 @@ export async function enforceApiRequestContract(
     }
 
     if (uniqueKeys.has(key)) {
-      reject(
+      await reject(
         request,
         response,
         'duplicate-query-parameter',
@@ -1496,7 +1498,14 @@ export function validateParsedApiBody(
   request,
 ) {
   const contract =
-    request.apiContract;
+    request.apiContract ??
+    contractFor(
+      String(
+        request.method ??
+        '',
+      ).toUpperCase(),
+      apiPath(request),
+    );
 
   if (!contract) {
     return {
