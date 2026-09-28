@@ -4,7 +4,7 @@ import http from 'node:http';
 import test from 'node:test';
 import { createLineTypesRouter } from '../src/routes/line-types-api.js';
 
-const authorization = `Basic ${Buffer.from('importer:test-secret').toString('base64')}`;
+const authorization = 'dtpstat_admin_session=test-session-token';
 const lineTypes = [
   {
     id: 1,
@@ -19,7 +19,7 @@ const lineTypes = [
 ];
 
 function requireInterface(request, response, next) {
-  if (request.get('authorization') !== authorization) {
+  if (request.get('cookie') !== authorization) {
     response.status(401).json({ error: 'Authentication required' });
     return;
   }
@@ -94,7 +94,7 @@ test('admin line type update requires auth and saves only editable settings', as
     const response = await fetch(`${baseUrl}/api/admin/line-types`, {
       method: 'PUT',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
@@ -109,7 +109,7 @@ test('admin line type update rejects a missing JSON content type', async () => {
   await withServer(async (baseUrl, savedPayload) => {
     const response = await fetch(`${baseUrl}/api/admin/line-types`, {
       method: 'PUT',
-      headers: { Authorization: authorization },
+      headers: { Cookie: authorization },
       body: 'not-json',
     });
     assert.equal(response.status, 415);
