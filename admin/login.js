@@ -1,3 +1,7 @@
+import {
+  adminApiHeaders,
+} from './api-contract-client.js';
+
 const form = document.querySelector('#admin-login-form');
 const message = document.querySelector('#admin-login-message');
 const loginReason = new URLSearchParams(window.location.search);
@@ -11,7 +15,11 @@ async function alreadyAuthenticated() {
   try {
     const response = await fetch('/api/admin/me', {
       credentials: 'same-origin',
-      headers: { Accept: 'application/json' },
+      headers:
+        adminApiHeaders({
+          Accept:
+            'application/json',
+        }),
     });
     return response.ok;
   } catch {
@@ -33,10 +41,13 @@ if (await alreadyAuthenticated()) {
       const response = await fetch('/api/admin/login', {
         method: 'POST',
         credentials: 'same-origin',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
+        headers:
+          adminApiHeaders({
+            Accept:
+              'application/json',
+            'Content-Type':
+              'application/json',
+          }),
         body: JSON.stringify({
           username: form.elements.username.value,
           password: form.elements.password.value,
@@ -44,6 +55,14 @@ if (await alreadyAuthenticated()) {
       });
       let payload = null;
       try { payload = await response.json(); } catch { /* no body */ }
+      if (
+        response.status === 426
+      ) {
+        throw new Error(
+          'Сервер обновлён. Перезагрузите страницу входа.',
+        );
+      }
+
       if (!response.ok) {
         const retry = payload?.retryAfterSeconds
           ? ` Повторите через ${payload.retryAfterSeconds} сек.`
