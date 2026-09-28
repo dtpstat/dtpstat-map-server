@@ -16,7 +16,7 @@ test('project settings transfer policy validates kind and schema before DB work'
   );
   assert.throws(
     () => validateProjectSettingsTransferEnvelope({
-      _dtpstat: { kind: 'project-settings', schemaVersion: 9 },
+      _dtpstat: { kind: 'project-settings', schemaVersion: 10 },
     }),
     ProjectSettingsTransferValidationError,
   );
@@ -28,7 +28,7 @@ test('project settings transfer policy validates kind and schema before DB work'
       reportConfig: {},
       securitySettings: {},
     }).schemaVersion,
-    8,
+    9,
   );
 });
 
