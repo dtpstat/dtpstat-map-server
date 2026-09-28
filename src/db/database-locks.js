@@ -9,7 +9,7 @@ import { databaseLockKey } from './database-environment.js';
  */
 export async function acquireDataImportLock(client, pool) {
   await client.query(
-    'SELECT pg_advisory_xact_lock(hashtext($1))',
+    'SELECT pg_advisory_xact_lock(hashtext($1::text))',
     [databaseLockKey(pool?.databaseSchema, 'data-import')],
   );
 }
