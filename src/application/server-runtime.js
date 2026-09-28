@@ -274,6 +274,10 @@ export function createServerRuntime({
     securityService,
     adminAuth,
     derivedState,
+    adminAllowedOrigins:
+      config.admin
+        ?.allowedOrigins ??
+      new Set(),
   };
 
   return {
