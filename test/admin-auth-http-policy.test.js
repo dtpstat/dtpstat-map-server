@@ -92,7 +92,7 @@ test('admin session HTTP helper parses the stable cookie and exposes effective e
   );
 });
 
-test('admin CSRF policy protects mutating session requests without restricting Basic Auth', () => {
+test('admin CSRF policy requires an exact-origin browser session for mutations', () => {
   const request = {
     method: 'POST',
     protocol: 'https',
@@ -155,17 +155,46 @@ test('admin CSRF policy protects mutating session requests without restricting B
     adminCsrfAllowed(
       {
         ...request,
-        get() {
-          return 'cross-site';
+        get(name) {
+          if (
+            String(name)
+              .toLowerCase() ===
+            'origin'
+          ) {
+            return null;
+          }
+
+          return request.get(name);
         },
       },
-      'basic',
+      'session',
     ),
-    true,
+    false,
+  );
+
+  assert.equal(
+    adminCsrfAllowed(
+      {
+        ...request,
+        get(name) {
+          if (
+            String(name)
+              .toLowerCase() ===
+            'sec-fetch-site'
+          ) {
+            return 'same-site';
+          }
+
+          return request.get(name);
+        },
+      },
+      'session',
+    ),
+    false,
   );
 });
 
-test('admin auth response mapper preserves lockout status headers and fallback challenge', () => {
+test('admin auth response mapper preserves lockout status without Basic challenge', () => {
   const locked = response();
 
   assert.equal(
@@ -215,11 +244,11 @@ test('admin auth response mapper preserves lockout status headers and fallback c
     unknown.body.error,
     'Invalid username or password',
   );
-  assert.match(
-    unknown.headers.get(
+  assert.equal(
+    unknown.headers.has(
       'www-authenticate',
     ),
-    /^Basic /u,
+    false,
   );
 
   const success = response();
