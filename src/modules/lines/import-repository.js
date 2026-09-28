@@ -369,9 +369,9 @@ export function createLineImportRepository() {
       return client.query(
         `SELECT seq::bigint::text AS seq, item
          FROM line_transfer_raw
-         WHERE seq > $1
+         WHERE seq > $1::bigint
          ORDER BY seq
-         LIMIT $2`,
+         LIMIT $2::integer`,
         [lastSeq, limit],
       );
     },
