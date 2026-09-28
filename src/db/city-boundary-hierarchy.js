@@ -13,7 +13,7 @@ const REBUILD_HIERARCHY_BATCH_SQL = `
     FROM city_boundaries AS boundary
     WHERE boundary.id > $1::bigint
     ORDER BY boundary.id
-    LIMIT $2
+    LIMIT $2::integer
   ),
   updated AS (
     UPDATE city_boundaries AS child
