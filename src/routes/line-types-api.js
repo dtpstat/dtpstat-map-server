@@ -1,4 +1,7 @@
-import express, { Router } from 'express';
+import { Router } from 'express';
+import {
+  jsonBody,
+} from '../shared/http/express.js';
 import { LineTypeValidationError } from '../modules/lines/type-policy.js';
 import {
   createAdminOperationAudit,
@@ -34,12 +37,13 @@ export function createLineTypesRouter({
     '/admin/line-types',
     adminAuth.requireInterface,
     createAdminOperationAudit(securityService, 'interface.line-types.update'),
-    express.json({
-      limit: Math.min(maxBodyBytes, 256 * 1024),
-      strict: true,
-      inflate: true,
-      type: 'application/json',
-    }),
+    jsonBody(
+      Math.min(
+        maxBodyBytes,
+        256 * 1024,
+      ),
+      'application/json',
+    ),
     async (request, response, next) => {
       if (request.body === undefined) {
         response.status(415).json({ error: 'Content-Type must be application/json' });

@@ -2,6 +2,9 @@ import express, {
   Router,
 } from 'express';
 import {
+  jsonBody as createJsonBody,
+} from '../shared/http/express.js';
+import {
   registerAdminAuditRoutes,
 } from './security/audit-routes.js';
 import {
@@ -21,16 +24,14 @@ export function createAdminSecurityRouter({
 }) {
   const router = Router();
 
-  const jsonBody = express.json({
-    limit:
+  const jsonBody =
+    createJsonBody(
       Math.min(
         maxBodyBytes,
         256 * 1024,
       ),
-    strict: true,
-    inflate: true,
-    type: 'application/json',
-  });
+      'application/json',
+    );
 
   const avatarBody = express.raw({
     limit: 256 * 1024,

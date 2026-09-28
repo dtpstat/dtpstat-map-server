@@ -2,6 +2,9 @@ import express, {
   Router,
 } from 'express';
 import {
+  jsonBody as createJsonBody,
+} from '../shared/http/express.js';
+import {
   CITY_MARKER_ICON_MAX_BYTES,
 } from '../modules/project/city-marker-icon.js';
 import {
@@ -45,16 +48,14 @@ export function createProjectSettingsRouter({
 }) {
   const router = Router();
 
-  const jsonBody = express.json({
-    limit:
+  const jsonBody =
+    createJsonBody(
       Math.min(
         maxBodyBytes,
         256 * 1024,
       ),
-    strict: true,
-    inflate: true,
-    type: 'application/json',
-  });
+      'application/json',
+    );
 
   const cityMarkerBody = express.raw({
     limit:

@@ -1,4 +1,7 @@
-import express, { Router } from 'express';
+import { Router } from 'express';
+import {
+  jsonBody as createJsonBody,
+} from '../shared/http/express.js';
 import {
   publicReportConfig,
   REPORT_CONFIG_CATALOG,
@@ -28,12 +31,14 @@ export function createReportConfigRouter({
   afterSave = async () => undefined,
 }) {
   const router = Router();
-  const jsonBody = express.json({
-    limit: Math.min(maxBodyBytes, 256 * 1024),
-    strict: true,
-    inflate: true,
-    type: 'application/json',
-  });
+  const jsonBody =
+    createJsonBody(
+      Math.min(
+        maxBodyBytes,
+        256 * 1024,
+      ),
+      'application/json',
+    );
 
   router.get('/report-config', async (_request, response, next) => {
     try {

@@ -1,6 +1,9 @@
-import express, {
+import {
   Router,
 } from 'express';
+import {
+  jsonBody as createJsonBody,
+} from '../shared/http/express.js';
 import {
   registerOsmBoundaryRoutes,
 } from './osm/boundary-routes.js';
@@ -35,12 +38,11 @@ export function createOsmBoundariesRouter({
 }) {
   const router = Router();
 
-  const jsonBody = express.json({
-    limit: 256 * 1024,
-    strict: true,
-    inflate: true,
-    type: 'application/json',
-  });
+  const jsonBody =
+    createJsonBody(
+      256 * 1024,
+      'application/json',
+    );
 
   registerOsmSettingsRoutes(
     router,

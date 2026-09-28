@@ -1,4 +1,6 @@
-import express from 'express';
+import {
+  jsonBody,
+} from '../../shared/http/express.js';
 import {
   isProjectSettingsTransferInputValidationError,
 } from '../../application/data-transfer/project-settings-service.js';
@@ -31,16 +33,13 @@ export function registerProjectSettingsTransferImportRoutes(
       securityService,
       'settings.import',
     ),
-    express.json({
-      limit:
-        Math.min(
-          maxBodyBytes,
-          2 * 1024 * 1024,
-        ),
-      strict: true,
-      inflate: true,
-      type: 'application/json',
-    }),
+    jsonBody(
+      Math.min(
+        maxBodyBytes,
+        2 * 1024 * 1024,
+      ),
+      'application/json',
+    ),
     async (
       request,
       response,

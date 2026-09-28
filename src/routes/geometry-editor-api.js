@@ -1,6 +1,9 @@
-import express, {
+import {
   Router,
 } from 'express';
+import {
+  jsonBody as createJsonBody,
+} from '../shared/http/express.js';
 import {
   createAdminOperationAudit,
   recordAdminOperationChanges,
@@ -150,17 +153,13 @@ export function createGeometryEditorRouter({
     Router();
 
   const jsonBody =
-    express.json({
-      limit:
-        Math.min(
-          maxBodyBytes,
-          8 * 1024 * 1024,
-        ),
-      strict: true,
-      inflate: true,
-      type:
-        'application/json',
-    });
+    createJsonBody(
+      Math.min(
+        maxBodyBytes,
+        8 * 1024 * 1024,
+      ),
+      'application/json',
+    );
 
   const audit =
     (operation) =>
