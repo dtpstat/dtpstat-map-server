@@ -148,7 +148,7 @@ const CITY_SQL = `
     LIMIT 1
   ) AS boundary
     ON TRUE
-  WHERE city.id = $1
+  WHERE city.id = $1::bigint
   LIMIT 1
 `;
 
@@ -172,7 +172,7 @@ const GEOMETRY_SUMMARIES_SQL = `
   FROM city_geometries AS geometry
   LEFT JOIN line_types AS line_type
     ON line_type.id = geometry.line_type_id
-  WHERE geometry.city_id = $1
+  WHERE geometry.city_id = $1::bigint
   ORDER BY
     COALESCE(NULLIF(BTRIM(geometry.display_name), ''), ''),
     geometry.id
@@ -214,7 +214,7 @@ const ONE_GEOMETRY_SQL = `
   FROM city_geometries AS geometry
   LEFT JOIN line_types AS line_type
     ON line_type.id = geometry.line_type_id
-  WHERE geometry.id = $1
+  WHERE geometry.id = $1::bigint
 `;
 
 const LOCK_GEOMETRIES_SQL = `
@@ -254,10 +254,10 @@ const CREATE_GEOMETRY_SQL = `
     updated_at
   )
   SELECT
-    $1,
-    $2,
-    $4,
-    $5,
+    $1::bigint,
+    $2::bigint,
+    $4::bigint,
+    $5::smallint,
     CASE
       WHEN GeometryType(prepared.geom) IN ('LINESTRING', 'MULTILINESTRING')
         THEN ST_Length(prepared.geom::geography)
@@ -270,11 +270,11 @@ const CREATE_GEOMETRY_SQL = `
     END,
     jsonb_build_object('source', 'manual'),
     prepared.geom,
-    $6,
-    $7,
+    $6::text,
+    $7::text,
     $8::text[],
     '{}'::jsonb,
-    $9,
+    $9::boolean,
     TRUE,
     NOW()
   FROM prepared
@@ -294,8 +294,8 @@ const UPDATE_GEOMETRY_SQL = `
   UPDATE city_geometries AS geometry
   SET
     geom = prepared.geom,
-    line_type_id = $3,
-    lanes = $4,
+    line_type_id = $3::bigint,
+    lanes = $4::smallint,
     length_m = CASE
       WHEN GeometryType(prepared.geom) IN ('LINESTRING', 'MULTILINESTRING')
         THEN ST_Length(prepared.geom::geography)
@@ -306,14 +306,14 @@ const UPDATE_GEOMETRY_SQL = `
         THEN ST_Length(prepared.geom::geography) * $4::smallint
       ELSE NULL
     END,
-    display_name = $5,
-    tooltip = $6,
+    display_name = $5::text,
+    tooltip = $6::text,
     tags = $7::text[],
-    is_visible = $8,
+    is_visible = $8::boolean,
     was_edited = TRUE,
     updated_at = NOW()
   FROM prepared
-  WHERE geometry.id = $1
+  WHERE geometry.id = $1::bigint
     AND NOT ST_IsEmpty(prepared.geom)
     AND ST_IsValid(prepared.geom)
   RETURNING geometry.id::integer AS id
@@ -327,7 +327,7 @@ const MERGE_GEOMETRIES_SQL = `
   ),
   merged AS (
     SELECT CASE
-      WHEN $3 = 'line' THEN
+      WHEN $3::text = 'line' THEN
         ST_Multi(
           ST_CollectionExtract(
             ST_Collect(geom),
@@ -352,28 +352,28 @@ const MERGE_GEOMETRIES_SQL = `
   SET
     geom = merged.geom,
     length_m = CASE
-      WHEN $3 = 'line'
+      WHEN $3::text = 'line'
         THEN ST_Length(
           merged.geom::geography
         )
       ELSE NULL
     END,
     lane_length_m = CASE
-      WHEN $3 = 'line'
+      WHEN $3::text = 'line'
         THEN ST_Length(
           merged.geom::geography
         ) * target.lanes
       ELSE NULL
     END,
     source_tags = CASE
-      WHEN $4
+      WHEN $4::boolean
         THEN target.source_tags
       ELSE '{}'::jsonb
     END,
     was_edited = TRUE,
     updated_at = NOW()
   FROM merged
-  WHERE target.id = $1
+  WHERE target.id = $1::bigint
     AND NOT ST_IsEmpty(
       merged.geom
     )
@@ -409,7 +409,7 @@ const CUT_GEOMETRY_SQL = `
       ) AS geom
     FROM city_geometries AS geometry
     CROSS JOIN prepared
-    WHERE geometry.id = $1
+    WHERE geometry.id = $1::bigint
   )
   UPDATE city_geometries AS geometry
   SET
@@ -417,7 +417,7 @@ const CUT_GEOMETRY_SQL = `
     was_edited = TRUE,
     updated_at = NOW()
   FROM difference
-  WHERE geometry.id = $1
+  WHERE geometry.id = $1::bigint
     AND NOT ST_IsEmpty(
       difference.geom
     )
@@ -539,7 +539,7 @@ export function createGeometryEditorStorage(
           `SELECT
              boundary.id::integer AS id
            FROM city_boundaries AS boundary
-           WHERE boundary.city_id = $1
+           WHERE boundary.city_id = $1::bigint
              AND boundary.is_active
            ORDER BY boundary.id
            LIMIT 1
@@ -558,7 +558,7 @@ export function createGeometryEditorStorage(
       }
       const result =
         await queryable.query(
-          'SELECT 1 FROM line_types WHERE id = $1',
+          'SELECT 1 FROM line_types WHERE id = $1::bigint',
           [lineTypeId],
         );
       return Boolean(
@@ -630,7 +630,7 @@ export function createGeometryEditorStorage(
       geometryId,
     ) {
       return client.query(
-        'SELECT relink_city_geometry($1)',
+        'SELECT relink_city_geometry($1::bigint)',
         [geometryId],
       );
     },
@@ -648,7 +648,7 @@ export function createGeometryEditorStorage(
       geometryId,
     ) {
       await client.query(
-        'DELETE FROM city_geometries WHERE id = $1',
+        'DELETE FROM city_geometries WHERE id = $1::bigint',
         [geometryId],
       );
     },
@@ -680,7 +680,7 @@ export function createGeometryEditorStorage(
       await client.query(
         `DELETE FROM city_geometries
          WHERE id = ANY($1::bigint[])
-           AND id <> $2`,
+           AND id <> $2::bigint`,
         [
           ids,
           targetId,
