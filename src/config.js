@@ -107,6 +107,98 @@ function stringListValue(env, name, fallback) {
   return [...new Set(values)];
 }
 
+function originSetValue(env, name, environment) {
+  const raw =
+    env[name]
+      ?.trim();
+
+  if (!raw) {
+    if (environment === 'production') {
+      throw new Error(
+        name +
+          ' is required in production',
+      );
+    }
+
+    return new Set();
+  }
+
+  const origins =
+    new Set();
+
+  for (
+    const value of
+    raw.split(',')
+      .map(
+        (item) =>
+          item.trim(),
+      )
+      .filter(Boolean)
+  ) {
+    let url;
+    try {
+      url =
+        new URL(value);
+    } catch {
+      throw new Error(
+        name +
+          ' must contain absolute HTTP(S) origins',
+      );
+    }
+
+    if (
+      ![
+        'http:',
+        'https:',
+      ].includes(
+        url.protocol,
+      ) ||
+      url.username ||
+      url.password ||
+      (
+        url.pathname !== '/' &&
+        url.pathname !== ''
+      ) ||
+      url.search ||
+      url.hash
+    ) {
+      throw new Error(
+        name +
+          ' must contain origins without paths, credentials, query or fragments',
+      );
+    }
+
+    if (
+      environment ===
+        'production' &&
+      url.protocol !==
+        'https:'
+    ) {
+      throw new Error(
+        name +
+          ' must use HTTPS origins in production',
+      );
+    }
+
+    origins.add(
+      url.origin,
+    );
+  }
+
+  if (
+    environment ===
+      'production' &&
+    origins.size === 0
+  ) {
+    throw new Error(
+      name +
+        ' must contain at least one origin in production',
+    );
+  }
+
+  return origins;
+}
+
 function optionalBootstrapUsername(env) {
   const value = env.IMPORT_API_USERNAME?.trim();
   return value || null;
@@ -124,6 +216,9 @@ function optionalBootstrapPassword(env) {
  * @param {string} [projectRoot]
  */
 export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT) {
+  const environment =
+    env.NODE_ENV?.trim() ||
+    'development';
   const httpEnabled = booleanValue(env, 'HTTP_ENABLED', true);
   const httpsEnabled = booleanValue(env, 'HTTPS_ENABLED', false);
   const databaseSchema = loadDatabaseSchema(env);
@@ -263,8 +358,16 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
   }
 
   return {
-    environment: env.NODE_ENV?.trim() || 'development',
+    environment,
     host: env.HOST?.trim() || '0.0.0.0',
+    admin: {
+      allowedOrigins:
+        originSetValue(
+          env,
+          'ADMIN_ALLOWED_ORIGINS',
+          environment,
+        ),
+    },
     projectRoot,
     http: {
       enabled: httpEnabled,
