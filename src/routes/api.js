@@ -29,7 +29,6 @@ import {
 import { registerLineRoutes } from '../modules/lines/routes.js';
 import { registerMapRoutes } from '../modules/map/routes.js';
 import { registerOsmRoutes } from '../modules/osm/routes.js';
-import { adminJsonBody as jsonBody } from '../http/admin-json-body.js';
 import {
   parseBoolean,
   parseCoordinates,
@@ -99,6 +98,7 @@ export function createApiRouter({
   adminTasks,
   adminAuth,
   securityService,
+  jsonBody,
   publicMap,
   importApi,
   kmlUpdate,
