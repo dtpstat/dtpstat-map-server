@@ -17,3 +17,6 @@ export function adminJsonBody(
     adminJsonBodySecurityGuard,
   ];
 }
+
+export const jsonBody =
+  adminJsonBody;
