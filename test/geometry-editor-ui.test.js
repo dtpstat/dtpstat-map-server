@@ -663,7 +663,7 @@ test('geometry workspace keeps new and failed bulk work locally and clears only 
   );
   assert.match(
     editor,
-    /const showEditable =[\s\S]*state\.editing[\s\S]*backgroundGeometries = showEditable[\s\S]*item\.id !== state\.current\.id/u,
+    /const showEditable =[\s\S]*state\.editing[\s\S]*backgroundGeometries = showEditable[\s\S]*String\(item\.id\) !==[\s\S]*String\(state\.current\.id\)/u,
   );
 });
 
