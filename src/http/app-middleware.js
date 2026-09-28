@@ -11,6 +11,9 @@ import {
 import {
   createApiRequestContractMiddleware,
 } from './api-request-contract.js';
+import {
+  createAdminOriginGuard,
+} from './admin-origin.js';
 
 const CITY_MARKER_PNG =
   Buffer.from(
@@ -123,6 +126,32 @@ export function installAppHttpMiddleware(
       'admin',
     );
 
+  const adminOrigins =
+    config.admin
+      ?.allowedOrigins ??
+    new Set();
+  const adminWebSocketOrigins =
+    [
+      ...adminOrigins,
+    ].map(
+      (origin) =>
+        origin.startsWith(
+          'https:',
+        )
+          ? 'wss:' +
+            origin.slice(
+              'https:'.length,
+            )
+          : 'ws:' +
+            origin.slice(
+              'http:'.length,
+            ),
+    );
+  const adminOriginGuard =
+    createAdminOriginGuard(
+      adminOrigins,
+    );
+
   app.disable('x-powered-by');
 
   app.set(
@@ -204,6 +233,7 @@ export function installAppHttpMiddleware(
 
   app.use(
     '/api/admin',
+    adminOriginGuard,
     requireAdminApiVersion,
     adminAuth
       .limitGlobalRequest,
@@ -232,6 +262,71 @@ export function installAppHttpMiddleware(
         .type('image/png')
         .send(CITY_MARKER_PNG);
     },
+  );
+
+  app.use(
+    '/admin',
+    helmet({
+      crossOriginEmbedderPolicy:
+        false,
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: [
+            "'self'",
+          ],
+          scriptSrc: [
+            "'self'",
+            "'wasm-unsafe-eval'",
+          ],
+          styleSrc: [
+            "'self'",
+            "'unsafe-inline'",
+          ],
+          imgSrc: [
+            "'self'",
+            'data:',
+            'blob:',
+            'https://*.mapbox.com',
+          ],
+          connectSrc: [
+            "'self'",
+            ...adminWebSocketOrigins,
+            ...(
+              isProduction
+                ? []
+                : [
+                    'ws:',
+                    'wss:',
+                  ]
+            ),
+            'https://*.mapbox.com',
+          ],
+          workerSrc: [
+            "'self'",
+            'blob:',
+          ],
+          childSrc: [
+            "'self'",
+            'blob:',
+          ],
+          frameSrc: [
+            "'none'",
+          ],
+          frameAncestors: [
+            "'none'",
+          ],
+          objectSrc: [
+            "'none'",
+          ],
+          baseUri: [
+            "'self'",
+          ],
+          formAction: [
+            "'self'",
+          ],
+        },
+      },
+    }),
   );
 
   for (
