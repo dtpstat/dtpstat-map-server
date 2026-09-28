@@ -657,9 +657,9 @@ test('geometry workspace keeps new and failed bulk work locally and clears only 
     editor,
     /state\.workspaceKey = 'unlinked'[\s\S]*rebuildDraftOverlay/u,
   );
-  assert.doesNotMatch(
+  assert.match(
     editor,
-    /!state\.city\?\.boundaryId[\s\S]*startDrawing/u,
+    /async function startDrawing\(mode\)[\s\S]*state\.drawing = \{ mode, coordinates: \[\] \}/u,
   );
   assert.match(
     editor,
