@@ -34,69 +34,21 @@ export function normalizeOsmUpdateUrl(rawUrl, allowedHosts) {
   return url.toString();
 }
 
-/**
- * @param {unknown} body
- * @param {Set<string>} allowedHosts
- * @param {Set<string> | undefined} allowedURLs
- * @param {string} fallback
- */
-function resolveUrl(body, allowedHosts, allowedURLs, fallback) {
-  if (body === undefined) return fallback;
-  if (!plainObject(body)) {
-    throw new OsmCityUpdateValidationError('OSM request body must be an object');
-  }
-  const unknown = Object.keys(body).filter((key) => key !== 'URL');
-  if (unknown.length > 0) {
-    throw new OsmCityUpdateValidationError(
-      `OSM request body contains unsupported properties: ${unknown.join(', ')}`,
-    );
-  }
-  if (typeof body.URL !== 'string' || !body.URL.trim()) {
-    throw new OsmCityUpdateValidationError('OSM request body.URL must be a string');
-  }
-  const normalized = normalizeOsmUpdateUrl(body.URL.trim(), allowedHosts);
-  if (allowedURLs && !allowedURLs.has(normalized)) {
-    throw new OsmCityUpdateValidationError(
-      `OSM URL is not in the allowed URL list: ${normalized}`,
-    );
-  }
-  return normalized;
-}
-
-/** @param {unknown} value @param {string} name */
-function queryValue(value, name) {
-  if (value === undefined) return undefined;
-  if (typeof value !== 'string') {
-    throw new OsmCityUpdateValidationError(`${name} must be specified once`);
-  }
-  return value;
-}
-
 /** @param {unknown} value @param {string} name @param {boolean} fallback */
-function queryBoolean(value, name, fallback) {
-  const raw = queryValue(value, name);
-  if (raw === undefined) return fallback;
-  if (raw === 'true') return true;
-  if (raw === 'false') return false;
-  throw new OsmCityUpdateValidationError(`${name} must equal true or false`);
-}
-
-/**
- * @param {unknown} value
- * @param {string} name
- * @param {number} maximum
- * @param {number} [fallback]
- */
-function boundedQueryInteger(value, name, maximum, fallback = maximum) {
-  const raw = queryValue(value, name);
-  if (raw === undefined) return fallback;
-  const number = Number(raw);
-  if (!Number.isInteger(number) || number < 1 || number > maximum) {
-    throw new OsmCityUpdateValidationError(
-      `${name} must be an integer between 1 and ${maximum}`,
-    );
+function optionBoolean(
+  value,
+  name,
+  fallback,
+) {
+  if (value === undefined) {
+    return fallback;
   }
-  return number;
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  throw new OsmCityUpdateValidationError(
+    `${name} must be boolean`,
+  );
 }
 
 /**
@@ -106,147 +58,329 @@ function boundedQueryInteger(value, name, maximum, fallback = maximum) {
  * @param {number} maximum
  * @param {number} fallback
  */
-function rangedQueryInteger(value, name, minimum, maximum, fallback) {
-  const raw = queryValue(value, name);
-  if (raw === undefined) return fallback;
-  const number = Number(raw);
-  if (!Number.isInteger(number) || number < minimum || number > maximum) {
+function rangedInteger(
+  value,
+  name,
+  minimum,
+  maximum,
+  fallback,
+) {
+  if (value === undefined) {
+    return fallback;
+  }
+  if (
+    !Number.isInteger(value) ||
+    value < minimum ||
+    value > maximum
+  ) {
     throw new OsmCityUpdateValidationError(
       `${name} must be an integer between ${minimum} and ${maximum}`,
     );
   }
-  return number;
+  return value;
 }
 
 /**
- * Resolve request overrides without allowing a request to raise ENV limits.
- * @param {unknown} body
- * @param {Record<string, unknown>} query
+ * @param {Record<string, unknown>} options
  * @param {any} config
  */
-export function resolveOsmCityUpdateRequest(body, query, config) {
-  const includeCity = queryBoolean(
-    query.includeCity,
-    'includeCity',
-    config.includeCity ?? true,
-  );
-  const includeTown = queryBoolean(
-    query.includeTown,
-    'includeTown',
-    config.includeTown ?? true,
-  );
-  const includeAdministrative = queryBoolean(
-    query.includeAdministrative,
-    'includeAdministrative',
-    config.includeAdministrative ?? false,
-  );
-  const adminLevelMin = rangedQueryInteger(
-    query.adminLevelMin,
-    'adminLevelMin',
-    1,
-    20,
-    config.adminLevelMin ?? 4,
-  );
-  const adminLevelMax = rangedQueryInteger(
-    query.adminLevelMax,
-    'adminLevelMax',
-    1,
-    20,
-    config.adminLevelMax ?? 8,
-  );
-  if (!includeCity && !includeTown && !includeAdministrative) {
+function resolveUrl(
+  options,
+  config,
+) {
+  if (
+    options.URL === undefined
+  ) {
+    return config.url;
+  }
+
+  if (
+    typeof options.URL !== 'string' ||
+    !options.URL.trim()
+  ) {
+    throw new OsmCityUpdateValidationError(
+      'URL must be a non-empty string',
+    );
+  }
+
+  const normalized =
+    normalizeOsmUpdateUrl(
+      options.URL.trim(),
+      config.allowedHosts,
+    );
+
+  if (
+    config.allowedURLs &&
+    !config.allowedURLs.has(
+      normalized,
+    )
+  ) {
+    throw new OsmCityUpdateValidationError(
+      `OSM URL is not in the allowed URL list: ${normalized}`,
+    );
+  }
+
+  return normalized;
+}
+
+/**
+ * Resolve request overrides without allowing a request to raise deployment
+ * limits. Mutating API options live only in the JSON body.
+ *
+ * @param {unknown} body
+ * @param {Record<string, unknown>} _query
+ * @param {any} config
+ */
+export function resolveOsmCityUpdateRequest(
+  body,
+  _query,
+  config,
+) {
+  const options =
+    body === undefined
+      ? {}
+      : body;
+
+  if (!plainObject(options)) {
+    throw new OsmCityUpdateValidationError(
+      'OSM update body must be a JSON object',
+    );
+  }
+
+  const allowed =
+    new Set([
+      'URL',
+      'dryRun',
+      'resume',
+      'restart',
+      'includeCity',
+      'includeTown',
+      'includeAdministrative',
+      'adminLevelMin',
+      'adminLevelMax',
+      'timeoutMs',
+      'queryTimeoutSeconds',
+      'maxResponseBytes',
+      'maxTotalBytes',
+      'batchSize',
+      'minDelayMs',
+      'maxRetries',
+      'retryBaseDelayMs',
+      'retryMaxDelayMs',
+    ]);
+
+  const unknown =
+    Object.keys(options)
+      .filter(
+        (key) =>
+          !allowed.has(key),
+      );
+
+  if (unknown.length > 0) {
+    throw new OsmCityUpdateValidationError(
+      'OSM update body contains unsupported properties: ' +
+      unknown.join(', '),
+    );
+  }
+
+  const includeCity =
+    optionBoolean(
+      options.includeCity,
+      'includeCity',
+      config.includeCity ??
+      true,
+    );
+  const includeTown =
+    optionBoolean(
+      options.includeTown,
+      'includeTown',
+      config.includeTown ??
+      true,
+    );
+  const includeAdministrative =
+    optionBoolean(
+      options.includeAdministrative,
+      'includeAdministrative',
+      config.includeAdministrative ??
+      false,
+    );
+
+  const adminLevelMin =
+    rangedInteger(
+      options.adminLevelMin,
+      'adminLevelMin',
+      1,
+      20,
+      config.adminLevelMin ??
+      4,
+    );
+  const adminLevelMax =
+    rangedInteger(
+      options.adminLevelMax,
+      'adminLevelMax',
+      1,
+      20,
+      config.adminLevelMax ??
+      8,
+    );
+
+  if (
+    !includeCity &&
+    !includeTown &&
+    !includeAdministrative
+  ) {
     throw new OsmCityUpdateValidationError(
       'At least one OSM object class must be enabled',
     );
   }
-  if (adminLevelMin > adminLevelMax) {
+
+  if (
+    adminLevelMin >
+    adminLevelMax
+  ) {
     throw new OsmCityUpdateValidationError(
       'adminLevelMin must not exceed adminLevelMax',
     );
   }
 
   const maxResponseBytesLimit =
-    config.maxResponseBytes ?? Math.min(config.maxBytes, 128 * 1024 * 1024);
-  const maxTotalBytesLimit = config.maxTotalBytes ?? config.maxBytes;
-  const maxResponseBytes = boundedQueryInteger(
-    query.maxResponseBytes,
-    'maxResponseBytes',
-    maxResponseBytesLimit,
-    maxResponseBytesLimit,
-  );
-  const maxTotalBytes = boundedQueryInteger(
-    query.maxTotalBytes ?? query.maxBytes,
-    query.maxTotalBytes === undefined ? 'maxBytes' : 'maxTotalBytes',
-    maxTotalBytesLimit,
-    maxTotalBytesLimit,
-  );
-  if (maxResponseBytes > maxTotalBytes) {
+    config.maxResponseBytes ??
+    Math.min(
+      config.maxBytes,
+      128 * 1024 * 1024,
+    );
+  const maxTotalBytesLimit =
+    config.maxTotalBytes ??
+    config.maxBytes;
+
+  const maxResponseBytes =
+    rangedInteger(
+      options.maxResponseBytes,
+      'maxResponseBytes',
+      1,
+      maxResponseBytesLimit,
+      maxResponseBytesLimit,
+    );
+  const maxTotalBytes =
+    rangedInteger(
+      options.maxTotalBytes,
+      'maxTotalBytes',
+      1,
+      maxTotalBytesLimit,
+      maxTotalBytesLimit,
+    );
+
+  if (
+    maxResponseBytes >
+    maxTotalBytes
+  ) {
     throw new OsmCityUpdateValidationError(
       'maxResponseBytes must not exceed maxTotalBytes',
     );
   }
 
-  const retryMaxDelayMs = rangedQueryInteger(
-    query.retryMaxDelayMs,
-    'retryMaxDelayMs',
-    config.retryMaxDelayMs,
-    3600000,
-    config.retryMaxDelayMs,
-  );
-  const retryBaseDelayMs = rangedQueryInteger(
-    query.retryBaseDelayMs,
-    'retryBaseDelayMs',
-    config.retryBaseDelayMs,
-    retryMaxDelayMs,
-    config.retryBaseDelayMs,
-  );
+  const retryMaxDelayMs =
+    rangedInteger(
+      options.retryMaxDelayMs,
+      'retryMaxDelayMs',
+      config.retryMaxDelayMs,
+      3600000,
+      config.retryMaxDelayMs,
+    );
+  const retryBaseDelayMs =
+    rangedInteger(
+      options.retryBaseDelayMs,
+      'retryBaseDelayMs',
+      config.retryBaseDelayMs,
+      retryMaxDelayMs,
+      config.retryBaseDelayMs,
+    );
+
+  const resume =
+    optionBoolean(
+      options.resume,
+      'resume',
+      false,
+    );
+  const restart =
+    optionBoolean(
+      options.restart,
+      'restart',
+      false,
+    );
+
+  if (
+    resume &&
+    restart
+  ) {
+    throw new OsmCityUpdateValidationError(
+      'resume and restart cannot both be true',
+    );
+  }
+
   return {
-    url: resolveUrl(
-      body,
-      config.allowedHosts,
-      config.allowedURLs,
-      config.url,
-    ),
-    dryRun: queryBoolean(query.dryRun, 'dryRun', config.dryRun),
+    url:
+      resolveUrl(
+        options,
+        config,
+      ),
+    dryRun:
+      optionBoolean(
+        options.dryRun,
+        'dryRun',
+        config.dryRun,
+      ),
+    resume,
+    restart,
     includeCity,
     includeTown,
     includeAdministrative,
     adminLevelMin,
     adminLevelMax,
-    timeoutMs: boundedQueryInteger(
-      query.timeoutMs,
-      'timeoutMs',
-      config.timeoutMs,
-    ),
-    queryTimeoutSeconds: boundedQueryInteger(
-      query.queryTimeoutSeconds,
-      'queryTimeoutSeconds',
-      config.queryTimeoutSeconds,
-    ),
+    timeoutMs:
+      rangedInteger(
+        options.timeoutMs,
+        'timeoutMs',
+        1,
+        config.timeoutMs,
+        config.timeoutMs,
+      ),
+    queryTimeoutSeconds:
+      rangedInteger(
+        options.queryTimeoutSeconds,
+        'queryTimeoutSeconds',
+        1,
+        config.queryTimeoutSeconds,
+        config.queryTimeoutSeconds,
+      ),
     maxResponseBytes,
     maxTotalBytes,
-    // Deprecated compatibility alias.
-    maxBytes: maxTotalBytes,
-    batchSize: boundedQueryInteger(
-      query.batchSize,
-      'batchSize',
-      config.maxBatchSize,
-      config.batchSize,
-    ),
-    minDelayMs: rangedQueryInteger(
-      query.minDelayMs,
-      'minDelayMs',
-      config.minDelayMs,
-      300000,
-      config.minDelayMs,
-    ),
-    maxRetries: rangedQueryInteger(
-      query.maxRetries,
-      'maxRetries',
-      0,
-      config.maxRetries,
-      config.maxRetries,
-    ),
+    maxBytes:
+      maxTotalBytes,
+    batchSize:
+      rangedInteger(
+        options.batchSize,
+        'batchSize',
+        1,
+        config.maxBatchSize,
+        config.batchSize,
+      ),
+    minDelayMs:
+      rangedInteger(
+        options.minDelayMs,
+        'minDelayMs',
+        config.minDelayMs,
+        300000,
+        config.minDelayMs,
+      ),
+    maxRetries:
+      rangedInteger(
+        options.maxRetries,
+        'maxRetries',
+        0,
+        config.maxRetries,
+        config.maxRetries,
+      ),
     retryBaseDelayMs,
     retryMaxDelayMs,
   };
