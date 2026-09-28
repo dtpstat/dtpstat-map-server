@@ -102,7 +102,7 @@ test('admin transport guard detects identity and role assertions without values'
   );
 });
 
-test('admin body guard rejects server-owned security attributes', () => {
+test('admin body guard rejects server-owned security attributes', async () => {
   const req =
     request({
       body: {
@@ -138,7 +138,7 @@ test('admin body guard rejects server-owned security attributes', () => {
   let nextCalled =
     false;
 
-  adminJsonBodySecurityGuard(
+  await adminJsonBodySecurityGuard(
     req,
     res,
     () => {
