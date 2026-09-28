@@ -20,6 +20,44 @@ const root =
     '..',
   );
 
+const ROUTE_IMPLEMENTATION_ALIAS_ALLOWLIST =
+  Object.freeze({
+    'GET /config':
+      Object.freeze([
+        'src/modules/map/routes.js',
+        'src/routes/project/public-routes.js',
+      ]),
+  });
+
+function allowedDuplicateRoute(
+  key,
+  locations,
+) {
+  const allowed =
+    ROUTE_IMPLEMENTATION_ALIAS_ALLOWLIST[
+      key
+    ];
+
+  if (!allowed) {
+    return false;
+  }
+
+  return (
+    locations.length ===
+      allowed.length &&
+    [...locations]
+      .sort()
+      .every(
+        (location, index) =>
+          location ===
+          [...allowed]
+            .sort()[
+              index
+            ],
+      )
+  );
+}
+
 async function javascriptFiles(
   directory,
 ) {
@@ -152,17 +190,44 @@ test('every literal HTTP API route has exactly one strict request contract and v
       .filter(
         (
           [
-            ,
+            key,
             locations,
           ],
         ) =>
-          locations.length !== 1,
+          locations.length !== 1 &&
+          !allowedDuplicateRoute(
+            key,
+            locations,
+          ),
       );
   assert.deepEqual(
     duplicateRoutes,
     [],
     'Literal API routes must be unique',
   );
+
+  for (
+    const [
+      key,
+      expectedLocations,
+    ] of Object.entries(
+      ROUTE_IMPLEMENTATION_ALIAS_ALLOWLIST,
+    )
+  ) {
+    assert.deepEqual(
+      [
+        ...(
+          routeKeys.get(key) ??
+          []
+        ),
+      ].sort(),
+      [
+        ...expectedLocations,
+      ].sort(),
+      key +
+        ' fallback implementations changed and require explicit security review',
+    );
+  }
 
   const missingContracts =
     [...routeKeys.keys()]
