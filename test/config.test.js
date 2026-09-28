@@ -21,6 +21,13 @@ test('loadConfig enables HTTP with safe generic defaults', () => {
   });
   assert.equal(config.https.enabled, false);
   assert.equal(config.host, '0.0.0.0');
+  assert.deepEqual(
+    [
+      ...config.admin
+        .allowedOrigins,
+    ],
+    [],
+  );
   assert.equal(config.database.maxConnections, 10);
   assert.equal(config.database.host, '127.0.0.1');
   assert.equal(config.database.port, 5432);
@@ -300,5 +307,59 @@ test('loadConfig validates streaming ZIP and JSON safety limits', () => {
       IMPORT_API_MAX_STREAM_ZIP_RATIO: '0',
     }, '/project'),
     /IMPORT_API_MAX_STREAM_ZIP_RATIO/,
+  );
+});
+
+
+test('loadConfig requires exact HTTPS admin origins in production', () => {
+  assert.throws(
+    () =>
+      loadConfig(
+        {
+          ...REQUIRED_ENV,
+          NODE_ENV:
+            'production',
+        },
+        '/project',
+      ),
+    /ADMIN_ALLOWED_ORIGINS is required/u,
+  );
+
+  assert.throws(
+    () =>
+      loadConfig(
+        {
+          ...REQUIRED_ENV,
+          NODE_ENV:
+            'production',
+          ADMIN_ALLOWED_ORIGINS:
+            'http://admin.example',
+        },
+        '/project',
+      ),
+    /must use HTTPS origins/u,
+  );
+
+  const config =
+    loadConfig(
+      {
+        ...REQUIRED_ENV,
+        NODE_ENV:
+          'production',
+        ADMIN_ALLOWED_ORIGINS:
+          'https://admin.example, https://ops.example',
+      },
+      '/project',
+    );
+
+  assert.deepEqual(
+    [
+      ...config.admin
+        .allowedOrigins,
+    ],
+    [
+      'https://admin.example',
+      'https://ops.example',
+    ],
   );
 });
