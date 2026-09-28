@@ -16,7 +16,7 @@ const LEASE_BY_GEOMETRY_SQL = `
   FROM geometry_edit_leases AS lease
   JOIN admin_users AS user_account
     ON user_account.id = lease.user_id
-  WHERE lease.geometry_id = $1
+  WHERE lease.geometry_id = $1::bigint
 `;
 
 const ACTIVE_LEASE_BY_GEOMETRY_SQL =
@@ -93,7 +93,7 @@ export function createGeometryEditLeaseStorage(
     ) {
       const result =
         await queryable.query(
-          'SELECT 1 FROM city_geometries WHERE id = $1',
+          'SELECT 1 FROM city_geometries WHERE id = $1::bigint::bigint',
           [geometryId],
         );
       return Boolean(
@@ -123,10 +123,10 @@ export function createGeometryEditLeaseStorage(
            expires_at
          )
          SELECT
-           $1,
-           $2,
-           $3,
-           $4,
+           $1::bigint,
+           $2::text,
+           $3::bigint,
+           $4::text,
            1,
            NOW(),
            NOW(),
@@ -134,7 +134,7 @@ export function createGeometryEditLeaseStorage(
          WHERE EXISTS (
            SELECT 1
            FROM city_geometries
-           WHERE id = $1
+           WHERE id = $1::bigint
          )
          ON CONFLICT (geometry_id) DO UPDATE
          SET
@@ -175,12 +175,12 @@ export function createGeometryEditLeaseStorage(
         await client.query(
           `UPDATE geometry_edit_leases
            SET
-             client_id = $4,
+             client_id = $4::text,
              last_seen_at = NOW(),
              expires_at = NOW() + ($5::integer * INTERVAL '1 second')
-           WHERE geometry_id = $1
-             AND token = $2
-             AND user_id = $3
+           WHERE geometry_id = $1::bigint
+             AND token = $2::text
+             AND user_id = $3::bigint
            RETURNING geometry_id`,
           [
             geometryId,
@@ -213,9 +213,9 @@ export function createGeometryEditLeaseStorage(
         await queryable.query(
           `SELECT 1
            FROM geometry_edit_leases
-           WHERE geometry_id = $1
-             AND token = $2
-             AND user_id = $3
+           WHERE geometry_id = $1::bigint
+             AND token = $2::text
+             AND user_id = $3::bigint
              AND expires_at > NOW()
            FOR SHARE`,
           [
@@ -240,9 +240,9 @@ export function createGeometryEditLeaseStorage(
       const result =
         await client.query(
           `DELETE FROM geometry_edit_leases
-           WHERE geometry_id = $1
-             AND token = $2
-             AND user_id = $3
+           WHERE geometry_id = $1::bigint
+             AND token = $2::text
+             AND user_id = $3::bigint
            RETURNING geometry_id`,
           [
             geometryId,
@@ -277,7 +277,7 @@ export function createGeometryEditLeaseStorage(
 
       const existsResult =
         await client.query(
-          'SELECT 1 FROM city_geometries WHERE id = $1',
+          'SELECT 1 FROM city_geometries WHERE id = $1::bigint::bigint',
           [geometryId],
         );
       const exists =
@@ -304,10 +304,10 @@ export function createGeometryEditLeaseStorage(
            expires_at
          )
          VALUES (
-           $1,
-           $2,
-           $3,
-           $4,
+           $1::bigint,
+           $2::text,
+           $3::bigint,
+           $4::text,
            1,
            NOW(),
            NOW(),
