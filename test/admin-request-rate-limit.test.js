@@ -104,3 +104,82 @@ test('admin request limiter shares one global budget between users', () => {
     2,
   );
 });
+
+
+test('global admin request budget can be consumed before user authentication', () => {
+  const limiter =
+    createAdminRequestRateLimiter({
+      now: () => 1_000,
+    });
+  const settings = {
+    requestRateLimitUserPerMinute: 10,
+    requestRateLimitGlobalPerMinute: 2,
+  };
+
+  assert.equal(
+    limiter.consumeGlobal({
+      settings,
+    }).allowed,
+    true,
+  );
+  assert.equal(
+    limiter.consumeGlobal({
+      settings,
+    }).allowed,
+    true,
+  );
+
+  const blocked =
+    limiter.consumeGlobal({
+      settings,
+    });
+
+  assert.equal(
+    blocked.allowed,
+    false,
+  );
+  assert.equal(
+    blocked.scope,
+    'global',
+  );
+});
+
+test('per-user request budget is independent from pre-auth global consumption', () => {
+  const limiter =
+    createAdminRequestRateLimiter({
+      now: () => 1_000,
+    });
+  const settings = {
+    requestRateLimitUserPerMinute: 2,
+    requestRateLimitGlobalPerMinute: 100,
+  };
+
+  limiter.consumeGlobal({
+    settings,
+  });
+  limiter.consumeGlobal({
+    settings,
+  });
+
+  assert.equal(
+    limiter.consumeUser({
+      userId: 5,
+      settings,
+    }).allowed,
+    true,
+  );
+  assert.equal(
+    limiter.consumeUser({
+      userId: 5,
+      settings,
+    }).allowed,
+    true,
+  );
+  assert.equal(
+    limiter.consumeUser({
+      userId: 5,
+      settings,
+    }).scope,
+    'user',
+  );
+});
