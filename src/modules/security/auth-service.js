@@ -31,15 +31,35 @@ export function createSecurityAuthService(
       };
     }
 
-    const state = await repository.getIpState(ip);
+    const state =
+      await repository
+        .getIpState(ip);
+    const loginRetry =
+      secondsUntil(
+        state?.lockedUntil,
+      );
+    const requestRetry =
+      secondsUntil(
+        state
+          ?.requestLockedUntil,
+      );
     const retryAfterSeconds =
-      secondsUntil(state?.lockedUntil);
+      Math.max(
+        loginRetry,
+        requestRetry,
+      );
 
     if (retryAfterSeconds) {
       return {
         status: 'ip-locked',
         ipAddress: ip,
         retryAfterSeconds,
+        lockReason:
+          requestRetry >=
+            loginRetry &&
+          requestRetry > 0
+            ? 'request-security'
+            : 'authentication',
       };
     }
 
@@ -90,6 +110,124 @@ export function createSecurityAuthService(
     }
 
     return retryAfterSeconds;
+  }
+
+
+  async function recordRequestSecurityIncident(
+    ipAddress,
+    details = {},
+  ) {
+    const ip =
+      normalizeAdminIp(
+        ipAddress,
+      );
+
+    if (!ip) {
+      return {
+        locked: false,
+        retryAfterSeconds: 0,
+      };
+    }
+
+    const settings =
+      await repository
+        .getSecuritySettings();
+    const state =
+      await repository
+        .recordRequestSecurityIncident(
+          ip,
+          new Date().toISOString(),
+          settings,
+          5,
+        );
+
+    const retryAfterSeconds =
+      secondsUntil(
+        state
+          ?.requestLockedUntil,
+      );
+    const locked =
+      retryAfterSeconds > 0;
+
+    securityLog(
+      locked
+        ? 'admin.request.ip_lockout'
+        : 'admin.request.security_incident',
+      {
+        ip,
+        attempts:
+          state
+            ?.requestIncidentCount ??
+          0,
+        retryAfterSeconds:
+          retryAfterSeconds ||
+          null,
+        reason:
+          details.reason ??
+          'api-contract',
+        method:
+          details.method ??
+          null,
+        path:
+          details.path ??
+          null,
+        fields:
+          Array.isArray(
+            details.fields,
+          )
+            ? details.fields
+                .slice(0, 32)
+            : [],
+      },
+    );
+
+    await appendAudit({
+      eventType:
+        'security',
+      operationType:
+        locked
+          ? 'admin.request.ip-lockout'
+          : 'admin.request.contract-violation',
+      status:
+        locked
+          ? 'locked'
+          : 'blocked',
+      durationMs: null,
+      ipAddress: ip,
+      userId: null,
+      username: null,
+      details: {
+        reason:
+          details.reason ??
+          'api-contract',
+        method:
+          details.method ??
+          null,
+        path:
+          details.path ??
+          null,
+        fields:
+          Array.isArray(
+            details.fields,
+          )
+            ? details.fields
+                .slice(0, 32)
+            : [],
+        requestIncidentCount:
+          state
+            ?.requestIncidentCount ??
+          0,
+        retryAfterSeconds:
+          retryAfterSeconds ||
+          null,
+      },
+    });
+
+    return {
+      locked,
+      retryAfterSeconds,
+      state,
+    };
   }
 
   async function authenticateCredentials(
@@ -596,6 +734,8 @@ export function createSecurityAuthService(
   }
 
   return {
+    ipAccessState,
+    recordRequestSecurityIncident,
     authenticate,
     authenticateRequest,
     login,
