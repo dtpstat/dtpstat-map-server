@@ -21,6 +21,10 @@ if (section) {
     adminSession.user;
 
   const citySelect = document.querySelector('#geometry-editor-city');
+  const cityWithGeometries =
+    document.querySelector(
+      '#geometry-editor-city-with-geometries',
+    );
   const searchInput = document.querySelector('#geometry-editor-search');
   const listHost = document.querySelector('#geometry-editor-list');
   const refreshButton = document.querySelector('#geometry-editor-refresh');
@@ -1182,18 +1186,49 @@ if (section) {
         state.current?.id,
       );
     const backgroundGeometries = showEditable
-      ? state.geometries.filter((item) => item.id !== state.current.id)
+      ? state.geometries.filter(
+          (item) =>
+            String(item.id) !==
+            String(state.current.id),
+        )
       : state.geometries;
-    map.getSource(MAP_SOURCE)?.setData(featureCollection(backgroundGeometries));
-    map.getSource(SELECTED_SOURCE)?.setData(
+    const selectedSummary =
+      state.geometries.find(
+        (item) =>
+          String(item.id) ===
+          String(state.selectedId),
+      ) ??
+      null;
+    const selectedGeometry =
       showEditable
-        ? featureCollection([{
-            ...(state.current ?? {}),
-            id: state.current?.id ?? null,
-            family: familyOf(state.draft),
-            geometryType: geometryType(state.draft),
-            geometry: state.draft,
-          }])
+        ? {
+            ...(state.current ?? selectedSummary ?? {}),
+            id:
+              state.current?.id ??
+              selectedSummary?.id ??
+              null,
+            family:
+              familyOf(state.draft),
+            geometryType:
+              geometryType(state.draft),
+            geometry:
+              state.draft,
+          }
+        : (
+            state.current ??
+            selectedSummary
+          );
+
+    map.getSource(MAP_SOURCE)?.setData(
+      featureCollection(
+        backgroundGeometries,
+      ),
+    );
+    map.getSource(SELECTED_SOURCE)?.setData(
+      selectedGeometry
+        ? featureCollection([
+            selectedGeometry,
+          ])
         : emptyCollection(),
     );
     map.getSource(HANDLE_SOURCE)?.setData(handleFeatures());
@@ -2891,30 +2926,97 @@ if (section) {
     return state.lineTypesPromise;
   }
 
-  async function loadCities() {
-    const payload = await api('/api/admin/geometry-editor/cities');
-    state.cities = payload.cities ?? [];
+  function renderCityOptions(
+    preferredValue =
+      citySelect.value,
+  ) {
+    const onlyWithGeometries =
+      Boolean(
+        cityWithGeometries
+          ?.checked,
+      );
+    const visibleCities =
+      onlyWithGeometries
+        ? state.cities.filter(
+            (city) =>
+              Number(
+                city.geometryCount,
+              ) > 0,
+          )
+        : state.cities;
 
-    const options = state.cities.map((city) => {
-      const option = document.createElement('option');
-      option.value = String(city.id);
-      option.textContent =
-        city.name + ' (' + city.geometryCount + ')';
-      return option;
-    });
+    const options =
+      visibleCities.map(
+        (city) => {
+          const option =
+            document.createElement(
+              'option',
+            );
+          option.value =
+            String(city.id);
+          option.textContent =
+            city.name +
+            ' (' +
+            city.geometryCount +
+            ')';
+          return option;
+        },
+      );
 
-    const unlinked = document.createElement('option');
-    unlinked.value = '__unlinked__';
-    unlinked.textContent = 'Без привязки';
+    const unlinked =
+      document.createElement(
+        'option',
+      );
+    unlinked.value =
+      '__unlinked__';
+    unlinked.textContent =
+      'Без привязки';
     options.push(unlinked);
-    citySelect.replaceChildren(...options);
 
-    if (!citySelect.value) {
-      citySelect.value =
-        state.cities[0]
-          ? String(state.cities[0].id)
+    citySelect.replaceChildren(
+      ...options,
+    );
+
+    const preferred =
+      String(
+        preferredValue ??
+        '',
+      );
+    const values =
+      new Set(
+        options.map(
+          (option) =>
+            option.value,
+        ),
+      );
+    const nextValue =
+      values.has(preferred)
+        ? preferred
+        : visibleCities[0]
+          ? String(
+              visibleCities[0].id,
+            )
           : '__unlinked__';
-    }
+
+    citySelect.value =
+      nextValue;
+    return nextValue;
+  }
+
+  async function loadCities({
+    preferredValue =
+      citySelect.value,
+  } = {}) {
+    const payload =
+      await api(
+        '/api/admin/geometry-editor/cities',
+      );
+    state.cities =
+      payload.cities ?? [];
+
+    return renderCityOptions(
+      preferredValue,
+    );
   }
 
   async function loadUnlinked({
@@ -3017,6 +3119,29 @@ if (section) {
   }
 
 
+  function loadWorkspace(
+    value,
+    {
+      keepSelection = false,
+      fit = true,
+    } = {},
+  ) {
+    return value ===
+      '__unlinked__'
+      ? loadUnlinked({
+          keepSelection,
+          fit,
+        })
+      : loadCity(
+          Number(value),
+          {
+            keepSelection,
+            fit,
+          },
+        );
+  }
+
+
   async function loadEditLeases() {
     const payload = await api(
       '/api/admin/geometry-editor/edit-locks',
@@ -3049,42 +3174,25 @@ if (section) {
               : ''
         );
 
-      await Promise.all([
-        loadCities(),
-        loadPendingImport(),
-        loadEditLeases(),
-      ]);
+      const [
+        workspace,
+      ] =
+        await Promise.all([
+          loadCities({
+            preferredValue:
+              selectedWorkspace,
+          }),
+          loadPendingImport(),
+          loadEditLeases(),
+        ]);
 
-      const workspace =
-        selectedWorkspace ||
-        (
-          state.cities[0]
-            ? String(state.cities[0].id)
-            : '__unlinked__'
-        );
-
-      if (workspace === '__unlinked__') {
-        await loadUnlinked({
+      await loadWorkspace(
+        workspace,
+        {
           keepSelection,
           fit,
-        });
-      } else {
-        const cityId = Number(workspace);
-        if (
-          Number.isSafeInteger(cityId) &&
-          cityId > 0
-        ) {
-          await loadCity(
-            cityId,
-            { keepSelection, fit },
-          );
-        } else {
-          await loadUnlinked({
-            keepSelection,
-            fit,
-          });
-        }
-      }
+        },
+      );
 
       if (
         state.importSession &&
@@ -4303,21 +4411,13 @@ if (section) {
 
   citySelect.addEventListener('change', () => {
     state.selectedSet.clear();
-    const value = citySelect.value;
-    const operation =
-      value === '__unlinked__'
-        ? loadUnlinked({
-            keepSelection: false,
-            fit: true,
-          })
-        : loadCity(
-            Number(value),
-            {
-              keepSelection: false,
-              fit: true,
-            },
-          );
-    void operation.catch(
+    void loadWorkspace(
+      citySelect.value,
+      {
+        keepSelection: false,
+        fit: true,
+      },
+    ).catch(
       (error) =>
         setMessage(
           error.message,
@@ -4325,6 +4425,42 @@ if (section) {
         ),
     );
   });
+
+  cityWithGeometries
+    ?.addEventListener(
+      'change',
+      () => {
+        const previous =
+          citySelect.value;
+        const workspace =
+          renderCityOptions(
+            previous,
+          );
+
+        if (
+          workspace ===
+          previous
+        ) {
+          return;
+        }
+
+        state.selectedSet.clear();
+        void loadWorkspace(
+          workspace,
+          {
+            keepSelection: false,
+            fit: true,
+          },
+        ).catch(
+          (error) =>
+            setMessage(
+              error.message,
+              'error',
+            ),
+        );
+      },
+    );
+
   searchInput.addEventListener('input', renderList);
   refreshButton.addEventListener('click', () => void refresh({ keepSelection: true }));
   recalculateButton.addEventListener('click', () => void recalculateDerived());

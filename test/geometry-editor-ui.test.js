@@ -668,6 +668,63 @@ test('geometry workspace keeps new and failed bulk work locally and clears only 
 });
 
 
+test('geometry editor filters empty cities and highlights the active geometry on the map', async () => {
+  const [
+    editor,
+    html,
+    styles,
+  ] =
+    await Promise.all([
+      read(
+        'admin/geometry-editor.js',
+      ),
+      read(
+        'admin/index.html',
+      ),
+      read(
+        'admin/geometry-editor.css',
+      ),
+    ]);
+
+  assert.match(
+    html,
+    /id="geometry-editor-city-with-geometries"/u,
+  );
+  assert.match(
+    html,
+    /Только города с геометриями/u,
+  );
+  assert.match(
+    editor,
+    /cityWithGeometries[\s\S]*\.checked/u,
+  );
+  assert.match(
+    editor,
+    /Number\([\s\S]*city\.geometryCount[\s\S]*\) > 0/u,
+  );
+  assert.match(
+    editor,
+    /function renderCityOptions/u,
+  );
+  assert.match(
+    editor,
+    /const selectedSummary =[\s\S]*state\.selectedId/u,
+  );
+  assert.match(
+    editor,
+    /const selectedGeometry =[\s\S]*showEditable[\s\S]*state\.current[\s\S]*selectedSummary/u,
+  );
+  assert.match(
+    editor,
+    /getSource\(SELECTED_SOURCE\)[\s\S]*selectedGeometry[\s\S]*featureCollection/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-editor-city-filter/u,
+  );
+});
+
+
 test('geometry editor exposes normal unlinked geometry and persistent explicit editing', async () => {
   const [
     editor,

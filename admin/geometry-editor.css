@@ -641,3 +641,14 @@
 .geometry-editor-row.is-unlinked .geometry-editor-row-tags {
   font-style: italic;
 }
+
+
+.geometry-editor-city-filter {
+  margin: -.15rem 0 0;
+  font-size: .7rem;
+  color: var(--muted);
+}
+
+.geometry-editor-city-filter input {
+  margin: 0;
+}
