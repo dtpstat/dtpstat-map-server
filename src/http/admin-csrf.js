@@ -19,7 +19,6 @@ export function adminCsrfAllowed(
     fetchSite &&
     ![
       'same-origin',
-      'same-site',
       'none',
     ].includes(fetchSite)
   ) {
@@ -30,7 +29,7 @@ export function adminCsrfAllowed(
     request.get?.('origin');
 
   if (!origin) {
-    return true;
+    return false;
   }
 
   try {
