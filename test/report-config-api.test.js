@@ -8,7 +8,7 @@ import {
 } from '../src/modules/reporting/config-policy.js';
 import { createReportConfigRouter } from '../src/routes/report-config-api.js';
 
-const authorization = `Basic ${Buffer.from('admin:test-secret').toString('base64')}`;
+const authorization = 'dtpstat_admin_session=test-session-token';
 const adminUser = {
   id: 1,
   username: 'admin',
@@ -17,7 +17,7 @@ const adminUser = {
 };
 const adminAuth = {
   requireInterface(request, response, next) {
-    if (request.get('authorization') !== authorization) {
+    if (request.get('cookie') !== authorization) {
       response.status(401).json({ error: 'Authentication required' });
       return;
     }
@@ -124,7 +124,7 @@ test('admin report endpoint requires auth and returns fixed catalogs', async () 
     assert.equal(unauthorized.status, 401);
 
     const response = await fetch(`${baseUrl}/api/admin/report-config`, {
-      headers: { Authorization: authorization },
+      headers: { Cookie: authorization },
     });
     assert.equal(response.status, 200);
     const payload = await response.json();
@@ -180,7 +180,7 @@ test('saving report materializes values, sequential ranking and public snapshots
     const response = await fetch(`${baseUrl}/api/admin/report-config`, {
       method: 'PUT',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(
@@ -212,7 +212,7 @@ test('saving report rejects arbitrary technical field names', async () => {
     const response = await fetch(`${baseUrl}/api/admin/report-config`, {
       method: 'PUT',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(
