@@ -163,13 +163,18 @@ test('admin authorization returns 429 when request budget is exhausted', async (
       authService(audits),
       {
         requestRateLimiter: {
-          consume() {
+          consumeUser() {
             return {
               allowed: false,
               scope: 'user',
               limit: 10,
               retryAfterSeconds:
                 17,
+            };
+          },
+          consumeGlobal() {
+            return {
+              allowed: true,
             };
           },
         },
