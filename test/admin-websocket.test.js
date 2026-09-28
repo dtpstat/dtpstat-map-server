@@ -97,6 +97,7 @@ async function openSocket(
   const socket =
     new WebSocket(
       url,
+      'dtpstat-api-v1',
       {
         headers: {
           Authorization:
@@ -173,7 +174,10 @@ test('admin WebSocket streams task events only to data managers and resource eve
     `ws://127.0.0.1:${address.port}/api/admin/ws`;
 
   const unauthorized =
-    new WebSocket(url);
+    new WebSocket(
+      url,
+      'dtpstat-api-v1',
+    );
   await assert.rejects(
     new Promise(
       (resolve, reject) => {
@@ -188,6 +192,27 @@ test('admin WebSocket streams task events only to data managers and resource eve
       },
     ),
     /401/u,
+  );
+
+  const stale =
+    new WebSocket(
+      url,
+      'dtpstat-api-v0',
+    );
+  await assert.rejects(
+    new Promise(
+      (resolve, reject) => {
+        stale.once(
+          'open',
+          resolve,
+        );
+        stale.once(
+          'error',
+          reject,
+        );
+      },
+    ),
+    /426/u,
   );
 
   const dataMessages = [];
