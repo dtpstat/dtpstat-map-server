@@ -1,3 +1,7 @@
+import {
+  ADMIN_API_VERSION,
+} from './api-contract-client.js';
+
 const CLIENT_ID_KEY =
   'dtpstat:realtime-client-id';
 const RECONNECT_DELAY_MS = 2000;
@@ -162,6 +166,8 @@ function connect() {
   const current =
     new WebSocket(
       `${protocol}//${location.host}/api/admin/ws`,
+      'dtpstat-api-v' +
+        ADMIN_API_VERSION,
     );
   socket = current;
 
