@@ -9,7 +9,7 @@ import {
   requireAdminApiVersion,
 } from './api-version.js';
 import {
-  enforceApiRequestContract,
+  createApiRequestContractMiddleware,
 } from './api-request-contract.js';
 
 const CITY_MARKER_PNG =
@@ -104,6 +104,7 @@ export function installAppHttpMiddleware(
   {
     config,
     adminAuth,
+    securityService,
   },
 ) {
   const isProduction =
@@ -210,7 +211,9 @@ export function installAppHttpMiddleware(
 
   app.use(
     '/api',
-    enforceApiRequestContract,
+    createApiRequestContractMiddleware({
+      securityService,
+    }),
   );
 
   app.get(
