@@ -15,6 +15,7 @@ const RESERVED_SECURITY_KEYS =
     'roles',
     'roleid',
     'roleir',
+    'toleir',
     'rolemode',
     'permission',
     'permissions',
@@ -55,6 +56,7 @@ const RESERVED_HEADERS =
     'x-role',
     'x-role-id',
     'x-role-ir',
+    'x-tole-ir',
     'x-role-mode',
     'x-user-role',
     'x-admin-role',
@@ -82,8 +84,8 @@ function normalizedKey(value) {
 
 function requestPath(request) {
   return String(
-    request.path ??
     request.originalUrl ??
+    request.path ??
     request.url ??
     '',
   ).split('?')[0];

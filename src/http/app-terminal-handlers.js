@@ -8,8 +8,8 @@ import {
 
 function requestPath(request) {
   return String(
-    request.path ??
     request.originalUrl ??
+    request.path ??
     request.url ??
     '',
   ).split('?')[0];

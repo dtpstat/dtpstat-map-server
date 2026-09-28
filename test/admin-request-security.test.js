@@ -61,6 +61,7 @@ test('admin transport guard detects identity and role assertions without values'
         query: {
           UserID: '999',
           RoleIR: 'root',
+          ToleIR: 'legacy-root',
           role_mode:
             'override',
         },
@@ -87,6 +88,10 @@ test('admin transport guard detects identity and role assertions without values'
       {
         source: 'query',
         key: 'RoleIR',
+      },
+      {
+        source: 'query',
+        key: 'ToleIR',
       },
       {
         source: 'query',
@@ -156,7 +161,7 @@ test('user administration may set capability flags but never immutable identity 
   const allowed =
     request({
       path:
-        '/api/admin/security/users/12',
+        '/admin/security/users/12',
       originalUrl:
         '/api/admin/security/users/12',
       method: 'PATCH',
