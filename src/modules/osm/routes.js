@@ -66,23 +66,13 @@ export function registerOsmRoutes(router, {
       try {
         const options = resolveOsmCityUpdateRequest(
           request.body,
-          request.query,
+          {},
           osmCityUpdate,
         );
-        const resume = parseBoolean(request.query.resume, false);
-        const restart = parseBoolean(request.query.restart, false);
-        if (resume === null || restart === null) {
-          response.status(400).json({
-            error: 'resume and restart must be true or false',
-          });
-          return;
-        }
-        if (resume && restart) {
-          response.status(400).json({
-            error: 'resume and restart cannot both be true',
-          });
-          return;
-        }
+        const {
+          resume,
+          restart,
+        } = options;
         startAdminTask(request, response, next, {
           type: 'osm-city-update',
           endpoint: '/api/admin/update/cities',
@@ -103,7 +93,7 @@ export function registerOsmRoutes(router, {
           },
         }, async (context) => osmCityUpdateService.update(
           request.body,
-          request.query,
+          {},
           {
             signal: context.signal,
             onCommit: () => context.beginCommit(),
