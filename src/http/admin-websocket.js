@@ -2,6 +2,9 @@ import { WebSocket, WebSocketServer } from 'ws';
 import {
   adminHasPermission,
 } from '../modules/security/authorization-policy.js';
+import {
+  DTPSTAT_API_VERSION,
+} from '../../public/js/api-contract.js';
 
 /** @param {import('ws').WebSocket} socket @param {object} payload */
 function send(socket, payload) {
@@ -195,6 +198,40 @@ export function createAdminWebSocketGateway({
             return;
           }
           if (pathname !== path) {
+            return;
+          }
+
+          const expectedProtocol =
+            'dtpstat-api-v' +
+            DTPSTAT_API_VERSION;
+          const protocols =
+            String(
+              request.headers[
+                'sec-websocket-protocol'
+              ] ??
+              '',
+            )
+              .split(',')
+              .map(
+                (value) =>
+                  value.trim(),
+              )
+              .filter(Boolean);
+
+          if (
+            !protocols.includes(
+              expectedProtocol,
+            )
+          ) {
+            rejectUpgrade(
+              socket,
+              426,
+              'Upgrade Required',
+              [[
+                'X-DTPStat-API-Version-Required',
+                DTPSTAT_API_VERSION,
+              ]],
+            );
             return;
           }
 
