@@ -158,23 +158,23 @@ export function createAdminAccessControlRepository(database) {
       const result = await database.query(
         `UPDATE admin_security_settings
          SET
-           max_failed_attempts=$1,
-           failure_window_seconds=$2,
-           lockout_seconds=$3,
-           ip_max_failed_attempts=$4,
-           ip_failure_window_seconds=$5,
-           ip_lockout_seconds=$6,
-           session_idle_seconds=$7,
-           session_absolute_seconds=$8,
-           audit_retention_days=$9,
-           request_rate_limit_user_per_minute=$10,
-           request_rate_limit_global_per_minute=$11,
-           password_min_length=$12,
-           password_max_length=$13,
-           password_require_lowercase=$14,
-           password_require_uppercase=$15,
-           password_require_digit=$16,
-           password_require_special=$17,
+           max_failed_attempts=$1::integer,
+           failure_window_seconds=$2::integer,
+           lockout_seconds=$3::integer,
+           ip_max_failed_attempts=$4::integer,
+           ip_failure_window_seconds=$5::integer,
+           ip_lockout_seconds=$6::integer,
+           session_idle_seconds=$7::integer,
+           session_absolute_seconds=$8::integer,
+           audit_retention_days=$9::integer,
+           request_rate_limit_user_per_minute=$10::integer,
+           request_rate_limit_global_per_minute=$11::integer,
+           password_min_length=$12::integer,
+           password_max_length=$13::integer,
+           password_require_lowercase=$14::boolean,
+           password_require_uppercase=$15::boolean,
+           password_require_digit=$16::boolean,
+           password_require_special=$17::boolean,
            updated_at=NOW()
          WHERE id=1
          RETURNING ${SECURITY_FIELDS_SQL}`,
@@ -320,7 +320,7 @@ export function createAdminAccessControlRepository(database) {
         `INSERT INTO admin_blocked_ips(
            ip_address,expires_at,blocked_by,reason,source_audit_id
          )
-         VALUES($1::inet,$2,$3,$4,$5)
+         VALUES($1::inet,$2::integer,$3::integer,$4::integer,$5)
          RETURNING
            id::integer AS id,
            host(ip_address) AS "ipAddress",
@@ -343,7 +343,7 @@ export function createAdminAccessControlRepository(database) {
     async deleteIpBlock(blockId) {
       const result = await database.query(
         'DELETE FROM admin_blocked_ips ' +
-          'WHERE id=$1 RETURNING id',
+          'WHERE id=$1::bigint RETURNING id',
         [blockId],
       );
       return (result.rowCount ?? result.rows.length) > 0;
