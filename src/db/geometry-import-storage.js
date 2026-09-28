@@ -8,7 +8,7 @@ const UPSERT_CITIES_SQL = `
   WITH requested AS (
     SELECT DISTINCT stage.boundary_id
     FROM geometry_import_stage AS stage
-    WHERE stage.session_id = $1
+    WHERE stage.session_id = $1::bigint
   ),
   canonical AS (
     SELECT
@@ -63,7 +63,7 @@ const LINK_CITIES_SQL = `
   WHERE boundary.id IN (
       SELECT stage.boundary_id
       FROM geometry_import_stage AS stage
-      WHERE stage.session_id = $1
+      WHERE stage.session_id = $1::bigint
     )
     AND city.slug = 'osm-' || boundary.osm_type || '-' || boundary.osm_id
     AND boundary.is_active
@@ -74,7 +74,7 @@ const RESOLVE_STAGE_CITY_SQL = `
   UPDATE geometry_import_stage AS stage
   SET city_id = boundary.city_id
   FROM city_boundaries AS boundary
-  WHERE stage.session_id = $1
+  WHERE stage.session_id = $1::bigint
     AND boundary.id = stage.boundary_id
     AND boundary.is_active
     AND boundary.city_id IS NOT NULL
@@ -84,7 +84,7 @@ const INSERT_LINE_TYPES_SQL = `
   WITH requested AS (
     SELECT DISTINCT BTRIM(stage.line_type_name) AS name
     FROM geometry_import_stage AS stage
-    WHERE stage.session_id = $1
+    WHERE stage.session_id = $1::bigint
   )
   INSERT INTO line_types (name, title)
   SELECT requested.name, requested.name
@@ -109,7 +109,7 @@ const RESOLVE_STAGE_TYPE_SQL = `
   UPDATE geometry_import_stage AS stage
   SET line_type_id = line_type.id
   FROM line_types AS line_type
-  WHERE stage.session_id = $1
+  WHERE stage.session_id = $1::bigint
     AND LOWER(BTRIM(line_type.name)) = LOWER(BTRIM(stage.line_type_name))
 `;
 
@@ -118,7 +118,7 @@ const REBUILD_AUTO_MATCH_SQL = `
   SET auto_existing_id = (
     SELECT existing.id
     FROM city_geometries AS existing
-    WHERE stage.session_id = $1
+    WHERE stage.session_id = $1::bigint
       AND existing.boundary_id = stage.boundary_id
       AND GeometryType(existing.geom) IN ('LINESTRING', 'MULTILINESTRING')
       AND ST_Equals(existing.geom, stage.geom)
@@ -126,7 +126,7 @@ const REBUILD_AUTO_MATCH_SQL = `
     ORDER BY existing.was_edited DESC, existing.id
     LIMIT 1
   )
-  WHERE stage.session_id = $1
+  WHERE stage.session_id = $1::bigint
 `;
 
 const INSERT_CONFLICTS_SQL = `
@@ -153,7 +153,7 @@ const INSERT_CONFLICTS_SQL = `
     ON existing.boundary_id = stage.boundary_id
    AND GeometryType(existing.geom) IN ('LINESTRING', 'MULTILINESTRING')
    AND existing.geom && stage.geom
-  WHERE stage.session_id = $1
+  WHERE stage.session_id = $1::bigint
     AND (
       (
         ST_Equals(existing.geom, stage.geom)
@@ -199,7 +199,7 @@ const STAGE_ROWS_SQL = `
     geom
   )
   SELECT
-    $1,
+    $1::bigint,
     payload.seq,
     payload."boundaryId",
     BTRIM(payload."lineTypeName"),
@@ -245,7 +245,7 @@ const STAGE_INSERT_ONE_SQL = `
     FALSE,
     NOW()
   FROM geometry_import_stage AS stage
-  WHERE stage.id = $1
+  WHERE stage.id = $1::bigint
   RETURNING id::integer AS id
 `;
 
@@ -267,8 +267,8 @@ const UPDATE_EXISTING_FROM_STAGE_SQL = `
     source_tags = stage.source_tags,
     updated_at = NOW()
   FROM geometry_import_stage AS stage
-  WHERE existing.id = $1
-    AND stage.id = $2
+  WHERE existing.id = $1::bigint
+    AND stage.id = $2::bigint
   RETURNING existing.id::integer AS id
 `;
 
@@ -279,13 +279,13 @@ function asIso(value) {
 
 async function rebuildRelations(client, sessionId) {
   await client.query(
-    'DELETE FROM geometry_import_conflicts WHERE session_id = $1',
+    'DELETE FROM geometry_import_conflicts WHERE session_id = $1::bigint',
     [sessionId],
   );
   await client.query(REBUILD_AUTO_MATCH_SQL, [sessionId]);
   await client.query(INSERT_CONFLICTS_SQL, [sessionId]);
   const result = await client.query(
-    'SELECT COUNT(*)::integer AS count FROM geometry_import_conflicts WHERE session_id = $1',
+    'SELECT COUNT(*)::integer AS count FROM geometry_import_conflicts WHERE session_id = $1::bigint',
     [sessionId],
   );
   return Number(result.rows[0]?.count ?? 0);
@@ -296,7 +296,7 @@ async function resolveReferences(client, sessionId) {
   await client.query(LINK_CITIES_SQL, [sessionId]);
   await client.query(RESOLVE_STAGE_CITY_SQL, [sessionId]);
   const unresolvedCities = await client.query(
-    'SELECT COUNT(*)::integer AS count FROM geometry_import_stage WHERE session_id = $1 AND city_id IS NULL',
+    'SELECT COUNT(*)::integer AS count FROM geometry_import_stage WHERE session_id = $1::bigint AND city_id IS NULL',
     [sessionId],
   );
   if (Number(unresolvedCities.rows[0]?.count ?? 0) > 0) {
@@ -311,7 +311,7 @@ async function resolveReferences(client, sessionId) {
   )).rows;
   await client.query(RESOLVE_STAGE_TYPE_SQL, [sessionId]);
   const unresolvedTypes = await client.query(
-    'SELECT COUNT(*)::integer AS count FROM geometry_import_stage WHERE session_id = $1 AND line_type_id IS NULL',
+    'SELECT COUNT(*)::integer AS count FROM geometry_import_stage WHERE session_id = $1::bigint AND line_type_id IS NULL',
     [sessionId],
   );
   if (Number(unresolvedTypes.rows[0]?.count ?? 0) > 0) {
@@ -326,7 +326,7 @@ async function loadConflictSets(client, sessionId) {
       conflict.incoming_id::integer AS "incomingId",
       conflict.existing_id::integer AS "existingId"
     FROM geometry_import_conflicts AS conflict
-    WHERE conflict.session_id = $1
+    WHERE conflict.session_id = $1::bigint
     ORDER BY conflict.incoming_id, conflict.existing_id
   `, [sessionId]);
   const candidates = new Map();
@@ -349,7 +349,7 @@ async function loadConflictAutoMatches(client, sessionId) {
       stage.id::integer AS "incomingId",
       stage.auto_existing_id::integer AS "existingId"
     FROM geometry_import_stage AS stage
-    WHERE stage.session_id = $1
+    WHERE stage.session_id = $1::bigint
       AND stage.auto_existing_id IS NOT NULL
       AND EXISTS (
         SELECT 1
@@ -373,7 +373,7 @@ async function protectExisting(client, sessionId) {
     INSERT INTO geometry_import_preserve_existing (id)
     SELECT DISTINCT auto_existing_id
     FROM geometry_import_stage
-    WHERE session_id = $1
+    WHERE session_id = $1::bigint
       AND auto_existing_id IS NOT NULL
     ON CONFLICT DO NOTHING
   `, [sessionId]);
@@ -381,7 +381,7 @@ async function protectExisting(client, sessionId) {
     INSERT INTO geometry_import_preserve_existing (id)
     SELECT DISTINCT existing_id
     FROM geometry_import_conflicts
-    WHERE session_id = $1
+    WHERE session_id = $1::bigint
       AND existing_id IS NOT NULL
     ON CONFLICT DO NOTHING
   `, [sessionId]);
@@ -391,7 +391,7 @@ async function applyStaged(client, sessionId, rawDecisions = []) {
   const sessionResult = await client.query(`
     SELECT id::integer AS id, status, metadata
     FROM geometry_import_sessions
-    WHERE id = $1
+    WHERE id = $1::bigint
     FOR UPDATE
   `, [sessionId]);
   const session = sessionResult.rows[0];
@@ -454,7 +454,7 @@ async function applyStaged(client, sessionId, rawDecisions = []) {
     SELECT stage.id::integer AS id,
            stage.auto_existing_id::integer AS "existingId"
     FROM geometry_import_stage AS stage
-    WHERE stage.session_id = $1
+    WHERE stage.session_id = $1::bigint
       AND stage.auto_existing_id IS NOT NULL
       AND NOT EXISTS (
         SELECT 1
@@ -471,7 +471,7 @@ async function applyStaged(client, sessionId, rawDecisions = []) {
   const newRows = await client.query(`
     SELECT stage.id::integer AS id
     FROM geometry_import_stage AS stage
-    WHERE stage.session_id = $1
+    WHERE stage.session_id = $1::bigint
       AND stage.auto_existing_id IS NULL
       AND NOT EXISTS (
         SELECT 1
@@ -558,7 +558,7 @@ async function applyStaged(client, sessionId, rawDecisions = []) {
       city_buffer_m
     )
     VALUES (
-      $1::jsonb, $2, $3, $4, $5, $6, $7, $8, $9
+      $1::jsonb, $2::text, $3::bigint, $4::integer, $5::integer, $6::integer, $7::integer, $8::integer, $9::integer
     )
     RETURNING id::integer AS id, created_at AS "createdAt"
   `, [
@@ -577,7 +577,7 @@ async function applyStaged(client, sessionId, rawDecisions = []) {
     UPDATE geometry_import_sessions
     SET status = 'applied',
         updated_at = NOW()
-    WHERE id = $1
+    WHERE id = $1::bigint
   `, [sessionId]);
 
   return {
@@ -639,7 +639,7 @@ export function createGeometryImportStorage(database) {
       const conflictIncoming = await client.query(`
         SELECT COUNT(DISTINCT incoming_id)::integer AS count
         FROM geometry_import_conflicts
-        WHERE session_id = $1
+        WHERE session_id = $1::bigint
       `, [session.id]);
       return {
         id: session.id,
@@ -663,7 +663,7 @@ export function createGeometryImportStorage(database) {
       const result =
         await client.query(
           `DELETE FROM geometry_import_sessions
-           WHERE id = $1
+           WHERE id = $1::bigint
              AND status = 'pending'
            RETURNING id::integer AS id`,
           [sessionId],
@@ -718,7 +718,7 @@ export function createGeometryImportStorage(database) {
           ON conflict.session_id = stage.session_id
          AND conflict.incoming_id = stage.id
         LEFT JOIN city_geometries AS existing ON existing.id = conflict.existing_id
-        WHERE stage.session_id = $1
+        WHERE stage.session_id = $1::bigint
         ORDER BY stage.seq, conflict.id
       `, [session.id]);
 
