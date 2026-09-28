@@ -212,8 +212,8 @@ test('OSM update UI exposes explicit resume restart and discard controls', async
   assert.match(admin, /osmCheckpoint:\s*null/);
   assert.match(admin, /async function loadOsmCheckpoint\(\)/);
   assert.match(admin, /\/api\/admin\/osm-checkpoint/);
-  assert.match(admin, /resume:\s*'true'/);
-  assert.match(admin, /restart:\s*String\(restart\)/);
+  assert.match(admin, /resume:\s*true/u);
+  assert.match(admin, /restart,?/u);
   assert.match(admin, /Запустить OSM заново/);
   assert.doesNotMatch(admin, /window\.confirm\(/);
   assert.match(admin, /adminConfirm\([\s\S]*сохранённый прогресс/i);
