@@ -183,3 +183,74 @@ test('per-user request budget is independent from pre-auth global consumption', 
     'user',
   );
 });
+
+
+test('rate limiter asks callers to log only the first block in a window', () => {
+  const limiter =
+    createAdminRequestRateLimiter({
+      now: () => 1_000,
+    });
+  const settings = {
+    requestRateLimitUserPerMinute: 1,
+    requestRateLimitGlobalPerMinute: 10,
+  };
+
+  limiter.consumeUser({
+    userId: 4,
+    settings,
+  });
+
+  const firstUserBlock =
+    limiter.consumeUser({
+      userId: 4,
+      settings,
+    });
+  const repeatedUserBlock =
+    limiter.consumeUser({
+      userId: 4,
+      settings,
+    });
+
+  assert.equal(
+    firstUserBlock.shouldLog,
+    true,
+  );
+  assert.equal(
+    repeatedUserBlock.shouldLog,
+    false,
+  );
+
+  const globalLimiter =
+    createAdminRequestRateLimiter({
+      now: () => 1_000,
+    });
+  const globalSettings = {
+    requestRateLimitUserPerMinute: 10,
+    requestRateLimitGlobalPerMinute: 1,
+  };
+
+  globalLimiter.consumeGlobal({
+    settings:
+      globalSettings,
+  });
+
+  const firstGlobalBlock =
+    globalLimiter.consumeGlobal({
+      settings:
+        globalSettings,
+    });
+  const repeatedGlobalBlock =
+    globalLimiter.consumeGlobal({
+      settings:
+        globalSettings,
+    });
+
+  assert.equal(
+    firstGlobalBlock.shouldLog,
+    true,
+  );
+  assert.equal(
+    repeatedGlobalBlock.shouldLog,
+    false,
+  );
+});
