@@ -10,7 +10,6 @@ import {
   adminSessionTokenHash,
   burnUnknownPasswordCheck,
   generateAdminSessionToken,
-  parseBasicAuthorization,
   verifyAdminPassword,
 } from './credentials.js';
 
@@ -466,38 +465,6 @@ export function createSecurityAuthService(
     };
   }
 
-  async function authenticate(
-    authorization,
-    context = {},
-  ) {
-    const credentials =
-      parseBasicAuthorization(authorization);
-
-    if (credentials.status === 'missing') {
-      return {
-        status: 'missing',
-        user: null,
-      };
-    }
-    if (credentials.status !== 'credentials') {
-      return {
-        status: 'invalid',
-        user: null,
-      };
-    }
-
-    return authenticateCredentials(
-      credentials.username,
-      credentials.password,
-      {
-        ...context,
-        method: 'basic',
-        recordLogin:
-          context.recordLogin ?? false,
-      },
-    );
-  }
-
   async function login(payload, context = {}) {
     if (
       !payload ||
@@ -685,44 +652,13 @@ export function createSecurityAuthService(
   }
 
   async function authenticateRequest({
-    authorization,
     sessionToken,
     ...context
   }) {
-    if (sessionToken) {
-      const sessionResult =
-        await authenticateSession(
-          sessionToken,
-          context,
-        );
-
-      if (
-        sessionResult.status === 'success'
-      ) {
-        return sessionResult;
-      }
-
-      if (
-        sessionResult.status !== 'invalid' &&
-        sessionResult.status !== 'expired'
-      ) {
-        return sessionResult;
-      }
-    }
-
-    const basicResult =
-      await authenticate(
-        authorization,
-        context,
-      );
-
-    return basicResult.status === 'success'
-      ? {
-        ...basicResult,
-        authMethod: 'basic',
-        sessionId: null,
-      }
-      : basicResult;
+    return authenticateSession(
+      sessionToken,
+      context,
+    );
   }
 
   async function logout(token) {
@@ -736,7 +672,6 @@ export function createSecurityAuthService(
   return {
     ipAccessState,
     recordRequestSecurityIncident,
-    authenticate,
     authenticateRequest,
     login,
     logout,
