@@ -115,7 +115,7 @@ test('OSM boundary admin storage keeps territory update scoped to one object', a
     calls[0].text,
     /^UPDATE city_boundaries/u,
   );
-  assert.match(calls[0].text, /WHERE id = \$1$/u);
+  assert.match(calls[0].text, /WHERE id = \$1::bigint$/u);
   assert.doesNotMatch(calls[0].text, /WITH RECURSIVE/u);
   assert.doesNotMatch(calls[0].text, /ANY\(/u);
   assert.equal(calls[0].values[1], false);
