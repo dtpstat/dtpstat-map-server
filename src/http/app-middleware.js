@@ -5,6 +5,9 @@ import path from 'node:path';
 import {
   CITY_MARKER_ICON,
 } from '../../public/js/city-marker-icon.js';
+import {
+  requireAdminApiVersion,
+} from './api-version.js';
 
 const CITY_MARKER_PNG =
   Buffer.from(
@@ -197,6 +200,7 @@ export function installAppHttpMiddleware(
 
   app.use(
     '/api/admin',
+    requireAdminApiVersion,
     adminAuth
       .limitGlobalRequest,
   );
