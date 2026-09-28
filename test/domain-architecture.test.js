@@ -3230,10 +3230,6 @@ test('application composition delegates test-only defaults to the testing module
   );
   assert.doesNotMatch(
     app,
-    /createBasicAuth\(/u,
-  );
-  assert.doesNotMatch(
-    app,
     /Temp-Password-1234/u,
   );
 
@@ -3241,7 +3237,7 @@ test('application composition delegates test-only defaults to the testing module
     defaults,
     /TEST_PROJECT_SETTINGS/u,
   );
-  assert.match(
+  assert.doesNotMatch(
     defaults,
     /createBasicAuth\(/u,
   );
@@ -3252,6 +3248,10 @@ test('application composition delegates test-only defaults to the testing module
   assert.match(
     defaults,
     /environment|importApi/u,
+  );
+  assert.doesNotMatch(
+    defaults,
+    /basic-auth\.js/u,
   );
   assert.doesNotMatch(
     defaults,
