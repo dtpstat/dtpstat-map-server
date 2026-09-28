@@ -36,6 +36,7 @@ function geometry(
 function serviceDependencies(
   storage,
   tokenSuffix = '1',
+  leaseOverrides = {},
 ) {
   return {
     storage,
@@ -74,6 +75,7 @@ function serviceDependencies(
       async release() {
         return true;
       },
+      ...leaseOverrides,
     },
     async acquireLock() {},
     randomUUID:
@@ -340,6 +342,7 @@ function polygonGeometry(
 
 function operationFixture(
   rows,
+  leaseOverrides = {},
 ) {
   const queries = [];
   const merges = [];
@@ -468,6 +471,7 @@ function operationFixture(
         serviceDependencies(
           storage,
           '2',
+          leaseOverrides,
         ),
       ),
     queries,
@@ -613,6 +617,202 @@ test('geometry merge conflict rolls back before spatial merge', async () => {
     ),
   );
 });
+
+test('geometry merge rolls back when any source has an active edit lease', async () => {
+  const first =
+    geometry(
+      2,
+      '2026-09-25T12:00:00.000Z',
+    );
+  const second =
+    geometry(
+      5,
+      '2026-09-25T12:05:00.000Z',
+    );
+
+  const blocked =
+    operationFixture(
+      [
+        first,
+        second,
+      ],
+      {
+        async acquire(
+          _client,
+          {
+            geometryId,
+            token,
+            userId,
+            clientId,
+          },
+        ) {
+          return {
+            geometryId,
+            token:
+              geometryId === 5
+                ? 'foreign-edit-token'
+                : token,
+            userId,
+            username:
+              geometryId === 5
+                ? 'other-editor'
+                : 'tester',
+            clientId:
+              geometryId === 5
+                ? 'other-client'
+                : clientId,
+            generation: 1,
+            acquiredAt:
+              '2026-09-25T12:00:00.000Z',
+            lastSeenAt:
+              '2026-09-25T12:00:00.000Z',
+            expiresAt:
+              '2026-09-25T12:01:30.000Z',
+          };
+        },
+      },
+    );
+
+  await assert.rejects(
+    blocked.service.merge(
+      {
+        items: [
+          {
+            id: 2,
+            baseUpdatedAt:
+              first.updatedAt,
+          },
+          {
+            id: 5,
+            baseUpdatedAt:
+              second.updatedAt,
+          },
+        ],
+      },
+      {
+        id: 77,
+      },
+      'test-client',
+    ),
+    (error) => {
+      assert.equal(
+        error.statusCode,
+        409,
+      );
+      assert.equal(
+        error.details
+          .conflicts[0]
+          .id,
+        5,
+      );
+      assert.equal(
+        error.details
+          .conflicts[0]
+          .reason,
+        'edit-lock',
+      );
+      return true;
+    },
+  );
+
+  assert.equal(
+    blocked.merges.length,
+    0,
+  );
+  assert.ok(
+    blocked.queries.includes(
+      'ROLLBACK',
+    ),
+  );
+});
+
+
+test('geometry cut refuses a token that no longer owns the edit lease', async () => {
+  const current =
+    polygonGeometry(
+      11,
+      '2026-09-25T12:10:00.000Z',
+    );
+
+  const blocked =
+    operationFixture(
+      [current],
+      {
+        async owns() {
+          return false;
+        },
+        async active() {
+          return {
+            geometryId: 11,
+            token:
+              'foreign-edit-token',
+            userId: 88,
+            username:
+              'other-editor',
+            clientId:
+              'other-client',
+            generation: 2,
+            acquiredAt:
+              '2026-09-25T12:00:00.000Z',
+            lastSeenAt:
+              '2026-09-25T12:00:00.000Z',
+            expiresAt:
+              '2026-09-25T12:01:30.000Z',
+          };
+        },
+      },
+    );
+
+  await assert.rejects(
+    blocked.service.cut(
+      11,
+      {
+        geometry: {
+          type: 'Polygon',
+          coordinates: [[
+            [30.5, 60.1],
+            [31, 60.1],
+            [31, 60.5],
+            [30.5, 60.1],
+          ]],
+        },
+      },
+      {
+        expectedUpdatedAt:
+          current.updatedAt,
+        editToken:
+          '0123456789abcdef',
+      },
+      {
+        id: 77,
+      },
+    ),
+    (error) => {
+      assert.equal(
+        error.statusCode,
+        409,
+      );
+      assert.equal(
+        error.details
+          .conflicts[0]
+          .reason,
+        'edit-lock',
+      );
+      return true;
+    },
+  );
+
+  assert.equal(
+    blocked.cuts.length,
+    0,
+  );
+  assert.ok(
+    blocked.queries.includes(
+      'ROLLBACK',
+    ),
+  );
+});
+
 
 test('geometry cut requires current polygon revision before spatial difference', async () => {
   const current =

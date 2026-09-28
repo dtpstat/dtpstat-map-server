@@ -623,6 +623,51 @@ test('geometry destructive actions preserve the explicit lease contract', async 
 });
 
 
+test('geometry workspace keeps new and failed bulk work locally and clears only explicitly', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /const localId =[\s\S]*'local:'[\s\S]*crypto\.randomUUID\(\)/u,
+  );
+  assert.match(
+    editor,
+    /kind: 'create'[\s\S]*workspaceKey:[\s\S]*value: payloadFromForm\(\)/u,
+  );
+  assert.match(
+    editor,
+    /\/api\/admin\/geometry-editor\/sync[\s\S]*JSON\.stringify\(\{ items \}\)[\s\S]*const updatedIds/u,
+  );
+  assert.match(
+    editor,
+    /const createdIds =[\s\S]*payload\.created[\s\S]*drafts\.remove/u,
+  );
+  assert.match(
+    editor,
+    /catch \(error\) \{[\s\S]*error\.status === 409[\s\S]*drafts\.markConflict/u,
+  );
+  assert.match(
+    editor,
+    /releaseDraftLease[\s\S]*drafts\.clear\(\)/u,
+  );
+  assert.match(
+    editor,
+    /state\.workspaceKey = 'unlinked'[\s\S]*rebuildDraftOverlay/u,
+  );
+  assert.doesNotMatch(
+    editor,
+    /!state\.city\?\.boundaryId[\s\S]*startDrawing/u,
+  );
+  assert.match(
+    editor,
+    /const showEditable =[\s\S]*state\.editing[\s\S]*backgroundGeometries = showEditable[\s\S]*item\.id !== state\.current\.id/u,
+  );
+});
+
+
 test('geometry editor exposes normal unlinked geometry and persistent explicit editing', async () => {
   const [
     editor,

@@ -496,3 +496,105 @@ test('disabling persistent mode in another tab preserves the shared draft in ses
     [],
   );
 });
+
+
+test('geometry workspace fields survive persistent store recreation', () => {
+  const sessionStorage =
+    storage();
+  const localStorage =
+    storage();
+
+  const first =
+    createDraftStore({
+      namespace:
+        'city-geometries',
+      sessionStorage,
+      localStorage,
+      now: () =>
+        '2026-09-28T01:00:00.000Z',
+    });
+
+  first.setPersistent(true);
+  first.upsert(
+    'local:abc',
+    {
+      kind: 'create',
+      localId:
+        'local:abc',
+      workspaceKey:
+        'unlinked',
+      editToken: null,
+      value: {
+        geometry: {
+          type: 'Point',
+          coordinates: [
+            20,
+            45,
+          ],
+        },
+        displayName:
+          'Local point',
+      },
+    },
+  );
+  first.upsert(
+    42,
+    {
+      kind: 'update',
+      baseUpdatedAt:
+        '2026-09-28T00:00:00.000Z',
+      editToken:
+        '0123456789abcdef',
+      changes: {
+        displayName:
+          'Edited',
+      },
+      conflict: false,
+    },
+  );
+
+  const restored =
+    createDraftStore({
+      namespace:
+        'city-geometries',
+      sessionStorage,
+      localStorage,
+    });
+
+  assert.equal(
+    restored.isPersistent(),
+    true,
+  );
+  assert.equal(
+    restored.get('local:abc')
+      ?.kind,
+    'create',
+  );
+  assert.equal(
+    restored.get('local:abc')
+      ?.workspaceKey,
+    'unlinked',
+  );
+  assert.deepEqual(
+    restored.get('local:abc')
+      ?.value?.geometry,
+    {
+      type: 'Point',
+      coordinates: [
+        20,
+        45,
+      ],
+    },
+  );
+  assert.equal(
+    restored.get(42)
+      ?.editToken,
+    '0123456789abcdef',
+  );
+  assert.equal(
+    restored.get(42)
+      ?.changes
+      ?.displayName,
+    'Edited',
+  );
+});
