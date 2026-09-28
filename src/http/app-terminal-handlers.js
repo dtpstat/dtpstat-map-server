@@ -108,12 +108,94 @@ export function installAppTerminalHandlers(
   );
 
   app.use(
-    (
+    async (
       error,
       request,
       response,
       _next,
     ) => {
+      if (
+        error?.type ===
+        'entity.duplicate.json.key'
+      ) {
+        const fields =
+          Array.isArray(
+            error
+              .duplicateJsonKeys,
+          )
+            ? error
+                .duplicateJsonKeys
+                .slice(0, 32)
+            : [];
+        const securityState =
+          typeof request
+            .recordApiContractIncident ===
+          'function'
+            ? await request
+                .recordApiContractIncident({
+                  reason:
+                    'duplicate-json-key',
+                  method:
+                    request.method,
+                  path:
+                    requestPath(
+                      request,
+                    ),
+                  fields,
+                  userId:
+                    request.adminUser?.id ??
+                    null,
+                  username:
+                    request.adminUser
+                      ?.username ??
+                    null,
+                })
+            : null;
+
+        if (
+          securityState?.locked
+        ) {
+          response.set(
+            'Retry-After',
+            String(
+              securityState
+                .retryAfterSeconds ??
+              1,
+            ),
+          );
+          response
+            .status(429)
+            .json({
+              error:
+                'This IP address is temporarily locked after repeated invalid API requests',
+              code:
+                'api_request_ip_locked',
+              retryAfterSeconds:
+                securityState
+                  .retryAfterSeconds ??
+                1,
+            });
+          return;
+        }
+
+        logRejectedRequest(
+          request,
+          400,
+          'duplicate-json-key',
+        );
+        response
+          .status(400)
+          .json({
+            error:
+              'Duplicate JSON object keys are not allowed',
+            code:
+              'api_contract_violation',
+            reason:
+              'duplicate-json-key',
+          });
+        return;
+      }
+
       if (
         error?.type ===
         'entity.too.large'
