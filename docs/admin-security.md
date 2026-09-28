@@ -132,13 +132,25 @@ Account manual block fields находятся в `ADMIN_USERS`.
 
 `ADMIN_BLOCKED_IPS` хранит manual IP blocks с optional expiration, reason/admin и audit linkage.
 
-## Session/audit policy
+## Session/audit and HTTP request policy
 
 | Field | Default |
 | --- | ---: |
 | `SESSION_IDLE_SECONDS` | 1800 |
 | `SESSION_ABSOLUTE_SECONDS` | 43200 |
 | `AUDIT_RETENTION_DAYS` | 365 |
+| `REQUEST_RATE_LIMIT_USER_PER_MINUTE` | 600 |
+| `REQUEST_RATE_LIMIT_GLOBAL_PER_MINUTE` | 5000 |
+
+Global HTTP rate limiting is applied before authentication for `/api/admin/*`;
+per-user limiting is applied after successful authentication. Security settings
+used by the pre-auth limiter are cached briefly, so a request flood does not
+turn the limiter into a settings-query flood. The global limit must be greater
+than or equal to the per-user limit.
+
+Rate-limit responses use `429` and `Retry-After`. Logging/audit for exceeded
+limits is coalesced to one event per minute-window per scope/user, while every
+excess request is still rejected.
 
 Во время browser upload и пока background admin task находится в
 `queued/running/cancelling`, web-admin удерживает idle-session активной:
@@ -154,11 +166,30 @@ idle-redirect на это время приостанавливается, а с
 401  auth отсутствует/неверен/expired
 403  manual block или недостаточно rights
 423  temporary account lockout
-429  temporary IP lockout
+429  temporary IP lockout or HTTP request rate limit
 428  password change required
 ```
 
 Temporary lockouts возвращают `Retry-After`.
+
+## Request tampering / malformed requests
+
+Admin HTTP requests reject attempts to assert server-owned authentication or
+authorization context through headers, query parameters or top-level JSON
+fields. Protected attributes include `UserID`, `RoleIR`, `ToleIR`,
+`RoleMode`, role/permission collections, session/auth identity,
+`isSuperuser`, `isBootstrap` and capability flags.
+
+The dedicated user-management create/update API may accept its documented
+`canManage*` / `canEdit*` capability fields; immutable identity and role
+override attributes remain rejected there.
+
+Tamper events store only the suspicious field name and source
+(`header` / `query` / `body`), never the supplied value. Authenticated
+HTTP responses with error status, malformed JSON, oversized bodies,
+unsupported encodings and unknown admin API routes are also recorded. Raw and
+streaming upload bodies are not reparsed as JSON; their headers/query remain
+covered and their own schema/size validators remain authoritative.
 
 ## CSRF / same-origin
 
@@ -282,4 +313,4 @@ npm run admin:unblock -- --ip 203.0.113.10
 - [database-indexes.md](database-indexes.md)
 - [project-settings-transfer.md](project-settings-transfer.md)
 
-Следующее изменение DB schema после текущего `V026` должно использовать migration **V027+**.
+Текущая security migration в этой ветке — `V047__admin_request_security.sql`; следующее изменение DB schema должно использовать **V048+**.
