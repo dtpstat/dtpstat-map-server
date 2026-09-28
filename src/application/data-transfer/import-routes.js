@@ -97,18 +97,26 @@ export function registerDataImportRoutes(
       response,
       next,
     ) => {
+      const dryRunHeader =
+        request.get?.(
+          'x-dtpstat-dry-run',
+        );
       const dryRun =
         parseBoolean(
-          request.query.dryRun,
+          dryRunHeader,
           false,
         );
 
-      if (dryRun === null) {
+      if (
+        dryRunHeader !==
+          undefined &&
+        dryRun === null
+      ) {
         response
           .status(400)
           .json({
             error:
-              'dryRun must be true or false',
+              'X-DTPStat-Dry-Run must be true or false',
           });
         return;
       }
