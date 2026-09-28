@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   jsonBody,
-} from '../shared/http/express.js';
+} from '../http/admin-json-body.js';
 import { LineTypeValidationError } from '../modules/lines/type-policy.js';
 import {
   createAdminOperationAudit,
