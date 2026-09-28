@@ -181,71 +181,136 @@ export function parseKmlSourcesJson(raw, constraints) {
   return validateKmlSources(value, constraints);
 }
 
-/** @param {unknown} value @param {string} name */
-function queryValue(value, name) {
-  if (value === undefined) return undefined;
-  if (typeof value !== 'string') {
-    throw new KmlUpdateValidationError(`${name} must be specified once`);
-  }
-  return value;
-}
-
 /** @param {unknown} value @param {string} name @param {boolean} fallback */
-function queryBoolean(value, name, fallback) {
-  const raw = queryValue(value, name);
-  if (raw === undefined) return fallback;
-  if (raw === 'true') return true;
-  if (raw === 'false') return false;
-  throw new KmlUpdateValidationError(`${name} must equal true or false`);
+function optionBoolean(
+  value,
+  name,
+  fallback,
+) {
+  if (value === undefined) {
+    return fallback;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  throw new KmlUpdateValidationError(
+    `${name} must be boolean`,
+  );
 }
 
-/** @param {unknown} value @param {string} name @param {number} maximum */
-function boundedQueryInteger(value, name, maximum) {
-  const raw = queryValue(value, name);
-  if (raw === undefined) return maximum;
-  const number = Number(raw);
-  if (!Number.isInteger(number) || number < 1 || number > maximum) {
+/** @param {unknown} value @param {string} name @param {number} maximum @param {number} fallback */
+function boundedInteger(
+  value,
+  name,
+  maximum,
+  fallback,
+) {
+  if (value === undefined) {
+    return fallback;
+  }
+  if (
+    !Number.isInteger(value) ||
+    value < 1 ||
+    value > maximum
+  ) {
     throw new KmlUpdateValidationError(
       `${name} must be an integer between 1 and ${maximum}`,
     );
   }
-  return number;
+  return value;
 }
 
 /** @param {unknown} value @param {string} name @param {number} maximum @param {number} fallback */
-function boundedQueryNonNegativeInteger(value, name, maximum, fallback) {
-  const raw = queryValue(value, name);
-  if (raw === undefined) return fallback;
-  const number = Number(raw);
-  if (!Number.isInteger(number) || number < 0 || number > maximum) {
+function boundedNonNegativeInteger(
+  value,
+  name,
+  maximum,
+  fallback,
+) {
+  if (value === undefined) {
+    return fallback;
+  }
+  if (
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > maximum
+  ) {
     throw new KmlUpdateValidationError(
       `${name} must be an integer between 0 and ${maximum}`,
     );
   }
-  return number;
+  return value;
 }
 
 /** @param {unknown} value @param {string} name @param {string[]} allowed @param {string} fallback */
-function queryEnum(value, name, allowed, fallback) {
-  const raw = queryValue(value, name);
-  if (raw === undefined) return fallback;
-  if (!allowed.includes(raw)) {
+function optionEnum(
+  value,
+  name,
+  allowed,
+  fallback,
+) {
+  if (value === undefined) {
+    return fallback;
+  }
+  if (
+    typeof value !== 'string' ||
+    !allowed.includes(value)
+  ) {
     throw new KmlUpdateValidationError(
       `${name} must be one of: ${allowed.join(', ')}`,
     );
   }
-  return raw;
+  return value;
 }
 
 /**
  * @param {unknown} body
- * @param {Record<string, unknown>} query
+ * @param {Record<string, unknown>} _query
  * @param {any} config
  */
-export function resolveKmlUpdateRequest(body, query, config) {
-  const sources = body === undefined
-    ? config.sources
-    : validateKmlSources(body, config);
+export function resolveKmlUpdateRequest(
+  body,
+  _query,
+  config,
+) {
+  const options =
+    body === undefined
+      ? {}
+      : body;
+
+  if (
+    !plainObject(options)
+  ) {
+    throw new KmlUpdateValidationError(
+      'KML update body must be a JSON object',
+    );
+  }
+
+  const allowed = [
+    'sources',
+    'dryRun',
+    'timeoutMs',
+    'maxFileBytes',
+    'maxTotalBytes',
+    'cityBufferMeters',
+    'unmatchedPolicy',
+    'ambiguousPolicy',
+  ];
+
+  rejectUnknownKeys(
+    options,
+    allowed,
+    'KML update body',
+  );
+
+  const sources =
+    options.sources === undefined
+      ? config.sources
+      : validateKmlSources(
+          options.sources,
+          config,
+        );
+
   if (sources.length === 0) {
     throw new KmlUpdateValidationError(
       'No KML sources supplied in the request or KML_UPDATE_SOURCES_JSON',
@@ -254,39 +319,59 @@ export function resolveKmlUpdateRequest(body, query, config) {
 
   return {
     sources,
-    dryRun: queryBoolean(query.dryRun, 'dryRun', config.dryRun),
-    timeoutMs: boundedQueryInteger(
-      query.timeoutMs,
-      'timeoutMs',
-      config.timeoutMs,
-    ),
-    maxFileBytes: boundedQueryInteger(
-      query.maxFileBytes,
-      'maxFileBytes',
-      config.maxFileBytes,
-    ),
-    maxTotalBytes: boundedQueryInteger(
-      query.maxTotalBytes,
-      'maxTotalBytes',
-      config.maxTotalBytes,
-    ),
-    cityBufferMeters: boundedQueryNonNegativeInteger(
-      query.cityBufferMeters,
-      'cityBufferMeters',
-      config.cityBufferMaxMeters,
-      config.cityBufferMeters,
-    ),
-    unmatchedPolicy: queryEnum(
-      query.unmatchedPolicy,
-      'unmatchedPolicy',
-      ['skip', 'fail'],
-      config.unmatchedPolicy,
-    ),
-    ambiguousPolicy: queryEnum(
-      query.ambiguousPolicy,
-      'ambiguousPolicy',
-      ['best-overlap', 'fail'],
-      config.ambiguousPolicy,
-    ),
+    dryRun:
+      optionBoolean(
+        options.dryRun,
+        'dryRun',
+        config.dryRun,
+      ),
+    timeoutMs:
+      boundedInteger(
+        options.timeoutMs,
+        'timeoutMs',
+        config.timeoutMs,
+        config.timeoutMs,
+      ),
+    maxFileBytes:
+      boundedInteger(
+        options.maxFileBytes,
+        'maxFileBytes',
+        config.maxFileBytes,
+        config.maxFileBytes,
+      ),
+    maxTotalBytes:
+      boundedInteger(
+        options.maxTotalBytes,
+        'maxTotalBytes',
+        config.maxTotalBytes,
+        config.maxTotalBytes,
+      ),
+    cityBufferMeters:
+      boundedNonNegativeInteger(
+        options.cityBufferMeters,
+        'cityBufferMeters',
+        config.cityBufferMaxMeters,
+        config.cityBufferMeters,
+      ),
+    unmatchedPolicy:
+      optionEnum(
+        options.unmatchedPolicy,
+        'unmatchedPolicy',
+        [
+          'skip',
+          'fail',
+        ],
+        config.unmatchedPolicy,
+      ),
+    ambiguousPolicy:
+      optionEnum(
+        options.ambiguousPolicy,
+        'ambiguousPolicy',
+        [
+          'best-overlap',
+          'fail',
+        ],
+        config.ambiguousPolicy,
+      ),
   };
 }
