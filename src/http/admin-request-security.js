@@ -4,6 +4,9 @@ import {
 import {
   securityLog,
 } from '../service-log.js';
+import {
+  validateParsedApiBody,
+} from './api-request-contract.js';
 
 const RESERVED_SECURITY_KEYS =
   new Set([
@@ -457,53 +460,145 @@ export function adminJsonBodySecurityGuard(
     );
 
   if (
-    findings.length === 0
+    findings.length > 0
   ) {
-    next();
-    return;
-  }
-
-  if (
-    typeof request
-      .recordAdminSecurityIncident ===
-    'function'
-  ) {
-    request
-      .recordAdminSecurityIncident(
+    if (
+      typeof request
+        .recordAdminSecurityIncident ===
+      'function'
+    ) {
+      request
+        .recordAdminSecurityIncident(
+          'admin.request.tamper',
+          {
+            statusCode: 400,
+            fields:
+              findings,
+          },
+        );
+    } else if (
+      typeof request
+        .recordApiContractIncident ===
+      'function'
+    ) {
+      request
+        .recordApiContractIncident({
+          reason:
+            'server-owned-security-attribute',
+          method:
+            request.method,
+          path:
+            requestPath(
+              request,
+            ),
+          fields:
+            findings.map(
+              (item) =>
+                item.key,
+            ),
+        });
+    } else {
+      securityLog(
         'admin.request.tamper',
         {
+          method:
+            request.method,
+          path:
+            requestPath(
+              request,
+            ),
+          ip:
+            requestClientIp(
+              request,
+            ),
+          userId: null,
+          username: null,
           statusCode: 400,
           fields:
             findings,
         },
       );
-  } else {
-    securityLog(
-      'admin.request.tamper',
-      {
-        method:
-          request.method,
-        path:
-          requestPath(
-            request,
-          ),
-        ip:
-          requestClientIp(
-            request,
-          ),
-        userId: null,
-        username: null,
-        statusCode: 400,
-        fields:
-          findings,
-      },
-    );
+    }
+
+    response
+      .status(400)
+      .json({
+        error:
+          'Request must not assert server-owned authentication or authorization attributes',
+        code:
+          'api_contract_violation',
+      });
+    return;
   }
 
-  response
-    .status(400)
-    .json({
-      error:
-        'Request must not assert server-owned authentication or authorization attributes',
-    });
+  const contractResult =
+    validateParsedApiBody(
+      request,
+    );
+
+  if (
+    !contractResult.valid
+  ) {
+    const incident = {
+      reason:
+        contractResult.reason,
+      method:
+        request.method,
+      path:
+        requestPath(
+          request,
+        ),
+      fields:
+        contractResult.fields,
+    };
+
+    if (
+      typeof request
+        .recordApiContractIncident ===
+      'function'
+    ) {
+      request
+        .recordApiContractIncident(
+          incident,
+        );
+    } else if (
+      typeof request
+        .recordAdminSecurityIncident ===
+      'function'
+    ) {
+      request
+        .recordAdminSecurityIncident(
+          'api.request.contract-violation',
+          {
+            statusCode: 400,
+            ...incident,
+          },
+        );
+    } else {
+      securityLog(
+        'api.request.contract_violation',
+        {
+          ...incident,
+          ip:
+            requestClientIp(
+              request,
+            ),
+        },
+      );
+    }
+
+    response
+      .status(400)
+      .json({
+        error:
+          'Request body does not match the API contract',
+        code:
+          'api_contract_violation',
+        reason:
+          contractResult.reason,
+      });
+    return;
+  }
+
+  next();
 }
