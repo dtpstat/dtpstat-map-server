@@ -15,7 +15,7 @@ test('data import advisory lock is scoped by database schema', async () => {
 
   assert.deepEqual(calls, [
     {
-      text: 'SELECT pg_advisory_xact_lock(hashtext($1))',
+      text: 'SELECT pg_advisory_xact_lock(hashtext($1::text))',
       values: ['tramlanes:data-import'],
     },
   ]);
