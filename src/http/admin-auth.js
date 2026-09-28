@@ -336,12 +336,6 @@ export function createAdminAuthorization(
   const authenticateRequest =
     async (request) =>
       securityService.authenticateRequest({
-        authorization:
-          request.get?.(
-            'authorization',
-          ) ??
-          request.headers
-            ?.authorization,
         sessionToken:
           adminSessionToken(request),
         ipAddress:
@@ -375,14 +369,7 @@ export function createAdminAuthorization(
             respondAdminAuthenticationFailure(
               response,
               result,
-              {
-                challengeOnMissing:
-                  Boolean(
-                    request.get?.(
-                      'authorization',
-                    ),
-                  ),
-              },
+              {},
             )
           ) {
             return;
@@ -600,9 +587,6 @@ export function createAdminAuthorization(
       const result =
         await securityService
           .authenticateRequest({
-            authorization:
-              request.headers
-                .authorization,
             sessionToken:
               adminSessionToken(
                 request,
