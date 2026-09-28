@@ -254,6 +254,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
         .adminRuntimeDependencies,
     ).sort(),
     [
+      'adminAllowedOrigins',
       'adminAuth',
       'adminTaskSuccessRepository',
       'derivedState',
