@@ -47,13 +47,13 @@ const SELECT_MAPBOX_BOOTSTRAP_STATE_SQL = `
 const UPDATE_SETTINGS_SQL = `
   UPDATE project_settings
   SET
-    project_name = $1,
+    project_name = $1::text,
     keywords = $2::text[],
-    footer_html = $3,
-    yandex_metrika_id = $4,
-    google_analytics_id = $5,
+    footer_html = $3::text,
+    yandex_metrika_id = $4::text,
+    google_analytics_id = $5::text,
     theme_preset = COALESCE($6::text, theme_preset),
-    show_line_labels = $7,
+    show_line_labels = $7::boolean,
     show_line_popups = COALESCE($8::boolean, show_line_popups),
     mapbox_access_token = CASE
       WHEN $9::text IS NULL THEN mapbox_access_token
@@ -63,8 +63,8 @@ const UPDATE_SETTINGS_SQL = `
       WHEN $9::text IS NULL THEN mapbox_access_token_initialized
       ELSE TRUE
     END,
-    large_city_population_threshold = $10,
-    large_city_area_km2_threshold = $11,
+    large_city_population_threshold = $10::integer,
+    large_city_area_km2_threshold = $11::double precision,
     updated_at = now()
   WHERE id = 1
   RETURNING
@@ -89,7 +89,7 @@ const UPDATE_SETTINGS_SQL = `
 const UPDATE_PUBLIC_DOWNLOAD_NAME_SQL = `
   UPDATE project_settings
   SET
-    public_download_name = $1,
+    public_download_name = $1::text,
     updated_at = now()
   WHERE id = 1
   RETURNING
@@ -100,10 +100,10 @@ const UPDATE_PUBLIC_DOWNLOAD_NAME_SQL = `
 const UPDATE_CITY_MARKER_ICON_SQL = `
   UPDATE project_settings
   SET
-    city_marker_icon = $1,
-    city_marker_icon_mime = $2,
-    city_marker_icon_width = $3,
-    city_marker_icon_height = $4,
+    city_marker_icon = $1::bytea,
+    city_marker_icon_mime = $2::text,
+    city_marker_icon_width = $3::integer,
+    city_marker_icon_height = $4::integer,
     updated_at = now()
   WHERE id = 1
   RETURNING
@@ -132,7 +132,7 @@ const CLEAR_CITY_MARKER_ICON_SQL = `
 const BOOTSTRAP_MAPBOX_TOKEN_SQL = `
   UPDATE project_settings
   SET
-    mapbox_access_token = $1,
+    mapbox_access_token = $1::text,
     mapbox_access_token_initialized = TRUE,
     updated_at = NOW()
   WHERE id = 1
