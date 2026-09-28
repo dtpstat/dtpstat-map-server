@@ -209,7 +209,7 @@ test('activating one OSM object never activates parents or descendants', async (
     /^UPDATE city_boundaries/i.test(query),
   );
   assert.ok(updateIndex >= 0);
-  assert.ok(pool.queries[updateIndex].endsWith('WHERE id = $1'));
+  assert.ok(pool.queries[updateIndex].endsWith('WHERE id = $1::bigint'));
   assert.equal(pool.queries[updateIndex].includes('parent_id'), false);
   assert.equal(pool.queries[updateIndex].includes('WITH RECURSIVE'), false);
   assert.equal(pool.queries[updateIndex].includes('ANY('), false);
