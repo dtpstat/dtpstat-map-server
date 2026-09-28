@@ -124,8 +124,8 @@ const INSERT_CHECKPOINT_SQL = `
     throttle_wait_ms
   )
   VALUES (
-    'downloading', $1, $2, $3, $4::jsonb, $5::jsonb,
-    $6, $7, $8::timestamptz, $9, $10, $11, $12, $13
+    'downloading', $1::text, $2::text, $3::text, $4::jsonb, $5::jsonb,
+    $6::integer, $7::integer, $8::timestamptz, $9::bigint, $10::integer, $11::integer, $12::bigint, $13::bigint
   )
   RETURNING id::bigint::text AS id
 `;
@@ -138,7 +138,7 @@ export function createOsmCheckpointRecordRepository(database) {
   async function getById(checkpointId) {
     const result = await query(
       `${CHECKPOINT_SELECT}
-       WHERE checkpoint.id = $1
+       WHERE checkpoint.id = $1::bigint
        GROUP BY checkpoint.id`,
       [checkpointId],
     );
@@ -214,7 +214,7 @@ export function createOsmCheckpointRecordRepository(database) {
       const result = await queryable.query(
         `SELECT id
          FROM osm_city_update_checkpoints
-         WHERE id = $1
+         WHERE id = $1::bigint
            AND status = ANY($2::text[])
          FOR UPDATE`,
         [
@@ -255,12 +255,12 @@ export function createOsmCheckpointRecordRepository(database) {
       return queryable.query(
         `UPDATE osm_city_update_checkpoints
          SET status = 'downloading',
-             downloaded_bytes = downloaded_bytes + $2,
-             request_attempt_count = request_attempt_count + $3,
-             retry_count = retry_count + $4,
-             retry_wait_ms = retry_wait_ms + $5,
-             throttle_wait_ms = throttle_wait_ms + $6,
-             ignored_elements = ignored_elements + $7,
+             downloaded_bytes = downloaded_bytes + $2::bigint,
+             request_attempt_count = request_attempt_count + $3::integer,
+             retry_count = retry_count + $4::integer,
+             retry_wait_ms = retry_wait_ms + $5::bigint,
+             throttle_wait_ms = throttle_wait_ms + $6::bigint,
+             ignored_elements = ignored_elements + $7::integer,
              staged_batch_count = staged_batch_count + 1,
              last_error = NULL,
              updated_at = NOW()
@@ -280,11 +280,11 @@ export function createOsmCheckpointRecordRepository(database) {
     async addMetrics(checkpointId, metrics = {}) {
       await query(
         `UPDATE osm_city_update_checkpoints
-         SET downloaded_bytes = downloaded_bytes + $2,
-             request_attempt_count = request_attempt_count + $3,
-             retry_count = retry_count + $4,
-             retry_wait_ms = retry_wait_ms + $5,
-             throttle_wait_ms = throttle_wait_ms + $6,
+         SET downloaded_bytes = downloaded_bytes + $2::bigint,
+             request_attempt_count = request_attempt_count + $3::integer,
+             retry_count = retry_count + $4::integer,
+             retry_wait_ms = retry_wait_ms + $5::bigint,
+             throttle_wait_ms = throttle_wait_ms + $6::bigint,
              updated_at = NOW()
          WHERE id = $1`,
         [
@@ -301,7 +301,7 @@ export function createOsmCheckpointRecordRepository(database) {
     async mark(checkpointId, status, lastError = null) {
       await query(
         `UPDATE osm_city_update_checkpoints
-         SET status = $2,
+         SET status = $2::text,
              last_error = $3::jsonb,
              updated_at = NOW()
          WHERE id = $1`,
