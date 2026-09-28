@@ -4,7 +4,47 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createApp } from '../src/app.js';
+import {
+  DTPSTAT_API_VERSION,
+  DTPSTAT_API_VERSION_HEADER,
+} from '../public/js/api-contract.js';
 import { createAdminTaskManager } from '../src/shared/tasks/admin-task-manager.js';
+
+function versionedFetch(
+  input,
+  init = {},
+) {
+  const url =
+    String(input);
+  if (
+    !url.includes(
+      '/api/admin/',
+    )
+  ) {
+    return fetch(
+      input,
+      init,
+    );
+  }
+
+  const headers =
+    new Headers(
+      init.headers ??
+      {},
+    );
+  headers.set(
+    DTPSTAT_API_VERSION_HEADER,
+    DTPSTAT_API_VERSION,
+  );
+
+  return fetch(
+    input,
+    {
+      ...init,
+      headers,
+    },
+  );
+}
 
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -221,7 +261,7 @@ async function withServer(callback, options = {}) {
 async function waitForAdminTask(baseUrl, accepted, authorization) {
   let statusBody;
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const statusResponse = await fetch(
+    const statusResponse = await versionedFetch(
       `${baseUrl}${accepted.task.statusURL}`,
       { headers: { Authorization: authorization } },
     );
@@ -256,9 +296,9 @@ async function acceptAndWaitForAdminTask(response, baseUrl, authorization) {
 test('API exposes public config, health, and ordered cities', async () => {
   await withServer(async (baseUrl) => {
     const [configResponse, healthResponse, citiesResponse] = await Promise.all([
-      fetch(`${baseUrl}/api/config`),
-      fetch(`${baseUrl}/api/health`),
-      fetch(`${baseUrl}/api/cities`),
+      versionedFetch(`${baseUrl}/api/config`),
+      versionedFetch(`${baseUrl}/api/health`),
+      versionedFetch(`${baseUrl}/api/cities`),
     ]);
 
     assert.equal(configResponse.status, 200);
@@ -292,7 +332,7 @@ test('public page emits analytics markup and a CSP that permits configured colle
   };
 
   await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/`);
+    const response = await versionedFetch(`${baseUrl}/`);
     assert.equal(response.status, 200);
     const html = await response.text();
     const csp = response.headers.get('content-security-policy') ?? '';
@@ -322,14 +362,14 @@ test('public page emits analytics markup and a CSP that permits configured colle
 
 test('geometry endpoint validates IDs and returns a FeatureCollection', async () => {
   await withServer(async (baseUrl) => {
-    const success = await fetch(`${baseUrl}/api/cities/1/geometries`);
+    const success = await versionedFetch(`${baseUrl}/api/cities/1/geometries`);
     assert.equal(success.status, 200);
     assert.deepEqual(await success.json(), geojson);
 
-    const invalid = await fetch(`${baseUrl}/api/cities/nope/geometries`);
+    const invalid = await versionedFetch(`${baseUrl}/api/cities/nope/geometries`);
     assert.equal(invalid.status, 400);
 
-    const missing = await fetch(`${baseUrl}/api/cities/999/geometries`);
+    const missing = await versionedFetch(`${baseUrl}/api/cities/999/geometries`);
     assert.equal(missing.status, 404);
   });
 });
@@ -350,7 +390,7 @@ test('viewport geometry endpoint validates bounds and forwards the map center', 
   };
 
   await withServer(async (baseUrl) => {
-    const success = await fetch(
+    const success = await versionedFetch(
       `${baseUrl}/api/geometries?bbox=37.4,55.6,37.9,55.9&center=37.62,55.75`,
     );
     assert.equal(success.status, 200);
@@ -370,7 +410,7 @@ test('viewport geometry endpoint validates bounds and forwards the map center', 
       centerLat: 55.75,
     });
 
-    const defaultCenter = await fetch(
+    const defaultCenter = await versionedFetch(
       `${baseUrl}/api/geometries?bbox=37.4,55.6,37.9,55.9`,
     );
     assert.equal(defaultCenter.status, 200);
@@ -384,7 +424,7 @@ test('viewport geometry endpoint validates bounds and forwards the map center', 
       '?bbox=west,55.6,37.9,55.9',
       '?bbox=-180,-90,180,90',
     ]) {
-      const invalid = await fetch(`${baseUrl}/api/geometries${query}`);
+      const invalid = await versionedFetch(`${baseUrl}/api/geometries${query}`);
       assert.equal(invalid.status, 400);
     }
   }, { repository });
@@ -393,8 +433,8 @@ test('viewport geometry endpoint validates bounds and forwards the map center', 
 test('root serves the optimized client without embedded GeoJSON', async () => {
   await withServer(async (baseUrl) => {
     const [response, markerResponse] = await Promise.all([
-      fetch(baseUrl),
-      fetch(`${baseUrl}/images/city-marker.png`),
+      versionedFetch(baseUrl),
+      versionedFetch(`${baseUrl}/images/city-marker.png`),
     ]);
     const html = await response.text();
 
@@ -411,11 +451,11 @@ test('root serves the optimized client without embedded GeoJSON', async () => {
 test('admin entry requires auth while static admin assets remain public', async () => {
   const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
   await withServer(async (baseUrl) => {
-    const unauthorized = await fetch(`${baseUrl}/admin/`);
+    const unauthorized = await versionedFetch(`${baseUrl}/admin/`);
     assert.equal(unauthorized.status, 401);
-    const publicScript = await fetch(`${baseUrl}/admin/admin.js`);
+    const publicScript = await versionedFetch(`${baseUrl}/admin/admin.js`);
     assert.equal(publicScript.status, 200);
-    const authorized = await fetch(`${baseUrl}/admin/`, {
+    const authorized = await versionedFetch(`${baseUrl}/admin/`, {
       headers: { Authorization: authorization },
     });
     assert.equal(authorized.status, 200);
@@ -440,10 +480,10 @@ test('admin entry requires auth while static admin assets remain public', async 
 test('admin config exposes safe ENV defaults and exact OSM URLs', async () => {
   const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
   await withServer(async (baseUrl) => {
-    const unauthorized = await fetch(`${baseUrl}/api/admin/config`);
+    const unauthorized = await versionedFetch(`${baseUrl}/api/admin/config`);
     assert.equal(unauthorized.status, 401);
 
-    const response = await fetch(`${baseUrl}/api/admin/config`, {
+    const response = await versionedFetch(`${baseUrl}/api/admin/config`, {
       headers: { Authorization: authorization },
     });
     assert.equal(response.status, 200);
@@ -479,7 +519,7 @@ test('admin status always exposes persistent successful update timestamps', asyn
     initialSuccessfulUpdates: [initial],
   });
   await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/admin/status`, {
+    const response = await versionedFetch(`${baseUrl}/api/admin/status`, {
       headers: { Authorization: authorization },
     });
     assert.equal(response.status, 200);
@@ -502,7 +542,7 @@ test('import endpoint requires Basic Auth before processing the body', async () 
   };
 
   await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/admin/import`, {
+    const response = await versionedFetch(`${baseUrl}/api/admin/import`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/geo+json' },
       body: JSON.stringify(geojson),
@@ -525,7 +565,7 @@ test('authenticated import accepts GeoJSON and returns update statistics', async
   const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
 
   await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/admin/import`, {
+    const response = await versionedFetch(`${baseUrl}/api/admin/import`, {
       method: 'POST',
       headers: {
         Authorization: authorization,
@@ -551,7 +591,7 @@ test('import endpoint rejects unsupported and malformed bodies', async () => {
   const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
 
   await withServer(async (baseUrl) => {
-    const unsupported = await fetch(`${baseUrl}/api/admin/import`, {
+    const unsupported = await versionedFetch(`${baseUrl}/api/admin/import`, {
       method: 'POST',
       headers: {
         Authorization: authorization,
@@ -561,7 +601,7 @@ test('import endpoint rejects unsupported and malformed bodies', async () => {
     });
     assert.equal(unsupported.status, 415);
 
-    const malformed = await fetch(`${baseUrl}/api/admin/import`, {
+    const malformed = await versionedFetch(`${baseUrl}/api/admin/import`, {
       method: 'POST',
       headers: {
         Authorization: authorization,
@@ -587,7 +627,7 @@ test('import endpoint enforces the configured upload limit', async () => {
   const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
 
   await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/admin/import`, {
+    const response = await versionedFetch(`${baseUrl}/api/admin/import`, {
       method: 'POST',
       headers: {
         Authorization: authorization,
@@ -625,7 +665,7 @@ test('authenticated population endpoint updates a separate data source', async (
   };
 
   await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/admin/populations`, {
+    const response = await versionedFetch(`${baseUrl}/api/admin/populations`, {
       method: 'POST',
       headers: {
         Authorization: authorization,
@@ -670,7 +710,7 @@ test('KML update endpoint is protected and forwards explicit sources and overrid
   const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
 
   await withServer(async (baseUrl) => {
-    const unauthorized = await fetch(`${baseUrl}/api/admin/update`, {
+    const unauthorized = await versionedFetch(`${baseUrl}/api/admin/update`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -678,7 +718,7 @@ test('KML update endpoint is protected and forwards explicit sources and overrid
     assert.equal(unauthorized.status, 401);
     assert.equal(calls, 0);
 
-    const response = await fetch(
+    const response = await versionedFetch(
       `${baseUrl}/api/admin/update?dryRun=true&unmatchedPolicy=skip`,
       {
         method: 'POST',
@@ -734,7 +774,7 @@ test('OSM subtree endpoint toggles the whole selected branch once', async () => 
   };
 
   await withServer(async (baseUrl) => {
-    const unauthorized = await fetch(
+    const unauthorized = await versionedFetch(
       `${baseUrl}/api/admin/osm-boundaries/42/subtree`,
       {
         method: 'PATCH',
@@ -744,7 +784,7 @@ test('OSM subtree endpoint toggles the whole selected branch once', async () => 
     );
     assert.equal(unauthorized.status, 401);
 
-    const response = await fetch(
+    const response = await versionedFetch(
       `${baseUrl}/api/admin/osm-boundaries/42/subtree`,
       {
         method: 'PATCH',
@@ -764,7 +804,7 @@ test('OSM subtree endpoint toggles the whole selected branch once', async () => 
     assert.equal(body.subtree.active, false);
     assert.equal(derivedCalls, 1);
 
-    const invalid = await fetch(
+    const invalid = await versionedFetch(
       `${baseUrl}/api/admin/osm-boundaries/42/subtree`,
       {
         method: 'PATCH',
@@ -813,12 +853,12 @@ test('OSM checkpoint API exposes and explicitly discards resumable progress', as
   ).toString('base64')}`;
 
   await withServer(async (baseUrl) => {
-    const unauthorized = await fetch(
+    const unauthorized = await versionedFetch(
       `${baseUrl}/api/admin/osm-checkpoint`,
     );
     assert.equal(unauthorized.status, 401);
 
-    const response = await fetch(
+    const response = await versionedFetch(
       `${baseUrl}/api/admin/osm-checkpoint`,
       { headers: { Authorization: authorization } },
     );
@@ -826,7 +866,7 @@ test('OSM checkpoint API exposes and explicitly discards resumable progress', as
     assert.match(response.headers.get('cache-control'), /no-store/);
     assert.deepEqual((await response.json()).checkpoint, checkpoint);
 
-    const discarded = await fetch(
+    const discarded = await versionedFetch(
       `${baseUrl}/api/admin/osm-checkpoint`,
       {
         method: 'DELETE',
@@ -838,7 +878,7 @@ test('OSM checkpoint API exposes and explicitly discards resumable progress', as
     assert.equal(discardedBody.discarded, true);
     assert.equal(discardedBody.checkpoint.id, 7);
 
-    const after = await fetch(
+    const after = await versionedFetch(
       `${baseUrl}/api/admin/osm-checkpoint`,
       { headers: { Authorization: authorization } },
     );
@@ -880,7 +920,7 @@ test('OSM city update endpoint is protected and forwards URL and safe overrides'
   const adminTasks = createAdminTaskManager();
 
   await withServer(async (baseUrl) => {
-    const unauthorized = await fetch(`${baseUrl}/api/admin/update/cities`, {
+    const unauthorized = await versionedFetch(`${baseUrl}/api/admin/update/cities`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -888,7 +928,7 @@ test('OSM city update endpoint is protected and forwards URL and safe overrides'
     assert.equal(unauthorized.status, 401);
     assert.equal(calls, 0);
 
-    const response = await fetch(
+    const response = await versionedFetch(
       `${baseUrl}/api/admin/update/cities?dryRun=true&timeoutMs=5000&batchSize=25`,
       {
         method: 'POST',
@@ -902,7 +942,7 @@ test('OSM city update endpoint is protected and forwards URL and safe overrides'
     assert.equal(response.status, 202);
     const accepted = await response.clone().json();
 
-    const unauthorizedStatus = await fetch(
+    const unauthorizedStatus = await versionedFetch(
       `${baseUrl}${accepted.task.statusURL}`,
     );
     assert.equal(unauthorizedStatus.status, 401);
@@ -956,7 +996,7 @@ test('one active admin task blocks every other mutating admin route', async () =
   };
 
   await withServer(async (baseUrl) => {
-    const firstResponse = await fetch(`${baseUrl}/api/admin/update?dryRun=true`, {
+    const firstResponse = await versionedFetch(`${baseUrl}/api/admin/update?dryRun=true`, {
       method: 'POST',
       headers: {
         Authorization: authorization,
@@ -967,7 +1007,7 @@ test('one active admin task blocks every other mutating admin route', async () =
     assert.equal(firstResponse.status, 202);
     const first = await firstResponse.json();
 
-    const blockedResponse = await fetch(`${baseUrl}/api/admin/populations`, {
+    const blockedResponse = await versionedFetch(`${baseUrl}/api/admin/populations`, {
       method: 'POST',
       headers: {
         Authorization: authorization,
@@ -986,7 +1026,7 @@ test('one active admin task blocks every other mutating admin route', async () =
     const completed = await waitForAdminTask(baseUrl, first, authorization);
     assert.equal(completed.status, 'succeeded');
 
-    const secondResponse = await fetch(`${baseUrl}/api/admin/populations`, {
+    const secondResponse = await versionedFetch(`${baseUrl}/api/admin/populations`, {
       method: 'POST',
       headers: {
         Authorization: authorization,
@@ -996,7 +1036,7 @@ test('one active admin task blocks every other mutating admin route', async () =
     });
     const second = await secondResponse.clone().json();
     assert.equal(secondResponse.status, 202);
-    const oldStatus = await fetch(`${baseUrl}${first.task.statusURL}`, {
+    const oldStatus = await versionedFetch(`${baseUrl}${first.task.statusURL}`, {
       headers: { Authorization: authorization },
     });
     assert.equal(oldStatus.status, 404);
@@ -1031,7 +1071,7 @@ test('admin cancellation aborts the active task and keeps its log', async () => 
   const authorization = `Basic ${Buffer.from('importer:test:secret').toString('base64')}`;
 
   await withServer(async (baseUrl) => {
-    const startResponse = await fetch(
+    const startResponse = await versionedFetch(
       `${baseUrl}/api/admin/update/cities?dryRun=true&batchSize=50`,
       { method: 'POST', headers: { Authorization: authorization } },
     );
@@ -1039,7 +1079,7 @@ test('admin cancellation aborts the active task and keeps its log', async () => 
     assert.equal(startResponse.status, 202);
     await new Promise((resolve) => setImmediate(resolve));
 
-    const cancelResponse = await fetch(
+    const cancelResponse = await versionedFetch(
       `${baseUrl}/api/admin/cancel/${started.taskId}`,
       { method: 'POST', headers: { Authorization: authorization } },
     );
@@ -1053,7 +1093,7 @@ test('admin cancellation aborts the active task and keeps its log', async () => 
     assert.ok(cancelled.task.log.some((entry) =>
       entry.message === 'Задача отменена'));
 
-    const repeated = await fetch(
+    const repeated = await versionedFetch(
       `${baseUrl}/api/admin/cancel/${started.taskId}`,
       { method: 'POST', headers: { Authorization: authorization } },
     );
