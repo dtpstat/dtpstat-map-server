@@ -3,7 +3,7 @@ import {
 } from 'express';
 import {
   jsonBody as createJsonBody,
-} from '../shared/http/express.js';
+} from '../http/admin-json-body.js';
 import {
   registerOsmBoundaryRoutes,
 } from './osm/boundary-routes.js';
