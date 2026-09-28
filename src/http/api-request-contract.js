@@ -969,7 +969,131 @@ function contractsForPath(path) {
     );
 }
 
-function reject(
+function logSafeText(
+  value,
+  maximum = 160,
+) {
+  let result = '';
+
+  for (
+    const character of
+    String(value ?? '')
+  ) {
+    const code =
+      character.codePointAt(0);
+
+    if (
+      code >= 0x20 &&
+      code <= 0x7e
+    ) {
+      result += character;
+    } else {
+      result +=
+        '\\u{' +
+        code
+          .toString(16)
+          .toUpperCase() +
+        '}';
+    }
+
+    if (
+      result.length >=
+      maximum
+    ) {
+      return (
+        result.slice(
+          0,
+          maximum,
+        ) +
+        '…'
+      );
+    }
+  }
+
+  return result;
+}
+
+function safeIncident(
+  incident,
+) {
+  return {
+    reason:
+      logSafeText(
+        incident.reason,
+        96,
+      ),
+    method:
+      logSafeText(
+        incident.method,
+        16,
+      ),
+    path:
+      logSafeText(
+        incident.path,
+        512,
+      ),
+    fields:
+      Array.isArray(
+        incident.fields,
+      )
+        ? incident.fields
+            .slice(0, 32)
+            .map(
+              (field) =>
+                logSafeText(
+                  field,
+                  120,
+                ),
+            )
+        : [],
+    userId:
+      incident.userId ??
+      null,
+    username:
+      incident.username
+        ? logSafeText(
+            incident.username,
+            96,
+          )
+        : null,
+  };
+}
+
+async function recordContractIncident(
+  request,
+  incident,
+) {
+  const safe =
+    safeIncident(
+      incident,
+    );
+
+  if (
+    typeof request
+      .recordApiContractIncident ===
+    'function'
+  ) {
+    return request
+      .recordApiContractIncident(
+        safe,
+      );
+  }
+
+  securityLog(
+    'api.request.contract_violation',
+    {
+      ...safe,
+      ip:
+        requestClientIp(
+          request,
+        ),
+    },
+  );
+
+  return null;
+}
+
+async function reject(
   request,
   response,
   reason,
@@ -982,29 +1106,48 @@ function reject(
       request.method,
     path:
       apiPath(request),
-    ...details,
+    fields:
+      details.fields ??
+      [],
+    userId:
+      request.adminUser?.id ??
+      null,
+    username:
+      request.adminUser
+        ?.username ??
+      null,
   };
 
-  if (
-    typeof request
-      .recordApiContractIncident ===
-    'function'
-  ) {
-    request
-      .recordApiContractIncident(
-        incident,
-      );
-  } else {
-    securityLog(
-      'api.request.contract_violation',
-      {
-        ...incident,
-        ip:
-          requestClientIp(
-            request,
-          ),
-      },
+  const securityState =
+    await recordContractIncident(
+      request,
+      incident,
     );
+
+  if (
+    securityState?.locked
+  ) {
+    response.set(
+      'Retry-After',
+      String(
+        securityState
+          .retryAfterSeconds ??
+        1,
+      ),
+    );
+    response
+      .status(429)
+      .json({
+        error:
+          'This IP address is temporarily locked after repeated invalid API requests',
+        code:
+          'api_request_ip_locked',
+        retryAfterSeconds:
+          securityState
+            .retryAfterSeconds ??
+          1,
+      });
+    return;
   }
 
   response
@@ -1047,7 +1190,7 @@ function validateDtpstatHeaders(
   );
 }
 
-export function enforceApiRequestContract(
+export async function enforceApiRequestContract(
   request,
   response,
   next,
@@ -1067,7 +1210,7 @@ export function enforceApiRequestContract(
   if (
     pathContracts.length === 0
   ) {
-    reject(
+    await reject(
       request,
       response,
       'unknown-api-endpoint',
@@ -1084,7 +1227,7 @@ export function enforceApiRequestContract(
     );
 
   if (!contract) {
-    reject(
+    await reject(
       request,
       response,
       'method-not-allowed',
@@ -1109,7 +1252,7 @@ export function enforceApiRequestContract(
     unsupportedHeaders.length >
     0
   ) {
-    reject(
+    await reject(
       request,
       response,
       'unsupported-dtpstat-header',
@@ -1173,7 +1316,7 @@ export function enforceApiRequestContract(
     ].includes(method) &&
     queryKeys.length > 0
   ) {
-    reject(
+    await reject(
       request,
       response,
       'query-not-allowed-for-mutating-request',
@@ -1202,7 +1345,7 @@ export function enforceApiRequestContract(
     unsupportedQuery.length >
     0
   ) {
-    reject(
+    await reject(
       request,
       response,
       'unsupported-query-parameter',
@@ -1223,7 +1366,7 @@ export function enforceApiRequestContract(
       request,
     )
   ) {
-    reject(
+    await reject(
       request,
       response,
       'body-not-allowed-for-read-request',
@@ -1238,7 +1381,7 @@ export function enforceApiRequestContract(
       request,
     )
   ) {
-    reject(
+    await reject(
       request,
       response,
       'body-not-allowed',
@@ -1376,6 +1519,66 @@ export function validateParsedApiBody(
     fields: [],
   };
 }
+
+export function createApiRequestContractMiddleware({
+  securityService,
+} = {}) {
+  return async (
+    request,
+    response,
+    next,
+  ) => {
+    request.recordApiContractIncident =
+      async (incident) => {
+        const details = {
+          ...incident,
+          userId:
+            request.adminUser?.id ??
+            incident.userId ??
+            null,
+          username:
+            request.adminUser
+              ?.username ??
+            incident.username ??
+            null,
+        };
+
+        if (
+          typeof securityService
+            ?.recordRequestSecurityIncident ===
+          'function'
+        ) {
+          return securityService
+            .recordRequestSecurityIncident(
+              requestClientIp(
+                request,
+              ),
+              details,
+            );
+        }
+
+        securityLog(
+          'api.request.contract_violation',
+          {
+            ...details,
+            ip:
+              requestClientIp(
+                request,
+              ),
+          },
+        );
+
+        return null;
+      };
+
+    await enforceApiRequestContract(
+      request,
+      response,
+      next,
+    );
+  };
+}
+
 
 export function apiContractKey(
   method,
