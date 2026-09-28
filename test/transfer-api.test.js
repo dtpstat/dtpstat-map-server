@@ -614,13 +614,14 @@ test('city GeoJSON import accepts a gzip request body and forwards dryRun', asyn
 
   await withServer(async (baseUrl) => {
     const response = await versionedFetch(
-      `${baseUrl}/api/admin/import/cities?dryRun=true`,
+      `${baseUrl}/api/admin/import/cities`,
       {
         method: 'POST',
         headers: {
           Authorization: authorization,
           'Content-Type': 'application/geo+json',
           'Content-Encoding': 'gzip',
+          'X-DTPStat-Dry-Run': 'true',
         },
         body: gzipSync(Buffer.from(JSON.stringify(body))),
       },
