@@ -29,6 +29,10 @@ const LOWERCASE_SQL_INTERPOLATION_ALLOWLIST =
         'sql',
         'fetchSize',
       ]),
+    'src/db/migration-state.js':
+      new Set([
+        'table',
+      ]),
   });
 
 async function javascriptFiles(
