@@ -5,7 +5,7 @@ import test from 'node:test';
 import { parseLinesKml } from '../src/modules/lines/kml-transfer.js';
 import { createKmlTransferRouter } from '../src/routes/kml-transfer-api.js';
 
-const authorization = `Basic ${Buffer.from('importer:test-secret').toString('base64')}`;
+const authorization = 'dtpstat_admin_session=test-session-token';
 
 const snapshot = {
   type: 'FeatureCollection',
@@ -34,7 +34,7 @@ const snapshot = {
 };
 
 function requireData(request, response, next) {
-  if (request.get('authorization') !== authorization) {
+  if (request.get('cookie') !== authorization) {
     response.status(401).json({ error: 'Authentication required' });
     return;
   }
@@ -105,7 +105,7 @@ test('portable KML export requires auth and carries numeric code/name/title dict
     assert.equal(unauthorized.status, 401);
 
     const response = await fetch(`${baseUrl}/api/admin/export/lines.kml`, {
-      headers: { Authorization: authorization },
+      headers: { Cookie: authorization },
     });
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type'), /vnd\.google-earth\.kml\+xml/);
@@ -123,14 +123,14 @@ test('portable KML export requires auth and carries numeric code/name/title dict
 test('portable KML import parses metadata before starting the database task', async () => {
   await withServer(async (baseUrl, state) => {
     const exportResponse = await fetch(`${baseUrl}/api/admin/export/lines.kml`, {
-      headers: { Authorization: authorization },
+      headers: { Cookie: authorization },
     });
     const xml = await exportResponse.text();
 
     const response = await fetch(`${baseUrl}/api/admin/import/lines.kml`, {
       method: 'POST',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/vnd.google-earth.kml+xml',
       },
       body: xml,
@@ -153,7 +153,7 @@ test('portable KML rejects malformed business metadata without starting a task',
     const response = await fetch(`${baseUrl}/api/admin/import/lines.kml`, {
       method: 'POST',
       headers: {
-        Authorization: authorization,
+        Cookie: authorization,
         'Content-Type': 'application/vnd.google-earth.kml+xml',
       },
       body: '<kml><Document><Placemark/></Document></kml>',
