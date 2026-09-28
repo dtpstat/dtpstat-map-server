@@ -16,7 +16,7 @@ const MATERIALIZE_CHECKPOINT_STAGE_SQL = `
     geom,
     bounds
   FROM osm_city_update_checkpoint_stage
-  WHERE checkpoint_id = $1
+  WHERE checkpoint_id = $1::bigint
     AND geometry_status = 'ready'
 `;
 
@@ -244,8 +244,8 @@ const INSERT_RUN_SQL = `
     batch_count
   )
   VALUES (
-    $1, $2, $3, $4, $5, $6, $7::timestamptz,
-    $8, $9, $10, $11, $12, $13, $14
+    $1::text, $2::text, $3::bigint, $4::integer, $5::integer, $6::integer, $7::timestamptz,
+    $8::integer, $9::integer, $10::integer, $11::integer, $12::integer, $13::integer, $14::integer
   )
   RETURNING id::integer AS id, created_at AS "createdAt"
 `;
