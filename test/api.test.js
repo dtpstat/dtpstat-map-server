@@ -718,15 +718,23 @@ test('KML update endpoint is protected and forwards explicit sources and overrid
     assert.equal(unauthorized.status, 401);
     assert.equal(calls, 0);
 
+    const requestBody = {
+      sources: body,
+      dryRun: true,
+      unmatchedPolicy: 'skip',
+    };
     const response = await versionedFetch(
-      `${baseUrl}/api/admin/update?dryRun=true&unmatchedPolicy=skip`,
+      `${baseUrl}/api/admin/update`,
       {
         method: 'POST',
         headers: {
           Authorization: authorization,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(body),
+        body:
+          JSON.stringify(
+            requestBody,
+          ),
       },
     );
 
@@ -738,9 +746,14 @@ test('KML update endpoint is protected and forwards explicit sources and overrid
     assert.equal(completed.status, 'succeeded');
     assert.deepEqual(completed.task.result, kmlUpdateResult);
     assert.equal(completed.task.type, 'kml-update');
-    assert.deepEqual(receivedBody, body);
-    assert.equal(receivedQuery.dryRun, 'true');
-    assert.equal(receivedQuery.unmatchedPolicy, 'skip');
+    assert.deepEqual(
+      receivedBody,
+      requestBody,
+    );
+    assert.deepEqual(
+      receivedQuery,
+      {},
+    );
   }, { kmlUpdateService });
 });
 
@@ -928,15 +941,24 @@ test('OSM city update endpoint is protected and forwards URL and safe overrides'
     assert.equal(unauthorized.status, 401);
     assert.equal(calls, 0);
 
+    const requestBody = {
+      ...body,
+      dryRun: true,
+      timeoutMs: 5000,
+      batchSize: 25,
+    };
     const response = await versionedFetch(
-      `${baseUrl}/api/admin/update/cities?dryRun=true&timeoutMs=5000&batchSize=25`,
+      `${baseUrl}/api/admin/update/cities`,
       {
         method: 'POST',
         headers: {
           Authorization: authorization,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(body),
+        body:
+          JSON.stringify(
+            requestBody,
+          ),
       },
     );
     assert.equal(response.status, 202);
@@ -960,10 +982,14 @@ test('OSM city update endpoint is protected and forwards URL and safe overrides'
     assert.ok(completed.task.log.some((entry) =>
       entry.message ===
         'OSM: HTTP 429, пакет 1/2; повтор 1/6 через 30 сек.'));
-    assert.deepEqual(receivedBody, body);
-    assert.equal(receivedQuery.dryRun, 'true');
-    assert.equal(receivedQuery.timeoutMs, '5000');
-    assert.equal(receivedQuery.batchSize, '25');
+    assert.deepEqual(
+      receivedBody,
+      requestBody,
+    );
+    assert.deepEqual(
+      receivedQuery,
+      {},
+    );
     assert.deepEqual(adminTasks.successfulUpdates(), {});
   }, { osmCityUpdateService, adminTasks });
 });
@@ -996,13 +1022,16 @@ test('one active admin task blocks every other mutating admin route', async () =
   };
 
   await withServer(async (baseUrl) => {
-    const firstResponse = await versionedFetch(`${baseUrl}/api/admin/update?dryRun=true`, {
+    const firstResponse = await versionedFetch(`${baseUrl}/api/admin/update`, {
       method: 'POST',
       headers: {
         Authorization: authorization,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(kmlBody),
+      body: JSON.stringify({
+        sources: kmlBody,
+        dryRun: true,
+      }),
     });
     assert.equal(firstResponse.status, 202);
     const first = await firstResponse.json();
@@ -1072,8 +1101,18 @@ test('admin cancellation aborts the active task and keeps its log', async () => 
 
   await withServer(async (baseUrl) => {
     const startResponse = await versionedFetch(
-      `${baseUrl}/api/admin/update/cities?dryRun=true&batchSize=50`,
-      { method: 'POST', headers: { Authorization: authorization } },
+      `${baseUrl}/api/admin/update/cities`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: authorization,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          dryRun: true,
+          batchSize: 50,
+        }),
+      },
     );
     const started = await startResponse.json();
     assert.equal(startResponse.status, 202);
