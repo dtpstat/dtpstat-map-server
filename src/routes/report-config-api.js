@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   jsonBody as createJsonBody,
-} from '../shared/http/express.js';
+} from '../http/admin-json-body.js';
 import {
   publicReportConfig,
   REPORT_CONFIG_CATALOG,
