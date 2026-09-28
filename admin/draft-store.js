@@ -1,4 +1,28 @@
-const STORAGE_VERSION = 1;
+export const DRAFT_STORAGE_VERSION =
+  2;
+
+export class DraftStoreVersionError
+  extends Error {
+  constructor(
+    message,
+    {
+      foundVersion = null,
+      expectedVersion =
+        DRAFT_STORAGE_VERSION,
+      corrupt = false,
+    } = {},
+  ) {
+    super(message);
+    this.name =
+      'DraftStoreVersionError';
+    this.foundVersion =
+      foundVersion;
+    this.expectedVersion =
+      expectedVersion;
+    this.corrupt =
+      Boolean(corrupt);
+  }
+}
 
 function safeStorage(storage) {
   try {
@@ -12,27 +36,126 @@ function safeStorage(storage) {
   }
 }
 
-function parsePayload(raw) {
-  if (!raw) return {};
-  try {
-    const value = JSON.parse(raw);
-    if (
-      !value ||
-      typeof value !== 'object' ||
-      Array.isArray(value) ||
-      value.version !== STORAGE_VERSION ||
-      !value.drafts ||
-      typeof value.drafts !== 'object' ||
-      Array.isArray(value.drafts)
-    ) {
-      return {};
-    }
-    return value.drafts;
-  } catch {
-    return {};
-  }
+function draftMap(value) {
+  return (
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value)
+  )
+    ? value
+    : null;
 }
 
+function decodePayload(raw) {
+  if (!raw) {
+    return {
+      version:
+        DRAFT_STORAGE_VERSION,
+      drafts: {},
+      migrated: false,
+    };
+  }
+
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new DraftStoreVersionError(
+      'Draft storage contains invalid JSON and was preserved unchanged',
+      {
+        corrupt: true,
+      },
+    );
+  }
+
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value)
+  ) {
+    throw new DraftStoreVersionError(
+      'Draft storage has an unsupported envelope and was preserved unchanged',
+      {
+        corrupt: true,
+      },
+    );
+  }
+
+  if (
+    value.version === 1
+  ) {
+    const drafts =
+      draftMap(
+        value.drafts,
+      );
+    if (!drafts) {
+      throw new DraftStoreVersionError(
+        'Draft storage v1 is malformed and was preserved unchanged',
+        {
+          foundVersion: 1,
+          corrupt: true,
+        },
+      );
+    }
+
+    return {
+      version:
+        DRAFT_STORAGE_VERSION,
+      drafts,
+      migrated: true,
+    };
+  }
+
+  if (
+    value.version !==
+    DRAFT_STORAGE_VERSION
+  ) {
+    throw new DraftStoreVersionError(
+      value.version >
+        DRAFT_STORAGE_VERSION
+        ? 'Draft storage was written by a newer client; reload/update before continuing'
+        : 'Draft storage version is unsupported and was preserved unchanged',
+      {
+        foundVersion:
+          value.version ??
+          null,
+      },
+    );
+  }
+
+  const drafts =
+    draftMap(
+      value.drafts,
+    );
+
+  if (!drafts) {
+    throw new DraftStoreVersionError(
+      'Draft storage v2 is malformed and was preserved unchanged',
+      {
+        foundVersion:
+          value.version,
+        corrupt: true,
+      },
+    );
+  }
+
+  return {
+    version:
+      DRAFT_STORAGE_VERSION,
+    drafts,
+    migrated: false,
+  };
+}
+
+function encodePayload(
+  drafts,
+) {
+  return JSON.stringify({
+    version:
+      DRAFT_STORAGE_VERSION,
+    drafts,
+  });
+}
 function clone(value) {
   return structuredClone(value);
 }
@@ -227,6 +350,8 @@ export function createDraftStore({
     null;
   const listeners =
     new Set();
+  let compatibilityIssue =
+    null;
 
   try {
     persistent =
@@ -253,19 +378,67 @@ export function createDraftStore({
             key: sessionKey,
           };
 
+  function rememberIssue(
+    error,
+  ) {
+    if (
+      error instanceof
+      DraftStoreVersionError
+    ) {
+      compatibilityIssue =
+        error;
+    }
+    throw error;
+  }
+
+  function assertCompatible() {
+    if (
+      compatibilityIssue
+    ) {
+      throw compatibilityIssue;
+    }
+  }
+
   function read(
     usePersistent =
       persistent,
   ) {
+    assertCompatible();
+
     const target =
       storageFor(
         usePersistent,
       );
-    return parsePayload(
+
+    let decoded;
+    try {
+      decoded =
+        decodePayload(
+          target.storage
+            ?.getItem(
+              target.key,
+            ),
+        );
+    } catch (error) {
+      return rememberIssue(
+        error,
+      );
+    }
+
+    if (
+      decoded.migrated &&
       target.storage
-        ?.getItem(
-          target.key,
+    ) {
+      target.storage.setItem(
+        target.key,
+        encodePayload(
+          decoded.drafts,
         ),
+      );
+    }
+
+    return clone(
+      decoded.drafts,
     );
   }
 
@@ -282,13 +455,22 @@ export function createDraftStore({
       return;
     }
 
-    const previous =
-      parsePayload(
-        target.storage
-          .getItem(
-            target.key,
-          ),
+    assertCompatible();
+
+    let previous;
+    try {
+      previous =
+        decodePayload(
+          target.storage
+            .getItem(
+              target.key,
+            ),
+        ).drafts;
+    } catch (error) {
+      return rememberIssue(
+        error,
       );
+    }
 
     if (
       sameDraftMap(
@@ -302,11 +484,9 @@ export function createDraftStore({
     target.storage
       .setItem(
         target.key,
-        JSON.stringify({
-          version:
-            STORAGE_VERSION,
+        encodePayload(
           drafts,
-        }),
+        ),
       );
   }
 
@@ -356,6 +536,10 @@ export function createDraftStore({
       modeChanged:
         Boolean(
           details.modeChanged,
+        ),
+      incompatible:
+        Boolean(
+          details.incompatible,
         ),
       ...diff,
     };
@@ -444,14 +628,38 @@ export function createDraftStore({
       event.key ===
       localKey
     ) {
-      const previous =
-        parsePayload(
-          event.oldValue,
-        );
-      const current =
-        parsePayload(
-          event.newValue,
-        );
+      let previous;
+      let current;
+      try {
+        previous =
+          decodePayload(
+            event.oldValue,
+          ).drafts;
+        current =
+          decodePayload(
+            event.newValue,
+          ).drafts;
+      } catch (error) {
+        if (
+          error instanceof
+          DraftStoreVersionError
+        ) {
+          compatibilityIssue =
+            error;
+          notify(
+            {},
+            {},
+            {
+              source:
+                'external-storage',
+              modeChanged: true,
+              incompatible: true,
+            },
+          );
+          return;
+        }
+        throw error;
+      }
 
       if (
         persistent &&
@@ -588,7 +796,74 @@ export function createDraftStore({
     listening = false;
   }
 
+  // Inspect both backing stores before the first mutation. A newer/corrupt
+  // payload must never be overwritten by an older client.
+  for (
+    const target of [
+      {
+        storage: session,
+        key: sessionKey,
+      },
+      {
+        storage: local,
+        key: localKey,
+      },
+    ]
+  ) {
+    if (
+      !target.storage ||
+      compatibilityIssue
+    ) {
+      continue;
+    }
+
+    try {
+      decodePayload(
+        target.storage.getItem(
+          target.key,
+        ),
+      );
+    } catch (error) {
+      if (
+        error instanceof
+        DraftStoreVersionError
+      ) {
+        compatibilityIssue =
+          error;
+      } else {
+        throw error;
+      }
+    }
+  }
+
   return {
+    compatibility() {
+      return compatibilityIssue
+        ? {
+            compatible: false,
+            message:
+              compatibilityIssue
+                .message,
+            foundVersion:
+              compatibilityIssue
+                .foundVersion,
+            expectedVersion:
+              compatibilityIssue
+                .expectedVersion,
+            corrupt:
+              compatibilityIssue
+                .corrupt,
+          }
+        : {
+            compatible: true,
+            foundVersion:
+              DRAFT_STORAGE_VERSION,
+            expectedVersion:
+              DRAFT_STORAGE_VERSION,
+            corrupt: false,
+          };
+    },
+
     isPersistent() {
       return Boolean(
         persistent &&
