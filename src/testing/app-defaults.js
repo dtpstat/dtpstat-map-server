@@ -250,6 +250,13 @@ function security(config) {
 
   const adminAuth = {
     requireAny: requireAuth,
+    limitGlobalRequest:
+      (
+        _request,
+        _response,
+        next,
+      ) =>
+        next(),
     requireAdminEntry:
       requireAuth,
     requireProfile: requireAuth,
