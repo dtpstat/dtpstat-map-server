@@ -391,6 +391,104 @@ if (typeof window !== 'undefined') {
   globalThis.fetch = guard.fetch;
   window.dtpstatAdminSessionGuard = guard;
 
+  document.addEventListener(
+    'click',
+    (event) => {
+      const anchor =
+        event.target
+          ?.closest?.(
+            'a[download]',
+          );
+
+      if (
+        !anchor ||
+        !isAdminApiRequest(
+          anchor.href,
+          window.location.href,
+        )
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      void (async () => {
+        const response =
+          await guard.fetch(
+            anchor.href,
+            {
+              credentials:
+                'same-origin',
+              headers: {
+                Accept:
+                  '*/*',
+              },
+            },
+          );
+
+        if (!response.ok) {
+          if (
+            response.status ===
+            426
+          ) {
+            return;
+          }
+
+          throw new Error(
+            'HTTP ' +
+            response.status,
+          );
+        }
+
+        const blob =
+          await response.blob();
+        const objectURL =
+          URL.createObjectURL(
+            blob,
+          );
+        const download =
+          document.createElement(
+            'a',
+          );
+
+        download.href =
+          objectURL;
+        download.download =
+          anchor.getAttribute(
+            'download',
+          ) ||
+          '';
+        download.hidden =
+          true;
+        document.body.append(
+          download,
+        );
+        download.click();
+        download.remove();
+        window.setTimeout(
+          () =>
+            URL.revokeObjectURL(
+              objectURL,
+            ),
+          0,
+        );
+      })().catch(
+        (error) => {
+          console.error(
+            'Admin download failed',
+            error,
+          );
+          window
+            .dtpstatAdminFeedback?.(
+              'Не удалось скачать файл.',
+              'error',
+            );
+        },
+      );
+    },
+    true,
+  );
+
   window.dtpstatAdminSession = loadAdminSession()
     .then((session) => {
       if (session.expiresAt) guard.scheduleExpiry(session.expiresAt);
