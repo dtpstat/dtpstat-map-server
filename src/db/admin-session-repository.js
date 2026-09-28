@@ -43,7 +43,7 @@ export function createAdminSessionRepository(database) {
         `INSERT INTO admin_sessions(
            user_id,token_hash,expires_at,ip_address,user_agent
          )
-         VALUES($1,$2,$3,$4::inet,$5)
+         VALUES($1::bigint,$2::bytea,$3::timestamptz,$4::inet,$5::text)
          RETURNING id::integer AS id,
            created_at AS "createdAt",
            last_seen_at AS "lastSeenAt",
@@ -65,7 +65,7 @@ export function createAdminSessionRepository(database) {
          FROM admin_sessions AS session
          JOIN admin_users AS users
            ON users.id=session.user_id
-         WHERE session.token_hash=$1`,
+         WHERE session.token_hash=$1::bytea`,
         [tokenHash],
       );
       return result.rows[0] ?? null;
@@ -74,14 +74,14 @@ export function createAdminSessionRepository(database) {
     async touchSession(sessionId, timestamp) {
       await database.query(
         'UPDATE admin_sessions ' +
-          'SET last_seen_at=$2::timestamptz WHERE id=$1',
+          'SET last_seen_at=$2::timestamptz WHERE id=$1::bigint',
         [sessionId, timestamp],
       );
     },
 
     async revokeSessionByHash(tokenHash) {
       await database.query(
-        'DELETE FROM admin_sessions WHERE token_hash=$1',
+        'DELETE FROM admin_sessions WHERE token_hash=$1::bytea',
         [tokenHash],
       );
     },
@@ -89,7 +89,7 @@ export function createAdminSessionRepository(database) {
     async revokeSessionById(userId, sessionId) {
       const result = await database.query(
         'DELETE FROM admin_sessions ' +
-          'WHERE id=$1 AND user_id=$2 RETURNING id',
+          'WHERE id=$1::bigint AND user_id=$2::bigint RETURNING id',
         [sessionId, userId],
       );
       return (result.rowCount ?? result.rows.length) > 0;
@@ -98,7 +98,7 @@ export function createAdminSessionRepository(database) {
     async revokeUserSessions(userId, exceptSessionId = null) {
       const result = await database.query(
         `DELETE FROM admin_sessions
-         WHERE user_id=$1
+         WHERE user_id=$1::bigint
            AND ($2::bigint IS NULL OR id<>$2::bigint)`,
         [userId, exceptSessionId],
       );
@@ -115,7 +115,7 @@ export function createAdminSessionRepository(database) {
            host(ip_address) AS "ipAddress",
            user_agent AS "userAgent"
          FROM admin_sessions
-         WHERE user_id=$1
+         WHERE user_id=$1::bigint
          ORDER BY created_at DESC`,
         [userId],
       );
