@@ -163,6 +163,8 @@ export function createApp({
       config,
       adminAuth:
         effectiveAdminAuth,
+      securityService:
+        effectiveSecurityService,
     },
   );
 
