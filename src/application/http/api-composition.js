@@ -25,6 +25,9 @@ import {
 import {
   createReportConfigRouter,
 } from '../../routes/report-config-api.js';
+import {
+  adminJsonBody,
+} from '../../http/admin-json-body.js';
 
 export function installApplicationApiRoutes(
   app,
@@ -181,6 +184,8 @@ export function installApplicationApiRoutes(
       adminTasks,
       adminAuth,
       securityService,
+      jsonBody:
+        adminJsonBody,
       publicMap:
         config.publicMap,
       importApi:
