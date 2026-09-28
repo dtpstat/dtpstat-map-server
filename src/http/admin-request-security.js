@@ -698,10 +698,17 @@ export async function adminJsonBodySecurityGuard(
     }
 
     response
-      .status(400)
+      .status(
+        contractResult
+          .statusCode ??
+        400,
+      )
       .json({
         error:
-          'Request body does not match the API contract',
+          contractResult
+            .statusCode === 415
+            ? 'Content-Type must be application/json'
+            : 'Request body does not match the API contract',
         code:
           'api_contract_violation',
         reason:
