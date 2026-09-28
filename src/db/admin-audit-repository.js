@@ -7,7 +7,7 @@ export function createAdminAuditRepository(database) {
            event_type,operation_type,status,duration_ms,
            ip_address,user_id,username,details
          )
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb)
+         VALUES($1::text,$2::text,$3::text,$4::bigint,$5::text,$6::bigint,$7::text,$8::jsonb)
          RETURNING id::integer AS id,
            created_at AS "createdAt"`,
         [
@@ -41,28 +41,28 @@ export function createAdminAuditRepository(database) {
         add('created_at < ?::timestamptz', options.to);
       }
       if (options.eventType) {
-        add('event_type = ?', options.eventType);
+        add('event_type = ?::text', options.eventType);
       }
       if (options.operationType) {
-        add('operation_type = ?', options.operationType);
+        add('operation_type = ?::text', options.operationType);
       }
       if (options.status) {
-        add('status = ?', options.status);
+        add('status = ?::text', options.status);
       }
       if (options.username) {
         add(
-          'LOWER(username) = LOWER(?)',
+          'LOWER(username) = LOWER(?::text)',
           options.username,
         );
       }
       if (options.ipAddress) {
-        add('ip_address = ?', options.ipAddress);
+        add('ip_address = ?::text', options.ipAddress);
       }
 
       values.push(options.limit ?? 200);
-      const limitRef = `$${values.length}`;
+      const limitRef = `${values.length}::integer`;
       values.push(options.offset ?? 0);
-      const offsetRef = `$${values.length}`;
+      const offsetRef = `${values.length}::integer`;
 
       const result = await database.query(
         `SELECT
