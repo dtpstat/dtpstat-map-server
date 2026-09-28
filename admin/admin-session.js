@@ -1,3 +1,8 @@
+import {
+  ADMIN_API_VERSION,
+  ADMIN_API_VERSION_HEADER,
+} from './api-contract-client.js';
+
 const LOGIN_URL = '/admin/login.html?expired=1';
 const SESSION_EXPIRY_HEADER = 'x-dtpstat-admin-session-expires-at';
 
@@ -12,13 +17,53 @@ function requestURL(input, baseHref) {
   }
 }
 
-export function isProtectedAdminRequest(input, baseHref) {
-  const url = requestURL(input, baseHref);
+export function isAdminApiRequest(
+  input,
+  baseHref,
+) {
+  const url =
+    requestURL(
+      input,
+      baseHref,
+    );
   if (!url) return false;
-  const base = new URL(baseHref);
-  return url.origin === base.origin &&
-    url.pathname.startsWith('/api/admin/') &&
-    url.pathname !== '/api/admin/login';
+
+  const base =
+    new URL(baseHref);
+
+  return (
+    url.origin ===
+      base.origin &&
+    url.pathname
+      .startsWith(
+        '/api/admin/',
+      )
+  );
+}
+
+export function isProtectedAdminRequest(
+  input,
+  baseHref,
+) {
+  if (
+    !isAdminApiRequest(
+      input,
+      baseHref,
+    )
+  ) {
+    return false;
+  }
+
+  const url =
+    requestURL(
+      input,
+      baseHref,
+    );
+
+  return (
+    url.pathname !==
+      '/api/admin/login'
+  );
 }
 
 export function createAdminSessionFetchGuard({
@@ -30,6 +75,7 @@ export function createAdminSessionFetchGuard({
   clearIntervalImpl = clearInterval,
   now = () => Date.now(),
   keepAliveIntervalMs = 30_000,
+  onVersionMismatch = () => {},
 }) {
   let timer = null;
   let keepAliveTimer = null;
@@ -37,6 +83,7 @@ export function createAdminSessionFetchGuard({
   let deadlineMs = null;
   let redirecting = false;
   let activityHeld = false;
+  let versionStale = false;
 
   const clearTimer = () => {
     if (timer !== null) {
@@ -83,17 +130,115 @@ export function createAdminSessionFetchGuard({
     schedule();
   };
 
-  const guardedFetch = async (input, init) => {
-    const response = await fetchImpl(input, init);
-    if (!isProtectedAdminRequest(input, location.href)) return response;
+  const guardedFetch = async (
+    input,
+    init = {},
+  ) => {
+    const adminRequest =
+      isAdminApiRequest(
+        input,
+        location.href,
+      );
 
-    if (response.status === 401) {
+    if (
+      adminRequest &&
+      versionStale
+    ) {
+      const error =
+        new Error(
+          'Administrative client is out of date; reload the page',
+        );
+      error.code =
+        'api_client_reload_required';
+      throw error;
+    }
+
+    let requestInit = init;
+
+    if (adminRequest) {
+      const headers =
+        new Headers(
+          (
+            input instanceof Request
+              ? input.headers
+              : undefined
+          ),
+        );
+
+      new Headers(
+        init.headers ??
+        {},
+      ).forEach(
+        (value, name) => {
+          headers.set(
+            name,
+            value,
+          );
+        },
+      );
+
+      headers.set(
+        ADMIN_API_VERSION_HEADER,
+        ADMIN_API_VERSION,
+      );
+
+      requestInit = {
+        ...init,
+        headers,
+      };
+    }
+
+    const response =
+      await fetchImpl(
+        input,
+        requestInit,
+      );
+
+    if (
+      adminRequest &&
+      response.status === 426
+    ) {
+      versionStale = true;
+      onVersionMismatch({
+        requiredVersion:
+          response.headers
+            ?.get?.(
+              'x-dtpstat-api-version-required',
+            ) ??
+          null,
+      });
+      return response;
+    }
+
+    if (
+      !isProtectedAdminRequest(
+        input,
+        location.href,
+      )
+    ) {
+      return response;
+    }
+
+    if (
+      response.status === 401
+    ) {
       redirectToLogin();
       return response;
     }
 
-    const expiresAt = response.headers?.get?.(SESSION_EXPIRY_HEADER);
-    if (response.ok && expiresAt) scheduleExpiry(expiresAt);
+    const expiresAt =
+      response.headers
+        ?.get?.(
+          SESSION_EXPIRY_HEADER,
+        );
+    if (
+      response.ok &&
+      expiresAt
+    ) {
+      scheduleExpiry(
+        expiresAt,
+      );
+    }
     return response;
   };
 
@@ -141,6 +286,8 @@ export function createAdminSessionFetchGuard({
     scheduleExpiry,
     setActivityHold,
     isActivityHeld: () => activityHeld,
+    isVersionStale:
+      () => versionStale,
     stop() {
       clearTimer();
       clearKeepAlive();
@@ -166,11 +313,80 @@ async function loadAdminSession() {
   return payload;
 }
 
+function showVersionReloadBlock() {
+  if (
+    document.getElementById(
+      'dtpstat-api-version-block',
+    )
+  ) {
+    return;
+  }
+
+  const overlay =
+    document.createElement(
+      'div',
+    );
+  overlay.id =
+    'dtpstat-api-version-block';
+  overlay.setAttribute(
+    'role',
+    'alertdialog',
+  );
+  overlay.style.cssText =
+    'position:fixed;inset:0;z-index:2147483647;' +
+    'display:grid;place-items:center;background:rgba(0,0,0,.78);padding:24px';
+
+  const box =
+    document.createElement(
+      'div',
+    );
+  box.style.cssText =
+    'max-width:560px;background:#fff;color:#111;padding:24px;border-radius:10px;' +
+    'box-shadow:0 12px 40px rgba(0,0,0,.35);font:16px/1.45 system-ui,sans-serif';
+
+  const title =
+    document.createElement('h2');
+  title.textContent =
+    'Админ-клиент устарел';
+
+  const text =
+    document.createElement('p');
+  text.textContent =
+    'Сервер обновлён. Перезагрузите страницу перед продолжением работы. ' +
+    'Локальные изменения геометрий сохранены в localStorage.';
+
+  const button =
+    document.createElement(
+      'button',
+    );
+  button.type =
+    'button';
+  button.textContent =
+    'Перезагрузить страницу';
+  button.addEventListener(
+    'click',
+    () =>
+      window.location.reload(),
+  );
+
+  box.append(
+    title,
+    text,
+    button,
+  );
+  overlay.append(box);
+  document.body.append(
+    overlay,
+  );
+}
+
 if (typeof window !== 'undefined') {
   const nativeFetch = globalThis.fetch.bind(globalThis);
   const guard = createAdminSessionFetchGuard({
     fetchImpl: nativeFetch,
     location: window.location,
+    onVersionMismatch:
+      showVersionReloadBlock,
   });
   globalThis.fetch = guard.fetch;
   window.dtpstatAdminSessionGuard = guard;
