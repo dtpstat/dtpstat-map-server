@@ -377,8 +377,10 @@ th button:focus-visible {
     position: sticky;
     z-index: 1;
     top: 0;
-    height: 70vh;
-    min-height: 390px;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 100vh;
+    min-height: 100dvh;
     flex: 0 0 auto;
   }
 

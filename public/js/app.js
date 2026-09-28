@@ -250,12 +250,13 @@ subscribeDerivedDataChanges(() => {
   void refreshDerivedData();
 });
 
-function selectCity(city) {
+function selectCity(city, { revealMap = false } = {}) {
   activeRequest?.abort();
   activeRequest = null;
   focusedCityId = city.id;
-  cityList.select(city.id, { scrollIntoView: true });
+  cityList.select(city.id);
   setCityStatus('');
+  if (revealMap) mapPanel.scrollIntoView({ block: 'start' });
   mapController.focusCity(city.bounds);
 }
 
@@ -284,9 +285,7 @@ async function updateViewport(viewport) {
     const centerCity = citiesById.get(focusedCityId)
       ?? citiesById.get(geojson.centerCityId);
     focusedCityId = null;
-    cityList.select(centerCity?.id ?? null, {
-      scrollIntoView: Boolean(centerCity),
-    });
+    cityList.select(centerCity?.id ?? null);
     setCityStatus('');
     setMapMessage('');
   } catch (error) {
@@ -300,7 +299,7 @@ async function updateViewport(viewport) {
   }
 }
 
-cityList.onSelect(selectCity);
+cityList.onSelect((city) => selectCity(city, { revealMap: true }));
 
 async function start() {
   try {
