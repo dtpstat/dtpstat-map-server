@@ -97,12 +97,13 @@ test('request sources replace ENV sources and query overrides cannot raise limit
     ambiguousPolicy: 'best-overlap',
   };
 
-  const resolved = resolveKmlUpdateRequest(rawSources, {
-    dryRun: 'true',
-    timeoutMs: '5000',
-    cityBufferMeters: '250',
+  const resolved = resolveKmlUpdateRequest({
+    sources: rawSources,
+    dryRun: true,
+    timeoutMs: 5000,
+    cityBufferMeters: 250,
     ambiguousPolicy: 'fail',
-  }, config);
+  }, {}, config);
   assert.equal(resolved.dryRun, true);
   assert.equal(resolved.timeoutMs, 5000);
   assert.equal(resolved.cityBufferMeters, 250);
@@ -112,11 +113,11 @@ test('request sources replace ENV sources and query overrides cannot raise limit
   assert.equal(resolved.sources[0].layers[1].type, 'default');
 
   assert.throws(
-    () => resolveKmlUpdateRequest(undefined, { timeoutMs: '30001' }, config),
+    () => resolveKmlUpdateRequest({ timeoutMs: 30001 }, {}, config),
     KmlUpdateValidationError,
   );
   assert.throws(
-    () => resolveKmlUpdateRequest(undefined, { cityBufferMeters: '5001' }, config),
+    () => resolveKmlUpdateRequest({ cityBufferMeters: 5001 }, {}, config),
     KmlUpdateValidationError,
   );
 });
