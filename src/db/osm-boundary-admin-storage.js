@@ -48,14 +48,14 @@ const GEOMETRY_SQL = `
     )
   ) AS feature
   FROM city_boundaries AS boundary
-  WHERE boundary.id = $1
+  WHERE boundary.id = $1::bigint
 `;
 
 const LOCK_SUBTREE_SQL = `
   WITH RECURSIVE subtree AS (
     SELECT boundary.id, boundary.is_active
     FROM city_boundaries AS boundary
-    WHERE boundary.id = $1
+    WHERE boundary.id = $1::bigint
 
     UNION ALL
 
@@ -86,31 +86,31 @@ const LOCK_BOUNDARY_SQL = `
     boundary.attributes,
     boundary.updated_at AS "updatedAt"
   FROM city_boundaries AS boundary
-  WHERE boundary.id = $1
+  WHERE boundary.id = $1::bigint
   FOR UPDATE OF boundary
 `;
 
 const UPDATE_BOUNDARY_SQL = `
   UPDATE city_boundaries
   SET
-    is_active = $2,
-    display_name = $3,
-    display_type = $4,
-    population = $5,
-    population_as_of = $6,
-    population_source = $7,
+    is_active = $2::boolean,
+    display_name = $3::text,
+    display_type = $4::text,
+    population = $5::integer,
+    population_as_of = $6::date,
+    population_source = $7::text,
     attributes = $8::jsonb,
     updated_at = now()
-  WHERE id = $1
+  WHERE id = $1::bigint
 `;
 
 const UPDATE_SUBTREE_ACTIVE_SQL = `
   UPDATE city_boundaries
   SET
-    is_active = $2,
+    is_active = $2::boolean,
     updated_at = now()
   WHERE id = ANY($1::bigint[])
-    AND is_active IS DISTINCT FROM $2
+    AND is_active IS DISTINCT FROM $2::boolean
 `;
 
 export function createOsmBoundaryAdminStorage(database) {
@@ -133,7 +133,7 @@ export function createOsmBoundaryAdminStorage(database) {
         `SELECT
            ${BOUNDARY_COLUMNS_SQL}
          FROM city_boundaries AS boundary
-         WHERE boundary.id = $1`,
+         WHERE boundary.id = $1::bigint`,
         [boundaryId],
       );
       return result.rows[0] ?? null;
