@@ -5,10 +5,6 @@ import {
   DEFAULT_REPORT_CONFIG,
   validateReportConfig,
 } from '../modules/reporting/config-policy.js';
-import {
-  createBasicAuth,
-} from '../http/basic-auth.js';
-
 const TEST_PROJECT_SETTINGS =
   Object.freeze({
     projectName:
@@ -202,13 +198,6 @@ function security(config) {
       .bootstrapPassword ??
     'test-secret';
 
-  const basic =
-    createBasicAuth({
-      username,
-      password,
-      realm: 'dtpstat-admin',
-    });
-
   const testUser = {
     id: 1,
     username,
@@ -233,20 +222,36 @@ function security(config) {
       request,
       response,
       next,
-    ) =>
-      basic(
-        request,
-        response,
-        () => {
-          request.adminUser =
-            testUser;
-          request.adminSessionId =
-            null;
-          request.adminAuthMethod =
-            'basic';
-          next();
-        },
-      );
+    ) => {
+      const cookie =
+        String(
+          request.headers
+            ?.cookie ??
+          '',
+        );
+
+      if (
+        !cookie.includes(
+          'dtpstat_admin_session=test-session-token',
+        )
+      ) {
+        response
+          .status(401)
+          .json({
+            error:
+              'Authentication required',
+          });
+        return;
+      }
+
+      request.adminUser =
+        testUser;
+      request.adminSessionId =
+        1;
+      request.adminAuthMethod =
+        'session';
+      next();
+    };
 
   const adminAuth = {
     requireAny: requireAuth,
