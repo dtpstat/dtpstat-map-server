@@ -33,8 +33,8 @@ export {
 } from './admin-operation-audit.js';
 
 /**
- * Session cookies are preferred for the interactive web admin. DB-backed Basic
- * Auth remains accepted for scripts and compatibility clients.
+ * Administrative HTTP authentication is session-only. Passwords are accepted
+ * only by POST /api/admin/login, which creates a DB-backed session cookie.
  */
 export function createAdminAuthorization(
   securityService,
