@@ -444,7 +444,7 @@ export function createPopulationImportRepository() {
          FROM population_transfer_raw
          WHERE seq > $1::bigint
          ORDER BY population_transfer_raw.seq
-         LIMIT $2`,
+         LIMIT $2::integer`,
         [lastRegionSeq, limit],
       );
     },
