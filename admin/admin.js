@@ -5,6 +5,10 @@ import { trackDirtyForm } from './admin-dirty-state.js';
 import { bindHumanUnits } from './admin-human-units.js';
 import { readTabState, writeTabState } from './admin-tab-state.js';
 import { subscribeAdminRealtime } from './realtime-client.js';
+import {
+  ADMIN_API_VERSION,
+  ADMIN_API_VERSION_HEADER,
+} from './api-contract-client.js';
 
 const taskTypeTabs = Object.freeze({
   'osm-city-update': 'osm',
@@ -1099,6 +1103,7 @@ async function uploadPortableFile(
   jsonContentType,
   taskKey,
   taskType,
+  requestHeaders = {},
 ) {
   clearTaskStatusForStart(taskKey);
   showTransferOverlay({ file, taskKey, taskType });
@@ -1108,11 +1113,35 @@ async function uploadPortableFile(
     state.transfer.xhr = xhr;
     xhr.open('POST', path);
     xhr.withCredentials = true;
-    xhr.setRequestHeader('Accept', 'application/json');
+    xhr.setRequestHeader(
+      'Accept',
+      'application/json',
+    );
+    xhr.setRequestHeader(
+      ADMIN_API_VERSION_HEADER,
+      ADMIN_API_VERSION,
+    );
     xhr.setRequestHeader(
       'Content-Type',
-      portableFileContentType(file, jsonContentType),
+      portableFileContentType(
+        file,
+        jsonContentType,
+      ),
     );
+
+    for (
+      const [
+        name,
+        value,
+      ] of Object.entries(
+        requestHeaders,
+      )
+    ) {
+      xhr.setRequestHeader(
+        name,
+        String(value),
+      );
+    }
 
     xhr.upload.addEventListener('progress', (event) => {
       const transfer = state.transfer;
@@ -1436,17 +1465,33 @@ async function cancelActiveTask() {
   return true;
 }
 
-async function importGeoJsonFile(form, endpoint, taskKey, query = '') {
+async function importGeoJsonFile(
+  form,
+  endpoint,
+  taskKey,
+  requestHeaders = {},
+) {
   if (await cancelActiveTask()) return;
   if (!form.reportValidity()) return;
-  const file = new FormData(form).get('file');
-  if (!(file instanceof File) || file.size === 0) return;
+
+  const file =
+    new FormData(form)
+      .get('file');
+
+  if (
+    !(file instanceof File) ||
+    file.size === 0
+  ) {
+    return;
+  }
+
   await uploadPortableFile(
-    `${endpoint}${query}`,
+    endpoint,
     file,
     'application/geo+json',
     taskKey,
     form.dataset.taskType,
+    requestHeaders,
   );
 }
 
@@ -1490,13 +1535,15 @@ elements.osmForm.addEventListener('submit', async (event) => {
 
   try {
     if (!await saveOsmSettings({ announce: false })) return;
-    const query = new URLSearchParams({
-      dryRun: String(dryRun),
-      restart: String(restart),
-    });
     await start(
-      `/api/admin/update/cities?${query}`,
-      {},
+      '/api/admin/update/cities',
+      await encodedJsonBody(
+        JSON.stringify({
+          dryRun,
+          restart,
+        }),
+        'application/json',
+      ),
       'osm',
     );
   } catch (error) {
@@ -1520,13 +1567,15 @@ elements.osmResume?.addEventListener('click', async () => {
   const dryRun = new FormData(elements.osmForm).get('dryRun') === 'on';
   try {
     if (!await saveOsmSettings({ announce: false })) return;
-    const query = new URLSearchParams({
-      dryRun: String(dryRun),
-      resume: 'true',
-    });
     await start(
-      `/api/admin/update/cities?${query}`,
-      {},
+      '/api/admin/update/cities',
+      await encodedJsonBody(
+        JSON.stringify({
+          dryRun,
+          resume: true,
+        }),
+        'application/json',
+      ),
       'osm',
     );
   } catch (error) {
@@ -1562,10 +1611,18 @@ elements.cityGeoJsonForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   const data = new FormData(form);
-  const query = new URLSearchParams({
-    dryRun: String(data.get('dryRun') === 'on'),
-  });
-  await importGeoJsonFile(form, '/api/admin/import/cities', 'osm', `?${query}`);
+  await importGeoJsonFile(
+    form,
+    '/api/admin/import/cities',
+    'osm',
+    {
+      'X-DTPStat-Dry-Run':
+        String(
+          data.get('dryRun') ===
+          'on',
+        ),
+    },
+  );
 });
 
 elements.kmlForm.addEventListener('submit', async (event) => {
@@ -1574,20 +1631,61 @@ elements.kmlForm.addEventListener('submit', async (event) => {
   if (await cancelActiveTask()) return;
   const data = new FormData(form);
   if (!form.reportValidity()) return;
-  const query = new URLSearchParams({
-    dryRun: String(data.get('dryRun') === 'on'),
-  });
-  const cityBufferMeters = String(data.get('cityBufferMeters')).trim();
-  if (cityBufferMeters) query.set('cityBufferMeters', cityBufferMeters);
-  const sources = String(data.get('sources')).trim();
-  let options = {};
-  if (sources) {
-    let normalized;
-    try { normalized = JSON.stringify(JSON.parse(sources)); }
-    catch { setTaskNotice('kml', 'некорректный JSON источников.', 'error'); return; }
-    options = await encodedJsonBody(normalized, 'application/json');
+  const cityBufferText =
+    String(
+      data.get(
+        'cityBufferMeters',
+      ),
+    ).trim();
+  const sourcesText =
+    String(
+      data.get('sources'),
+    ).trim();
+
+  let sources;
+  if (sourcesText) {
+    try {
+      sources =
+        JSON.parse(
+          sourcesText,
+        );
+    } catch {
+      setTaskNotice(
+        'kml',
+        'некорректный JSON источников.',
+        'error',
+      );
+      return;
+    }
   }
-  await start(`/api/admin/update?${query}`, options, 'kml');
+
+  const payload = {
+    dryRun:
+      data.get('dryRun') ===
+      'on',
+    ...(cityBufferText
+      ? {
+          cityBufferMeters:
+            Number(
+              cityBufferText,
+            ),
+        }
+      : {}),
+    ...(sources
+      ? { sources }
+      : {}),
+  };
+
+  await start(
+    '/api/admin/update',
+    await encodedJsonBody(
+      JSON.stringify(
+        payload,
+      ),
+      'application/json',
+    ),
+    'kml',
+  );
 });
 
 elements.lineGeoJsonForm.addEventListener('submit', async (event) => {
