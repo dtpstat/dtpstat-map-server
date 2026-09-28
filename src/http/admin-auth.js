@@ -111,6 +111,13 @@ export function createAdminAuthorization(
       result,
       rateLimit,
     ) => {
+      if (
+        rateLimit.shouldLog ===
+        false
+      ) {
+        return;
+      }
+
       const ipAddress =
         requestClientIp(request);
       const details = {
@@ -249,59 +256,64 @@ export function createAdminAuthorization(
           return;
         }
 
-        const ipAddress =
-          requestClientIp(
-            request,
-          );
-        const details = {
-          scope: 'global',
-          limit:
-            rateLimit.limit,
-          retryAfterSeconds:
-            rateLimit
-              .retryAfterSeconds,
-          method:
-            request.method,
-          path:
-            String(
-              request.originalUrl ??
-              request.path ??
-              request.url ??
-              '',
-            ).split('?')[0],
-        };
-
-        securityLog(
-          'admin.request.rate_limited',
-          {
-            ...details,
-            ip:
-              ipAddress,
-            userId: null,
-            username: null,
-          },
-        );
-
         if (
-          typeof securityService
-            .appendAudit ===
-          'function'
+          rateLimit.shouldLog !==
+          false
         ) {
-          await securityService
-            .appendAudit({
-              eventType:
-                'security',
-              operationType:
-                'admin.request.rate-limit',
-              status:
-                'blocked',
-              durationMs:
-                null,
-              ipAddress,
+          const ipAddress =
+            requestClientIp(
+              request,
+            );
+          const details = {
+            scope: 'global',
+            limit:
+              rateLimit.limit,
+            retryAfterSeconds:
+              rateLimit
+                .retryAfterSeconds,
+            method:
+              request.method,
+            path:
+              String(
+                request.originalUrl ??
+                request.path ??
+                request.url ??
+                '',
+              ).split('?')[0],
+          };
+
+          securityLog(
+            'admin.request.rate_limited',
+            {
+              ...details,
+              ip:
+                ipAddress,
               userId: null,
               username: null,
-              details,
-            });
+            },
+          );
+
+          if (
+            typeof securityService
+              .appendAudit ===
+            'function'
+          ) {
+            await securityService
+              .appendAudit({
+                eventType:
+                  'security',
+                operationType:
+                  'admin.request.rate-limit',
+                status:
+                  'blocked',
+                durationMs:
+                  null,
+                ipAddress,
+                userId: null,
+                username: null,
+                details,
+              });
+          }
         }
 
         sendAdminAuthorizationError(
