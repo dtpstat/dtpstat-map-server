@@ -63,7 +63,7 @@ export function applyAdminSessionContext(
     result.sessionId ?? null;
 
   request.adminAuthMethod =
-    result.authMethod ?? 'basic';
+    'session';
 
   request.adminSessionExpiresAt =
     result
