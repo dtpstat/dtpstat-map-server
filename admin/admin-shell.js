@@ -63,38 +63,6 @@ function ensureProfileSection() {
   }
 }
 
-function clearBasicAuthCache() {
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      resolve();
-    };
-
-    try {
-      const request = new XMLHttpRequest();
-      request.open(
-        'GET',
-        `/admin/logout-basic.txt?_=${Date.now()}`,
-        true,
-        'sim',
-        'salabim',
-      );
-      request.setRequestHeader('Cache-Control', 'no-store');
-      request.onloadend = finish;
-      request.onerror = finish;
-      request.ontimeout = finish;
-      request.timeout = 2500;
-      request.send();
-    } catch {
-      finish();
-    }
-
-    window.setTimeout(finish, 3000);
-  });
-}
-
 function ensureTopbarActions() {
   const host = document.querySelector('.topbar-status');
   if (!host || document.querySelector('#admin-logout')) return;
@@ -117,10 +85,8 @@ function ensureTopbarActions() {
         headers: { Accept: 'application/json' },
       });
     } catch {
-      // Continue with browser Basic Auth cache replacement even when the
-      // server-side session has already expired or the network reply was lost.
+      // The local session may already be expired or the network reply lost.
     }
-    await clearBasicAuthCache();
     window.location.replace('/admin/login.html');
   });
   host.append(button);
