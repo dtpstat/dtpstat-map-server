@@ -81,6 +81,7 @@ function taskDataChange(update) {
  *   securityService: { appendAudit: (entry: any) => Promise<any> },
  *   adminAuth: any,
  *   derivedState: any,
+ *   adminAllowedOrigins?: Set<string>,
  *   factories?: Partial<typeof DEFAULT_FACTORIES>
  * }} dependencies
  */
@@ -90,6 +91,8 @@ export function createAdminRuntime({
   securityService,
   adminAuth,
   derivedState,
+  adminAllowedOrigins =
+    new Set(),
   factories = {},
 }) {
   const runtimeFactories = {
@@ -143,6 +146,9 @@ export function createAdminRuntime({
         adminTasks,
         adminAuth,
         realtimeEvents,
+        allowedOrigins:
+          adminAllowedOrigins,
+        securityService,
       });
 
   return {
