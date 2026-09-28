@@ -26,7 +26,7 @@ export function createAdminTaskSuccessRepository(pool) {
           task_id,
           endpoint,
           completed_at
-        ) VALUES ($1, $2::uuid, $3, $4::timestamptz)
+        ) VALUES ($1::text, $2::uuid, $3::text, $4::timestamptz)
         ON CONFLICT (task_type) DO UPDATE
         SET task_id = EXCLUDED.task_id,
             endpoint = EXCLUDED.endpoint,
