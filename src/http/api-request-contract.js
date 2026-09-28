@@ -933,6 +933,34 @@ function hasRequestBody(request) {
   );
 }
 
+function requestContentType(
+  request,
+) {
+  return String(
+    request.headers?.[
+      'content-type'
+    ] ??
+    '',
+  )
+    .split(';')[0]
+    .trim()
+    .toLocaleLowerCase(
+      'en-US',
+    );
+}
+
+function expectsJsonBody(
+  contract,
+) {
+  return [
+    'json-object',
+    'json-object-optional',
+    'json-array',
+  ].includes(
+    contract.body,
+  );
+}
+
 function safeParameterName(
   key,
   body = false,
@@ -1478,6 +1506,28 @@ export async function enforceApiRequestContract(
   }
 
   if (
+    expectsJsonBody(
+      contract,
+    ) &&
+    hasRequestBody(
+      request,
+    ) &&
+    requestContentType(
+      request,
+    ) !==
+      'application/json'
+  ) {
+    await reject(
+      request,
+      response,
+      'unsupported-content-type',
+      {},
+      415,
+    );
+    return;
+  }
+
+  if (
     contract.body ===
       'none' &&
     hasRequestBody(
@@ -1533,6 +1583,28 @@ export function validateParsedApiBody(
     return {
       valid: true,
       fields: [],
+    };
+  }
+
+  if (
+    expectsJsonBody(
+      contract,
+    ) &&
+    body === undefined &&
+    hasRequestBody(
+      request,
+    ) &&
+    requestContentType(
+      request,
+    ) !==
+      'application/json'
+  ) {
+    return {
+      valid: false,
+      reason:
+        'unsupported-content-type',
+      fields: [],
+      statusCode: 415,
     };
   }
 
