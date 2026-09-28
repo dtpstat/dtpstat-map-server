@@ -3,7 +3,7 @@ import express, {
 } from 'express';
 import {
   jsonBody as createJsonBody,
-} from '../shared/http/express.js';
+} from '../http/admin-json-body.js';
 import {
   registerAdminAuditRoutes,
 } from './security/audit-routes.js';
