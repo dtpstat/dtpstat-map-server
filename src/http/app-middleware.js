@@ -8,6 +8,9 @@ import {
 import {
   requireAdminApiVersion,
 } from './api-version.js';
+import {
+  enforceApiRequestContract,
+} from './api-request-contract.js';
 
 const CITY_MARKER_PNG =
   Buffer.from(
@@ -203,6 +206,11 @@ export function installAppHttpMiddleware(
     requireAdminApiVersion,
     adminAuth
       .limitGlobalRequest,
+  );
+
+  app.use(
+    '/api',
+    enforceApiRequestContract,
   );
 
   app.get(
