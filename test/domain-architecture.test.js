@@ -2630,7 +2630,7 @@ test('security routes use canonical session and client IP HTTP helpers', async (
   );
   assert.match(
     profile,
-    /sessionCookieOptions\(\s*request\s*\)/u,
+    /sessionCookieOptions\(\s*request\s*,?\s*\)/u,
   );
   assert.match(
     controls,
