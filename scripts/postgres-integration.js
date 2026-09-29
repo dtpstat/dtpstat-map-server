@@ -1273,6 +1273,100 @@ async function verifyGeometryEditorInfrastructure(
       .geometries[1]
       .id,
   );
+  const splitRelinkDiagnostics =
+    await pool.query(
+      `
+        SELECT
+          geometry.id::bigint AS "geometryId",
+          geometry.boundary_id::bigint AS "linkedBoundaryId",
+          GeometryType(geometry.geom)
+            AS "geometryType",
+          ST_AsText(geometry.geom)
+            AS wkt,
+          ST_Intersects(
+            child.geom,
+            geometry.geom
+          ) AS "childIntersects",
+          ST_Covers(
+            child.geom,
+            geometry.geom
+          ) AS "childCovers",
+          ST_Length(
+            ST_CollectionExtract(
+              ST_Intersection(
+                child.geom,
+                geometry.geom
+              ),
+              2
+            )::geography
+          )::double precision
+            AS "childRawLength",
+          ST_IsEmpty(
+            ST_Intersection(
+              child.geom,
+              geometry.geom
+            )
+          ) AS "childRawEmpty",
+          ST_Length(
+            ST_CollectionExtract(
+              ST_Intersection(
+                ST_ReducePrecision(
+                  child.geom,
+                  0.000000001
+                ),
+                ST_ReducePrecision(
+                  geometry.geom,
+                  0.000000001
+                )
+              ),
+              2
+            )::geography
+          )::double precision
+            AS "childReducedLength",
+          ST_IsEmpty(
+            ST_Intersection(
+              ST_ReducePrecision(
+                child.geom,
+                0.000000001
+              ),
+              ST_ReducePrecision(
+                geometry.geom,
+                0.000000001
+              )
+            )
+          ) AS "childReducedEmpty",
+          ST_Length(
+            geometry.geom::geography
+          )::double precision
+            AS "totalLength",
+          resolved.boundary_id::bigint
+            AS "resolvedBoundaryId"
+        FROM city_geometries
+          AS geometry
+        JOIN city_boundaries
+          AS child
+          ON child.id =
+             $2::bigint
+        LEFT JOIN LATERAL
+          resolve_geometry_admin_links(
+            geometry.geom
+          ) AS resolved
+          ON TRUE
+        WHERE geometry.id =
+              ANY($1::bigint[])
+        ORDER BY geometry.id
+      `,
+      [
+        splitResult
+          .geometries
+          .map(
+            (item) =>
+              item.id,
+          ),
+        childBoundaryId,
+      ],
+    );
+
   assert.deepEqual(
     splitResult
       .geometries
@@ -1284,7 +1378,11 @@ async function verifyGeometryEditorInfrastructure(
       childBoundaryId,
       childBoundaryId,
     ],
-    'Both split parts must be spatially relinked',
+    'Both split parts must be spatially relinked: ' +
+      JSON.stringify(
+        splitRelinkDiagnostics
+          .rows,
+      ),
   );
 
   const unlinked =
