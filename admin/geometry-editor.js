@@ -38,7 +38,7 @@ if (section) {
   const form = document.querySelector('#geometry-editor-form');
   const title = document.querySelector('#geometry-editor-selected-title');
   const lineFields = document.querySelector('#geometry-line-fields');
-  const polygonActions = document.querySelector('#geometry-polygon-actions');
+  const topologyActions = document.querySelector('#geometry-topology-actions');
   const message = document.querySelector('#geometry-editor-message');
   const conflictMessage = document.querySelector('#geometry-editor-conflict');
   const meta = document.querySelector('#geometry-editor-meta');
@@ -47,6 +47,8 @@ if (section) {
   const deleteButton = document.querySelector('#geometry-delete');
   const revertButton = document.querySelector('#geometry-revert');
   const cutButton = document.querySelector('#geometry-cut-area');
+  const cutSelectedButton = document.querySelector('#geometry-cut-selected');
+  const splitButton = document.querySelector('#geometry-split');
   const undoButton = document.querySelector('#geometry-undo');
   const redoButton = document.querySelector('#geometry-redo');
   const finishDrawButton = document.querySelector('#geometry-finish-draw');
@@ -740,7 +742,10 @@ if (section) {
     let geometry;
     if (drawing.mode === 'point') {
       geometry = { type: 'Point', coordinates: drawing.coordinates[0] };
-    } else if (drawing.mode === 'line') {
+    } else if (
+      drawing.mode === 'line' ||
+      drawing.mode === 'split'
+    ) {
       if (drawing.coordinates.length === 1) {
         geometry = { type: 'Point', coordinates: drawing.coordinates[0] };
       } else {
@@ -1765,7 +1770,7 @@ if (section) {
     if (!draft) {
       title.textContent = 'Выберите геометрию';
       lineFields.hidden = true;
-      polygonActions.hidden = true;
+      topologyActions.hidden = true;
       meta.replaceChildren();
       sourceTags.textContent = '—';
       return;
@@ -1783,14 +1788,7 @@ if (section) {
         ? 'Новая: ' + typeLabel(pseudo)
         : displayName(pseudo);
     lineFields.hidden = family !== 'line';
-    polygonActions.hidden =
-      family !== 'polygon' ||
-      localItem;
-
-    cutButton.disabled =
-      !enabled ||
-      localItem ||
-      Object.keys(localDraft?.changes ?? {}).length > 0;
+    renderTopologyState();
 
     if (family === 'line') {
       form.elements.lineTypeId.disabled = !enabled;
@@ -1892,10 +1890,10 @@ if (section) {
       );
       check.title = check.disabled
         ? 'Сначала сохраните или сбросьте локальный черновик'
-        : 'Выбрать для объединения';
+        : 'Выбрать для групповой или topology-операции';
       check.setAttribute(
         'aria-label',
-        'Выбрать для объединения: ' + displayName(item),
+        'Выбрать для операции: ' + displayName(item),
       );
       check.addEventListener('change', () => {
         if (check.checked) state.selectedSet.add(item.id);
@@ -1997,6 +1995,144 @@ if (section) {
     return null;
   }
 
+  function selectedCutterGeometry() {
+    const targetId =
+      state.current?.id;
+
+    const candidates =
+      selectedMergeItems()
+        .filter(
+          (item) =>
+            item.id !== targetId,
+        );
+
+    if (
+      candidates.length !== 1
+    ) {
+      return null;
+    }
+
+    const cutter =
+      candidates[0];
+
+    if (
+      cutter.family !== 'polygon' ||
+      !cutter.updatedAt ||
+      cutter._draft ||
+      cutter._conflict ||
+      state.editLeases.has(
+        Number(cutter.id),
+      )
+    ) {
+      return null;
+    }
+
+    return cutter;
+  }
+
+  function topologyTargetReady(
+    families,
+  ) {
+    const item =
+      state.current;
+    const local =
+      item?.id
+        ? draftFor(item.id)
+        : null;
+    const family =
+      familyOf(
+        state.draft,
+      );
+
+    return Boolean(
+      item?.id &&
+      !isLocalGeometryId(
+        item.id,
+      ) &&
+      state.editing &&
+      !state.drawing &&
+      !state.importSession &&
+      families.includes(
+        family,
+      ) &&
+      item.updatedAt &&
+      local?.editToken &&
+      Object.keys(
+        local.changes ?? {},
+      ).length === 0
+    );
+  }
+
+  function renderTopologyState() {
+    const item =
+      state.current;
+    const family =
+      familyOf(
+        state.draft,
+      );
+    const saved =
+      Boolean(
+        item?.id &&
+        !isLocalGeometryId(
+          item.id,
+        ),
+      );
+
+    topologyActions.hidden =
+      !saved ||
+      ![
+        'line',
+        'polygon',
+      ].includes(family);
+
+    cutButton.hidden =
+      family !== 'polygon';
+    cutSelectedButton.hidden =
+      family !== 'polygon';
+    splitButton.hidden =
+      ![
+        'line',
+        'polygon',
+      ].includes(family);
+
+    const polygonReady =
+      topologyTargetReady([
+        'polygon',
+      ]);
+    const splitReady =
+      topologyTargetReady([
+        'line',
+        'polygon',
+      ]);
+    const cutter =
+      selectedCutterGeometry();
+
+    cutButton.disabled =
+      !polygonReady;
+    cutButton.title =
+      polygonReady
+        ? 'Нарисовать polygon, который будет вычтен из текущего'
+        : 'Сначала начните редактирование и синхронизируйте локальные изменения';
+
+    cutSelectedButton.disabled =
+      !polygonReady ||
+      !cutter;
+    cutSelectedButton.title =
+      cutter
+        ? 'Cutter: ' +
+          displayName(
+            cutter,
+          )
+        : 'Отметьте ровно один сохранённый polygon без черновика и блокировки';
+
+    splitButton.disabled =
+      !splitReady;
+    splitButton.title =
+      splitReady
+        ? 'Нарисовать линию, которая разделит геометрию ровно на две части'
+        : 'Сначала начните редактирование и синхронизируйте локальные изменения';
+  }
+
   function renderMergeState() {
     const selected = selectedMergeItems();
     const problem = mergeProblem(selected);
@@ -2009,6 +2145,7 @@ if (section) {
         : 'Объединить выбранные';
     mergeButton.title =
       problem ?? '';
+    renderTopologyState();
   }
 
   function focusGeometry(geometry) {
@@ -3445,6 +3582,243 @@ if (section) {
     };
   }
 
+  async function finishTopologyMutation(
+    target,
+    geometries,
+    successMessage,
+  ) {
+    const editDraft =
+      draftFor(
+        target.id,
+      );
+
+    if (editDraft?.editToken) {
+      await Promise.allSettled([
+        releaseDraftLease({
+          ...editDraft,
+          id:
+            target.id,
+        }),
+      ]);
+    }
+
+    drafts.remove(
+      target.id,
+    );
+    state.editing = false;
+    state.editLease = null;
+    state.blockedLease = null;
+    state.selectedSet.clear();
+
+    for (
+      const geometry of
+      geometries
+    ) {
+      upsertGeometrySummary(
+        geometry,
+      );
+    }
+
+    const primary =
+      geometries.find(
+        (geometry) =>
+          geometry.id ===
+          target.id,
+      ) ??
+      geometries[0];
+
+    if (primary) {
+      adoptGeometryDetail(
+        primary,
+      );
+    }
+
+    refreshDraftControls();
+    setMessage(
+      successMessage,
+      'success',
+    );
+  }
+
+  async function topologyFailure(
+    error,
+  ) {
+    if (
+      error.status === 409
+    ) {
+      for (
+        const conflict of
+        error.payload
+          ?.details
+          ?.conflicts ??
+        []
+      ) {
+        if (
+          draftFor(
+            conflict.id,
+          )
+        ) {
+          drafts.markConflict(
+            conflict.id,
+            true,
+          );
+        }
+      }
+
+      await refresh({
+        keepSelection: true,
+        fit: false,
+      });
+    }
+
+    setMessage(
+      error.message,
+      'error',
+    );
+  }
+
+  async function cutTarget(
+    target,
+    body,
+  ) {
+    try {
+      setMessage(
+        'Вырезаем область…',
+      );
+
+      const payload =
+        await api(
+          `/api/admin/geometry-editor/geometries/${encodeURIComponent(target.id)}/cut`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+              'X-DTPStat-Base-Revision':
+                target.updatedAt,
+              'X-DTPStat-Edit-Token':
+                draftFor(
+                  target.id,
+                )?.editToken ??
+                '',
+            },
+            body:
+              JSON.stringify(
+                body,
+              ),
+          },
+        );
+
+      await finishTopologyMutation(
+        target,
+        [
+          payload.geometry,
+        ],
+        'Область вырезана. Для обновления основной карты и статистики нажмите «Пересчитать».',
+      );
+    } catch (error) {
+      await topologyFailure(
+        error,
+      );
+    }
+  }
+
+  async function splitTarget(
+    target,
+    blade,
+  ) {
+    try {
+      setMessage(
+        'Разделяем геометрию…',
+      );
+
+      const payload =
+        await api(
+          `/api/admin/geometry-editor/geometries/${encodeURIComponent(target.id)}/split`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+              'X-DTPStat-Base-Revision':
+                target.updatedAt,
+              'X-DTPStat-Edit-Token':
+                draftFor(
+                  target.id,
+                )?.editToken ??
+                '',
+            },
+            body:
+              JSON.stringify({
+                blade,
+              }),
+          },
+        );
+
+      await finishTopologyMutation(
+        target,
+        payload.geometries,
+        'Геометрия разделена на две части. Для обновления основной карты и статистики нажмите «Пересчитать».',
+      );
+    } catch (error) {
+      await topologyFailure(
+        error,
+      );
+    }
+  }
+
+  async function cutWithSelectedGeometry() {
+    const target =
+      state.current;
+    const cutter =
+      selectedCutterGeometry();
+
+    if (
+      !topologyTargetReady([
+        'polygon',
+      ]) ||
+      !cutter
+    ) {
+      renderTopologyState();
+      setMessage(
+        'Для вырезания выберите текущий редактируемый polygon и отметьте ровно один сохранённый polygon-cutter.',
+        'error',
+      );
+      return;
+    }
+
+    const confirmed =
+      await adminConfirm({
+        title:
+          'Вырезать выбранным полигоном?',
+        message:
+          displayName(
+            cutter,
+          ) +
+          ' будет использован только как cutter и останется без изменений.',
+        confirmLabel:
+          'Вырезать',
+        cancelLabel:
+          'Отмена',
+        destructive:
+          true,
+      });
+
+    if (!confirmed) {
+      return;
+    }
+
+    await cutTarget(
+      target,
+      {
+        cutterGeometryId:
+          cutter.id,
+        cutterUpdatedAt:
+          cutter.updatedAt,
+      },
+    );
+  }
+
   async function startDrawing(mode) {
     if (state.importSession) {
       setMessage(
@@ -3453,36 +3827,49 @@ if (section) {
       );
       return;
     }
-    if (mode === 'cut') {
+    if (
+      mode === 'cut' ||
+      mode === 'split'
+    ) {
+      const families =
+        mode === 'cut'
+          ? ['polygon']
+          : [
+            'line',
+            'polygon',
+          ];
+
       if (
-        !state.editing ||
-        !state.current?.id ||
-        isLocalGeometryId(state.current.id) ||
-        !draftFor(state.current.id)?.editToken ||
-        familyOf(state.draft) !== 'polygon'
+        !topologyTargetReady(
+          families,
+        )
       ) {
         setMessage(
-          'Для вырезания сначала начните редактирование сохранённого полигона.',
+          mode === 'cut'
+            ? 'Для вырезания сначала начните редактирование сохранённого полигона и синхронизируйте локальные изменения.'
+            : 'Для разделения сначала начните редактирование сохранённой линии или полигона и синхронизируйте локальные изменения.',
           'error',
         );
         return;
       }
 
-      const local = captureCurrentDraft();
+      const local =
+        captureCurrentDraft();
+
       if (
         Object.keys(
           local?.changes ?? {},
         ).length > 0
       ) {
         setMessage(
-          'Перед вырезанием синхронизируйте или отмените локальные изменения выбранного полигона.',
+          'Перед topology-операцией синхронизируйте или отмените локальные изменения.',
           'error',
         );
         return;
       }
 
       state.drawing = {
-        mode: 'cut',
+        mode,
         coordinates: [],
       };
       state.history = [];
@@ -3492,7 +3879,9 @@ if (section) {
       updateDrawControls();
       renderFormState();
       setMessage(
-        'Нарисуйте область, которую нужно вырезать: минимум три точки.',
+        mode === 'cut'
+          ? 'Нарисуйте область, которую нужно вырезать: минимум три точки.'
+          : 'Нарисуйте режущую линию через геометрию: минимум две точки.',
       );
       return;
     }
@@ -3540,7 +3929,10 @@ if (section) {
     cancelDrawButton.hidden = !active;
 
     let canFinish = false;
-    if (drawing?.mode === 'line') {
+    if (
+      drawing?.mode === 'line' ||
+      drawing?.mode === 'split'
+    ) {
       canFinish = drawing.coordinates.length >= 2;
     }
     if (
@@ -3560,6 +3952,10 @@ if (section) {
         'Вырезание области · точек: ' +
         drawing.coordinates.length +
         ' · замкнётся автоматически';
+    } else if (drawing?.mode === 'split') {
+      modeLabel.textContent =
+        'Разделение режущей линией · точек: ' +
+        drawing.coordinates.length;
     } else if (drawing?.mode === 'point') {
       modeLabel.textContent =
         'Добавление точки · кликните по карте';
@@ -3584,12 +3980,16 @@ if (section) {
 
 
   function cancelDrawing() {
-    const wasCut =
-      state.drawing?.mode ===
-      'cut';
+    const wasTopology =
+      [
+        'cut',
+        'split',
+      ].includes(
+        state.drawing?.mode,
+      );
     state.drawing = null;
     if (
-      !wasCut &&
+      !wasTopology &&
       !state.selectedId
     ) {
       clearSelection();
@@ -3606,7 +4006,12 @@ if (section) {
     if (!drawing) return;
 
     if (
-      drawing.mode === 'cut' &&
+      [
+        'cut',
+        'split',
+      ].includes(
+        drawing.mode,
+      ) &&
       state.pendingExternalDraftSync
     ) {
       state.drawing = null;
@@ -3615,7 +4020,7 @@ if (section) {
       renderFormState();
       flushPendingExternalDraftSync();
       setMessage(
-        'Вырезание отменено: общий черновик этой геометрии изменился в другой вкладке.',
+        'Topology-операция отменена: общий черновик этой геометрии изменился в другой вкладке.',
         'error',
       );
       return;
@@ -3631,12 +4036,48 @@ if (section) {
         ...draftItemFor('Point'),
         geometry: state.draft,
       };
-    } else if (drawing.mode === 'line') {
+    } else if (
+      drawing.mode === 'line' ||
+      drawing.mode === 'split'
+    ) {
       if (drawing.coordinates.length < 2) return;
-      state.draft = {
+      const line = {
         type: 'LineString',
-        coordinates: clone(drawing.coordinates),
+        coordinates:
+          clone(
+            drawing.coordinates,
+          ),
       };
+
+      if (
+        drawing.mode === 'split'
+      ) {
+        const target =
+          state.current;
+        state.drawing = null;
+        updateMapSources();
+        updateDrawControls();
+        renderFormState();
+
+        if (
+          !target?.id ||
+          !target.updatedAt
+        ) {
+          setMessage(
+            'Не удалось определить серверную ревизию геометрии. Обновите список.',
+            'error',
+          );
+          return;
+        }
+
+        await splitTarget(
+          target,
+          line,
+        );
+        return;
+      }
+
+      state.draft = line;
       state.current = {
         ...draftItemFor('LineString'),
         geometry: state.draft,
@@ -3653,7 +4094,8 @@ if (section) {
       };
 
       if (drawing.mode === 'cut') {
-        const target = state.current;
+        const target =
+          state.current;
         state.drawing = null;
         updateMapSources();
         updateDrawControls();
@@ -3670,61 +4112,13 @@ if (section) {
           return;
         }
 
-        try {
-          setMessage('Вырезаем область…');
-          const payload = await api(
-            `/api/admin/geometry-editor/geometries/${encodeURIComponent(target.id)}/cut`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-DTPStat-Base-Revision': target.updatedAt,
-                ...(draftFor(target.id)?.editToken
-                  ? {
-                      'X-DTPStat-Edit-Token':
-                        draftFor(target.id).editToken,
-                    }
-                  : {}),
-              },
-              body: JSON.stringify({
-                geometry: polygon,
-              }),
-            },
-          );
-
-          const editDraft =
-            draftFor(target.id);
-          if (editDraft?.editToken) {
-            await Promise.allSettled([
-              releaseDraftLease({
-                ...editDraft,
-                id: target.id,
-              }),
-            ]);
-          }
-          drafts.remove(target.id);
-          state.editing = false;
-          state.editLease = null;
-          upsertGeometrySummary(payload.geometry);
-          adoptGeometryDetail(payload.geometry);
-          refreshDraftControls();
-          setMessage(
-            'Область вырезана. Для обновления основной карты и статистики нажмите «Пересчитать».',
-            'success',
-          );
-        } catch (error) {
-          if (error.status === 409) {
-            const local = draftFor(target.id);
-            if (local) {
-              drafts.markConflict(target.id, true);
-            }
-            await refresh({
-              keepSelection: true,
-              fit: false,
-            });
-          }
-          setMessage(error.message, 'error');
-        }
+        await cutTarget(
+          target,
+          {
+            geometry:
+              polygon,
+          },
+        );
         return;
       }
 
@@ -4651,6 +5045,16 @@ if (section) {
   cutButton.addEventListener('click', () => {
     void startDrawing('cut');
   });
+  cutSelectedButton.addEventListener(
+    'click',
+    () =>
+      void cutWithSelectedGeometry(),
+  );
+  splitButton.addEventListener(
+    'click',
+    () =>
+      void startDrawing('split'),
+  );
 
 
   undoButton.addEventListener('click', undo);

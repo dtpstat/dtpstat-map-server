@@ -139,6 +139,12 @@ identifier/fragments, которые нельзя выразить bind paramete
 Route получает service/repository через dependency injection; прямой импорт из
 `src/db` запрещён.
 
+Geometry topology request semantics находятся в
+`src/modules/geometry/topology-policy.js`: transport не решает, какой cutter
+допустим и каким должен быть split blade. Transaction orchestration остаётся
+в geometry use-case service, а PostGIS `ST_Difference/ST_Split` и cloning
+record metadata принадлежат только DB storage.
+
 ### Notifications и realtime
 
 Notification semantics принадлежат `src/modules/notifications`: допустимые

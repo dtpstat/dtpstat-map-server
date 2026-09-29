@@ -178,13 +178,24 @@ V049 empty-descendant spatial resolver fix
 
 ### Геометрические операции
 
-- сохранить существующий режим «Вырезать область…» для рисуемого cutter
-  polygon;
-- добавить использование существующей polygon geometry как cutter;
-- добавить split line в выбранной точке/узле на две geometry;
-- добавить split polygon режущей линией на две geometry;
-- все destructive topology operations должны сохранять lease + optimistic
-  revision + atomic transaction contract.
+Реализовано:
+
+- [x] существующий режим «Вырезать нарисованную область…» сохраняет polygon
+  cutter;
+- [x] сохранённый polygon можно использовать как cutter для текущего polygon;
+  target требует owned edit lease + current revision, cutter передаётся как
+  `cutterGeometryId + cutterUpdatedAt` и проверяется optimistic read-lock-ом;
+- [x] line и polygon разделяются одной нарисованной режущей `LineString`;
+- [x] split принимается только если PostGIS возвращает ровно две валидные части;
+  исходный ID остаётся у первой части, вторая создаётся новой записью с теми же
+  editable metadata/source tags;
+- [x] обе split-части spatial-relink-ятся внутри той же transaction;
+- [x] cut/split требуют owned lease и `X-DTPStat-Base-Revision`; stale target
+  или stale referenced cutter дают conflict и полный rollback.
+
+UI deliberately использует один mental model: **cut** вычитает polygon, а
+**split** рисует линию-разделитель. Для cut существующим polygon пользователь
+отмечает ровно один сохранённый polygon в списке; cutter не изменяется.
 
 ### Notification / realtime infrastructure
 

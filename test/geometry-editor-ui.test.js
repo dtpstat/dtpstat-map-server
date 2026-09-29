@@ -816,3 +816,64 @@ test('saving locally leaves the lease but exits active edit and can resume it', 
     /leasedByThisClient[\s\S]*Локально сохранено · блокировка остаётся за вами/u,
   );
 });
+
+
+test('geometry editor exposes optimistic polygon cutter and line-blade split operations', async () => {
+  const [
+    page,
+    editor,
+  ] = await Promise.all([
+    read(
+      'admin/index.html',
+    ),
+    read(
+      'admin/geometry-editor.js',
+    ),
+  ]);
+
+  assert.match(
+    page,
+    /id="geometry-cut-selected"/u,
+  );
+  assert.match(
+    page,
+    /Вырезать выбранным полигоном/u,
+  );
+  assert.match(
+    page,
+    /id="geometry-split"/u,
+  );
+  assert.match(
+    page,
+    /Разделить линией/u,
+  );
+
+  assert.match(
+    editor,
+    /cutterGeometryId:[\s\S]*cutter\.id[\s\S]*cutterUpdatedAt:[\s\S]*cutter\.updatedAt/u,
+  );
+  assert.match(
+    editor,
+    /\/geometries\/\$\{encodeURIComponent\(target\.id\)\}\/split/u,
+  );
+  assert.match(
+    editor,
+    /body:[\s\S]*JSON\.stringify\(\{[\s\S]*blade/u,
+  );
+  assert.match(
+    editor,
+    /drawing\.mode === 'split'/u,
+  );
+  assert.match(
+    editor,
+    /Разделение режущей линией/u,
+  );
+  assert.match(
+    editor,
+    /topologyTargetReady\(\[[\s\S]*'line'[\s\S]*'polygon'/u,
+  );
+  assert.match(
+    editor,
+    /releaseDraftLease\([\s\S]*target\.id/u,
+  );
+});
