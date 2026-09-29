@@ -1146,6 +1146,24 @@ if (section) {
           layerId,
           beginGeometryDrag,
         );
+        map.on(
+          'mouseenter',
+          layerId,
+          () => {
+            state.hoveredGeometry =
+              true;
+            refreshMapCursor();
+          },
+        );
+        map.on(
+          'mouseleave',
+          layerId,
+          () => {
+            state.hoveredGeometry =
+              false;
+            refreshMapCursor();
+          },
+        );
       }
 
       addLayerSafe(map, {

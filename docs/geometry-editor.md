@@ -172,9 +172,15 @@ V049 empty-descendant spatial resolver fix
   со стилем рабочей editable line;
 - [x] «Сохранить локально» завершает активный EDIT, но сохраняет lease/token за
   client до явного release/sync/discard;
-- добавить перенос всей geometry drag-ом, отдельно от vertex drag;
-- добавить coordinate editor в отдельном окне: табличный ввод точек и
-  multi-row paste из clipboard.
+- [x] перенос всей geometry отдельным drag-mode, не конфликтующим с vertex drag;
+  один gesture создаёт одну undo-history запись, а cross-tab draft update
+  откладывается до завершения drag;
+- [x] coordinate editor в отдельном плавающем окне: таблица WGS84
+  longitude/latitude, выбор line/ring для Multi*/Polygon, добавление/удаление
+  строк и multi-row paste;
+- [x] clipboard/input parser допускает только конечные WGS84 coordinates,
+  ограничивает объём/число строк и не использует eval/HTML interpretation;
+  Polygon rings при применении закрываются автоматически.
 
 ### Геометрические операции
 

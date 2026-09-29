@@ -926,3 +926,118 @@ test('geometry drawing previews the next segment under the pointer and keeps sec
     /\.geometry-editor-more-menu[\s\S]*position: absolute/u,
   );
 });
+
+
+test('geometry editor exposes coordinate table editing and whole geometry drag as local draft operations', async () => {
+  const [
+    editor,
+    html,
+    styles,
+    model,
+  ] =
+    await Promise.all([
+      read(
+        'admin/geometry-editor.js',
+      ),
+      read(
+        'admin/index.html',
+      ),
+      read(
+        'admin/geometry-editor.css',
+      ),
+      read(
+        'admin/geometry-coordinate-model.js',
+      ),
+    ]);
+
+  for (const id of [
+    'geometry-move-toggle',
+    'geometry-coordinate-open',
+    'geometry-coordinate-window',
+    'geometry-coordinate-sequence',
+    'geometry-coordinate-table-body',
+    'geometry-coordinate-paste',
+    'geometry-coordinate-import',
+    'geometry-coordinate-apply',
+  ]) {
+    assert.match(
+      html,
+      new RegExp(
+        `id="${id}"`,
+        'u',
+      ),
+    );
+  }
+
+  assert.match(
+    editor,
+    /from '\.\/geometry-coordinate-model\.js'/u,
+  );
+  assert.match(
+    editor,
+    /function openCoordinateWindow\(\)/u,
+  );
+  assert.match(
+    editor,
+    /parseCoordinateText\([\s\S]*coordinatePaste\.value/u,
+  );
+  assert.match(
+    editor,
+    /replaceCoordinateSequence\([\s\S]*state\.draft[\s\S]*descriptor\.path/u,
+  );
+  assert.match(
+    editor,
+    /pushHistory\(\);[\s\S]*state\.draft = next;[\s\S]*captureCurrentDraft\(\)/u,
+  );
+
+  assert.match(
+    editor,
+    /moveGeometryMode: false/u,
+  );
+  assert.match(
+    editor,
+    /geometryDrag: null/u,
+  );
+  assert.match(
+    editor,
+    /selectedDragLayers[\s\S]*geometry-editor-selected-fill[\s\S]*geometry-editor-selected-line[\s\S]*geometry-editor-selected-point/u,
+  );
+  assert.match(
+    editor,
+    /translateGeometry\([\s\S]*state\.geometryDrag[\s\S]*original[\s\S]*dx,[\s\S]*dy/u,
+  );
+  assert.match(
+    editor,
+    /state\.pendingExternalDraftSync[\s\S]*state\.geometryDrag/u,
+  );
+  assert.match(
+    editor,
+    /state\.geometryDrag[\s\S]*pushHistory\(\)[\s\S]*map\.dragPan\.disable/u,
+  );
+
+  assert.match(
+    model,
+    /export function parseCoordinateText/u,
+  );
+  assert.match(
+    model,
+    /export function coordinateSequences/u,
+  );
+  assert.match(
+    model,
+    /export function replaceCoordinateSequence/u,
+  );
+  assert.match(
+    model,
+    /export function translateGeometry/u,
+  );
+
+  assert.match(
+    styles,
+    /\.geometry-coordinate-window\s*\{[\s\S]*position: fixed/u,
+  );
+  assert.match(
+    styles,
+    /#geometry-move-toggle\.is-active/u,
+  );
+});
