@@ -1833,6 +1833,423 @@ if (section) {
   }
 
 
+  function setCoordinateMessage(
+    text,
+    tone = '',
+  ) {
+    coordinateMessage.textContent =
+      text ?? '';
+    coordinateMessage.className =
+      'notice geometry-coordinate-message' +
+      (
+        tone
+          ? ' notice-' + tone
+          : ''
+      );
+  }
+
+  function currentCoordinateSequence() {
+    if (!state.draft) {
+      return null;
+    }
+
+    const sequences =
+      coordinateSequences(
+        state.draft,
+      );
+    const selected =
+      coordinateSequence.value;
+
+    return (
+      sequences.find(
+        (item) =>
+          item.key ===
+          selected,
+      ) ??
+      sequences[0] ??
+      null
+    );
+  }
+
+  function coordinateRow(
+    coordinate,
+    index,
+  ) {
+    const row =
+      document.createElement(
+        'tr',
+      );
+
+    const number =
+      document.createElement(
+        'td',
+      );
+    number.textContent =
+      String(index + 1);
+
+    const lonCell =
+      document.createElement(
+        'td',
+      );
+    const lon =
+      document.createElement(
+        'input',
+      );
+    lon.type = 'text';
+    lon.inputMode = 'decimal';
+    lon.autocomplete = 'off';
+    lon.dataset.coordinate =
+      'longitude';
+    lon.value =
+      String(
+        coordinate?.[0] ??
+        '',
+      );
+    lonCell.append(lon);
+
+    const latCell =
+      document.createElement(
+        'td',
+      );
+    const lat =
+      document.createElement(
+        'input',
+      );
+    lat.type = 'text';
+    lat.inputMode = 'decimal';
+    lat.autocomplete = 'off';
+    lat.dataset.coordinate =
+      'latitude';
+    lat.value =
+      String(
+        coordinate?.[1] ??
+        '',
+      );
+    latCell.append(lat);
+
+    const actionCell =
+      document.createElement(
+        'td',
+      );
+    const remove =
+      document.createElement(
+        'button',
+      );
+    remove.type = 'button';
+    remove.className =
+      'secondary';
+    remove.textContent = '×';
+    remove.title =
+      'Удалить строку';
+    remove.setAttribute(
+      'aria-label',
+      'Удалить координату ' +
+        (index + 1),
+    );
+    remove.addEventListener(
+      'click',
+      () => {
+        row.remove();
+        renumberCoordinateRows();
+      },
+    );
+    actionCell.append(remove);
+
+    row.append(
+      number,
+      lonCell,
+      latCell,
+      actionCell,
+    );
+
+    return row;
+  }
+
+  function renumberCoordinateRows() {
+    [
+      ...coordinateTableBody
+        .querySelectorAll('tr'),
+    ].forEach(
+      (row, index) => {
+        row.children[0]
+          .textContent =
+          String(index + 1);
+        row.querySelector(
+          'button',
+        )?.setAttribute(
+          'aria-label',
+          'Удалить координату ' +
+            (index + 1),
+        );
+      },
+    );
+  }
+
+  function renderCoordinateRows(
+    coordinates,
+  ) {
+    coordinateTableBody
+      .replaceChildren(
+        ...coordinates.map(
+          coordinateRow,
+        ),
+      );
+  }
+
+  function readCoordinateRows() {
+    const rows = [
+      ...coordinateTableBody
+        .querySelectorAll('tr'),
+    ];
+
+    return rows.map(
+      (row) =>
+        normalizeCoordinate(
+          row.querySelector(
+            '[data-coordinate="longitude"]',
+          )?.value,
+          row.querySelector(
+            '[data-coordinate="latitude"]',
+          )?.value,
+        ),
+    );
+  }
+
+  function renderCoordinateSequence() {
+    const descriptor =
+      currentCoordinateSequence();
+
+    if (!descriptor) {
+      renderCoordinateRows(
+        [],
+      );
+      coordinateApply.disabled =
+        true;
+      coordinateAddRow.disabled =
+        true;
+      return;
+    }
+
+    renderCoordinateRows(
+      descriptor.coordinates,
+    );
+    coordinateApply.disabled =
+      false;
+    coordinateAddRow.disabled =
+      state.draft?.type ===
+      'Point';
+    setCoordinateMessage('');
+  }
+
+  function refreshCoordinateWindow() {
+    if (
+      !state.coordinateWindowOpen ||
+      !state.draft
+    ) {
+      return;
+    }
+
+    const previous =
+      coordinateSequence.value;
+    const sequences =
+      coordinateSequences(
+        state.draft,
+      );
+
+    coordinateSequence
+      .replaceChildren(
+        ...sequences.map(
+          (descriptor) => {
+            const option =
+              document.createElement(
+                'option',
+              );
+            option.value =
+              descriptor.key;
+            option.textContent =
+              descriptor.label;
+            return option;
+          },
+        ),
+      );
+
+    if (
+      sequences.some(
+        (descriptor) =>
+          descriptor.key ===
+          previous,
+      )
+    ) {
+      coordinateSequence.value =
+        previous;
+    }
+
+    renderCoordinateSequence();
+  }
+
+  function closeCoordinateWindow() {
+    state.coordinateWindowOpen =
+      false;
+    coordinateWindow.hidden =
+      true;
+    setCoordinateMessage('');
+  }
+
+  function openCoordinateWindow() {
+    if (
+      !state.editing ||
+      !state.draft ||
+      state.drawing ||
+      state.importSession
+    ) {
+      return;
+    }
+
+    state.moveGeometryMode =
+      false;
+    state.coordinateWindowOpen =
+      true;
+    coordinateWindow.hidden =
+      false;
+    coordinatePaste.value =
+      '';
+    refreshCoordinateWindow();
+    renderGeometryToolState();
+    refreshMapCursor();
+  }
+
+  function renderGeometryToolState() {
+    const enabled =
+      Boolean(
+        state.editing &&
+        state.draft &&
+        !state.drawing &&
+        !state.importSession,
+      );
+
+    moveGeometryButton.disabled =
+      !enabled;
+    coordinateOpenButton.disabled =
+      !enabled;
+
+    if (
+      !enabled &&
+      state.moveGeometryMode
+    ) {
+      state.moveGeometryMode =
+        false;
+    }
+
+    if (
+      !enabled &&
+      state.coordinateWindowOpen
+    ) {
+      closeCoordinateWindow();
+    }
+
+    moveGeometryButton.classList
+      .toggle(
+        'is-active',
+        state.moveGeometryMode,
+      );
+    moveGeometryButton.textContent =
+      state.moveGeometryMode
+        ? 'Перемещение включено'
+        : 'Переместить';
+    moveGeometryButton.setAttribute(
+      'aria-pressed',
+      String(
+        state.moveGeometryMode,
+      ),
+    );
+  }
+
+  function setMoveGeometryMode(
+    enabled,
+  ) {
+    const next =
+      Boolean(enabled);
+
+    if (
+      next &&
+      (
+        !state.editing ||
+        !state.draft ||
+        state.drawing ||
+        state.importSession
+      )
+    ) {
+      return;
+    }
+
+    if (
+      state.geometryDrag
+    ) {
+      return;
+    }
+
+    state.moveGeometryMode =
+      next;
+    state.selectedVertexPath =
+      null;
+
+    if (next) {
+      closeCoordinateWindow();
+      modeLabel.textContent =
+        'Перемещение геометрии · перетащите объект целиком';
+    } else {
+      modeLabel.textContent =
+        editingModeText(
+          state.current,
+        );
+    }
+
+    updateMapSources();
+    renderGeometryToolState();
+    refreshMapCursor();
+  }
+
+  function applyCoordinateTable() {
+    const descriptor =
+      currentCoordinateSequence();
+
+    if (
+      !descriptor ||
+      !state.draft ||
+      !state.editing
+    ) {
+      return;
+    }
+
+    try {
+      const coordinates =
+        readCoordinateRows();
+      const next =
+        replaceCoordinateSequence(
+          state.draft,
+          descriptor.path,
+          coordinates,
+        );
+
+      pushHistory();
+      state.draft = next;
+      state.selectedVertexPath =
+        null;
+      updateDraftMap();
+      captureCurrentDraft();
+      refreshCoordinateWindow();
+      setCoordinateMessage(
+        'Координаты применены к локальному черновику.',
+        'success',
+      );
+    } catch (error) {
+      setCoordinateMessage(
+        error.message,
+        'error',
+      );
+    }
+  }
+
   function updateDraftMap() {
     updateMapSources();
     renderHistoryControls();
@@ -1872,6 +2289,8 @@ if (section) {
       state.editing &&
       !state.drawing &&
       !state.importSession;
+
+    renderGeometryToolState();
 
     for (const control of form.elements) {
       if (control.name === 'lineTypeId' || control.name === 'lanes') continue;
@@ -2752,6 +3171,11 @@ if (section) {
   }
 
   function clearSelection() {
+    state.moveGeometryMode =
+      false;
+    state.geometryDrag =
+      null;
+    closeCoordinateWindow();
     state.selectedId = null;
     state.current = null;
     state.draft = null;
@@ -4002,6 +4426,9 @@ if (section) {
   }
 
   async function startDrawing(mode) {
+    setMoveGeometryMode(false);
+    closeCoordinateWindow();
+
     if (state.importSession) {
       setMessage(
         'Сначала разрешите конфликты подготовленного импорта.',
