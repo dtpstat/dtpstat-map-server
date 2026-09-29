@@ -1,3 +1,4 @@
+import path from 'node:path';
 import {
   createDerivedStateRefresh,
 } from './derived-state-refresh.js';
@@ -52,6 +53,9 @@ import {
 import {
   createSecurityRuntime,
 } from './security-runtime.js';
+import {
+  createPointTypeIconFileStore,
+} from '../modules/points/icon-file-store.js';
 
 const DEFAULT_FACTORIES =
   Object.freeze({
@@ -64,6 +68,7 @@ const DEFAULT_FACTORIES =
     createKmlUpdateRuntime,
     createLineTypesRepository,
     createPointTypesRepository,
+    createPointTypeIconFileStore,
     createGeometryEditorRuntime,
     createGeometryImportRuntime,
     createOsmBoundaryAdminRuntime,
@@ -108,6 +113,15 @@ export function createServerRuntime({
   const pointTypesRepository =
     runtimeFactories
       .createPointTypesRepository(pool);
+  const pointTypeIconStore =
+    runtimeFactories
+      .createPointTypeIconFileStore(
+        path.join(
+          config.projectRoot,
+          'var',
+          'point-type-icons',
+        ),
+      );
   const geometryEditorService =
     runtimeFactories
       .createGeometryEditorRuntime(
@@ -213,6 +227,8 @@ export function createServerRuntime({
   const bootstrapDependencies = {
     config,
     repository,
+    pointTypesRepository,
+    pointTypeIconStore,
     osmImportSettingsRepository,
     securityService,
     projectSettingsRepository,
@@ -224,6 +240,7 @@ export function createServerRuntime({
     repository,
     lineTypesRepository,
     pointTypesRepository,
+    pointTypeIconStore,
     projectSettingsRepository,
     settingsTransferService,
     reportConfigService,

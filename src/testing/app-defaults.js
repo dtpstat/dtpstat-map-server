@@ -90,6 +90,18 @@ function pointTypesRepository() {
       return [];
     },
 
+    async get() {
+      return null;
+    },
+
+    async saveIconMetadata() {
+      return null;
+    },
+
+    async clearIconMetadata() {
+      return null;
+    },
+
     async create(payload) {
       return {
         id: 1,
@@ -116,6 +128,49 @@ function pointTypesRepository() {
         iconFileName: null,
         unlinkedGeometryCount: 0,
       };
+    },
+  };
+}
+
+function pointTypeIconStore() {
+  const files =
+    new Map();
+
+  return {
+    async save(
+      fileName,
+      data,
+    ) {
+      files.set(
+        fileName,
+        Buffer.from(data),
+      );
+      return {
+        fileName,
+      };
+    },
+
+    async read(fileName) {
+      const data =
+        files.get(fileName);
+
+      if (!data) {
+        const error =
+          new Error(
+            'File not found',
+          );
+        error.code =
+          'ENOENT';
+        throw error;
+      }
+
+      return Buffer.from(data);
+    },
+
+    async remove(fileName) {
+      return files.delete(
+        fileName,
+      );
     },
   };
 }
@@ -492,6 +547,8 @@ export function createTestAppDefaults(
       lineTypesRepository(),
     pointTypesRepository:
       pointTypesRepository(),
+    pointTypeIconStore:
+      pointTypeIconStore(),
     projectSettingsRepository:
       projectSettingsRepository(),
     settingsTransferService:

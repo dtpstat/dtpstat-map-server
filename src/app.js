@@ -22,7 +22,8 @@ import {
  * @param {{
  *   repository: import('./routes/api.js').CitiesRepository,
  *   lineTypesRepository?: { list: () => Promise<any[]>, save: (payload: unknown) => Promise<any[]> },
- *   pointTypesRepository?: { list: Function, create: Function, update: Function, delete: Function },
+ *   pointTypesRepository?: { list: Function, get: Function, saveIconMetadata: Function, clearIconMetadata: Function, create: Function, update: Function, delete: Function },
+ *   pointTypeIconStore?: { save: Function, read: Function, remove: Function },
  *   projectSettingsRepository?: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
  *   settingsTransferService?: { exportSettings: () => Promise<object>, importSettings: (payload: unknown) => Promise<object> },
  *   reportConfigService?: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
@@ -53,6 +54,7 @@ export function createApp({
   repository,
   lineTypesRepository,
   pointTypesRepository,
+  pointTypeIconStore,
   projectSettingsRepository,
   settingsTransferService,
   reportConfigService,
@@ -99,6 +101,12 @@ export function createApp({
       ?.pointTypesRepository ??
     null;
 
+  const effectivePointTypeIconStore =
+    pointTypeIconStore ??
+    testDefaults
+      ?.pointTypeIconStore ??
+    null;
+
   const effectiveProjectSettingsRepository =
     projectSettingsRepository ??
     testDefaults
@@ -139,6 +147,14 @@ export function createApp({
   ) {
     throw new Error(
       'pointTypesRepository is required',
+    );
+  }
+
+  if (
+    !effectivePointTypeIconStore
+  ) {
+    throw new Error(
+      'pointTypeIconStore is required',
     );
   }
 
@@ -194,6 +210,8 @@ export function createApp({
         effectiveLineTypesRepository,
       pointTypesRepository:
         effectivePointTypesRepository,
+      pointTypeIconStore:
+        effectivePointTypeIconStore,
       projectSettingsRepository:
         effectiveProjectSettingsRepository,
       settingsTransferService:

@@ -176,6 +176,37 @@ test('application bootstrap preserves startup order and returns admin success st
           calls.push('health');
         },
       },
+      pointTypesRepository: {
+        async listIconFileNames() {
+          calls.push(
+            'point-icon-list',
+          );
+          return [
+            '1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.svg',
+          ];
+        },
+      },
+      pointTypeIconStore: {
+        async reconcile(
+          fileNames,
+        ) {
+          assert.deepEqual(
+            fileNames,
+            [
+              '1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.svg',
+            ],
+          );
+          calls.push(
+            'point-icon-reconcile',
+          );
+          return {
+            referenced: 1,
+            removed: 2,
+            removedTemporary: 1,
+            missing: 0,
+          };
+        },
+      },
       osmImportSettingsRepository: {
         async bootstrap(options) {
           assert.equal(
@@ -282,6 +313,7 @@ test('application bootstrap preserves startup order and returns admin success st
     [
       'database.health',
       'portable-import-spool.cleanup',
+      'point-type-icons.reconcile',
       'osm-import-settings.bootstrap',
       'admin-security.bootstrap',
       'project-settings.mapbox.bootstrap',
@@ -294,6 +326,8 @@ test('application bootstrap preserves startup order and returns admin success st
     [
       'health',
       'spool-cleanup',
+      'point-icon-list',
+      'point-icon-reconcile',
       'osm-bootstrap',
       'security-bootstrap',
       'mapbox-bootstrap',

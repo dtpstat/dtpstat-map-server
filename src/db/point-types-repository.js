@@ -32,6 +32,33 @@ const LIST_SQL = `
   ORDER BY LOWER(point_type.name), point_type.id
 `;
 
+const LIST_ICON_FILES_SQL = `
+  SELECT icon_file_name AS "iconFileName"
+  FROM point_types
+  WHERE icon_file_name IS NOT NULL
+  ORDER BY id
+`;
+
+const GET_SQL = `
+  SELECT
+    id::integer AS id,
+    name,
+    is_active AS "isActive",
+    display_width::integer AS "displayWidth",
+    display_height::integer AS "displayHeight",
+    anchor_x::double precision AS "anchorX",
+    anchor_y::double precision AS "anchorY",
+    icon_file_name AS "iconFileName",
+    icon_mime AS "iconMime",
+    icon_source_width::integer AS "iconSourceWidth",
+    icon_source_height::integer AS "iconSourceHeight",
+    icon_sha256 AS "iconSha256",
+    created_at AS "createdAt",
+    updated_at AS "updatedAt"
+  FROM point_types
+  WHERE id = $1::bigint
+`;
+
 const GET_FOR_UPDATE_SQL = `
   SELECT
     id::integer AS id,
@@ -82,6 +109,32 @@ const UPDATE_SQL = `
     display_height = $5::smallint,
     anchor_x = $6::double precision,
     anchor_y = $7::double precision,
+    updated_at = NOW()
+  WHERE id = $1::bigint
+  RETURNING id::integer AS id
+`;
+
+const SAVE_ICON_SQL = `
+  UPDATE point_types
+  SET
+    icon_file_name = $2::text,
+    icon_mime = $3::text,
+    icon_source_width = $4::integer,
+    icon_source_height = $5::integer,
+    icon_sha256 = $6::text,
+    updated_at = NOW()
+  WHERE id = $1::bigint
+  RETURNING id::integer AS id
+`;
+
+const CLEAR_ICON_SQL = `
+  UPDATE point_types
+  SET
+    icon_file_name = NULL,
+    icon_mime = NULL,
+    icon_source_width = NULL,
+    icon_source_height = NULL,
+    icon_sha256 = NULL,
     updated_at = NOW()
   WHERE id = $1::bigint
   RETURNING id::integer AS id
@@ -156,6 +209,134 @@ export function createPointTypesRepository(
 
   return {
     list,
+
+    async listIconFileNames(
+      queryable = database,
+    ) {
+      const result =
+        await queryable.query(
+          LIST_ICON_FILES_SQL,
+        );
+      return result.rows.map(
+        (row) =>
+          row.iconFileName,
+      );
+    },
+
+    async get(
+      pointTypeId,
+      queryable = database,
+    ) {
+      const id =
+        normalizePointTypeId(
+          pointTypeId,
+        );
+      const result =
+        await queryable.query(
+          GET_SQL,
+          [id],
+        );
+      return (
+        result.rows[0] ??
+        null
+      );
+    },
+
+    async saveIconMetadata(
+      pointTypeId,
+      icon,
+    ) {
+      const id =
+        normalizePointTypeId(
+          pointTypeId,
+        );
+      return withTransaction(
+        async (client) => {
+          const current =
+            (
+              await client.query(
+                GET_FOR_UPDATE_SQL,
+                [id],
+              )
+            ).rows[0] ??
+            null;
+          if (!current) {
+            return null;
+          }
+
+          await client.query(
+            SAVE_ICON_SQL,
+            [
+              id,
+              icon.fileName,
+              icon.mime,
+              icon.width,
+              icon.height,
+              icon.sha256,
+            ],
+          );
+
+          return {
+            previousIconFileName:
+              current.iconFileName ??
+              null,
+            pointType:
+              (
+                await list(
+                  client,
+                )
+              ).find(
+                (item) =>
+                  item.id === id,
+              ) ?? null,
+          };
+        },
+      );
+    },
+
+    async clearIconMetadata(
+      pointTypeId,
+    ) {
+      const id =
+        normalizePointTypeId(
+          pointTypeId,
+        );
+      return withTransaction(
+        async (client) => {
+          const current =
+            (
+              await client.query(
+                GET_FOR_UPDATE_SQL,
+                [id],
+              )
+            ).rows[0] ??
+            null;
+          if (!current) {
+            return null;
+          }
+
+          await client.query(
+            CLEAR_ICON_SQL,
+            [id],
+          );
+
+          return {
+            previousIconFileName:
+              current.iconFileName ??
+              null,
+            pointType:
+              (
+                await list(
+                  client,
+                )
+              ).find(
+                (item) =>
+                  item.id === id,
+              ) ?? null,
+          };
+        },
+      );
+    },
 
     async create(payload) {
       const value =

@@ -99,6 +99,8 @@ export async function prepareServerDatabase({
  * @param {{
  *   config: any,
  *   repository: { health: () => Promise<any> },
+ *   pointTypesRepository: { listIconFileNames: () => Promise<string[]> },
+ *   pointTypeIconStore: { reconcile: (fileNames: string[]) => Promise<any> },
  *   osmImportSettingsRepository: { bootstrap: (options: any) => Promise<any> },
  *   securityService: { bootstrap: (credentials: object) => Promise<any> },
  *   projectSettingsRepository: {
@@ -114,6 +116,8 @@ export async function prepareServerDatabase({
 export async function bootstrapServerApplication({
   config,
   repository,
+  pointTypesRepository,
+  pointTypeIconStore,
   osmImportSettingsRepository,
   securityService,
   projectSettingsRepository,
@@ -150,6 +154,20 @@ export async function bootstrapServerApplication({
               .streamUploadDirectory,
           removed,
         }),
+    },
+  );
+
+  await runOperation(
+    'point-type-icons.reconcile',
+    async () =>
+      pointTypeIconStore
+        .reconcile(
+          await pointTypesRepository
+            .listIconFileNames(),
+        ),
+    {
+      successDetails:
+        (result) => result,
     },
   );
 

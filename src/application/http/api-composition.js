@@ -38,6 +38,7 @@ export function installApplicationApiRoutes(
     repository,
     lineTypesRepository,
     pointTypesRepository,
+    pointTypeIconStore,
     projectSettingsRepository,
     settingsTransferService,
     reportConfigService,
@@ -103,6 +104,7 @@ export function installApplicationApiRoutes(
     '/api',
     createPointTypesRouter({
       pointTypesRepository,
+      pointTypeIconStore,
       ...commonAdmin,
     }),
   );

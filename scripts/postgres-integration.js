@@ -22,6 +22,9 @@ import {
   createProjectSettingsTransferRepository,
 } from '../src/db/project-settings-transfer-repository.js';
 import {
+  createPointTypesRepository,
+} from '../src/db/point-types-repository.js';
+import {
   createGeometryEditorStorage,
 } from '../src/db/geometry-editor-storage.js';
 import {
@@ -123,6 +126,7 @@ async function verifyMigratedSchema(
     const table of [
       'project_settings',
       'line_types',
+      'point_types',
       'report_config',
       'admin_security_settings',
       'city_boundaries',
@@ -369,6 +373,131 @@ async function verifySpatialExports(
   } finally {
     client.release();
   }
+}
+
+async function verifyPointTypeIconMetadata(
+  pool,
+) {
+  const repository =
+    createPointTypesRepository(
+      pool,
+    );
+  const pointType =
+    await repository.create({
+      name:
+        'Integration point ' +
+        crypto
+          .randomBytes(4)
+          .toString('hex'),
+    });
+
+  assert.ok(
+    pointType?.id > 0,
+    'Point type was not created',
+  );
+
+  const sha256 =
+    'a'.repeat(64);
+  const fileName =
+    pointType.id +
+    '-' +
+    sha256 +
+    '.svg';
+
+  const saved =
+    await repository
+      .saveIconMetadata(
+        pointType.id,
+        {
+          fileName,
+          mime:
+            'image/svg+xml',
+          width: 24,
+          height: 24,
+          sha256,
+        },
+      );
+
+  assert.equal(
+    saved
+      .previousIconFileName,
+    null,
+  );
+  assert.equal(
+    saved
+      .pointType
+      .iconConfigured,
+    true,
+  );
+  assert.equal(
+    saved
+      .pointType
+      .iconMime,
+    'image/svg+xml',
+  );
+  assert.equal(
+    saved
+      .pointType
+      .iconSourceWidth,
+    24,
+  );
+  assert.deepEqual(
+    await repository
+      .listIconFileNames(),
+    [fileName],
+  );
+
+  const internal =
+    await repository.get(
+      pointType.id,
+    );
+
+  assert.equal(
+    internal.iconFileName,
+    fileName,
+  );
+  assert.equal(
+    internal.iconSha256,
+    sha256,
+  );
+
+  const cleared =
+    await repository
+      .clearIconMetadata(
+        pointType.id,
+      );
+
+  assert.equal(
+    cleared
+      .previousIconFileName,
+    fileName,
+  );
+  assert.equal(
+    cleared
+      .pointType
+      .iconConfigured,
+    false,
+  );
+  assert.deepEqual(
+    await repository
+      .listIconFileNames(),
+    [],
+  );
+
+  const deleted =
+    await repository.delete(
+      pointType.id,
+    );
+
+  assert.equal(
+    deleted.id,
+    pointType.id,
+  );
+  assert.equal(
+    deleted
+      .unlinkedGeometryCount,
+    0,
+  );
 }
 
 async function verifyGeometryEditorInfrastructure(
@@ -1065,6 +1194,10 @@ async function main() {
     );
 
     await verifySpatialExports(
+      pool,
+    );
+
+    await verifyPointTypeIconMetadata(
       pool,
     );
 

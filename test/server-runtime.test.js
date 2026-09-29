@@ -58,6 +58,20 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
       };
   }
 
+  factories.createPointTypeIconFileStore =
+    (directory) => {
+      assert.equal(
+        directory,
+        '/srv/app/var/point-type-icons',
+      );
+      calls.push(
+        'createPointTypeIconFileStore',
+      );
+      return value(
+        'createPointTypeIconFileStore',
+      );
+    };
+
   factories.createProjectRuntime =
     (options) => {
       assert.equal(
@@ -221,6 +235,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
       'createCitiesRepository',
       'createLineTypesRepository',
       'createPointTypesRepository',
+      'createPointTypeIconFileStore',
       'createGeometryEditorRuntime',
       'createGeometryImportRuntime',
       'createProjectRuntime',
@@ -316,6 +331,29 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
       .pointTypesRepository
       .name,
     'createPointTypesRepository',
+  );
+  assert.equal(
+    runtime
+      .appDependencies
+      .pointTypeIconStore
+      .name,
+    'createPointTypeIconFileStore',
+  );
+  assert.equal(
+    runtime
+      .bootstrapDependencies
+      .pointTypeIconStore,
+    runtime
+      .appDependencies
+      .pointTypeIconStore,
+  );
+  assert.equal(
+    runtime
+      .bootstrapDependencies
+      .pointTypesRepository,
+    runtime
+      .appDependencies
+      .pointTypesRepository,
   );
   assert.equal(
     runtime

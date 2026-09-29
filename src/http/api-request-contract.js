@@ -209,6 +209,15 @@ export const API_REQUEST_CONTRACTS =
     ),
     c('GET', '/line-types'),
     c('GET', '/point-types'),
+    c(
+      'GET',
+      '/point-types/:pointTypeId/icon',
+      {
+        query: [
+          'v',
+        ],
+      },
+    ),
     c('GET', '/report-config'),
     c('GET', '/project'),
     c('GET', '/city-marker-icon'),
@@ -256,6 +265,17 @@ export const API_REQUEST_CONTRACTS =
     c(
       'DELETE',
       '/admin/point-types/:pointTypeId',
+    ),
+    c(
+      'PUT',
+      '/admin/point-types/:pointTypeId/icon',
+      {
+        body: 'binary',
+      },
+    ),
+    c(
+      'DELETE',
+      '/admin/point-types/:pointTypeId/icon',
     ),
     c(
       'POST',

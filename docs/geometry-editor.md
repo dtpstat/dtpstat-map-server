@@ -153,6 +153,7 @@ V039-V044 transitional integrity/rebinding hardening
 V045 spatial-derived administrative links
 V046 edit leases
 V049 empty-descendant spatial resolver fix
+V050 point types and Point category metadata
 ```
 
 ## Future backlog
@@ -233,27 +234,49 @@ state непосредственно перед отправкой.
 
 ### Point types и icons
 
-Point geometry должна получить отдельный business type, определяющий icon.
+`V050__point_types.sql` вводит отдельный business type для Point geometry:
+`POINT_TYPES` + nullable `CITY_GEOMETRIES.POINT_TYPE_ID`. Для line/polygon
+ссылка запрещена constraint-ом; удаление типа переводит связанные точки в
+`POINT_TYPE_ID = NULL`.
 
-В **Настройках интерфейса** нужен CRUD типов точек:
+Backend CRUD типов точек реализован отдельно от geometry editor. Тип хранит:
 
-- name/title;
+- name;
 - active/inactive;
-- icon upload;
 - target width/height, default `32×32`;
 - anchor X/Y, default center;
-- delete с удалением связанного server file.
+- metadata server-owned icon.
 
-Разрешённый input: только строго распознанные PNG/GIF/SVG. Нельзя доверять
-filename, extension или присланному MIME. Upload должен пройти signature/type
-validation, decode/sanitize и **принудительное безопасное пересохранение** в
-server-owned формате/файле до публикации. Для SVG требуется parse/sanitize с
-запретом script/external references либо rasterization; исходный пользовательский
-файл не должен отдаваться обратно как trusted asset.
+Icon upload принимает только PNG/GIF/SVG и не доверяет filename, extension или
+заявленному MIME. Перед публикацией файл проходит domain sanitizer:
 
-Icons хранятся в отдельном server-owned каталоге, metadata/type — в PostgreSQL.
-При delete type необходимо атомарно проверить references, удалить/заменить DB
-record согласно выбранной policy и убрать связанный файл без orphan assets.
+- PNG: проверка chunk CRC, IHDR/critical chunks, bounds, bounded inflate и
+  повторная сборка только из canonical `IHDR/PLTE/tRNS/IDAT/IEND`;
+- GIF: структурный разбор, только один frame, bounded LZW decode; comment,
+  application и plain-text extensions отбрасываются;
+- SVG: UTF-8 parser с whitelist безопасных geometry elements/attributes,
+  запретом script/external references/entities и unsafe CSS; inline
+  `style="..."` и `<style>` разрешены через ограниченный CSS parser только
+  для local tag/class/id selectors и whitelist presentation properties без
+  `url(...)`, `@import`, `expression()`, CSS escapes/variables и external
+  data.
+
+После sanitize считается SHA-256 и генерируется имя
+`<pointTypeId>-<sha256>.<ext>`; пользовательское имя файла никогда не
+используется. Sanitized icon хранится в `var/point-type-icons`, а metadata
+остаются в PostgreSQL. Public API отдаёт только контролируемый
+`/api/point-types/:id/icon?v=<sha256>` с `nosniff` и restrictive CSP.
+
+DB metadata меняется транзакционно; новый файл записывается до commit и
+удаляется при DB failure, старый файл удаляется только после успешного commit.
+При reset/delete ошибка cleanup не возвращает старый asset в публичное
+состояние: metadata уже очищены, а orphan отмечается как cleanup pending.
+Startup reconciliation дополнительно удаляет server-owned orphan/temp icons,
+оставшиеся после аварийного завершения процесса, и считает DB references на
+отсутствующие files.
+
+Остаётся UI-этап: CRUD/upload preview в **Настройках интерфейса** и rendering
+point icons на admin/public map.
 
 ## Проверки
 
