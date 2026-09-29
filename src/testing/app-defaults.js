@@ -235,6 +235,8 @@ function securitySettings() {
     passwordRequireUppercase: false,
     passwordRequireDigit: false,
     passwordRequireSpecial: false,
+    metricsEnabled: false,
+    metricsTokenConfigured: false,
   };
 }
 
@@ -500,7 +502,43 @@ function security(config) {
     async saveSecuritySettings(
       payload,
     ) {
-      return payload;
+      return {
+        ...payload,
+        metricsTokenConfigured:
+          false,
+      };
+    },
+
+    async bootstrapMetricsSettings() {
+      return {
+        initializedFromEnvironment:
+          false,
+        enabled: false,
+        tokenConfigured: false,
+      };
+    },
+
+    async authorizeMetricsToken() {
+      return {
+        enabled: false,
+        authorized: false,
+      };
+    },
+
+    async rotateMetricsToken() {
+      return {
+        token:
+          'test-metrics-token',
+        settings: {
+          ...securitySettings(),
+          metricsTokenConfigured:
+            true,
+        },
+      };
+    },
+
+    async clearMetricsToken() {
+      return securitySettings();
     },
 
     async listIpBlocks() {

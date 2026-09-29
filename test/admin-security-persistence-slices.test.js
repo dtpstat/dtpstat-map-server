@@ -140,6 +140,7 @@ test('admin access-control repository keeps settings IP failure and manual block
     createAdminAccessControlRepository(database);
 
   const settings = await repository.getSecuritySettings();
+  await repository.getMetricsAccess();
   const failed = await repository.recordFailedIp(
     '127.0.0.1',
     '2026-09-24T10:00:00.000Z',
@@ -165,11 +166,19 @@ test('admin access-control repository keeps settings IP failure and manual block
     /FROM admin_security_settings/u,
   );
   assert.match(
+    calls[0].text,
+    /metrics_enabled AS "metricsEnabled"/u,
+  );
+  assert.match(
     calls[1].text,
-    /^INSERT INTO admin_login_ip_state/u,
+    /metrics_bearer_token_hash AS "tokenHash"/u,
   );
   assert.match(
     calls[2].text,
+    /^INSERT INTO admin_login_ip_state/u,
+  );
+  assert.match(
+    calls[3].text,
     /^INSERT INTO admin_blocked_ips/u,
   );
 });

@@ -260,8 +260,8 @@ export function installAppHttpMiddleware(
   installMetricsEndpoint(
     app,
     {
-      config,
       metrics,
+      securityService,
     },
   );
 

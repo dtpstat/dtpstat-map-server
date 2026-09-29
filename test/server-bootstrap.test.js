@@ -159,6 +159,11 @@ test('application bootstrap preserves startup order and returns admin success st
       bootstrapAccessToken:
         'mapbox-token',
     },
+    metrics: {
+      enabled: true,
+      bearerToken:
+        '0123456789abcdef0123456789abcdef',
+    },
   };
   const updates = [
     {
@@ -239,6 +244,23 @@ test('application bootstrap preserves startup order and returns admin success st
             created: false,
           };
         },
+        async bootstrapMetricsSettings(
+          metrics,
+        ) {
+          assert.equal(
+            metrics,
+            config.metrics,
+          );
+          calls.push(
+            'metrics-bootstrap',
+          );
+          return {
+            initializedFromEnvironment:
+              true,
+            enabled: true,
+            tokenConfigured: true,
+          };
+        },
       },
       projectSettingsRepository: {
         async bootstrapMapboxAccessToken(
@@ -316,6 +338,7 @@ test('application bootstrap preserves startup order and returns admin success st
       'point-type-icons.reconcile',
       'osm-import-settings.bootstrap',
       'admin-security.bootstrap',
+      'metrics.settings.bootstrap',
       'project-settings.mapbox.bootstrap',
       'project-settings.load',
       'admin-success-state.load',
@@ -330,6 +353,7 @@ test('application bootstrap preserves startup order and returns admin success st
       'point-icon-reconcile',
       'osm-bootstrap',
       'security-bootstrap',
+      'metrics-bootstrap',
       'mapbox-bootstrap',
       'settings-load',
       'derived-refresh',

@@ -133,7 +133,7 @@ MAPBOX_ACCESS_TOKEN=pk....
 
 ## Миграции
 
-Текущий набор: `V001…V053`.
+Текущий набор: `V001…V054`.
 
 Последние migrations:
 
@@ -174,6 +174,7 @@ V050__point_types.sql
 V051__active_descendant_spatial_relink.sql
 V052__covered_geometry_spatial_relink.sql
 V053__covered_descendant_spatial_relink.sql
+V054__admin_metrics_settings.sql
 ```
 
 Назначение `V023…V053`:
@@ -203,9 +204,10 @@ V053__covered_descendant_spatial_relink.sql
 - `V050` — dictionary типов точек, icon metadata и optional point-type link для Point geometry;
 - `V051` — PostGIS-version-independent fallback к active parent при отсутствии active descendants;
 - `V052` — bypass overlay для полностью покрытой geometry, устраняющий PostGIS 3.5/3.6 расхождение `ST_Intersects`/empty `ST_Intersection`;
-- `V053` — zero-score short-circuit для parent candidate, полностью покрытого active descendants, без ненадёжного `ST_Difference`.
+- `V053` — zero-score short-circuit для parent candidate, полностью покрытого active descendants, без ненадёжного `ST_Difference`;
+- `V054` — DB-backed Prometheus enable flag и SHA-256 bearer-token hash с одноразовым ENV bootstrap.
 
-Следующая migration: **V054+**. Опубликованные migration files не изменяются задним числом.
+Следующая migration: **V055+**. Опубликованные migration files не изменяются задним числом.
 
 Startup автоматически применяет pending migrations через отдельный
 `DATABASE_MIGRATION_ROLE` под PostgreSQL advisory lock, затем повторно сверяет
@@ -281,18 +283,19 @@ WebSocket headers нужны для `/api/admin/ws`.
 
 ### Prometheus metrics
 
-Metrics endpoint по умолчанию выключен. Для production:
+Начиная с `V054`, authoritative metrics settings хранятся в
+`ADMIN_SECURITY_SETTINGS` и меняются в admin → «Пользователи и безопасность»
+→ «Защита». Bearer token хранится только как SHA-256 hash; plaintext
+показывается один раз при генерации/ротации.
 
-```dotenv
-METRICS_ENABLED=true
-METRICS_BEARER_TOKEN=replace-with-a-separate-random-token-at-least-32-characters
-```
+`METRICS_ENABLED` и `METRICS_BEARER_TOKEN` теперь только одноразовый
+bootstrap для существующих deployment-конфигураций. После первого startup
+`METRICS_SETTINGS_INITIALIZED=true`, и ENV больше не переопределяет настройки
+из админки.
 
 Scrape endpoint: `GET /metrics` с заголовком
-`Authorization: Bearer <METRICS_BEARER_TOKEN>`. Без корректного token endpoint
-возвращает `401`; без `METRICS_ENABLED=true` route вообще не регистрируется.
-Production startup fail-closed, если metrics включены без token длиной минимум
-32 символа.
+`Authorization: Bearer <token>`. Когда metrics выключены, endpoint отвечает
+`404`; при неверном token — `401`.
 
 Экспортируются bounded-label HTTP request counters/histogram, process
 uptime/RSS/heap и состояние runtime PostgreSQL pool. Query string, request body,

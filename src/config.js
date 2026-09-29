@@ -400,8 +400,6 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
   }
 
   if (
-    environment ===
-      'production' &&
     metricsEnabled &&
     (
       !metricsBearerToken ||
@@ -410,7 +408,7 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     )
   ) {
     throw new Error(
-      'METRICS_BEARER_TOKEN with at least 32 characters is required when metrics are enabled in production',
+      'METRICS_BEARER_TOKEN with at least 32 characters is required when METRICS_ENABLED=true',
     );
   }
 

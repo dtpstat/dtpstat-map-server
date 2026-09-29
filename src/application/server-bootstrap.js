@@ -102,7 +102,10 @@ export async function prepareServerDatabase({
  *   pointTypesRepository: { listIconFileNames: () => Promise<string[]> },
  *   pointTypeIconStore: { reconcile: (fileNames: string[]) => Promise<any> },
  *   osmImportSettingsRepository: { bootstrap: (options: any) => Promise<any> },
- *   securityService: { bootstrap: (credentials: object) => Promise<any> },
+ *   securityService: {
+ *     bootstrap: (credentials: object) => Promise<any>,
+ *     bootstrapMetricsSettings: (options: object) => Promise<any>
+ *   },
  *   projectSettingsRepository: {
  *     bootstrapMapboxAccessToken: (token: any) => Promise<any>,
  *     get: () => Promise<any>
@@ -201,6 +204,19 @@ export async function bootstrapServerApplication({
           created:
             result.created,
         }),
+    },
+  );
+
+  await runOperation(
+    'metrics.settings.bootstrap',
+    () =>
+      securityService
+        .bootstrapMetricsSettings(
+          config.metrics,
+        ),
+    {
+      successDetails:
+        (result) => result,
     },
   );
 

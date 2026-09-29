@@ -408,3 +408,16 @@ npm run admin:unblock -- --ip 203.0.113.10
 - dependency/CodeQL/Dependabot policy в CI/CD;
 - optional external audit/security collectors (например Zabbix/SIEM);
 - отдельный расширенный regression suite для всех production security headers.
+
+
+## Prometheus access
+
+Начиная с V054, доступ к `/metrics` управляется через
+`ADMIN_SECURITY_SETTINGS`. В БД хранится только SHA-256 hash bearer token.
+Plaintext token возвращается только в ответ на явную ротацию и не входит в
+project settings export, audit details или service logs.
+
+Включить metrics без настроенного token нельзя. Очистка token автоматически
+выключает endpoint. ENV `METRICS_ENABLED` / `METRICS_BEARER_TOKEN` служат
+только одноразовым bootstrap и после `METRICS_SETTINGS_INITIALIZED=true` не
+переопределяют настройки администратора.

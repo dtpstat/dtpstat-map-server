@@ -7,15 +7,18 @@ import {
 } from '../src/http/metrics-endpoint.js';
 
 async function withMetricsServer(
-  config,
+  authorizeMetricsToken,
   callback,
 ) {
   const app =
     express();
+
   installMetricsEndpoint(
     app,
     {
-      config,
+      securityService: {
+        authorizeMetricsToken,
+      },
       metrics: {
         render() {
           return (
@@ -26,6 +29,7 @@ async function withMetricsServer(
       },
     },
   );
+
   const server =
     http.createServer(
       app,
@@ -65,14 +69,12 @@ async function withMetricsServer(
   }
 }
 
-test('metrics endpoint is absent while disabled', async () => {
+test('metrics endpoint stays hidden while DB setting is disabled', async () => {
   await withMetricsServer(
-    {
-      metrics: {
-        enabled: false,
-        bearerToken: null,
-      },
-    },
+    async () => ({
+      enabled: false,
+      authorized: false,
+    }),
     async (baseUrl) => {
       const response =
         await fetch(
@@ -88,14 +90,20 @@ test('metrics endpoint is absent while disabled', async () => {
   );
 });
 
-test('metrics endpoint requires the configured bearer token', async () => {
+test('metrics endpoint requires the DB-backed bearer token', async () => {
+  const received = [];
+
   await withMetricsServer(
-    {
-      metrics: {
+    async (token) => {
+      received.push(
+        token,
+      );
+      return {
         enabled: true,
-        bearerToken:
-          '0123456789abcdef0123456789abcdef',
-      },
+        authorized:
+          token ===
+          'correct-token',
+      };
     },
     async (baseUrl) => {
       const unauthorized =
@@ -122,7 +130,7 @@ test('metrics endpoint requires the configured bearer token', async () => {
           {
             headers: {
               Authorization:
-                'Bearer 0123456789abcdef0123456789abcdef',
+                'Bearer correct-token',
             },
           },
         );
@@ -158,5 +166,13 @@ test('metrics endpoint requires the configured bearer token', async () => {
         /test_metric 1/u,
       );
     },
+  );
+
+  assert.deepEqual(
+    received,
+    [
+      null,
+      'correct-token',
+    ],
   );
 });

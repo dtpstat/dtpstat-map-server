@@ -471,3 +471,41 @@ test('loadConfig requires a dedicated metrics bearer token in production', () =>
     },
   );
 });
+
+
+test('loadConfig treats metrics environment values as validated bootstrap input', () => {
+  assert.throws(
+    () =>
+      loadConfig(
+        {
+          ...REQUIRED_ENV,
+          METRICS_ENABLED:
+            'true',
+        },
+        '/project',
+      ),
+    /METRICS_BEARER_TOKEN/u,
+  );
+
+  const token =
+    '0123456789abcdef0123456789abcdef';
+  const config =
+    loadConfig(
+      {
+        ...REQUIRED_ENV,
+        METRICS_ENABLED:
+          'true',
+        METRICS_BEARER_TOKEN:
+          token,
+      },
+      '/project',
+    );
+
+  assert.deepEqual(
+    config.metrics,
+    {
+      enabled: true,
+      bearerToken: token,
+    },
+  );
+});

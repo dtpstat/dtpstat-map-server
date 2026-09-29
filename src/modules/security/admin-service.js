@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import {
   adminPasswordPolicy,
   AdminSecurityValidationError,
@@ -7,6 +8,49 @@ import {
   normalizeAdminReason,
   normalizeAdminSecuritySettings,
 } from './policy.js';
+
+function metricsTokenHash(
+  token,
+) {
+  return crypto
+    .createHash(
+      'sha256',
+    )
+    .update(
+      token,
+      'utf8',
+    )
+    .digest();
+}
+
+function metricsTokenMatches(
+  token,
+  tokenHash,
+) {
+  if (
+    typeof token !== 'string' ||
+    !token ||
+    !Buffer.isBuffer(
+      tokenHash,
+    )
+  ) {
+    return false;
+  }
+
+  const actual =
+    metricsTokenHash(
+      token,
+    );
+
+  return (
+    actual.length ===
+      tokenHash.length &&
+    crypto.timingSafeEqual(
+      actual,
+      tokenHash,
+    )
+  );
+}
 
 export function createSecurityAdministrationService(
   repository,
@@ -77,11 +121,32 @@ export function createSecurityAdministrationService(
   }
 
   async function saveSecuritySettings(payload) {
+    const normalized =
+      normalizeAdminSecuritySettings(
+        payload,
+      );
+
+    if (
+      normalized.metricsEnabled
+    ) {
+      const access =
+        await repository
+          .getMetricsAccess();
+
+      if (
+        !Buffer.isBuffer(
+          access.tokenHash,
+        )
+      ) {
+        throw new AdminSecurityValidationError(
+          'Configure a Prometheus bearer token before enabling metrics',
+        );
+      }
+    }
+
     const settings =
       await repository.saveSecuritySettings(
-        normalizeAdminSecuritySettings(
-          payload,
-        ),
+        normalized,
       );
 
     await repository.purgeAudit(
@@ -89,6 +154,100 @@ export function createSecurityAdministrationService(
     );
 
     return settings;
+  }
+
+  async function bootstrapMetricsSettings(
+    options = {},
+  ) {
+    const bearerToken =
+      typeof options
+        .bearerToken ===
+        'string' &&
+      options.bearerToken
+        ? options.bearerToken
+        : null;
+    const tokenHash =
+      bearerToken
+        ? metricsTokenHash(
+            bearerToken,
+          )
+        : null;
+
+    const access =
+      await repository
+        .initializeMetricsSettings({
+          enabled:
+            Boolean(
+              options.enabled &&
+              tokenHash,
+            ),
+          tokenHash,
+        });
+
+    return {
+      initializedFromEnvironment:
+        access
+          .initializedFromEnvironment,
+      enabled:
+        Boolean(
+          access.enabled,
+        ),
+      tokenConfigured:
+        Buffer.isBuffer(
+          access.tokenHash,
+        ),
+    };
+  }
+
+  async function authorizeMetricsToken(
+    token,
+  ) {
+    const access =
+      await repository
+        .getMetricsAccess();
+
+    return {
+      enabled:
+        Boolean(
+          access.enabled,
+        ),
+      authorized:
+        Boolean(
+          access.enabled &&
+          metricsTokenMatches(
+            token,
+            access.tokenHash,
+          ),
+        ),
+    };
+  }
+
+  async function rotateMetricsToken() {
+    const token =
+      crypto
+        .randomBytes(
+          32,
+        )
+        .toString(
+          'base64url',
+        );
+    const settings =
+      await repository
+        .saveMetricsTokenHash(
+          metricsTokenHash(
+            token,
+          ),
+        );
+
+    return {
+      token,
+      settings,
+    };
+  }
+
+  async function clearMetricsToken() {
+    return repository
+      .clearMetricsToken();
   }
 
   return {
@@ -101,6 +260,10 @@ export function createSecurityAdministrationService(
       ),
 
     saveSecuritySettings,
+    bootstrapMetricsSettings,
+    authorizeMetricsToken,
+    rotateMetricsToken,
+    clearMetricsToken,
 
     listIpBlocks: () =>
       repository.listIpBlocks(),

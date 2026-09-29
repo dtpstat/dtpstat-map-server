@@ -16,6 +16,8 @@ const SECURITY_FIELDS_SQL = `
   password_require_uppercase AS "passwordRequireUppercase",
   password_require_digit AS "passwordRequireDigit",
   password_require_special AS "passwordRequireSpecial",
+  metrics_enabled AS "metricsEnabled",
+  (metrics_bearer_token_hash IS NOT NULL) AS "metricsTokenConfigured",
   updated_at AS "updatedAt"
 `;
 
@@ -175,6 +177,7 @@ export function createAdminAccessControlRepository(database) {
            password_require_uppercase=$15::boolean,
            password_require_digit=$16::boolean,
            password_require_special=$17::boolean,
+           metrics_enabled=$18::boolean,
            updated_at=NOW()
          WHERE id=1
          RETURNING ${SECURITY_FIELDS_SQL}`,
@@ -196,8 +199,110 @@ export function createAdminAccessControlRepository(database) {
           settings.passwordRequireUppercase,
           settings.passwordRequireDigit,
           settings.passwordRequireSpecial,
+          settings.metricsEnabled,
         ],
       );
+      if (!result.rows[0]) {
+        throw new Error(
+          'Admin security settings row is missing; run database migrations',
+        );
+      }
+      return result.rows[0];
+    },
+
+    async getMetricsAccess() {
+      const result =
+        await database.query(
+          `SELECT
+             metrics_enabled AS "enabled",
+             metrics_bearer_token_hash AS "tokenHash",
+             metrics_settings_initialized AS "initialized"
+           FROM admin_security_settings
+           WHERE id = 1`,
+        );
+      if (!result.rows[0]) {
+        throw new Error(
+          'Admin security settings row is missing; run database migrations',
+        );
+      }
+      return result.rows[0];
+    },
+
+    async initializeMetricsSettings({
+      enabled,
+      tokenHash,
+    }) {
+      const result =
+        await database.query(
+          `UPDATE admin_security_settings
+           SET
+             metrics_enabled=$1::boolean,
+             metrics_bearer_token_hash=$2::bytea,
+             metrics_settings_initialized=TRUE,
+             updated_at=NOW()
+           WHERE id=1
+             AND NOT metrics_settings_initialized
+           RETURNING
+             metrics_enabled AS "enabled",
+             metrics_bearer_token_hash AS "tokenHash",
+             metrics_settings_initialized AS "initialized"`,
+          [
+            enabled,
+            tokenHash,
+          ],
+        );
+
+      if (result.rows[0]) {
+        return {
+          ...result.rows[0],
+          initializedFromEnvironment:
+            true,
+        };
+      }
+
+      return {
+        ...await this.getMetricsAccess(),
+        initializedFromEnvironment:
+          false,
+      };
+    },
+
+    async saveMetricsTokenHash(
+      tokenHash,
+    ) {
+      const result =
+        await database.query(
+          `UPDATE admin_security_settings
+           SET
+             metrics_bearer_token_hash=$1::bytea,
+             metrics_settings_initialized=TRUE,
+             updated_at=NOW()
+           WHERE id=1
+           RETURNING ${SECURITY_FIELDS_SQL}`,
+          [
+            tokenHash,
+          ],
+        );
+      if (!result.rows[0]) {
+        throw new Error(
+          'Admin security settings row is missing; run database migrations',
+        );
+      }
+      return result.rows[0];
+    },
+
+    async clearMetricsToken() {
+      const result =
+        await database.query(
+          `UPDATE admin_security_settings
+           SET
+             metrics_enabled=FALSE,
+             metrics_bearer_token_hash=NULL,
+             metrics_settings_initialized=TRUE,
+             updated_at=NOW()
+           WHERE id=1
+           RETURNING ${SECURITY_FIELDS_SQL}`,
+        );
       if (!result.rows[0]) {
         throw new Error(
           'Admin security settings row is missing; run database migrations',
