@@ -737,31 +737,136 @@ if (section) {
   }
 
   function drawingFeature() {
-    const drawing = state.drawing;
-    if (!drawing || drawing.coordinates.length === 0) return emptyCollection();
+    const drawing =
+      state.drawing;
+
+    if (!drawing) {
+      return emptyCollection();
+    }
+
+    const fixed =
+      drawing.coordinates.map(
+        (coordinate) =>
+          [...coordinate],
+      );
+    const preview =
+      drawing.previewCoordinate
+        ? [
+            ...drawing
+              .previewCoordinate,
+          ]
+        : null;
+
     let geometry;
-    if (drawing.mode === 'point') {
-      geometry = { type: 'Point', coordinates: drawing.coordinates[0] };
+
+    if (
+      drawing.mode ===
+      'point'
+    ) {
+      const coordinate =
+        fixed[0] ??
+        preview;
+
+      if (!coordinate) {
+        return emptyCollection();
+      }
+
+      geometry = {
+        type: 'Point',
+        coordinates:
+          coordinate,
+      };
     } else if (
       drawing.mode === 'line' ||
       drawing.mode === 'split'
     ) {
-      if (drawing.coordinates.length === 1) {
-        geometry = { type: 'Point', coordinates: drawing.coordinates[0] };
-      } else {
-        geometry = { type: 'LineString', coordinates: drawing.coordinates };
+      const coordinates =
+        fixed.length > 0 &&
+        preview
+          ? [
+              ...fixed,
+              preview,
+            ]
+          : fixed;
+
+      if (
+        coordinates.length === 0
+      ) {
+        return emptyCollection();
       }
+
+      geometry =
+        coordinates.length === 1
+          ? {
+              type: 'Point',
+              coordinates:
+                coordinates[0],
+            }
+          : {
+              type: 'LineString',
+              coordinates,
+            };
     } else {
-      const coords = [...drawing.coordinates];
-      if (coords.length >= 2) coords.push([...coords[0]]);
-      geometry = coords.length >= 4
-        ? { type: 'Polygon', coordinates: [coords] }
-        : { type: 'LineString', coordinates: drawing.coordinates };
+      const coordinates =
+        fixed.length > 0 &&
+        preview
+          ? [
+              ...fixed,
+              preview,
+            ]
+          : fixed;
+
+      if (
+        coordinates.length === 0
+      ) {
+        return emptyCollection();
+      }
+
+      if (
+        coordinates.length < 3
+      ) {
+        geometry =
+          coordinates.length === 1
+            ? {
+                type: 'Point',
+                coordinates:
+                  coordinates[0],
+              }
+            : {
+                type: 'LineString',
+                coordinates,
+              };
+      } else {
+        geometry = {
+          type: 'Polygon',
+          coordinates: [[
+            ...coordinates,
+            [
+              ...coordinates[0],
+            ],
+          ]],
+        };
+      }
     }
+
     return {
       type: 'FeatureCollection',
-      features: [{ type: 'Feature', geometry, properties: {} }],
+      features: [{
+        type: 'Feature',
+        geometry,
+        properties: {},
+      }],
     };
+  }
+
+  function updateDrawingPreview() {
+    state.map
+      ?.getSource(
+        DRAW_SOURCE,
+      )
+      ?.setData(
+        drawingFeature(),
+      );
   }
 
   function addLayerSafe(map, layer, before) {
@@ -1114,8 +1219,29 @@ if (section) {
         pushHistory();
       });
       map.on('mousemove', (event) => {
-        if (!state.dragPath || !state.draft) return;
-        moveVertex(state.dragPath, event.lngLat.toArray(), { record: false });
+        if (
+          state.dragPath &&
+          state.draft
+        ) {
+          moveVertex(
+            state.dragPath,
+            event.lngLat.toArray(),
+            {
+              record: false,
+            },
+          );
+          return;
+        }
+
+        if (!state.drawing) {
+          return;
+        }
+
+        state.drawing
+          .previewCoordinate =
+          event.lngLat.toArray();
+
+        updateDrawingPreview();
       });
       map.on('mouseup', () => {
         if (!state.dragPath) return;
@@ -1136,13 +1262,28 @@ if (section) {
 
       map.on('click', (event) => {
         if (state.suppressMapClick || !state.drawing) return;
-        const coordinate = event.lngLat.toArray();
-        if (state.drawing.mode === 'point') {
-          state.drawing.coordinates = [coordinate];
+        const coordinate =
+          event.lngLat.toArray();
+
+        state.drawing
+          .previewCoordinate =
+          null;
+
+        if (
+          state.drawing.mode ===
+          'point'
+        ) {
+          state.drawing.coordinates =
+            [coordinate];
           finishDrawing();
           return;
         }
-        state.drawing.coordinates.push(coordinate);
+
+        state.drawing
+          .coordinates
+          .push(
+            coordinate,
+          );
         updateMapSources();
         updateDrawControls();
       });
@@ -2085,6 +2226,13 @@ if (section) {
         'polygon',
       ].includes(family);
 
+    if (
+      topologyActions.hidden
+    ) {
+      topologyActions.open =
+        false;
+    }
+
     cutButton.hidden =
       family !== 'polygon';
     cutSelectedButton.hidden =
@@ -2139,10 +2287,10 @@ if (section) {
     mergeButton.disabled =
       Boolean(problem) ||
       Boolean(state.drawing);
+    mergeButton.hidden =
+      selected.length === 0;
     mergeButton.textContent =
-      selected.length > 0
-        ? `Объединить выбранные (${selected.length})`
-        : 'Объединить выбранные';
+      `Объединить (${selected.length})`;
     mergeButton.title =
       problem ?? '';
     renderTopologyState();
@@ -3871,6 +4019,7 @@ if (section) {
       state.drawing = {
         mode,
         coordinates: [],
+        previewCoordinate: null,
       };
       state.history = [];
       state.future = [];
@@ -3899,7 +4048,11 @@ if (section) {
       }
     }
 
-    state.drawing = { mode, coordinates: [] };
+    state.drawing = {
+      mode,
+      coordinates: [],
+      previewCoordinate: null,
+    };
     state.current = draftItemFor(
       mode === 'point'
         ? 'Point'

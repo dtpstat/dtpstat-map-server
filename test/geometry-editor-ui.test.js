@@ -877,3 +877,52 @@ test('geometry editor exposes optimistic polygon cutter and line-blade split ope
     /releaseDraftLease\([\s\S]*target\.id/u,
   );
 });
+
+
+test('geometry drawing previews the next segment under the pointer and keeps secondary actions compact', async () => {
+  const [
+    editor,
+    page,
+    styles,
+  ] =
+    await Promise.all([
+      read(
+        'admin/geometry-editor.js',
+      ),
+      read(
+        'admin/index.html',
+      ),
+      read(
+        'admin/geometry-editor.css',
+      ),
+    ]);
+
+  assert.match(
+    editor,
+    /previewCoordinate/u,
+  );
+  assert.match(
+    editor,
+    /map\.on\('mousemove'[\s\S]*state\.drawing[\s\S]*previewCoordinate[\s\S]*updateDrawingPreview/u,
+  );
+  assert.match(
+    editor,
+    /fixed\.length > 0[\s\S]*preview[\s\S]*LineString/u,
+  );
+  assert.match(
+    page,
+    /class="geometry-editor-more-actions"[\s\S]*<summary>Ещё<\/summary>/u,
+  );
+  assert.match(
+    page,
+    /id="geometry-topology-actions"[\s\S]*<summary>Геометрические операции<\/summary>/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-editor-meta div[\s\S]*grid-template-columns/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-editor-more-menu[\s\S]*position: absolute/u,
+  );
+});

@@ -472,32 +472,41 @@
             <div class="geometry-editor-heading-actions">
               <span id="geometry-editor-draft-count"
                     class="geometry-editor-draft-count">Черновики: 0</span>
-              <span class="geometry-editor-storage-mode"
-                    title="Несинхронизированные изменения хранятся в localStorage браузера">
-                localStorage
-              </span>
               <button id="geometry-editor-save-all" type="button" disabled>
                 Синхронизировать
               </button>
-              <button class="secondary" id="geometry-editor-discard-all"
-                      type="button" disabled>
-                Очистить локальные изменения
-              </button>
-              <button class="secondary" id="geometry-editor-refresh"
-                      type="button">
-                Обновить
-              </button>
-              <button id="geometry-editor-recalculate" type="button">
-                Пересчитать
-              </button>
+              <details class="geometry-editor-more-actions">
+                <summary>Ещё</summary>
+                <div class="geometry-editor-more-menu">
+                  <span class="geometry-editor-storage-mode"
+                        title="Несинхронизированные изменения хранятся в localStorage браузера">
+                    localStorage
+                  </span>
+                  <button class="secondary" id="geometry-editor-discard-all"
+                          type="button" disabled>
+                    Сбросить локальное
+                  </button>
+                  <button class="secondary" id="geometry-editor-refresh"
+                          type="button">
+                    Обновить данные
+                  </button>
+                  <button class="secondary" id="geometry-editor-recalculate"
+                          type="button">
+                    Пересчитать производные
+                  </button>
+                </div>
+              </details>
             </div>
           </div>
 
-          <p class="panel-description">
-            Ручное редактирование Point, LineString/MultiLineString и Polygon/MultiPolygon.
-            Изменения существующих геометрий сначала сохраняются локально как черновики.
-            Серверные изменения не перезаписывают локальный черновик молча.
-          </p>
+          <details class="geometry-editor-help">
+            <summary>Как работать с редактором</summary>
+            <p>
+              Существующие объекты сначала открываются только для просмотра.
+              «Начать редактирование» берёт lease; несинхронизированные изменения
+              остаются в localStorage.
+            </p>
+          </details>
 
           <section class="geometry-import-conflicts"
                    id="geometry-import-conflicts" hidden>
@@ -547,11 +556,11 @@
                   </label>
                   <div class="geometry-editor-create-actions">
                     <button class="secondary" id="geometry-new-point"
-                            type="button">+ Точка</button>
+                            type="button">Точка</button>
                     <button class="secondary" id="geometry-new-line"
-                            type="button">+ Линия</button>
+                            type="button">Линия</button>
                     <button class="secondary" id="geometry-new-polygon"
-                            type="button">+ Полигон</button>
+                            type="button">Полигон</button>
                   </div>
                 </div>
 
@@ -631,7 +640,7 @@
                   </label>
 
                   <label>Подсказка
-                    <textarea name="tooltip" rows="4"
+                    <textarea name="tooltip" rows="2"
                               maxlength="2000" disabled
                               placeholder="Если пусто, используется имя"></textarea>
                   </label>
@@ -640,7 +649,6 @@
                     <input name="tags" type="text"
                            maxlength="4096" disabled
                            placeholder="центр, обособленная, эксперимент">
-                    <small>Через запятую.</small>
                   </label>
 
                   <label class="check">
@@ -668,21 +676,24 @@
                             type="button" disabled>Отменить правки</button>
                   </div>
 
-                  <div class="geometry-editor-topology-actions"
-                       id="geometry-topology-actions" hidden>
-                    <button class="secondary" id="geometry-cut-area"
-                            type="button">
-                      Вырезать нарисованную область…
-                    </button>
-                    <button class="secondary" id="geometry-cut-selected"
-                            type="button">
-                      Вырезать выбранным полигоном
-                    </button>
-                    <button class="secondary" id="geometry-split"
-                            type="button">
-                      Разделить линией…
-                    </button>
-                  </div>
+                  <details class="geometry-editor-topology-actions"
+                           id="geometry-topology-actions" hidden>
+                    <summary>Геометрические операции</summary>
+                    <div class="geometry-editor-topology-buttons">
+                      <button class="secondary" id="geometry-cut-area"
+                              type="button">
+                        Вырезать область
+                      </button>
+                      <button class="secondary" id="geometry-cut-selected"
+                              type="button">
+                        Вырезать полигоном
+                      </button>
+                      <button class="secondary" id="geometry-split"
+                              type="button">
+                        Разделить линией
+                      </button>
+                    </div>
+                  </details>
 
                   <button class="danger" id="geometry-delete"
                           type="button" disabled>

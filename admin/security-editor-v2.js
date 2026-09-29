@@ -400,9 +400,20 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
             canManageSecurity: form.elements.canManageSecurity.checked,
           }),
         });
-        userById.set(user.id, payload.user);
-        setMessage(host.querySelector('#security-users-message'), 'Пользователь сохранён.', 'success');
-        await loadUsers(user.id);
+        userById.set(
+          user.id,
+          payload.user,
+        );
+        await loadUsers(
+          user.id,
+        );
+        setMessage(
+          host.querySelector(
+            '#security-users-message',
+          ),
+          'Пользователь сохранён.',
+          'success',
+        );
       } catch (error) {
         setMessage(host.querySelector('#security-users-message'), error.message, 'error');
       }
@@ -441,6 +452,13 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           }),
         });
         await loadUsers(user.id);
+        setMessage(
+          host.querySelector(
+            '#security-users-message',
+          ),
+          'Пользователь заблокирован.',
+          'success',
+        );
       } catch (error) {
         setMessage(host.querySelector('#security-users-message'), error.message, 'error');
       }
@@ -449,6 +467,13 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       try {
         await api(`/api/admin/security/users/${user.id}/unblock`, { method: 'POST' });
         await loadUsers(user.id);
+        setMessage(
+          host.querySelector(
+            '#security-users-message',
+          ),
+          'Пользователь разблокирован.',
+          'success',
+        );
       } catch (error) {
         setMessage(host.querySelector('#security-users-message'), error.message, 'error');
       }
