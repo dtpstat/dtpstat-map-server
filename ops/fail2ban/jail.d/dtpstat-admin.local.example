@@ -1,0 +1,13 @@
+# Copy to /etc/fail2ban/jail.d/dtpstat-admin.local and adjust the unit name.
+#
+# The application already enforces its own DB-backed lockout. This jail adds a
+# host firewall ban only after an explicit DTP-Stat lockout event appears.
+[dtpstat-admin-lockout]
+enabled = true
+filter = dtpstat-admin-lockout
+backend = systemd
+journalmatch = _SYSTEMD_UNIT=dtpstat.service
+port = http,https
+maxretry = 1
+findtime = 10m
+bantime = 1h

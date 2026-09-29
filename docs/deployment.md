@@ -348,6 +348,10 @@ sudo systemctl reload nginx
 эти сообщения можно использовать внешним fail2ban/journal tooling. Само
 приложение fail2ban не конфигурирует.
 
+Готовые deployment templates для fail2ban и Prometheus alerts находятся в
+`ops/`. Порядок установки, проверки regex/rules и рекомендуемые dashboards:
+[monitoring.md](monitoring.md).
+
 ## PM2
 
 ```bash
