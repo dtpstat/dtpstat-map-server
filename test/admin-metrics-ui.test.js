@@ -136,3 +136,52 @@ test('Prometheus controls are top-level and use a compact checkbox', async () =>
     /\.security-settings-form \.security-metrics-toggle input\[type="checkbox"\][\s\S]*width:\s*1rem;[\s\S]*height:\s*1rem;/u,
   );
 });
+
+
+test('Prometheus token controls follow the enable checkbox state', async () => {
+  const [
+    editor,
+    css,
+  ] =
+    await Promise.all([
+      fs.readFile(
+        path.join(
+          root,
+          'admin/security-editor-v2.js',
+        ),
+        'utf8',
+      ),
+      fs.readFile(
+        path.join(
+          root,
+          'admin/security-v2.css',
+        ),
+        'utf8',
+      ),
+    ]);
+
+  assert.match(
+    editor,
+    /function setMetricsControlsEnabled\(enabled\)/u,
+  );
+  assert.match(
+    editor,
+    /rotate\.disabled = !enabled/u,
+  );
+  assert.match(
+    editor,
+    /clear\.disabled =[\s\S]*!enabled[\s\S]*!metricsTokenConfigured/u,
+  );
+  assert.match(
+    editor,
+    /elements\.metricsEnabled[\s\S]*addEventListener\([\s\S]*'change'/u,
+  );
+  assert.doesNotMatch(
+    editor,
+    /showMetricsBearerToken\(payload\.token\);\s*await loadSettings\(\);/u,
+  );
+  assert.match(
+    css,
+    /\.security-metrics-body\.is-disabled/u,
+  );
+});

@@ -558,3 +558,13 @@ body.security-modal-open { overflow: hidden; }
     flex-direction: column;
   }
 }
+
+
+.security-metrics-body.is-disabled {
+  opacity: .48;
+  filter: saturate(.45);
+}
+
+.security-metrics-body.is-disabled button {
+  cursor: not-allowed;
+}

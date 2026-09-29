@@ -1121,11 +1121,38 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     if (event.key === 'Escape' && !auditOverlay?.hidden) closeAuditDetails();
   });
 
+  function setMetricsControlsEnabled(enabled) {
+    const body = host.querySelector('.security-metrics-body');
+    const rotate = host.querySelector('#security-metrics-token-rotate');
+    const clear = host.querySelector('#security-metrics-token-clear');
+
+    body?.classList.toggle(
+      'is-disabled',
+      !enabled,
+    );
+    body?.setAttribute(
+      'aria-disabled',
+      String(!enabled),
+    );
+
+    if (rotate) {
+      rotate.disabled = !enabled;
+    }
+    if (clear) {
+      clear.disabled =
+        !enabled ||
+        !metricsTokenConfigured;
+    }
+  }
+
   function renderMetricsSettings(settings) {
     metricsTokenConfigured = Boolean(settings.metricsTokenConfigured);
     const status = host.querySelector('#security-metrics-token-status');
     const rotate = host.querySelector('#security-metrics-token-rotate');
-    const clear = host.querySelector('#security-metrics-token-clear');
+    const form = host.querySelector('#security-settings-form');
+    const enabled = Boolean(
+      form?.elements.metricsEnabled?.checked,
+    );
 
     if (status) {
       status.textContent = metricsTokenConfigured
@@ -1137,7 +1164,10 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         ? 'Заменить token'
         : 'Сгенерировать token';
     }
-    if (clear) clear.disabled = !metricsTokenConfigured;
+
+    setMetricsControlsEnabled(
+      enabled,
+    );
   }
 
   async function loadSettings() {
@@ -1160,6 +1190,17 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       setMessage(message, error.message, 'error');
     }
   }
+
+  host.querySelector('#security-settings-form')
+    ?.elements.metricsEnabled
+    ?.addEventListener(
+      'change',
+      (event) => {
+        setMetricsControlsEnabled(
+          event.currentTarget.checked,
+        );
+      },
+    );
 
   host.querySelector('#security-settings-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -1226,7 +1267,6 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         });
         renderMetricsSettings(payload.settings);
         showMetricsBearerToken(payload.token);
-        await loadSettings();
       } catch (error) {
         setMessage(
           host.querySelector('#security-settings-message'),
@@ -1252,9 +1292,11 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         const payload = await api('/api/admin/security/metrics-token', {
           method: 'DELETE',
         });
-        renderMetricsSettings(payload.settings);
         const form = host.querySelector('#security-settings-form');
-        if (form?.elements.metricsEnabled) form.elements.metricsEnabled.checked = false;
+        if (form?.elements.metricsEnabled) {
+          form.elements.metricsEnabled.checked = false;
+        }
+        renderMetricsSettings(payload.settings);
         securitySettingsDirty?.markClean();
         setMessage(
           host.querySelector('#security-settings-message'),
