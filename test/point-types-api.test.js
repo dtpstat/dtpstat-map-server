@@ -7,7 +7,7 @@ import {
 } from '../src/routes/point-types-api.js';
 
 async function withServer(callback) {
-  let rows = [];
+  const rows = [];
   let nextId = 1;
 
   const pointTypesRepository = {
