@@ -141,12 +141,7 @@ export function createPointTypesRouter({
       limit:
         POINT_TYPE_ICON_MAX_BYTES,
       inflate: false,
-      type: [
-        'image/png',
-        'image/gif',
-        'image/svg+xml',
-        'application/octet-stream',
-      ],
+      type: () => true,
     });
 
   router.get(
@@ -343,18 +338,28 @@ export function createPointTypesRouter({
                   },
                 );
           } catch (error) {
-            await cleanupIcon(
-              pointTypeIconStore,
-              stored.fileName,
-            );
+            if (
+              before.iconFileName !==
+              stored.fileName
+            ) {
+              await cleanupIcon(
+                pointTypeIconStore,
+                stored.fileName,
+              );
+            }
             throw error;
           }
 
           if (!saved) {
-            await cleanupIcon(
-              pointTypeIconStore,
-              stored.fileName,
-            );
+            if (
+              before.iconFileName !==
+              stored.fileName
+            ) {
+              await cleanupIcon(
+                pointTypeIconStore,
+                stored.fileName,
+              );
+            }
             response
               .status(404)
               .json({

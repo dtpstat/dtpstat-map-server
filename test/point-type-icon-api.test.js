@@ -5,6 +5,9 @@ import test from 'node:test';
 import {
   createPointTypesRouter,
 } from '../src/routes/point-types-api.js';
+import {
+  PointTypeValidationError,
+} from '../src/modules/points/type-policy.js';
 
 function pointTypeState() {
   return {
@@ -28,6 +31,8 @@ function pointTypeState() {
 async function withServer(callback) {
   let pointType =
     pointTypeState();
+  let rejectNextIconSave =
+    false;
   const files =
     new Map();
 
@@ -54,6 +59,14 @@ async function withServer(callback) {
       pointTypeId,
       icon,
     ) {
+      if (rejectNextIconSave) {
+        rejectNextIconSave =
+          false;
+        throw new PointTypeValidationError(
+          'forced icon metadata rejection',
+        );
+      }
+
       if (
         Number(pointTypeId) !==
         pointType.id
@@ -230,6 +243,10 @@ async function withServer(callback) {
       address.port,
       {
         files,
+        rejectNextIconSave() {
+          rejectNextIconSave =
+            true;
+        },
       },
     );
   } finally {
@@ -432,6 +449,135 @@ test('point type icon API sanitizes stores versions serves and resets SVG', asyn
       assert.equal(
         missing.status,
         404,
+      );
+    },
+  );
+});
+
+test('point type icon API preserves an already referenced same-hash file when DB metadata save fails', async () => {
+  await withServer(
+    async (
+      baseUrl,
+      state,
+    ) => {
+      const source =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">' +
+        '<circle cx="16" cy="16" r="12" style="fill:#123456"/>' +
+        '</svg>';
+
+      const first =
+        await fetch(
+          baseUrl +
+          '/api/admin/point-types/1/icon',
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type':
+                'image/svg+xml',
+            },
+            body: source,
+          },
+        );
+
+      assert.equal(
+        first.status,
+        200,
+      );
+
+      const firstPayload =
+        await first.json();
+      const storedFileName =
+        [...state.files.keys()][0];
+
+      assert.ok(
+        storedFileName,
+      );
+
+      state
+        .rejectNextIconSave();
+
+      const repeated =
+        await fetch(
+          baseUrl +
+          '/api/admin/point-types/1/icon',
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type':
+                'image/svg+xml',
+            },
+            body: source,
+          },
+        );
+
+      assert.equal(
+        repeated.status,
+        400,
+      );
+      assert.equal(
+        state.files.size,
+        1,
+      );
+      assert.equal(
+        state.files.has(
+          storedFileName,
+        ),
+        true,
+      );
+
+      const stillServed =
+        await fetch(
+          baseUrl +
+          firstPayload
+            .pointType
+            .iconUrl,
+        );
+
+      assert.equal(
+        stillServed.status,
+        200,
+      );
+    },
+  );
+});
+
+test('point type icon API bounds unsupported content types before persistence', async () => {
+  await withServer(
+    async (
+      baseUrl,
+      state,
+    ) => {
+      const response =
+        await fetch(
+          baseUrl +
+          '/api/admin/point-types/1/icon',
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type':
+                'image/jpeg',
+            },
+            body:
+              Buffer.from(
+                'not-an-image',
+                'utf8',
+              ),
+          },
+        );
+
+      assert.equal(
+        response.status,
+        400,
+      );
+      assert.match(
+        (
+          await response.json()
+        ).error,
+        /Content-Type/u,
+      );
+      assert.equal(
+        state.files.size,
+        0,
       );
     },
   );
