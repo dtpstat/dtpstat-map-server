@@ -157,3 +157,40 @@ test('V052 bypasses overlay when a boundary fully covers the geometry', async ()
     /ASSERT_CITY_GEOMETRY_INVARIANTS/u,
   );
 });
+
+
+test('V053 bypasses descendant difference when descendants fully cover a candidate match', async () => {
+  const migration =
+    await fs.readFile(
+      path.join(
+        root,
+        'db/migrations/V053__covered_descendant_spatial_relink.sql',
+      ),
+      'utf8',
+    );
+
+  assert.match(
+    migration,
+    /ST_COVERS\(\s*DESCENDANT_UNION[\s\S]*ACTIVE_DESCENDANTS,[\s\S]*CANDIDATE\.BASE_MATCH\s*\)/u,
+  );
+  assert.match(
+    migration,
+    /THEN\s+0::DOUBLE PRECISION/u,
+  );
+  assert.match(
+    migration,
+    /ELSE\s+ST_LENGTH/u,
+  );
+  assert.match(
+    migration,
+    /ELSE\s+ST_AREA/u,
+  );
+  assert.match(
+    migration,
+    /ST_DIFFERENCE\(\s*CANDIDATE\.BASE_MATCH/u,
+  );
+  assert.match(
+    migration,
+    /RELINK_ALL_CITY_GEOMETRIES/u,
+  );
+});
