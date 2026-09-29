@@ -690,6 +690,10 @@ if (section) {
       : null;
   }
 
+  function midpoint(a, b) {
+    return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  }
+
   function pathKey(path) {
     return JSON.stringify(path);
   }
@@ -796,6 +800,24 @@ if (section) {
           properties: {
             kind: 'segment',
             path: pathKey([...sequence.prefix, index]),
+          },
+        });
+        features.push({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates:
+              midpoint(
+                coords[index],
+                coords[nextIndex],
+              ),
+          },
+          properties: {
+            kind: 'midpoint',
+            path: pathKey([
+              ...sequence.prefix,
+              index,
+            ]),
           },
         });
       }
@@ -1347,54 +1369,59 @@ if (section) {
           'circle-stroke-width': 1.5,
         },
       });
+      addLayerSafe(map, {
+        id: 'geometry-editor-midpoints',
+        type: 'circle',
+        source: HANDLE_SOURCE,
+        filter: ['==', ['get', 'kind'], 'midpoint'],
+        paint: {
+          'circle-radius': 4,
+          'circle-color': '#35c6b4',
+          'circle-stroke-color': '#061311',
+          'circle-stroke-width': 1,
+        },
+      });
 
-      function projectedSegmentCoordinate(candidate, event) {
-        const coordinates = candidate?.geometry?.coordinates;
-        if (!Array.isArray(coordinates) || coordinates.length !== 2) {
-          return event.lngLat.toArray();
-        }
-
-        const start = map.project(coordinates[0]);
-        const end = map.project(coordinates[1]);
-        const click = event.point;
-        const dx = end.x - start.x;
-        const dy = end.y - start.y;
-        const lengthSquared = dx * dx + dy * dy;
-        if (lengthSquared <= Number.EPSILON) return coordinates[0];
-
-        const t = Math.max(0, Math.min(1,
-          ((click.x - start.x) * dx + (click.y - start.y) * dy) / lengthSquared,
-        ));
-        return map.unproject([
-          start.x + dx * t,
-          start.y + dy * t,
-        ]).toArray();
-      }
-
-      map.on('click', 'geometry-editor-segment-hit', (event) => {
-        const candidate = event.features?.[0];
+      map.on('click', 'geometry-editor-midpoints', (event) => {
+        const candidate =
+          event.features?.[0];
         if (
           !candidate ||
           !state.draft ||
           state.drawing ||
           state.moveGeometryMode ||
           state.suppressMapClick
-        ) return;
+        ) {
+          return;
+        }
 
-        // A vertex sits on the same line, so it wins over the wider segment hitbox.
-        const vertexHits = map.queryRenderedFeatures(event.point, {
-          layers: ['geometry-editor-vertices'],
-        });
-        if (vertexHits.length > 0) return;
+        event.originalEvent
+          ?.preventDefault?.();
+        event.originalEvent
+          ?.stopPropagation?.();
+        state.suppressMapClick =
+          true;
 
-        event.originalEvent?.stopPropagation?.();
-        state.suppressMapClick = true;
-        const prefixAndIndex = JSON.parse(candidate.properties.path);
         insertVertexOnSegment(
-          prefixAndIndex,
-          projectedSegmentCoordinate(candidate, event),
+          JSON.parse(
+            candidate
+              .properties
+              .path,
+          ),
+          [
+            ...candidate
+              .geometry
+              .coordinates,
+          ],
         );
-        window.setTimeout(() => { state.suppressMapClick = false; }, 0);
+
+        window.setTimeout(
+          () => {
+            state.suppressMapClick =
+              false;
+          },
+          0,
+        );
       });
 
       map.on('click', 'geometry-editor-vertices', (event) => {
@@ -1578,6 +1605,13 @@ if (section) {
         updateDrawControls();
       });
 
+      const addVertexHint =
+        new globalThis.mapboxgl.Popup({
+          closeButton: false,
+          closeOnClick: false,
+          offset: 10,
+        });
+
       for (const layerId of [
         'geometry-editor-lines',
         'geometry-editor-polygon-lines',
@@ -1623,6 +1657,21 @@ if (section) {
       map.on('mouseleave', 'geometry-editor-segment-hit', () => {
         state.hoveredSegment = false;
         refreshMapCursor();
+      });
+      map.on('mouseenter', 'geometry-editor-midpoints', (event) => {
+        if (
+          !state.drawing &&
+          !state.moveGeometryMode &&
+          event.lngLat
+        ) {
+          addVertexHint
+            .setLngLat(event.lngLat)
+            .setText('Добавить узел')
+            .addTo(map);
+        }
+      });
+      map.on('mouseleave', 'geometry-editor-midpoints', () => {
+        addVertexHint.remove();
       });
       state.map = map;
       await syncPointTypeMapImages();

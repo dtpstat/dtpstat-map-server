@@ -171,11 +171,11 @@ test('geometry editor keeps direct vertex editing and progressive loading', asyn
     editor,
     /function editableSequences\(geometry\)/u,
   );
-  assert.doesNotMatch(
+  assert.match(
     editor,
     /kind: 'midpoint'/u,
   );
-  assert.doesNotMatch(
+  assert.match(
     editor,
     /geometry-editor-midpoints/u,
   );
@@ -201,9 +201,13 @@ test('geometry editor keeps direct vertex editing and progressive loading', asyn
   );
   assert.match(
     editor,
+    /map\.on\('click', 'geometry-editor-midpoints'/u,
+  );
+  assert.doesNotMatch(
+    editor,
     /projectedSegmentCoordinate/u,
   );
-  assert.match(
+  assert.doesNotMatch(
     editor,
     /map\.on\('click', 'geometry-editor-segment-hit'/u,
   );
