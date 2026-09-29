@@ -30,8 +30,22 @@ function baseSettings(
     passwordRequireDigit: false,
     passwordRequireSpecial: false,
     metricsEnabled: false,
-    metricsTokenConfigured: false,
     ...overrides,
+  };
+}
+
+function publicSettings(
+  overrides = {},
+) {
+  return {
+    ...baseSettings(
+      overrides,
+    ),
+    metricsTokenConfigured:
+      Boolean(
+        overrides
+          .metricsTokenConfigured,
+      ),
   };
 }
 
@@ -42,7 +56,7 @@ function repository() {
 
   return {
     async getSecuritySettings() {
-      return baseSettings({
+      return publicSettings({
         metricsEnabled:
           enabled,
         metricsTokenConfigured:
@@ -57,7 +71,7 @@ function repository() {
       enabled =
         settings
           .metricsEnabled;
-      return baseSettings({
+      return publicSettings({
         ...settings,
         metricsTokenConfigured:
           Buffer.isBuffer(
@@ -243,8 +257,6 @@ test('metrics token rotation returns plaintext once and authorization uses only 
     .saveSecuritySettings(
       baseSettings({
         metricsEnabled:
-          true,
-        metricsTokenConfigured:
           true,
       }),
     );

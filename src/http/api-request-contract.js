@@ -104,6 +104,7 @@ const SECURITY_SETTINGS_KEYS = [
   'passwordRequireUppercase',
   'passwordRequireDigit',
   'passwordRequireSpecial',
+  'metricsEnabled',
 ];
 
 const USER_CAPABILITY_KEYS = [
@@ -804,6 +805,14 @@ export const API_REQUEST_CONTRACTS =
         bodyKeys:
           SECURITY_SETTINGS_KEYS,
       },
+    ),
+    c(
+      'POST',
+      '/admin/security/metrics-token',
+    ),
+    c(
+      'DELETE',
+      '/admin/security/metrics-token',
     ),
     c(
       'GET',
