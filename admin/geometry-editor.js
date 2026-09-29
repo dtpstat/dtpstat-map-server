@@ -5,6 +5,13 @@ import {
   geometryDraftChanges,
   geometryDraftIsStale,
 } from './geometry-draft.js';
+import {
+  coordinateSequences,
+  normalizeCoordinate,
+  parseCoordinateText,
+  replaceCoordinateSequence,
+  translateGeometry,
+} from './geometry-coordinate-model.js';
 import { publishDerivedDataChange } from './derived-data-events.js';
 import {
   realtimeClientId,
@@ -53,6 +60,17 @@ if (section) {
   const redoButton = document.querySelector('#geometry-redo');
   const finishDrawButton = document.querySelector('#geometry-finish-draw');
   const cancelDrawButton = document.querySelector('#geometry-cancel-draw');
+  const moveGeometryButton = document.querySelector('#geometry-move-toggle');
+  const coordinateOpenButton = document.querySelector('#geometry-coordinate-open');
+  const coordinateWindow = document.querySelector('#geometry-coordinate-window');
+  const coordinateCloseButton = document.querySelector('#geometry-coordinate-close');
+  const coordinateSequence = document.querySelector('#geometry-coordinate-sequence');
+  const coordinateTableBody = document.querySelector('#geometry-coordinate-table-body');
+  const coordinateAddRow = document.querySelector('#geometry-coordinate-add-row');
+  const coordinatePaste = document.querySelector('#geometry-coordinate-paste');
+  const coordinateImport = document.querySelector('#geometry-coordinate-import');
+  const coordinateApply = document.querySelector('#geometry-coordinate-apply');
+  const coordinateMessage = document.querySelector('#geometry-coordinate-message');
   const modeLabel = document.querySelector('#geometry-editor-mode');
   const newPointButton = document.querySelector('#geometry-new-point');
   const newLineButton = document.querySelector('#geometry-new-line');
@@ -101,6 +119,9 @@ if (section) {
     map: null,
     mapReady: null,
     dragPath: null,
+    moveGeometryMode: false,
+    geometryDrag: null,
+    coordinateWindowOpen: false,
     hoveredVertex: false,
     hoveredSegment: false,
     hoveredGeometry: false,
@@ -392,6 +413,7 @@ if (section) {
     if (
       !state.pendingExternalDraftSync ||
       state.dragPath ||
+      state.geometryDrag ||
       state.drawing
     ) {
       return;
@@ -675,7 +697,8 @@ if (section) {
     if (
       !geometry ||
       !state.editing ||
-      state.drawing
+      state.drawing ||
+      state.moveGeometryMode
     ) {
       return emptyCollection();
     }
@@ -878,6 +901,17 @@ if (section) {
     if (!canvas) return;
     if (state.drawing) {
       canvas.style.cursor = 'crosshair';
+      return;
+    }
+    if (state.geometryDrag) {
+      canvas.style.cursor = 'grabbing';
+      return;
+    }
+    if (state.moveGeometryMode) {
+      canvas.style.cursor =
+        state.hoveredGeometry
+          ? 'grab'
+          : 'move';
       return;
     }
     if (state.dragPath) {

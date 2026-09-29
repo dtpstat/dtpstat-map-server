@@ -576,6 +576,16 @@
                        aria-label="Карта редактора геометрий">
                 <div class="geometry-editor-map-toolbar">
                   <span id="geometry-editor-mode">Выберите геометрию</span>
+                  <button class="secondary" id="geometry-move-toggle"
+                          type="button" disabled
+                          title="Перетащить всю геометрию">
+                    Переместить
+                  </button>
+                  <button class="secondary" id="geometry-coordinate-open"
+                          type="button" disabled
+                          title="Точное редактирование координат">
+                    Координаты
+                  </button>
                   <button class="secondary" id="geometry-undo"
                           type="button" disabled title="Ctrl+Z">↶</button>
                   <button class="secondary" id="geometry-redo"
@@ -714,6 +724,74 @@
               </aside>
             </div>
           </div>
+
+          <section class="geometry-coordinate-window"
+                   id="geometry-coordinate-window"
+                   aria-label="Редактор координат"
+                   hidden>
+            <header class="geometry-coordinate-window-header">
+              <div>
+                <strong>Координаты геометрии</strong>
+                <small>WGS84 · долгота, широта</small>
+              </div>
+              <button class="secondary" id="geometry-coordinate-close"
+                      type="button" aria-label="Закрыть редактор координат">
+                ×
+              </button>
+            </header>
+
+            <div class="geometry-coordinate-window-body">
+              <label>Часть геометрии
+                <select id="geometry-coordinate-sequence"></select>
+              </label>
+
+              <div class="geometry-coordinate-table-wrap">
+                <table class="geometry-coordinate-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Долгота</th>
+                      <th>Широта</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="geometry-coordinate-table-body"></tbody>
+                </table>
+              </div>
+
+              <div class="geometry-coordinate-row-actions">
+                <button class="secondary" id="geometry-coordinate-add-row"
+                        type="button">
+                  Добавить строку
+                </button>
+              </div>
+
+              <label class="geometry-coordinate-paste-label">
+                Вставка нескольких точек
+                <textarea id="geometry-coordinate-paste" rows="5"
+                          spellcheck="false"
+                          placeholder="37.6173 55.7558&#10;37.6200 55.7600"></textarea>
+                <small>
+                  Одна точка на строку: «долгота широта».
+                  Допустимы пробел, Tab, «;» или «,» между числами;
+                  десятичный разделитель — точка.
+                </small>
+              </label>
+
+              <p class="notice geometry-coordinate-message"
+                 id="geometry-coordinate-message" role="status"></p>
+            </div>
+
+            <footer class="geometry-coordinate-window-actions">
+              <button class="secondary" id="geometry-coordinate-import"
+                      type="button">
+                Заменить таблицу из вставки
+              </button>
+              <button id="geometry-coordinate-apply" type="button">
+                Применить к черновику
+              </button>
+            </footer>
+          </section>
         </section>
       </div>
     </section>

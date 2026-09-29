@@ -745,3 +745,165 @@
   color: #f3b74e;
   font-weight: 700;
 }
+
+
+.geometry-editor-map-toolbar #geometry-move-toggle.is-active {
+  border-color: #f3b74e;
+  color: #ffe1a0;
+  background: #2a2110;
+}
+
+.geometry-coordinate-window {
+  position: fixed;
+  top: max(5rem, 8vh);
+  right: max(1rem, 3vw);
+  z-index: 120;
+  width: min(38rem, calc(100vw - 2rem));
+  max-height: min(46rem, calc(100vh - 7rem));
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #38515a;
+  border-radius: 10px;
+  background: #0b1417;
+  box-shadow: 0 1.5rem 5rem rgb(0 0 0 / 62%);
+}
+
+.geometry-coordinate-window[hidden] {
+  display: none;
+}
+
+.geometry-coordinate-window-header,
+.geometry-coordinate-window-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  padding: .65rem .75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.geometry-coordinate-window-header > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.geometry-coordinate-window-header strong,
+.geometry-coordinate-window-header small {
+  display: block;
+}
+
+.geometry-coordinate-window-header small {
+  margin-top: .15rem;
+  color: var(--muted);
+  font-size: .65rem;
+}
+
+.geometry-coordinate-window-header button {
+  width: auto;
+  min-width: 2rem;
+}
+
+.geometry-coordinate-window-body {
+  min-height: 0;
+  padding: .7rem .75rem;
+  display: grid;
+  gap: .65rem;
+  overflow: auto;
+}
+
+.geometry-coordinate-table-wrap {
+  max-height: 19rem;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.geometry-coordinate-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .68rem;
+}
+
+.geometry-coordinate-table th,
+.geometry-coordinate-table td {
+  padding: .3rem;
+  border-bottom: 1px solid rgb(35 56 64 / 70%);
+  text-align: left;
+}
+
+.geometry-coordinate-table th:first-child,
+.geometry-coordinate-table td:first-child {
+  width: 2.5rem;
+  color: var(--muted);
+  text-align: right;
+}
+
+.geometry-coordinate-table th:last-child,
+.geometry-coordinate-table td:last-child {
+  width: 2.5rem;
+}
+
+.geometry-coordinate-table input {
+  width: 100%;
+  min-width: 7rem;
+  padding: .38rem .42rem;
+  font: .68rem/1.25 ui-monospace, monospace;
+}
+
+.geometry-coordinate-table button {
+  width: 2rem;
+  min-width: 2rem;
+  padding: .35rem;
+}
+
+.geometry-coordinate-row-actions,
+.geometry-coordinate-window-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.geometry-coordinate-window-actions {
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+}
+
+.geometry-coordinate-window-actions button {
+  width: auto;
+}
+
+.geometry-coordinate-paste-label textarea {
+  min-height: 7rem;
+  resize: vertical;
+  font: .68rem/1.4 ui-monospace, monospace;
+}
+
+.geometry-coordinate-paste-label small {
+  display: block;
+  margin-top: .25rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.geometry-coordinate-message {
+  min-height: 0;
+  margin: 0;
+}
+
+@media (max-width: 650px) {
+  .geometry-coordinate-window {
+    top: 4.5rem;
+    right: .5rem;
+    left: .5rem;
+    width: auto;
+    max-height: calc(100vh - 5rem);
+  }
+
+  .geometry-coordinate-window-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .geometry-coordinate-window-actions button {
+    width: 100%;
+  }
+}
