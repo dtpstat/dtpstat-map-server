@@ -27,7 +27,10 @@ npm start
 DATABASE_HOST=127.0.0.1
 DATABASE_PORT=5432
 DATABASE_NAME=tramlanes
-DATABASE_ROLE=tramlanes
+DATABASE_ROLE=tramlanes_app
+DATABASE_ROLE_PASSWORD=<runtime-secret>
+DATABASE_MIGRATION_ROLE=tramlanes_migrator
+DATABASE_MIGRATION_ROLE_PASSWORD=<migration-secret>
 DATABASE_SCHEMA=tramlanes
 HOST=127.0.0.1
 HTTP_ENABLED=true
@@ -56,6 +59,64 @@ IMPORT_API_PASSWORD=replace-with-a-long-random-password
 
 Runtime SQL должен использовать `search_path`, а не literals вида `buslanes.table`.
 
+### PostgreSQL roles
+
+Production использует две разные login-role:
+
+```text
+<DATABASE_MIGRATION_ROLE>
+  owner DATABASE_NAME
+  owner DATABASE_SCHEMA
+  выполняет startup/manual migrations
+
+<DATABASE_ROLE>
+  CONNECT + TEMPORARY на DATABASE_NAME
+  USAGE на DATABASE_SCHEMA
+  SELECT/INSERT/UPDATE/DELETE на application tables
+  USAGE/SELECT/UPDATE на sequences
+  EXECUTE на application functions
+  без CREATE на DATABASE_SCHEMA
+  без membership в migration role
+```
+
+`DATABASE_ROLE` и `DATABASE_MIGRATION_ROLE` не должны совпадать в production.
+Миграции запускаются отдельным pool до создания runtime pool и до открытия HTTP
+listeners. После migrations runtime repositories не получают migration
+credentials.
+
+`npm run db:init` идемпотентно:
+
+1. создаёт/обновляет обе login-role без SUPERUSER/CREATEDB/CREATEROLE/BYPASSRLS;
+2. делает migration role владельцем application database и schema;
+3. переносит существующие application objects в `DATABASE_SCHEMA` на migration role;
+4. снимает у runtime role schema CREATE и выдаёт только runtime privileges;
+5. настраивает `ALTER DEFAULT PRIVILEGES`, чтобы будущие migrations автоматически
+   выдавали runtime DML/sequence/function privileges.
+
+PostGIS extension и её objects в `public` не передаются application owner:
+`db:init` лишь обеспечивает обеим ролям необходимый `USAGE` на `public`.
+
+Для перехода уже существующей single-role инсталляции сначала добавить в `.env`:
+
+```dotenv
+DATABASE_ROLE=tramlanes_app
+DATABASE_ROLE_PASSWORD=<runtime-secret>
+DATABASE_MIGRATION_ROLE=tramlanes_migrator
+DATABASE_MIGRATION_ROLE_PASSWORD=<different-migration-secret>
+```
+
+затем один раз выполнить:
+
+```bash
+npm run db:init
+npm run db:migrate
+npm run test:integration
+```
+
+Только после успешного preflight перезапускать production Node process. Первый
+`db:init` меняет ownership/grants существующих application objects, но не
+пересоздаёт и не очищает application database.
+
 В migration source token `BUSLANES` допустим: migration runner заменяет его на фактический schema name до выполнения.
 
 ## Mapbox bootstrap
@@ -72,7 +133,7 @@ MAPBOX_ACCESS_TOKEN=pk....
 
 ## Миграции
 
-Текущий набор: `V001…V049`.
+Текущий набор: `V001…V050`.
 
 Последние migrations:
 
@@ -109,9 +170,10 @@ V046__geometry_edit_leases.sql
 V047__admin_request_security.sql
 V048__admin_request_incident_lockout.sql
 V049__empty_descendant_spatial_relink.sql
+V050__point_types.sql
 ```
 
-Назначение `V023…V049`:
+Назначение `V023…V050`:
 
 - `V023` — logical `FULL_NAME` OSM boundary, merge relation fragments по `PLACE_TYPE + FULL_NAME`, sync `CITIES.FULL_NAME`;
 - `V024` — ordered `REPORT_CONFIG.RANK_SORT`;
@@ -134,11 +196,18 @@ V049__empty_descendant_spatial_relink.sql
 - `V046` — cooperative edit leases;
 - `V047` — DB-backed HTTP request rate limits;
 - `V048` — persistent request-security incident/IP lockout state;
-- `V049` — корректный spatial resolver при EMPTY descendant aggregate.
+- `V049` — корректный spatial resolver при EMPTY descendant aggregate;
+- `V050` — dictionary типов точек, icon metadata и optional point-type link для Point geometry.
 
-Следующая migration: **V050+**. Опубликованные migration files не изменяются задним числом.
+Следующая migration: **V051+**. Опубликованные migration files не изменяются задним числом.
 
-Startup автоматически применяет pending migrations под PostgreSQL advisory lock, затем повторно сверяет `<DATABASE_SCHEMA>.schema_versions` с набором `db/migrations`. Modified/gapped/newer history или ошибка SQL считаются startup error: HTTP listeners не открываются. `npm run db:migrate` остаётся ручной preflight-командой, но для обычного restart больше не обязателен.
+Startup автоматически применяет pending migrations через отдельный
+`DATABASE_MIGRATION_ROLE` под PostgreSQL advisory lock, затем повторно сверяет
+`<DATABASE_SCHEMA>.schema_versions` с набором `db/migrations`. Только после
+успеха migration pool закрывается и создаётся runtime pool под `DATABASE_ROLE`.
+Modified/gapped/newer history или ошибка SQL считаются startup error: HTTP
+listeners не открываются. `npm run db:migrate` использует ту же migration role
+и остаётся ручной preflight-командой.
 
 ## Большие portable JSON / ZIP transfers
 

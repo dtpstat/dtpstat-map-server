@@ -430,14 +430,22 @@ npm run test:integration
 
 Harness подключается к существующей БД, указанной в `.env`: `DATABASE_HOST`,
 `DATABASE_PORT`, `DATABASE_NAME` и SSL-настройки берутся из database config,
-а подключение выполняется административной ролью PostgreSQL из
+а административные операции выполняются PostgreSQL role из
 `POSTGRES_ADMIN_USER` / `POSTGRES_ADMIN_PASSWORD`.
 
-Рабочая `DATABASE_SCHEMA` приложения не используется и не изменяется. Для
-каждого запуска создаётся случайная schema `dtpstat_it_*`, в неё применяются все
-migrations и выполняются integration checks. В `finally` временная schema
-удаляется через `DROP SCHEMA ... CASCADE`. PostGIS ожидается уже установленным в
-этой БД штатным `npm run db:init`.
+Основной PostGIS regression не использует и не изменяет рабочую
+`DATABASE_SCHEMA`: для каждого запуска создаётся случайная schema
+`dtpstat_it_*`, в неё применяются все migrations и выполняются repository /
+PostGIS checks. В `finally` schema удаляется через `DROP SCHEMA ... CASCADE`.
+
+Отдельный privilege regression создаёт disposable database `dtp_it_priv_*` и
+две disposable login-role. На реальном PostgreSQL он проверяет, что migration
+role владеет DDL, а runtime role может DML/TEMP/sequence/function access, но не
+может CREATE/ALTER/DROP application objects и не может `SET ROLE` migration
+owner. В `finally` временная database и обе role удаляются.
+
+PostGIS ожидается уже установленным в основной integration database штатным
+`npm run db:init`.
 
 
 Импорт и перенос application data выполняются через административные API/UI. Отдельного repository-snapshot import script нет.
