@@ -116,3 +116,44 @@ test('V051 excludes inactive descendants before spatial aggregation', async () =
     /ASSERT_CITY_GEOMETRY_INVARIANTS/u,
   );
 });
+
+
+test('V052 bypasses overlay when a boundary fully covers the geometry', async () => {
+  const migration =
+    await fs.readFile(
+      path.join(
+        root,
+        'db/migrations/V052__covered_geometry_spatial_relink.sql',
+      ),
+      'utf8',
+    );
+
+  assert.match(
+    migration,
+    /ST_COVERS\(\s*BOUNDARY\.GEOM,\s*INPUT_GEOM\s*\)/u,
+  );
+  assert.match(
+    migration,
+    /THEN INPUT_GEOM\s+ELSE ST_INTERSECTION/u,
+  );
+  assert.match(
+    migration,
+    /END AS BASE_MATCH/u,
+  );
+  assert.match(
+    migration,
+    /CANDIDATE\.BASE_MATCH/u,
+  );
+  assert.match(
+    migration,
+    /ST_DIFFERENCE\(\s*CANDIDATE\.BASE_MATCH/u,
+  );
+  assert.match(
+    migration,
+    /RELINK_ALL_CITY_GEOMETRIES/u,
+  );
+  assert.match(
+    migration,
+    /ASSERT_CITY_GEOMETRY_INVARIANTS/u,
+  );
+});
