@@ -871,6 +871,79 @@ async function verifyGeometryEditorInfrastructure(
     'Old token remained valid after forced takeover',
   );
 
+  const splitRevision =
+    new Date(
+      childLinkedAgain
+        .updatedAt,
+    ).toISOString();
+
+  const splitResult =
+    await service.split(
+      geometry.id,
+      {
+        blade: {
+          type:
+            'LineString',
+          coordinates: [
+            [
+              30.029,
+              50.01,
+            ],
+            [
+              30.029,
+              50.05,
+            ],
+          ],
+        },
+      },
+      {
+        expectedUpdatedAt:
+          splitRevision,
+        editToken:
+          takeover.lease.token,
+      },
+      {
+        id: editUserId,
+        username:
+          'geometry-integration',
+        isSuperuser: true,
+      },
+    );
+
+  assert.equal(
+    splitResult
+      .geometries
+      .length,
+    2,
+    'Line split must create exactly two geometry records',
+  );
+  assert.equal(
+    splitResult
+      .sourceGeometryId,
+    geometry.id,
+  );
+  assert.notEqual(
+    splitResult
+      .geometries[0]
+      .id,
+    splitResult
+      .geometries[1]
+      .id,
+  );
+  assert.deepEqual(
+    splitResult
+      .geometries
+      .map(
+        (item) =>
+          item.boundaryId,
+      ),
+    [
+      childBoundaryId,
+      childBoundaryId,
+    ],
+    'Both split parts must be spatially relinked',
+  );
+
   const unlinked =
     await service.sync(
       {

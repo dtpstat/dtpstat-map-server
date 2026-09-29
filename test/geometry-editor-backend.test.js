@@ -416,3 +416,91 @@ test('geometry editor backend exposes atomic create-update sync and edit leases'
     /async delete\([\s\S]*normalizeGeometryEditToken[\s\S]*requireOwnedEditLease/u,
   );
 });
+
+
+test('geometry topology operations stay domain validated revision safe and transactional', async () => {
+  const [
+    policy,
+    service,
+    storage,
+    route,
+    contracts,
+  ] = await Promise.all([
+    read(
+      'src/modules/geometry/topology-policy.js',
+    ),
+    read(
+      'src/modules/geometry/editor-service.js',
+    ),
+    read(
+      'src/db/geometry-editor-storage.js',
+    ),
+    read(
+      'src/routes/geometry-editor-api.js',
+    ),
+    read(
+      'src/http/api-request-contract.js',
+    ),
+  ]);
+
+  assert.match(
+    policy,
+    /normalizeGeometryCutRequest/u,
+  );
+  assert.match(
+    policy,
+    /normalizeGeometrySplitRequest/u,
+  );
+  assert.match(
+    policy,
+    /exactly one cutter source/u,
+  );
+  assert.match(
+    service,
+    /async split\(/u,
+  );
+  assert.match(
+    service,
+    /Geometry changed before split/u,
+  );
+  assert.match(
+    service,
+    /requireOwnedEditLease/u,
+  );
+  assert.match(
+    service,
+    /Cutter geometry changed before cut/u,
+  );
+  assert.match(
+    storage,
+    /ST_Split/u,
+  );
+  assert.match(
+    storage,
+    /part\.part_count = 2/u,
+  );
+  assert.match(
+    storage,
+    /INSERT INTO city_geometries/u,
+  );
+  assert.match(
+    route,
+    /'\/admin\/geometry-editor\/geometries\/:geometryId\/split'/u,
+  );
+  assert.match(
+    route,
+    /audit\([\s\S]*'geometry\.split'/u,
+  );
+  assert.match(
+    contracts,
+    /cutterGeometryId/u,
+  );
+  assert.match(
+    contracts,
+    /cutterUpdatedAt/u,
+  );
+  assert.match(
+    contracts,
+    /'\/admin\/geometry-editor\/geometries\/:geometryId\/split'[\s\S]*'blade'[\s\S]*x-dtpstat-edit-token/u,
+  );
+});

@@ -7,13 +7,16 @@ import {
   normalizeGeometryEditTokenValidation,
   normalizeGeometryEditorClientId,
   normalizeGeometryCreatePayload,
-  normalizeGeometryCutRequest,
   normalizeGeometryId,
   normalizeGeometryMergeRequest,
   normalizeGeometryRevision,
   normalizeGeometrySyncRequest,
   validateGeometryLineState,
 } from './editor-policy.js';
+import {
+  normalizeGeometryCutRequest,
+  normalizeGeometrySplitRequest,
+} from './topology-policy.js';
 
 function own(
   value,
@@ -1128,7 +1131,7 @@ export function createGeometryEditorService(
         normalizeGeometryId(
           geometryId,
         );
-      const cutter =
+      const cutterRequest =
         normalizeGeometryCutRequest(
           payload,
         );
@@ -1144,17 +1147,51 @@ export function createGeometryEditorService(
       const userId =
         actorId(actor);
 
+      if (
+        cutterRequest.kind ===
+          'geometry' &&
+        cutterRequest.geometryId ===
+          id
+      ) {
+        throw new GeometryEditorValidationError(
+          'Geometry cannot cut itself',
+        );
+      }
+
       return write(
         async (client) => {
+          const ids =
+            cutterRequest.kind ===
+              'geometry'
+              ? [
+                id,
+                cutterRequest
+                  .geometryId,
+              ]
+              : [id];
+
           const locked =
             await storage
               .lockGeometries(
                 client,
-                [id],
+                [...ids].sort(
+                  (left, right) =>
+                    left - right,
+                ),
               );
 
+          const byId =
+            new Map(
+              locked.map(
+                (item) => [
+                  item.id,
+                  item,
+                ],
+              ),
+            );
+
           const previous =
-            locked[0] ??
+            byId.get(id) ??
             null;
 
           if (!previous) {
@@ -1205,6 +1242,69 @@ export function createGeometryEditorService(
             );
           }
 
+          let cutter =
+            cutterRequest.geometry;
+
+          if (
+            cutterRequest.kind ===
+            'geometry'
+          ) {
+            const referenced =
+              byId.get(
+                cutterRequest
+                  .geometryId,
+              ) ??
+              null;
+
+            if (!referenced) {
+              throw new GeometryEditorValidationError(
+                'Cutter geometry not found',
+                404,
+              );
+            }
+
+            const cutterActual =
+              revision(
+                referenced.updatedAt,
+              );
+
+            if (
+              cutterActual !==
+              cutterRequest
+                .baseUpdatedAt
+            ) {
+              throw new GeometryEditorValidationError(
+                'Cutter geometry changed before cut',
+                409,
+                {
+                  conflicts: [{
+                    id:
+                      referenced.id,
+                    reason:
+                      'changed',
+                    expectedUpdatedAt:
+                      cutterRequest
+                        .baseUpdatedAt,
+                    actualUpdatedAt:
+                      cutterActual,
+                  }],
+                },
+              );
+            }
+
+            if (
+              referenced.family !==
+              'polygon'
+            ) {
+              throw new GeometryEditorValidationError(
+                'Referenced cutter must be a polygon geometry',
+              );
+            }
+
+            cutter =
+              referenced.geometry;
+          }
+
           const geometry =
             await storage
               .cutGeometry(
@@ -1230,6 +1330,147 @@ export function createGeometryEditorService(
               client,
               id,
             );
+        },
+      );
+    },
+
+    async split(
+      geometryId,
+      payload,
+      options = {},
+      actor,
+    ) {
+      const id =
+        normalizeGeometryId(
+          geometryId,
+        );
+      const blade =
+        normalizeGeometrySplitRequest(
+          payload,
+        );
+      const expected =
+        normalizeGeometryRevision(
+          options
+            .expectedUpdatedAt,
+        );
+      const token =
+        normalizeGeometryEditToken(
+          options.editToken,
+        );
+      const userId =
+        actorId(actor);
+
+      return write(
+        async (client) => {
+          const locked =
+            await storage
+              .lockGeometries(
+                client,
+                [id],
+              );
+
+          const previous =
+            locked[0] ??
+            null;
+
+          if (!previous) {
+            return null;
+          }
+
+          const actual =
+            revision(
+              previous.updatedAt,
+            );
+
+          if (
+            actual !== expected
+          ) {
+            throw new GeometryEditorValidationError(
+              'Geometry changed before split',
+              409,
+              {
+                conflicts: [{
+                  id,
+                  reason:
+                    'changed',
+                  expectedUpdatedAt:
+                    expected,
+                  actualUpdatedAt:
+                    actual,
+                }],
+              },
+            );
+          }
+
+          await requireOwnedEditLease(
+            client,
+            {
+              geometryId:
+                id,
+              token,
+              userId,
+            },
+          );
+
+          if (
+            ![
+              'line',
+              'polygon',
+            ].includes(
+              previous.family,
+            )
+          ) {
+            throw new GeometryEditorValidationError(
+              'Only line or polygon geometries can be split',
+            );
+          }
+
+          const geometries =
+            await storage
+              .splitGeometry(
+                client,
+                id,
+                blade,
+                previous.family,
+              );
+
+          if (
+            !Array.isArray(
+              geometries,
+            ) ||
+            geometries.length !== 2
+          ) {
+            throw new GeometryEditorValidationError(
+              'Split blade must divide the geometry into exactly two valid parts',
+            );
+          }
+
+          for (
+            const geometry of
+            geometries
+          ) {
+            await storage
+              .relinkGeometry(
+                client,
+                geometry.id,
+              );
+          }
+
+          return {
+            sourceGeometryId:
+              id,
+            geometries:
+              await Promise.all(
+                geometries.map(
+                  (geometry) =>
+                    storage
+                      .getGeometry(
+                        client,
+                        geometry.id,
+                      ),
+                ),
+              ),
+          };
         },
       );
     },

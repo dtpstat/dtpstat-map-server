@@ -5,11 +5,14 @@ import {
   geometryFamily,
   normalizeGeometryBulkUpdates,
   normalizeGeometryCreatePayload,
-  normalizeGeometryCutRequest,
   normalizeGeometryMergeRequest,
   normalizeGeometryTags,
   validateEditorGeometry,
 } from '../src/modules/geometry/editor-policy.js';
+import {
+  normalizeGeometryCutRequest,
+  normalizeGeometrySplitRequest,
+} from '../src/modules/geometry/topology-policy.js';
 
 test('geometry editor accepts supported geometry families', () => {
   const cases = [
@@ -216,7 +219,7 @@ test('geometry merge request requires distinct optimistic revisions', () => {
   );
 });
 
-test('geometry cut request accepts only polygon cutters', () => {
+test('geometry cut request accepts inline or optimistic referenced polygon cutters', () => {
   assert.deepEqual(
     normalizeGeometryCutRequest({
       geometry: {
@@ -230,13 +233,30 @@ test('geometry cut request accepts only polygon cutters', () => {
       },
     }),
     {
-      type: 'Polygon',
-      coordinates: [[
-        [30, 60],
-        [31, 60],
-        [31, 61],
-        [30, 60],
-      ]],
+      kind: 'inline',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[
+          [30, 60],
+          [31, 60],
+          [31, 61],
+          [30, 60],
+        ]],
+      },
+    },
+  );
+
+  assert.deepEqual(
+    normalizeGeometryCutRequest({
+      cutterGeometryId: 17,
+      cutterUpdatedAt:
+        '2026-09-29T01:00:00Z',
+    }),
+    {
+      kind: 'geometry',
+      geometryId: 17,
+      baseUpdatedAt:
+        '2026-09-29T01:00:00.000Z',
     },
   );
 
@@ -253,5 +273,61 @@ test('geometry cut request accepts only polygon cutters', () => {
         },
       }),
     /Cut geometry must be Polygon or MultiPolygon/u,
+  );
+
+  assert.throws(
+    () =>
+      normalizeGeometryCutRequest({
+        geometry: {
+          type: 'Polygon',
+          coordinates: [[
+            [30, 60],
+            [31, 60],
+            [31, 61],
+            [30, 60],
+          ]],
+        },
+        cutterGeometryId: 17,
+        cutterUpdatedAt:
+          '2026-09-29T01:00:00Z',
+      }),
+    /exactly one cutter source/u,
+  );
+});
+
+test('geometry split request requires a line blade', () => {
+  assert.deepEqual(
+    normalizeGeometrySplitRequest({
+      blade: {
+        type: 'LineString',
+        coordinates: [
+          [30, 60],
+          [31, 61],
+        ],
+      },
+    }),
+    {
+      type: 'LineString',
+      coordinates: [
+        [30, 60],
+        [31, 61],
+      ],
+    },
+  );
+
+  assert.throws(
+    () =>
+      normalizeGeometrySplitRequest({
+        blade: {
+          type: 'Polygon',
+          coordinates: [[
+            [30, 60],
+            [31, 60],
+            [31, 61],
+            [30, 60],
+          ]],
+        },
+      }),
+    /Split blade must be LineString or MultiLineString/u,
   );
 });

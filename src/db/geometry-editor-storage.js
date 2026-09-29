@@ -432,6 +432,158 @@ const CUT_GEOMETRY_SQL = `
     geometry.id::integer AS id
 `;
 
+const SPLIT_GEOMETRY_SQL = `
+  WITH source AS MATERIALIZED (
+    SELECT *
+    FROM city_geometries
+    WHERE id = $1::bigint
+  ),
+  prepared AS (
+    SELECT
+      ST_SetSRID(
+        ST_GeomFromGeoJSON(
+          $2::text
+        ),
+        4326
+      ) AS blade
+  ),
+  split_result AS (
+    SELECT
+      ST_Split(
+        source.geom,
+        prepared.blade
+      ) AS pieces
+    FROM source
+    CROSS JOIN prepared
+  ),
+  dumped AS MATERIALIZED (
+    SELECT
+      dump.path,
+      dump.geom
+    FROM split_result
+    CROSS JOIN LATERAL ST_Dump(
+      ST_CollectionExtract(
+        split_result.pieces,
+        CASE
+          WHEN $3::text = 'line'
+            THEN 2
+          ELSE 3
+        END
+      )
+    ) AS dump
+    WHERE NOT ST_IsEmpty(
+      dump.geom
+    )
+      AND ST_IsValid(
+        dump.geom
+      )
+  ),
+  numbered AS (
+    SELECT
+      geom,
+      ROW_NUMBER() OVER (
+        ORDER BY path
+      ) AS part_no,
+      COUNT(*) OVER () AS part_count
+    FROM dumped
+  ),
+  updated AS (
+    UPDATE city_geometries AS target
+    SET
+      geom = part.geom,
+      length_m = CASE
+        WHEN $3::text = 'line'
+          THEN ST_Length(
+            part.geom::geography
+          )
+        ELSE NULL
+      END,
+      lane_length_m = CASE
+        WHEN $3::text = 'line'
+          THEN ST_Length(
+            part.geom::geography
+          ) * target.lanes
+        ELSE NULL
+      END,
+      was_edited = TRUE,
+      updated_at = NOW()
+    FROM numbered AS part
+    WHERE target.id = $1::bigint
+      AND part.part_no = 1
+      AND part.part_count = 2
+    RETURNING target.id
+  ),
+  inserted AS (
+    INSERT INTO city_geometries (
+      city_id,
+      boundary_id,
+      line_type_id,
+      lanes,
+      length_m,
+      lane_length_m,
+      properties,
+      geom,
+      display_name,
+      tooltip,
+      tags,
+      source_tags,
+      is_visible,
+      was_edited,
+      updated_at
+    )
+    SELECT
+      source.city_id,
+      source.boundary_id,
+      source.line_type_id,
+      source.lanes,
+      CASE
+        WHEN $3::text = 'line'
+          THEN ST_Length(
+            part.geom::geography
+          )
+        ELSE NULL
+      END,
+      CASE
+        WHEN $3::text = 'line'
+          THEN ST_Length(
+            part.geom::geography
+          ) * source.lanes
+        ELSE NULL
+      END,
+      source.properties,
+      part.geom,
+      source.display_name,
+      source.tooltip,
+      source.tags,
+      source.source_tags,
+      source.is_visible,
+      TRUE,
+      NOW()
+    FROM source
+    JOIN numbered AS part
+      ON part.part_no = 2
+     AND part.part_count = 2
+    WHERE EXISTS (
+      SELECT 1
+      FROM updated
+    )
+    RETURNING id
+  )
+  SELECT
+    (
+      SELECT id
+      FROM updated
+    )::integer AS "sourceId",
+    (
+      SELECT id
+      FROM inserted
+    )::integer AS "newId"
+  WHERE EXISTS (
+    SELECT 1
+    FROM inserted
+  )
+`;
+
 export function createGeometryEditorStorage(
   database,
 ) {
@@ -715,6 +867,55 @@ export function createGeometryEditorStorage(
           geometryId,
         )
         : null;
+    },
+
+    async splitGeometry(
+      client,
+      geometryId,
+      blade,
+      family,
+    ) {
+      const result =
+        await client.query(
+          SPLIT_GEOMETRY_SQL,
+          [
+            geometryId,
+            JSON.stringify(
+              blade,
+            ),
+            family,
+          ],
+        );
+
+      const ids =
+        result.rows[0]
+          ? [
+            result.rows[0]
+              .sourceId,
+            result.rows[0]
+              .newId,
+          ]
+            .filter(
+              (id) =>
+                Number.isSafeInteger(
+                  Number(id),
+                ),
+            )
+          : [];
+
+      if (ids.length !== 2) {
+        return null;
+      }
+
+      return Promise.all(
+        ids.map(
+          (id) =>
+            one(
+              client,
+              id,
+            ),
+        ),
+      );
     },
 
     assertNoPendingImport(

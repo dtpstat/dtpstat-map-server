@@ -347,6 +347,7 @@ function operationFixture(
   const queries = [];
   const merges = [];
   const cuts = [];
+  const splits = [];
   const current =
     new Map(
       rows.map(
@@ -462,6 +463,57 @@ function operationFixture(
         cut,
       );
     },
+    async splitGeometry(
+      _client,
+      id,
+      blade,
+      family,
+    ) {
+      splits.push({
+        id,
+        blade:
+          structuredClone(
+            blade,
+          ),
+        family,
+      });
+
+      const source = {
+        ...structuredClone(
+          rows.find(
+            (item) =>
+              item.id === id,
+          ),
+        ),
+        updatedAt:
+          '2026-09-25T13:00:00.000Z',
+      };
+      const created = {
+        ...structuredClone(
+          source,
+        ),
+        id: 99,
+        displayName:
+          source.displayName +
+          ' part 2',
+      };
+      current.set(
+        id,
+        source,
+      );
+      current.set(
+        99,
+        created,
+      );
+      return [
+        structuredClone(
+          source,
+        ),
+        structuredClone(
+          created,
+        ),
+      ];
+    },
   };
 
   return {
@@ -477,6 +529,7 @@ function operationFixture(
     queries,
     merges,
     cuts,
+    splits,
   };
 }
 
@@ -911,5 +964,242 @@ test('geometry cut requires current polygon revision before spatial difference',
     stale.queries.includes(
       'ROLLBACK',
     ),
+  );
+});
+
+
+test('geometry cut can use another polygon as an optimistic cutter without taking its lease', async () => {
+  const target =
+    polygonGeometry(
+      11,
+      '2026-09-25T12:10:00.000Z',
+    );
+  const cutter =
+    polygonGeometry(
+      12,
+      '2026-09-25T12:11:00.000Z',
+    );
+
+  const {
+    service,
+    cuts,
+  } =
+    operationFixture([
+      target,
+      cutter,
+    ]);
+
+  const result =
+    await service.cut(
+      target.id,
+      {
+        cutterGeometryId:
+          cutter.id,
+        cutterUpdatedAt:
+          cutter.updatedAt,
+      },
+      {
+        expectedUpdatedAt:
+          target.updatedAt,
+        editToken:
+          '0123456789abcdef',
+      },
+      {
+        id: 77,
+      },
+    );
+
+  assert.equal(
+    result.id,
+    target.id,
+  );
+  assert.deepEqual(
+    cuts[0].cutter,
+    cutter.geometry,
+  );
+
+  await assert.rejects(
+    service.cut(
+      target.id,
+      {
+        cutterGeometryId:
+          cutter.id,
+        cutterUpdatedAt:
+          '2026-09-25T12:00:00.000Z',
+      },
+      {
+        expectedUpdatedAt:
+          result.updatedAt,
+        editToken:
+          '0123456789abcdef',
+      },
+      {
+        id: 77,
+      },
+    ),
+    (error) => {
+      assert.equal(
+        error.statusCode,
+        409,
+      );
+      assert.equal(
+        error.details
+          .conflicts[0]
+          .id,
+        cutter.id,
+      );
+      return true;
+    },
+  );
+});
+
+test('geometry split keeps optimistic revision and owned lease in one transaction', async () => {
+  const current =
+    geometry(
+      21,
+      '2026-09-25T12:10:00.000Z',
+    );
+
+  const {
+    service,
+    queries,
+    splits,
+  } =
+    operationFixture([
+      current,
+    ]);
+
+  const blade = {
+    type: 'LineString',
+    coordinates: [
+      [30.5, 59],
+      [30.5, 62],
+    ],
+  };
+
+  const result =
+    await service.split(
+      current.id,
+      {
+        blade,
+      },
+      {
+        expectedUpdatedAt:
+          current.updatedAt,
+        editToken:
+          '0123456789abcdef',
+      },
+      {
+        id: 77,
+      },
+    );
+
+  assert.equal(
+    result.sourceGeometryId,
+    current.id,
+  );
+  assert.deepEqual(
+    result.geometries.map(
+      (item) => item.id,
+    ),
+    [current.id, 99],
+  );
+  assert.deepEqual(
+    splits,
+    [{
+      id: current.id,
+      blade,
+      family: 'line',
+    }],
+  );
+  assert.ok(
+    queries.includes(
+      'COMMIT',
+    ),
+  );
+});
+
+test('geometry split rejects stale revisions and point targets before persistence', async () => {
+  const current =
+    geometry(
+      22,
+      '2026-09-25T12:10:00.000Z',
+    );
+  const stale =
+    operationFixture([
+      current,
+    ]);
+
+  await assert.rejects(
+    stale.service.split(
+      current.id,
+      {
+        blade: {
+          type: 'LineString',
+          coordinates: [
+            [30, 59],
+            [30, 62],
+          ],
+        },
+      },
+      {
+        expectedUpdatedAt:
+          '2026-09-25T12:00:00.000Z',
+        editToken:
+          '0123456789abcdef',
+      },
+      {
+        id: 77,
+      },
+    ),
+    (error) =>
+      error.statusCode === 409,
+  );
+
+  assert.equal(
+    stale.splits.length,
+    0,
+  );
+
+  const point =
+    operationFixture([{
+      ...current,
+      id: 23,
+      family: 'point',
+      geometryType: 'POINT',
+      geometry: {
+        type: 'Point',
+        coordinates: [30, 60],
+      },
+    }]);
+
+  await assert.rejects(
+    point.service.split(
+      23,
+      {
+        blade: {
+          type: 'LineString',
+          coordinates: [
+            [29, 60],
+            [31, 60],
+          ],
+        },
+      },
+      {
+        expectedUpdatedAt:
+          current.updatedAt,
+        editToken:
+          '0123456789abcdef',
+      },
+      {
+        id: 77,
+      },
+    ),
+    /Only line or polygon geometries can be split/u,
+  );
+
+  assert.equal(
+    point.splits.length,
+    0,
   );
 });

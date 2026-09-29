@@ -632,6 +632,23 @@ export const API_REQUEST_CONTRACTS =
         body: 'json-object',
         bodyKeys: [
           'geometry',
+          'cutterGeometryId',
+          'cutterUpdatedAt',
+        ],
+        headers: [
+          ...COMMON_MUTATION_HEADERS,
+          'x-dtpstat-base-revision',
+          'x-dtpstat-edit-token',
+        ],
+      },
+    ),
+    c(
+      'POST',
+      '/admin/geometry-editor/geometries/:geometryId/split',
+      {
+        body: 'json-object',
+        bodyKeys: [
+          'blade',
         ],
         headers: [
           ...COMMON_MUTATION_HEADERS,

@@ -1220,6 +1220,106 @@ export function createGeometryEditorRouter({
   );
 
   router.post(
+    '/admin/geometry-editor/geometries/:geometryId/split',
+    adminAuth
+      .requireGeometryEditor,
+    audit(
+      'geometry.split',
+    ),
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const result =
+          await geometryEditorService
+            .split(
+              request.params
+                .geometryId,
+              request.body,
+              {
+                expectedUpdatedAt:
+                  expectedRevision(
+                    request,
+                  ),
+                editToken:
+                  editToken(
+                    request,
+                  ),
+              },
+              request.adminUser,
+            );
+
+        if (!result) {
+          response
+            .status(404)
+            .json({
+              error:
+                'Geometry not found',
+            });
+          return;
+        }
+
+        recordAdminOperationDetails(
+          response,
+          {
+            sourceGeometryId:
+              result
+                .sourceGeometryId,
+            resultGeometryIds:
+              result
+                .geometries
+                .map(
+                  (geometry) =>
+                    geometry.id,
+                ),
+            family:
+              result
+                .geometries[0]
+                ?.family ??
+              null,
+          },
+        );
+
+        publishChange(
+          realtimeEvents,
+          request,
+          {
+            action:
+              'split',
+            entityIds:
+              result
+                .geometries
+                .map(
+                  (geometry) =>
+                    geometry.id,
+                ),
+          },
+        );
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json(result);
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.post(
     '/admin/geometry-editor/recalculate',
     adminAuth
       .requireGeometryEditor,

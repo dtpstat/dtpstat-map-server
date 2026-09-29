@@ -811,53 +811,6 @@ export function normalizeGeometryMergeRequest(
   );
 }
 
-export function normalizeGeometryCutRequest(
-  payload,
-) {
-  const source =
-    object(
-      payload,
-      'Request body',
-    );
-
-  const unknown =
-    Object.keys(source)
-      .filter(
-        (key) =>
-          key !== 'geometry',
-      );
-
-  if (unknown.length > 0) {
-    throw new GeometryEditorValidationError(
-      'Unsupported cut fields: ' +
-        unknown.join(', '),
-    );
-  }
-
-  if (!('geometry' in source)) {
-    throw new GeometryEditorValidationError(
-      'geometry is required',
-    );
-  }
-
-  const geometry =
-    validateEditorGeometry(
-      source.geometry,
-    );
-
-  if (
-    geometryFamily(geometry) !==
-    'polygon'
-  ) {
-    throw new GeometryEditorValidationError(
-      'Cut geometry must be Polygon or MultiPolygon',
-    );
-  }
-
-  return geometry;
-}
-
-
 export function normalizeGeometryEditToken(
   value,
   label = 'editToken',
