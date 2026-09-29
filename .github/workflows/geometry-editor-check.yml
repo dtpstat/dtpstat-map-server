@@ -12,6 +12,22 @@ permissions:
   contents: read
 
 jobs:
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Verify lockfile without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Verify dependency tree
+        run: npm ls --all
+      - name: Reject high or critical production vulnerabilities
+        run: npm audit --omit=dev --audit-level=high
+
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -45,6 +61,8 @@ jobs:
       DATABASE_NAME: dtpstat_geometry_ci
       DATABASE_ROLE: dtpstat_geometry_app
       DATABASE_ROLE_PASSWORD: app-ci-password
+      DATABASE_MIGRATION_ROLE: dtpstat_geometry_migrator
+      DATABASE_MIGRATION_ROLE_PASSWORD: migration-ci-password
       DATABASE_SCHEMA: geometry_ci
       DATABASE_SSL: "false"
       POSTGRES_ADMIN_USER: postgres
@@ -85,6 +103,8 @@ jobs:
       DATABASE_NAME: dtpstat_geometry_upgrade_ci
       DATABASE_ROLE: dtpstat_geometry_upgrade_app
       DATABASE_ROLE_PASSWORD: app-ci-password
+      DATABASE_MIGRATION_ROLE: dtpstat_geometry_upgrade_migrator
+      DATABASE_MIGRATION_ROLE_PASSWORD: migration-ci-password
       DATABASE_SCHEMA: geometry_upgrade_ci
       DATABASE_SSL: "false"
       POSTGRES_ADMIN_USER: postgres
@@ -123,6 +143,8 @@ jobs:
       DATABASE_NAME: dtpstat_geometry_integration_ci
       DATABASE_ROLE: dtpstat_geometry_integration_app
       DATABASE_ROLE_PASSWORD: app-ci-password
+      DATABASE_MIGRATION_ROLE: dtpstat_geometry_integration_migrator
+      DATABASE_MIGRATION_ROLE_PASSWORD: migration-ci-password
       DATABASE_SCHEMA: buslanes
       DATABASE_SSL: "false"
       POSTGRES_ADMIN_USER: postgres
