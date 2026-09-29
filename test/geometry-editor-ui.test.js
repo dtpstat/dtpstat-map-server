@@ -453,7 +453,7 @@ test('geometry editor does not overwrite a cross-tab draft after an in-progress 
   );
   assert.match(
     editor,
-    /\['cut',[\s\S]*'split'[\s\S]*\.includes\([\s\S]*drawing\.mode[\s\S]*state\.pendingExternalDraftSync[\s\S]*Topology-операция отменена/u,
+    /\[\s*'cut',[\s\S]*'split'[\s\S]*\.includes\([\s\S]*drawing\.mode[\s\S]*state\.pendingExternalDraftSync[\s\S]*Topology-операция отменена/u,
   );
 });
 

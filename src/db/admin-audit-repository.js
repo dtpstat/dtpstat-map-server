@@ -60,9 +60,9 @@ export function createAdminAuditRepository(database) {
       }
 
       values.push(options.limit ?? 200);
-      const limitRef = `${values.length}::integer`;
+      const limitRef = `$${values.length}::integer`;
       values.push(options.offset ?? 0);
-      const offsetRef = `${values.length}::integer`;
+      const offsetRef = `$${values.length}::integer`;
 
       const result = await database.query(
         `SELECT
