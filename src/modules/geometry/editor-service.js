@@ -81,8 +81,9 @@ function nextGeometryValue(
       geometry,
     );
 
-  let lineTypeId;
-  let lanes;
+  let lineTypeId = null;
+  let pointTypeId = null;
+  let lanes = null;
 
   if (family === 'line') {
     lineTypeId =
@@ -100,9 +101,30 @@ function nextGeometryValue(
       )
         ? changes.lanes
         : previous.lanes;
-  } else {
-    lineTypeId = null;
-    lanes = null;
+
+    if (
+      own(
+        changes,
+        'pointTypeId',
+      ) &&
+      changes.pointTypeId !== null
+    ) {
+      pointTypeId =
+        changes.pointTypeId;
+    }
+  } else if (
+    family === 'point'
+  ) {
+    pointTypeId =
+      own(
+        changes,
+        'pointTypeId',
+      )
+        ? changes.pointTypeId
+        : (
+            previous.pointTypeId ??
+            null
+          );
 
     if (
       own(
@@ -124,12 +146,44 @@ function nextGeometryValue(
       lanes =
         changes.lanes;
     }
+  } else {
+    if (
+      own(
+        changes,
+        'lineTypeId',
+      ) &&
+      changes.lineTypeId !== null
+    ) {
+      lineTypeId =
+        changes.lineTypeId;
+    }
+    if (
+      own(
+        changes,
+        'pointTypeId',
+      ) &&
+      changes.pointTypeId !== null
+    ) {
+      pointTypeId =
+        changes.pointTypeId;
+    }
+    if (
+      own(
+        changes,
+        'lanes',
+      ) &&
+      changes.lanes !== null
+    ) {
+      lanes =
+        changes.lanes;
+    }
   }
 
   validateGeometryLineState(
     geometry,
     lineTypeId,
     lanes,
+    pointTypeId,
   );
 
   return {
@@ -164,6 +218,7 @@ function nextGeometryValue(
         ? changes.isVisible
         : previous.isVisible,
     lineTypeId,
+    pointTypeId,
     lanes,
   };
 }
@@ -570,6 +625,46 @@ export function createGeometryEditorService(
     }
   }
 
+  async function assertPointType(
+    client,
+    value,
+  ) {
+    if (
+      value.pointTypeId ===
+        null ||
+      value.pointTypeId ===
+        undefined
+    ) {
+      return;
+    }
+
+    if (
+      !await storage
+        .pointTypeExists(
+          client,
+          value.pointTypeId,
+        )
+    ) {
+      throw new GeometryEditorValidationError(
+        'pointTypeId does not exist',
+      );
+    }
+  }
+
+  async function assertGeometryTypes(
+    client,
+    value,
+  ) {
+    await assertLineType(
+      client,
+      value,
+    );
+    await assertPointType(
+      client,
+      value,
+    );
+  }
+
   async function updateLocked(
     client,
     previous,
@@ -581,7 +676,7 @@ export function createGeometryEditorService(
         changes,
       );
 
-    await assertLineType(
+    await assertGeometryTypes(
       client,
       next,
     );
@@ -684,7 +779,7 @@ export function createGeometryEditorService(
 
       return write(
         async (client) => {
-          await assertLineType(
+          await assertGeometryTypes(
             client,
             normalized,
           );
@@ -1689,7 +1784,7 @@ export function createGeometryEditorService(
               item.kind ===
               'create'
             ) {
-              await assertLineType(
+              await assertGeometryTypes(
                 client,
                 item.value,
               );

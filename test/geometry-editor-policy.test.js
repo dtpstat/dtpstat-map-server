@@ -100,6 +100,71 @@ test('geometry create payload validates line state and normalizes tags', () => {
   );
 });
 
+test('point geometry accepts an optional point type and other families reject it', () => {
+  const point =
+    normalizeGeometryCreatePayload({
+      geometry: {
+        type: 'Point',
+        coordinates: [
+          30,
+          60,
+        ],
+      },
+      pointTypeId: 12,
+    });
+
+  assert.equal(
+    point.family,
+    'point',
+  );
+  assert.equal(
+    point.pointTypeId,
+    12,
+  );
+  assert.equal(
+    point.lineTypeId,
+    null,
+  );
+  assert.equal(
+    point.lanes,
+    null,
+  );
+
+  assert.throws(
+    () =>
+      normalizeGeometryCreatePayload({
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [30, 60],
+            [31, 61],
+          ],
+        },
+        lineTypeId: 7,
+        pointTypeId: 12,
+        lanes: 1,
+      }),
+    /pointTypeId/u,
+  );
+
+  assert.throws(
+    () =>
+      normalizeGeometryCreatePayload({
+        geometry: {
+          type: 'Polygon',
+          coordinates: [[
+            [30, 60],
+            [31, 60],
+            [31, 61],
+            [30, 60],
+          ]],
+        },
+        pointTypeId: 12,
+      }),
+    /point/u,
+  );
+});
+
 test('geometry tags remain case-insensitively unique', () => {
   assert.deepEqual(
     normalizeGeometryTags([

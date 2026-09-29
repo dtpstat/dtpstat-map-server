@@ -22,6 +22,7 @@ import {
  * @param {{
  *   repository: import('./routes/api.js').CitiesRepository,
  *   lineTypesRepository?: { list: () => Promise<any[]>, save: (payload: unknown) => Promise<any[]> },
+ *   pointTypesRepository?: { list: Function, create: Function, update: Function, delete: Function },
  *   projectSettingsRepository?: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
  *   settingsTransferService?: { exportSettings: () => Promise<object>, importSettings: (payload: unknown) => Promise<object> },
  *   reportConfigService?: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
@@ -51,6 +52,7 @@ import {
 export function createApp({
   repository,
   lineTypesRepository,
+  pointTypesRepository,
   projectSettingsRepository,
   settingsTransferService,
   reportConfigService,
@@ -91,6 +93,12 @@ export function createApp({
       ?.lineTypesRepository ??
     null;
 
+  const effectivePointTypesRepository =
+    pointTypesRepository ??
+    testDefaults
+      ?.pointTypesRepository ??
+    null;
+
   const effectiveProjectSettingsRepository =
     projectSettingsRepository ??
     testDefaults
@@ -123,6 +131,14 @@ export function createApp({
   ) {
     throw new Error(
       'lineTypesRepository is required',
+    );
+  }
+
+  if (
+    !effectivePointTypesRepository
+  ) {
+    throw new Error(
+      'pointTypesRepository is required',
     );
   }
 
@@ -176,6 +192,8 @@ export function createApp({
       repository,
       lineTypesRepository:
         effectiveLineTypesRepository,
+      pointTypesRepository:
+        effectivePointTypesRepository,
       projectSettingsRepository:
         effectiveProjectSettingsRepository,
       settingsTransferService:

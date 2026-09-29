@@ -84,6 +84,42 @@ function lineTypesRepository() {
   };
 }
 
+function pointTypesRepository() {
+  return {
+    async list() {
+      return [];
+    },
+
+    async create(payload) {
+      return {
+        id: 1,
+        ...payload,
+      };
+    },
+
+    async update(
+      pointTypeId,
+      payload,
+    ) {
+      return {
+        id:
+          Number(pointTypeId),
+        ...payload,
+      };
+    },
+
+    async delete(pointTypeId) {
+      return {
+        id:
+          Number(pointTypeId),
+        name: 'Point type',
+        iconFileName: null,
+        unlinkedGeometryCount: 0,
+      };
+    },
+  };
+}
+
 function reportConfigService() {
   let config =
     structuredClone(
@@ -454,6 +490,8 @@ export function createTestAppDefaults(
   return {
     lineTypesRepository:
       lineTypesRepository(),
+    pointTypesRepository:
+      pointTypesRepository(),
     projectSettingsRepository:
       projectSettingsRepository(),
     settingsTransferService:

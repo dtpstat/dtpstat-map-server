@@ -124,6 +124,7 @@ const GEOMETRY_VALUE_KEYS = [
   'tags',
   'isVisible',
   'lineTypeId',
+  'pointTypeId',
   'lanes',
 ];
 
@@ -207,6 +208,7 @@ export const API_REQUEST_CONTRACTS =
       },
     ),
     c('GET', '/line-types'),
+    c('GET', '/point-types'),
     c('GET', '/report-config'),
     c('GET', '/project'),
     c('GET', '/city-marker-icon'),
@@ -220,6 +222,40 @@ export const API_REQUEST_CONTRACTS =
           'lineTypes',
         ],
       },
+    ),
+    c(
+      'POST',
+      '/admin/point-types',
+      {
+        body: 'json-object',
+        bodyKeys: [
+          'name',
+          'isActive',
+          'displayWidth',
+          'displayHeight',
+          'anchorX',
+          'anchorY',
+        ],
+      },
+    ),
+    c(
+      'PATCH',
+      '/admin/point-types/:pointTypeId',
+      {
+        body: 'json-object',
+        bodyKeys: [
+          'name',
+          'isActive',
+          'displayWidth',
+          'displayHeight',
+          'anchorX',
+          'anchorY',
+        ],
+      },
+    ),
+    c(
+      'DELETE',
+      '/admin/point-types/:pointTypeId',
     ),
     c(
       'POST',
@@ -596,6 +632,7 @@ export const API_REQUEST_CONTRACTS =
           'tags',
           'isVisible',
           'lineTypeId',
+          'pointTypeId',
           'lanes',
         ],
         headers: [

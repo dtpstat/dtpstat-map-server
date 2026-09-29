@@ -22,6 +22,9 @@ import {
   createLineTypesRepository,
 } from '../db/line-types-repository.js';
 import {
+  createPointTypesRepository,
+} from '../db/point-types-repository.js';
+import {
   createGeometryEditorRuntime,
 } from './geometry-editor-runtime.js';
 import {
@@ -60,6 +63,7 @@ const DEFAULT_FACTORIES =
     createDerivedStateRefresh,
     createKmlUpdateRuntime,
     createLineTypesRepository,
+    createPointTypesRepository,
     createGeometryEditorRuntime,
     createGeometryImportRuntime,
     createOsmBoundaryAdminRuntime,
@@ -101,6 +105,9 @@ export function createServerRuntime({
   const lineTypesRepository =
     runtimeFactories
       .createLineTypesRepository(pool);
+  const pointTypesRepository =
+    runtimeFactories
+      .createPointTypesRepository(pool);
   const geometryEditorService =
     runtimeFactories
       .createGeometryEditorRuntime(
@@ -216,6 +223,7 @@ export function createServerRuntime({
   const appDependencies = {
     repository,
     lineTypesRepository,
+    pointTypesRepository,
     projectSettingsRepository,
     settingsTransferService,
     reportConfigService,

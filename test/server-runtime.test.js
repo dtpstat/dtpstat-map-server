@@ -30,6 +30,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
   const simpleFactories = [
     'createCitiesRepository',
     'createLineTypesRepository',
+    'createPointTypesRepository',
     'createGeometryEditorRuntime',
     'createGeometryImportRuntime',
     'createProjectSettingsTransferRuntime',
@@ -219,6 +220,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
     [
       'createCitiesRepository',
       'createLineTypesRepository',
+      'createPointTypesRepository',
       'createGeometryEditorRuntime',
       'createGeometryImportRuntime',
       'createProjectRuntime',
@@ -307,6 +309,13 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
     runtime
       .bootstrapDependencies
       .repository,
+  );
+  assert.equal(
+    runtime
+      .appDependencies
+      .pointTypesRepository
+      .name,
+    'createPointTypesRepository',
   );
   assert.equal(
     runtime

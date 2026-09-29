@@ -14,6 +14,9 @@ import {
   createLineTypesRouter,
 } from '../../routes/line-types-api.js';
 import {
+  createPointTypesRouter,
+} from '../../routes/point-types-api.js';
+import {
   createOsmBoundariesRouter,
 } from '../../routes/osm-boundaries-api.js';
 import {
@@ -34,6 +37,7 @@ export function installApplicationApiRoutes(
   {
     repository,
     lineTypesRepository,
+    pointTypesRepository,
     projectSettingsRepository,
     settingsTransferService,
     reportConfigService,
@@ -91,6 +95,14 @@ export function installApplicationApiRoutes(
     '/api',
     createLineTypesRouter({
       lineTypesRepository,
+      ...commonAdmin,
+    }),
+  );
+
+  app.use(
+    '/api',
+    createPointTypesRouter({
+      pointTypesRepository,
       ...commonAdmin,
     }),
   );

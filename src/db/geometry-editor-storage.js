@@ -29,6 +29,14 @@ const DETAIL_COLUMNS_SQL = `
   geometry.is_visible AS "isVisible",
   geometry.was_edited AS "wasEdited",
   geometry.line_type_id::integer AS "lineTypeId",
+  geometry.point_type_id::integer AS "pointTypeId",
+  point_type.name AS "pointTypeName",
+  point_type.is_active AS "pointTypeActive",
+  point_type.display_width::integer AS "pointTypeDisplayWidth",
+  point_type.display_height::integer AS "pointTypeDisplayHeight",
+  point_type.anchor_x::double precision AS "pointTypeAnchorX",
+  point_type.anchor_y::double precision AS "pointTypeAnchorY",
+  (point_type.icon_file_name IS NOT NULL) AS "pointTypeIconConfigured",
   line_type.code::integer AS "lineTypeCode",
   line_type.name AS "lineTypeName",
   line_type.title AS "lineTypeTitle",
@@ -164,6 +172,14 @@ const GEOMETRY_SUMMARIES_SQL = `
     geometry.is_visible AS "isVisible",
     geometry.updated_at AS "updatedAt",
     geometry.line_type_id::integer AS "lineTypeId",
+    geometry.point_type_id::integer AS "pointTypeId",
+    point_type.name AS "pointTypeName",
+    point_type.is_active AS "pointTypeActive",
+    point_type.display_width::integer AS "pointTypeDisplayWidth",
+    point_type.display_height::integer AS "pointTypeDisplayHeight",
+    point_type.anchor_x::double precision AS "pointTypeAnchorX",
+    point_type.anchor_y::double precision AS "pointTypeAnchorY",
+    (point_type.icon_file_name IS NOT NULL) AS "pointTypeIconConfigured",
     geometry.lanes,
     line_type.name AS "lineTypeName",
     line_type.color AS "lineTypeColor",
@@ -172,6 +188,8 @@ const GEOMETRY_SUMMARIES_SQL = `
   FROM city_geometries AS geometry
   LEFT JOIN line_types AS line_type
     ON line_type.id = geometry.line_type_id
+  LEFT JOIN point_types AS point_type
+    ON point_type.id = geometry.point_type_id
   WHERE geometry.city_id = $1::bigint
   ORDER BY
     COALESCE(NULLIF(BTRIM(geometry.display_name), ''), ''),
@@ -194,6 +212,14 @@ const UNLINKED_GEOMETRY_SUMMARIES_SQL = `
     geometry.is_visible AS "isVisible",
     geometry.updated_at AS "updatedAt",
     geometry.line_type_id::integer AS "lineTypeId",
+    geometry.point_type_id::integer AS "pointTypeId",
+    point_type.name AS "pointTypeName",
+    point_type.is_active AS "pointTypeActive",
+    point_type.display_width::integer AS "pointTypeDisplayWidth",
+    point_type.display_height::integer AS "pointTypeDisplayHeight",
+    point_type.anchor_x::double precision AS "pointTypeAnchorX",
+    point_type.anchor_y::double precision AS "pointTypeAnchorY",
+    (point_type.icon_file_name IS NOT NULL) AS "pointTypeIconConfigured",
     geometry.lanes,
     line_type.name AS "lineTypeName",
     line_type.color AS "lineTypeColor",
@@ -202,6 +228,8 @@ const UNLINKED_GEOMETRY_SUMMARIES_SQL = `
   FROM city_geometries AS geometry
   LEFT JOIN line_types AS line_type
     ON line_type.id = geometry.line_type_id
+  LEFT JOIN point_types AS point_type
+    ON point_type.id = geometry.point_type_id
   WHERE geometry.city_id IS NULL
   ORDER BY
     COALESCE(NULLIF(BTRIM(geometry.display_name), ''), ''),
@@ -214,6 +242,8 @@ const ONE_GEOMETRY_SQL = `
   FROM city_geometries AS geometry
   LEFT JOIN line_types AS line_type
     ON line_type.id = geometry.line_type_id
+  LEFT JOIN point_types AS point_type
+    ON point_type.id = geometry.point_type_id
   WHERE geometry.id = $1::bigint
 `;
 
@@ -223,6 +253,8 @@ const LOCK_GEOMETRIES_SQL = `
   FROM city_geometries AS geometry
   LEFT JOIN line_types AS line_type
     ON line_type.id = geometry.line_type_id
+  LEFT JOIN point_types AS point_type
+    ON point_type.id = geometry.point_type_id
   WHERE geometry.id = ANY($1::bigint[])
   ORDER BY geometry.id
   FOR UPDATE OF geometry
@@ -240,6 +272,7 @@ const CREATE_GEOMETRY_SQL = `
     city_id,
     boundary_id,
     line_type_id,
+    point_type_id,
     lanes,
     length_m,
     lane_length_m,
@@ -257,7 +290,8 @@ const CREATE_GEOMETRY_SQL = `
     $1::bigint,
     $2::bigint,
     $4::bigint,
-    $5::smallint,
+    $5::bigint,
+    $6::smallint,
     CASE
       WHEN GeometryType(prepared.geom) IN ('LINESTRING', 'MULTILINESTRING')
         THEN ST_Length(prepared.geom::geography)
@@ -265,16 +299,16 @@ const CREATE_GEOMETRY_SQL = `
     END,
     CASE
       WHEN GeometryType(prepared.geom) IN ('LINESTRING', 'MULTILINESTRING')
-        THEN ST_Length(prepared.geom::geography) * $5::smallint
+        THEN ST_Length(prepared.geom::geography) * $6::smallint
       ELSE NULL
     END,
     jsonb_build_object('source', 'manual'),
     prepared.geom,
-    $6::text,
     $7::text,
-    $8::text[],
+    $8::text,
+    $9::text[],
     '{}'::jsonb,
-    $9::boolean,
+    $10::boolean,
     TRUE,
     NOW()
   FROM prepared
@@ -295,7 +329,8 @@ const UPDATE_GEOMETRY_SQL = `
   SET
     geom = prepared.geom,
     line_type_id = $3::bigint,
-    lanes = $4::smallint,
+    point_type_id = $4::bigint,
+    lanes = $5::smallint,
     length_m = CASE
       WHEN GeometryType(prepared.geom) IN ('LINESTRING', 'MULTILINESTRING')
         THEN ST_Length(prepared.geom::geography)
@@ -303,13 +338,13 @@ const UPDATE_GEOMETRY_SQL = `
     END,
     lane_length_m = CASE
       WHEN GeometryType(prepared.geom) IN ('LINESTRING', 'MULTILINESTRING')
-        THEN ST_Length(prepared.geom::geography) * $4::smallint
+        THEN ST_Length(prepared.geom::geography) * $5::smallint
       ELSE NULL
     END,
-    display_name = $5::text,
-    tooltip = $6::text,
-    tags = $7::text[],
-    is_visible = $8::boolean,
+    display_name = $6::text,
+    tooltip = $7::text,
+    tags = $8::text[],
+    is_visible = $9::boolean,
     was_edited = TRUE,
     updated_at = NOW()
   FROM prepared
@@ -518,6 +553,7 @@ const SPLIT_GEOMETRY_SQL = `
       city_id,
       boundary_id,
       line_type_id,
+      point_type_id,
       lanes,
       length_m,
       lane_length_m,
@@ -535,6 +571,7 @@ const SPLIT_GEOMETRY_SQL = `
       source.city_id,
       source.boundary_id,
       source.line_type_id,
+      source.point_type_id,
       source.lanes,
       CASE
         WHEN $3::text = 'line'
@@ -718,6 +755,23 @@ export function createGeometryEditorStorage(
       );
     },
 
+    async pointTypeExists(
+      queryable,
+      pointTypeId,
+    ) {
+      if (pointTypeId === null) {
+        return true;
+      }
+      const result =
+        await queryable.query(
+          'SELECT 1 FROM point_types WHERE id = $1::bigint',
+          [pointTypeId],
+        );
+      return Boolean(
+        result.rows[0],
+      );
+    },
+
     async createGeometry(
       client,
       payload,
@@ -732,6 +786,7 @@ export function createGeometryEditorStorage(
               payload.geometry,
             ),
             payload.lineTypeId,
+            payload.pointTypeId,
             payload.lanes,
             payload.displayName,
             payload.tooltip,
@@ -761,6 +816,7 @@ export function createGeometryEditorStorage(
               payload.geometry,
             ),
             payload.lineTypeId,
+            payload.pointTypeId,
             payload.lanes,
             payload.displayName,
             payload.tooltip,

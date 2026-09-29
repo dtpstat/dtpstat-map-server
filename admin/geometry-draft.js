@@ -42,6 +42,7 @@ export function geometryDraftChanges(
     'tags',
     'isVisible',
     'lineTypeId',
+    'pointTypeId',
     'lanes',
   ];
 

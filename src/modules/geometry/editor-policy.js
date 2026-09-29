@@ -346,6 +346,21 @@ function normalizedLineTypeId(
   );
 }
 
+function normalizedPointTypeId(
+  value,
+) {
+  if (
+    value === null ||
+    value === ''
+  ) {
+    return null;
+  }
+  return positiveInteger(
+    value,
+    'pointTypeId',
+  );
+}
+
 function normalizedLanes(value) {
   if (
     value === null ||
@@ -369,6 +384,7 @@ export function validateGeometryLineState(
   geometry,
   lineTypeId,
   lanes,
+  pointTypeId = null,
 ) {
   const family =
     geometryFamily(geometry);
@@ -392,12 +408,40 @@ export function validateGeometryLineState(
         'lanes must be 1 or 2 for line geometries',
       );
     }
+    if (pointTypeId !== null) {
+      throw new GeometryEditorValidationError(
+        'pointTypeId is allowed only for point geometries',
+      );
+    }
+  } else if (family === 'point') {
+    if (
+      lineTypeId !== null ||
+      lanes !== null
+    ) {
+      throw new GeometryEditorValidationError(
+        'lineTypeId and lanes are allowed only for line geometries',
+      );
+    }
+    if (
+      pointTypeId !== null &&
+      (
+        !Number.isSafeInteger(
+          pointTypeId,
+        ) ||
+        pointTypeId <= 0
+      )
+    ) {
+      throw new GeometryEditorValidationError(
+        'pointTypeId must be a positive integer or null',
+      );
+    }
   } else if (
     lineTypeId !== null ||
-    lanes !== null
+    lanes !== null ||
+    pointTypeId !== null
   ) {
     throw new GeometryEditorValidationError(
-      'lineTypeId and lanes are allowed only for line geometries',
+      'Line and point type fields do not apply to polygon geometries',
     );
   }
 
@@ -421,6 +465,7 @@ export function normalizeGeometryChanges(
       'tags',
       'isVisible',
       'lineTypeId',
+      'pointTypeId',
       'lanes',
     ]);
 
@@ -486,6 +531,12 @@ export function normalizeGeometryChanges(
         source.lineTypeId,
       );
   }
+  if ('pointTypeId' in source) {
+    result.pointTypeId =
+      normalizedPointTypeId(
+        source.pointTypeId,
+      );
+  }
   if ('lanes' in source) {
     result.lanes =
       normalizedLanes(
@@ -522,6 +573,7 @@ export function normalizeGeometryCreatePayload(
       'tags',
       'isVisible',
       'lineTypeId',
+      'pointTypeId',
       'lanes',
     ]);
 
@@ -583,6 +635,9 @@ export function normalizeGeometryCreatePayload(
     lineTypeId:
       changes.lineTypeId ??
       null,
+    pointTypeId:
+      changes.pointTypeId ??
+      null,
     lanes:
       changes.lanes ??
       null,
@@ -593,6 +648,7 @@ export function normalizeGeometryCreatePayload(
       value.geometry,
       value.lineTypeId,
       value.lanes,
+      value.pointTypeId,
     );
 
   return value;
