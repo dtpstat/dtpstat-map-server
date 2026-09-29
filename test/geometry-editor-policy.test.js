@@ -360,7 +360,7 @@ test('geometry cut request accepts inline or optimistic referenced polygon cutte
   );
 });
 
-test('geometry split request requires a line blade', () => {
+test('geometry split request requires one straight two-point blade', () => {
   assert.deepEqual(
     normalizeGeometrySplitRequest({
       blade: {
@@ -393,6 +393,49 @@ test('geometry split request requires a line blade', () => {
           ]],
         },
       }),
-    /Split blade must be LineString or MultiLineString/u,
+    /two-point LineString/u,
+  );
+
+  assert.throws(
+    () =>
+      normalizeGeometrySplitRequest({
+        blade: {
+          type: 'LineString',
+          coordinates: [
+            [30, 60],
+            [31, 61],
+            [32, 62],
+          ],
+        },
+      }),
+    /two-point LineString/u,
+  );
+
+  assert.throws(
+    () =>
+      normalizeGeometrySplitRequest({
+        blade: {
+          type: 'MultiLineString',
+          coordinates: [[
+            [30, 60],
+            [31, 61],
+          ]],
+        },
+      }),
+    /two-point LineString/u,
+  );
+
+  assert.throws(
+    () =>
+      normalizeGeometrySplitRequest({
+        blade: {
+          type: 'LineString',
+          coordinates: [
+            [30, 60],
+            [30, 60],
+          ],
+        },
+      }),
+    /distinct endpoints/u,
   );
 });

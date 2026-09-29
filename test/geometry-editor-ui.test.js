@@ -886,7 +886,19 @@ test('geometry editor exposes optimistic polygon cutter and line-blade split ope
   );
   assert.match(
     editor,
-    /Разделение режущей линией/u,
+    /После второй точки разделение выполнится автоматически/u,
+  );
+  assert.match(
+    editor,
+    /geometry-editor-split-blade[\s\S]*line-dasharray/u,
+  );
+  assert.match(
+    editor,
+    /state\.drawing[\s\S]*\.mode ===[\s\S]*'split'[\s\S]*\.length ===[\s\S]*2[\s\S]*finishDrawing\(\)/u,
+  );
+  assert.match(
+    editor,
+    /\['point',[\s\S]*'split'[\s\S]*\.includes\([\s\S]*drawing\?\.mode/u,
   );
   assert.match(
     editor,

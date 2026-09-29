@@ -174,14 +174,30 @@ export function normalizeGeometrySplitRequest(
       source.blade,
     );
 
+  const coordinates =
+    blade.type ===
+      'LineString'
+      ? blade.coordinates
+      : null;
+
+  const distinctEndpoints =
+    Array.isArray(
+      coordinates,
+    ) &&
+    coordinates.length ===
+      2 &&
+    (
+      coordinates[0][0] !==
+        coordinates[1][0] ||
+      coordinates[0][1] !==
+        coordinates[1][1]
+    );
+
   if (
-    geometryFamily(
-      blade,
-    ) !==
-    'line'
+    !distinctEndpoints
   ) {
     throw new GeometryEditorValidationError(
-      'Split blade must be LineString or MultiLineString',
+      'Split blade must be a two-point LineString with distinct endpoints',
     );
   }
 

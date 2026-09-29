@@ -473,7 +473,7 @@ const SPLIT_GEOMETRY_SQL = `
     FROM city_geometries
     WHERE id = $1::bigint
   ),
-  prepared AS (
+  parsed_blade AS (
     SELECT
       ST_SetSRID(
         ST_GeomFromGeoJSON(
@@ -481,6 +481,15 @@ const SPLIT_GEOMETRY_SQL = `
         ),
         4326
       ) AS blade
+  ),
+  prepared AS (
+    SELECT
+      ST_LineExtend(
+        parsed_blade.blade,
+        360.0,
+        360.0
+      ) AS blade
+    FROM parsed_blade
   ),
   split_result AS (
     SELECT

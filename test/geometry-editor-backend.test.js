@@ -477,6 +477,10 @@ test('geometry topology operations stay domain validated revision safe and trans
   );
   assert.match(
     storage,
+    /ST_LineExtend/u,
+  );
+  assert.match(
+    storage,
     /part\.part_count = 2/u,
   );
   assert.match(

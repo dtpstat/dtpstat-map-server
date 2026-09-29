@@ -1234,7 +1234,7 @@ async function verifyGeometryEditorInfrastructure(
             ],
             [
               30.029,
-              50.05,
+              50.02,
             ],
           ],
         },

@@ -948,7 +948,10 @@ if (section) {
       features: [{
         type: 'Feature',
         geometry,
-        properties: {},
+        properties: {
+          mode:
+            drawing.mode,
+        },
       }],
     };
   }
@@ -1238,12 +1241,56 @@ if (section) {
         type: 'line',
         source: DRAW_SOURCE,
         filter: [
-          'in',
-          ['geometry-type'],
-          ['literal', ['LineString', 'Polygon']],
+          'all',
+          [
+            'in',
+            ['geometry-type'],
+            ['literal', ['LineString', 'Polygon']],
+          ],
+          [
+            '!=',
+            ['get', 'mode'],
+            'split',
+          ],
         ],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: { 'line-color': '#f3b74e', 'line-width': 5 },
+      });
+      addLayerSafe(map, {
+        id: 'geometry-editor-split-blade',
+        type: 'line',
+        source: DRAW_SOURCE,
+        filter: [
+          'all',
+          ['==', ['geometry-type'], 'LineString'],
+          ['==', ['get', 'mode'], 'split'],
+        ],
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': '#ff5d67',
+          'line-width': 3,
+          'line-opacity': 0.95,
+          'line-dasharray': [1.5, 1],
+        },
+      });
+      addLayerSafe(map, {
+        id: 'geometry-editor-split-point',
+        type: 'circle',
+        source: DRAW_SOURCE,
+        filter: [
+          'all',
+          ['==', ['geometry-type'], 'Point'],
+          ['==', ['get', 'mode'], 'split'],
+        ],
+        paint: {
+          'circle-radius': 5,
+          'circle-color': '#ff5d67',
+          'circle-stroke-color': '#fff',
+          'circle-stroke-width': 1.5,
+        },
       });
       addLayerSafe(map, {
         id: 'geometry-editor-draw-fill',
@@ -1631,6 +1678,18 @@ if (section) {
           );
         updateMapSources();
         updateDrawControls();
+
+        if (
+          state.drawing
+            ?.mode ===
+            'split' &&
+          state.drawing
+            .coordinates
+            .length ===
+            2
+        ) {
+          void finishDrawing();
+        }
       });
 
       const addVertexHint =
@@ -5076,7 +5135,7 @@ if (section) {
       setMessage(
         mode === 'cut'
           ? 'Нарисуйте область, которую нужно вырезать: минимум три точки.'
-          : 'Нарисуйте режущую линию через геометрию: минимум две точки.',
+          : 'Укажите две точки прямой разреза. После второй точки разделение выполнится автоматически.',
       );
       return;
     }
@@ -5136,15 +5195,25 @@ if (section) {
   function updateDrawControls() {
     const drawing = state.drawing;
     const active = Boolean(drawing);
-    finishDrawButton.hidden = !active || drawing?.mode === 'point';
+    finishDrawButton.hidden =
+      !active ||
+      [
+        'point',
+        'split',
+      ].includes(
+        drawing?.mode,
+      );
     cancelDrawButton.hidden = !active;
 
     let canFinish = false;
     if (
-      drawing?.mode === 'line' ||
-      drawing?.mode === 'split'
+      drawing?.mode ===
+      'line'
     ) {
-      canFinish = drawing.coordinates.length >= 2;
+      canFinish =
+        drawing.coordinates
+          .length >=
+        2;
     }
     if (
       drawing?.mode === 'polygon' ||
@@ -5165,8 +5234,10 @@ if (section) {
         ' · замкнётся автоматически';
     } else if (drawing?.mode === 'split') {
       modeLabel.textContent =
-        'Разделение режущей линией · точек: ' +
-        drawing.coordinates.length;
+        drawing.coordinates.length ===
+          0
+          ? 'Разделение · укажите первую точку прямой'
+          : 'Разделение · укажите вторую точку прямой';
     } else if (drawing?.mode === 'point') {
       modeLabel.textContent =
         'Добавление точки · кликните по карте';
@@ -5252,6 +5323,15 @@ if (section) {
       drawing.mode === 'line' ||
       drawing.mode === 'split'
     ) {
+      if (
+        drawing.mode ===
+          'split' &&
+        drawing.coordinates
+          .length !==
+          2
+      ) {
+        return;
+      }
       if (drawing.coordinates.length < 2) return;
       const line = {
         type: 'LineString',
