@@ -35,7 +35,7 @@ test('OSM editor role crosses persistence service authorization and UI boundarie
   assert.match(auth, /requireOsmEditor:\s*middleware\('osm-editor'\)/);
   assert.match(router, /adminAuth\.requireOsmEditor/);
   assert.doesNotMatch(router, /adminAuth\.requireData/);
-  assert.match(shell, /'osm-objects': !mustChangePassword && canEditOsm\(user\)/);
+  assert.match(shell, /'osm-objects': !restricted && canEditOsm\(user\)/);
   assert.match(editor, /roleCheckbox\('canEditOsm', 'Объекты OSM'/);
   assert.match(editor, /canEditOsm: form\.elements\.canEditOsm\.checked/);
 });

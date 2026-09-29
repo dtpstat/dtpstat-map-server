@@ -65,7 +65,7 @@ test('OSM object editor is a top-level admin section with population editing', a
   assert.doesNotMatch(html, /data-operation-panel="osm-objects"/);
 
   assert.match(shell, /function canEditOsm\(user\)/);
-  assert.match(shell, /'osm-objects': !mustChangePassword && canEditOsm\(user\)/);
+  assert.match(shell, /'osm-objects': !restricted && canEditOsm\(user\)/);
   assert.match(shell, /if \(canEditOsm\(user\)\) await import\('\.\/osm-boundary-editor\.js'\)/);
   assert.doesNotMatch(shell, /'osm-objects': dataAccess/);
   assert.match(shell, /dtpstat:osm-boundary-editor-open/);

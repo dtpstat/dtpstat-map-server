@@ -71,7 +71,7 @@ test('geometry editor is a dedicated permission-protected top-level admin sectio
   );
   assert.match(
     shell,
-    /geometries: !mustChangePassword && canEditGeometries\(user\)/u,
+    /geometries: !restricted && canEditGeometries\(user\)/u,
   );
   assert.match(
     shell,
