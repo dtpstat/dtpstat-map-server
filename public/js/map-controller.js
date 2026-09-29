@@ -257,6 +257,10 @@ export async function createMapController(config) {
           ),
       );
 
+    if (pointTypes.size === 0) {
+      return geojson;
+    }
+
     return {
       ...geojson,
       features:
