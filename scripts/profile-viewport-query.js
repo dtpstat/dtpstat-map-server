@@ -1,13 +1,33 @@
 import 'dotenv/config';
+import path from 'node:path';
+import {
+  fileURLToPath,
+} from 'node:url';
 import {
   createDatabaseClient,
 } from './database.js';
+import {
+  loadDatabaseSchema,
+} from '../src/db/database-environment.js';
+import {
+  verifyDatabaseMigrationState,
+} from '../src/db/migration-state.js';
 import {
   viewportGeometryQuery,
 } from '../src/db/viewport-query.js';
 
 const DEFAULT_ITERATIONS = 5;
 const MAX_ITERATIONS = 50;
+
+const projectRoot =
+  path.resolve(
+    path.dirname(
+      fileURLToPath(
+        import.meta.url,
+      ),
+    ),
+    '..',
+  );
 
 function optionValue(
   name,
@@ -314,6 +334,16 @@ async function main() {
   await client.connect();
 
   try {
+    const migrationState =
+      await verifyDatabaseMigrationState(
+        client,
+        {
+          projectRoot,
+          schema:
+            loadDatabaseSchema(),
+        },
+      );
+
     await client.query(
       'BEGIN READ ONLY',
     );
@@ -372,6 +402,7 @@ async function main() {
             client.database,
           runtimeRole:
             client.user,
+          migrationState,
           viewport,
           selector:
             query.selector,
