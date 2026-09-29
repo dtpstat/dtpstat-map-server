@@ -436,12 +436,17 @@ if (section) {
         currentDraft,
       );
 
-    state.editing =
+    const draftTokenIsValid =
       Boolean(
         currentDraft?.editToken &&
         state.validatedEditTokens.get(
           String(state.selectedId),
         ) === currentDraft.editToken,
+      );
+    state.editing =
+      Boolean(
+        state.editing &&
+        draftTokenIsValid,
       );
     state.draft = clone(effective.geometry);
     state.history = [];
@@ -1652,8 +1657,33 @@ if (section) {
           });
           if (vertexHits.length > 0) return;
 
-          const id = Number(event.features?.[0]?.properties?.id);
-          if (Number.isSafeInteger(id) && id > 0) void selectGeometry(id);
+          const rawId =
+            event.features?.[0]
+              ?.properties
+              ?.id;
+          const id =
+            isLocalGeometryId(
+              rawId,
+            )
+              ? rawId
+              : Number(
+                  rawId,
+                );
+          if (
+            isLocalGeometryId(
+              id,
+            ) ||
+            (
+              Number.isSafeInteger(
+                id,
+              ) &&
+              id > 0
+            )
+          ) {
+            void selectGeometry(
+              id,
+            );
+          }
         });
         map.on('mouseenter', layerId, () => {
           state.hoveredGeometry = true;
@@ -2638,6 +2668,24 @@ if (section) {
     return `${Number(value).toLocaleString('ru-RU', { maximumFractionDigits: decimals })} ${unit}`;
   }
 
+  function renderCreateControls() {
+    const cannotCreate =
+      Boolean(
+        state.importSession ||
+        state.editing ||
+        state.drawing
+      ) ||
+      !state.city
+        ?.boundaryId;
+
+    newPointButton.disabled =
+      cannotCreate;
+    newLineButton.disabled =
+      cannotCreate;
+    newPolygonButton.disabled =
+      cannotCreate;
+  }
+
   function renderFormState() {
     const item = state.current;
     const draft = state.draft;
@@ -2658,6 +2706,7 @@ if (section) {
       !state.importSession;
 
     renderGeometryToolState();
+    renderCreateControls();
 
     for (const control of form.elements) {
       if (control.name === 'lineTypeId' || control.name === 'lanes') continue;
@@ -3229,20 +3278,8 @@ if (section) {
     state.selectedId = item.id;
     state.current = item;
     state.draft = clone(effective.geometry);
-    state.editing =
-      Boolean(
-        local?.editToken &&
-        state.validatedEditTokens.get(
-          String(item.id),
-        ) === local.editToken,
-      );
-    state.editLease =
-      state.editing
-        ? {
-            ...(state.editLeases.get(item.id) ?? {}),
-            token: local.editToken,
-          }
-        : null;
+    state.editing = false;
+    state.editLease = null;
     state.blockedLease = null;
     state.history = [];
     state.future = [];
@@ -3266,6 +3303,22 @@ if (section) {
 
   async function selectGeometry(id, { focus = true } = {}) {
     closeCoordinateWindow();
+
+    if (
+      state.editing &&
+      String(state.current?.id) ===
+        String(id)
+    ) {
+      if (
+        focus &&
+        state.draft
+      ) {
+        focusGeometry(
+          state.draft,
+        );
+      }
+      return;
+    }
 
     if (state.importSession) {
       setMessage(
@@ -3746,15 +3799,7 @@ if (section) {
 
     citySelect.disabled =
       Boolean(session);
-    const cannotCreate =
-      Boolean(session) ||
-      !state.city?.boundaryId;
-    newPointButton.disabled =
-      cannotCreate;
-    newLineButton.disabled =
-      cannotCreate;
-    newPolygonButton.disabled =
-      cannotCreate;
+    renderCreateControls();
     recalculateButton.disabled =
       Boolean(session);
 
@@ -4947,6 +4992,29 @@ if (section) {
   async function startDrawing(mode) {
     closeCoordinateWindow();
 
+    const createsGeometry =
+      [
+        'point',
+        'line',
+        'polygon',
+      ].includes(
+        mode,
+      );
+
+    if (
+      createsGeometry &&
+      (
+        state.editing ||
+        state.drawing
+      )
+    ) {
+      setMessage(
+        'Завершите текущее редактирование или рисование перед добавлением другой геометрии.',
+        'error',
+      );
+      return;
+    }
+
     if (state.importSession) {
       setMessage(
         'Сначала разрешите конфликты подготовленного импорта.',
@@ -5119,6 +5187,7 @@ if (section) {
     refreshMapCursor();
     renderHistoryControls();
     renderMergeState();
+    renderCreateControls();
   }
 
 

@@ -595,19 +595,47 @@
                        aria-label="Карта редактора геометрий">
                 <div class="geometry-editor-map-toolbar">
                   <span id="geometry-editor-mode">Выберите геометрию</span>
-                  <button class="secondary" id="geometry-coordinate-open"
-                          type="button" disabled
-                          title="Точное редактирование координат">
-                    Координаты
-                  </button>
-                  <button class="secondary" id="geometry-undo"
-                          type="button" disabled title="Ctrl+Z">↶</button>
-                  <button class="secondary" id="geometry-redo"
-                          type="button" disabled title="Ctrl+Y">↷</button>
                   <button id="geometry-finish-draw"
                           type="button" hidden>Завершить</button>
                   <button class="secondary" id="geometry-cancel-draw"
                           type="button" hidden>Отмена</button>
+                </div>
+                <div class="geometry-editor-map-controls"
+                     aria-label="Инструменты геометрии">
+                  <button class="secondary geometry-editor-map-tool"
+                          id="geometry-coordinate-open"
+                          type="button" disabled
+                          title="Координаты"
+                          aria-label="Координаты">
+                    XY
+                  </button>
+                  <button class="secondary geometry-editor-map-tool"
+                          id="geometry-undo"
+                          type="button" disabled title="Отменить · Ctrl+Z"
+                          aria-label="Отменить">↶</button>
+                  <button class="secondary geometry-editor-map-tool"
+                          id="geometry-redo"
+                          type="button" disabled title="Повторить · Ctrl+Y"
+                          aria-label="Повторить">↷</button>
+                  <details class="geometry-editor-map-operations"
+                           id="geometry-topology-actions" hidden>
+                    <summary title="Геометрические операции"
+                             aria-label="Геометрические операции">✂</summary>
+                    <div class="geometry-editor-topology-buttons">
+                      <button class="secondary" id="geometry-cut-area"
+                              type="button">
+                        Вырезать область
+                      </button>
+                      <button class="secondary" id="geometry-cut-selected"
+                              type="button">
+                        Вырезать полигоном
+                      </button>
+                      <button class="secondary" id="geometry-split"
+                              type="button">
+                        Разделить линией
+                      </button>
+                    </div>
+                  </details>
                 </div>
                 <div id="geometry-editor-map" class="geometry-editor-map"></div>
               </section>
@@ -713,25 +741,6 @@
                     <button class="secondary" id="geometry-revert"
                             type="button" disabled>Отменить правки</button>
                   </div>
-
-                  <details class="geometry-editor-topology-actions"
-                           id="geometry-topology-actions" hidden>
-                    <summary>Геометрические операции</summary>
-                    <div class="geometry-editor-topology-buttons">
-                      <button class="secondary" id="geometry-cut-area"
-                              type="button">
-                        Вырезать область
-                      </button>
-                      <button class="secondary" id="geometry-cut-selected"
-                              type="button">
-                        Вырезать полигоном
-                      </button>
-                      <button class="secondary" id="geometry-split"
-                              type="button">
-                        Разделить линией
-                      </button>
-                    </div>
-                  </details>
 
                   <button class="danger" id="geometry-delete"
                           type="button" disabled>

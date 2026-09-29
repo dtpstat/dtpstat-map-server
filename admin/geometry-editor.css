@@ -352,33 +352,79 @@
   gap: .45rem;
 }
 
-.geometry-editor-topology-actions {
-  padding-top: .2rem;
-  border-top: 1px solid #233840;
+.geometry-editor-map-controls {
+  position: absolute;
+  top: 3.55rem;
+  left: .55rem;
+  z-index: 25;
+  display: grid;
+  gap: .3rem;
 }
 
-.geometry-editor-topology-actions[hidden] {
+.geometry-editor-map-tool,
+.geometry-editor-map-operations > summary {
+  box-sizing: border-box;
+  width: 2.25rem;
+  height: 2.25rem;
+  min-width: 2.25rem;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid #38515a;
+  border-radius: 6px;
+  color: var(--text);
+  background: #102126;
+  box-shadow: 0 .2rem .7rem rgb(0 0 0 / 28%);
+  cursor: pointer;
+  font-size: .72rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.geometry-editor-map-tool:hover:not(:disabled),
+.geometry-editor-map-operations > summary:hover {
+  border-color: #4f817e;
+  background: #163036;
+}
+
+.geometry-editor-map-operations {
+  position: relative;
+}
+
+.geometry-editor-map-operations[hidden] {
   display: none;
 }
 
-.geometry-editor-topology-actions > summary {
-  padding: .35rem 0;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: .7rem;
-  font-weight: 750;
+.geometry-editor-map-operations > summary {
+  list-style: none;
+  font-size: 1rem;
 }
 
-.geometry-editor-topology-buttons {
-  margin-top: .25rem;
+.geometry-editor-map-operations > summary::-webkit-details-marker {
+  display: none;
+}
+
+.geometry-editor-map-operations .geometry-editor-topology-buttons {
+  position: absolute;
+  top: 0;
+  left: calc(100% + .4rem);
+  width: 13rem;
+  padding: .45rem;
   display: grid;
-  grid-template-columns:
-    repeat(2, minmax(0, 1fr));
   gap: .35rem;
+  border: 1px solid #38515a;
+  border-radius: 8px;
+  background: #0d171a;
+  box-shadow: 0 .75rem 2.2rem rgb(0 0 0 / 42%);
 }
 
-.geometry-editor-topology-buttons button:last-child {
-  grid-column: 1 / -1;
+.geometry-editor-map-operations:not([open])
+.geometry-editor-topology-buttons {
+  display: none;
+}
+
+.geometry-editor-topology-buttons button {
+  width: 100%;
 }
 
 .geometry-editor-meta {

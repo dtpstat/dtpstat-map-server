@@ -935,7 +935,7 @@ test('geometry drawing previews the next segment under the pointer and keeps sec
   );
   assert.match(
     page,
-    /id="geometry-topology-actions"[\s\S]*<summary>Геометрические операции<\/summary>/u,
+    /class="geometry-editor-map-controls"[\s\S]*id="geometry-topology-actions"[\s\S]*aria-label="Геометрические операции"/u,
   );
   assert.match(
     styles,
@@ -1079,5 +1079,63 @@ test('geometry editor exposes coordinate table editing and whole geometry drag a
   assert.doesNotMatch(
     styles,
     /#geometry-move-toggle/u,
+  );
+});
+
+
+test('geometry editor keeps creation and edit activation explicit and selects local geometries from the map', async () => {
+  const [
+    editor,
+    page,
+    styles,
+  ] =
+    await Promise.all([
+      read(
+        'admin/geometry-editor.js',
+      ),
+      read(
+        'admin/index.html',
+      ),
+      read(
+        'admin/geometry-editor.css',
+      ),
+    ]);
+
+  assert.match(
+    editor,
+    /function renderCreateControls\(\)[\s\S]*state\.editing[\s\S]*state\.drawing/u,
+  );
+  assert.match(
+    editor,
+    /Завершите текущее редактирование или рисование/u,
+  );
+  assert.match(
+    editor,
+    /isLocalGeometryId\([\s\S]*rawId[\s\S]*void selectGeometry/u,
+  );
+  assert.match(
+    editor,
+    /function adoptGeometryDetail[\s\S]*state\.editing = false;[\s\S]*state\.editLease = null;/u,
+  );
+  assert.match(
+    editor,
+    /state\.editing &&[\s\S]*String\(state\.current\?\.id\)[\s\S]*String\(id\)[\s\S]*return;/u,
+  );
+
+  assert.match(
+    page,
+    /class="geometry-editor-map-controls"/u,
+  );
+  assert.match(
+    page,
+    /id="geometry-coordinate-open"[\s\S]*id="geometry-undo"[\s\S]*id="geometry-redo"[\s\S]*id="geometry-topology-actions"/u,
+  );
+  assert.doesNotMatch(
+    page,
+    /class="geometry-editor-topology-actions"/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-editor-map-controls\s*\{[\s\S]*position: absolute;[\s\S]*top: 3\.55rem;[\s\S]*left: \.55rem;/u,
   );
 });
