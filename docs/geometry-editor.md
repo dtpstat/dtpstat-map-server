@@ -155,6 +155,90 @@ V046 edit leases
 V049 empty-descendant spatial resolver fix
 ```
 
+## Future backlog
+
+Ниже зафиксированы следующие связанные этапы развития editor. Это backlog, а
+не контракт уже реализованного поведения; пункты должны вводиться небольшими
+отдельными изменениями с regression tests.
+
+### Карта и режимы редактирования
+
+- leased геометрии обозначать на карте нейтральным серым состоянием;
+- phantom midpoint/segment для добавления узла снабдить явным hint;
+- унифицировать add/delete cursors одной визуальной системой;
+- для point/line/polygon drawing явно показывать активный режим и специальный
+  cursor;
+- line drawing не должен получать polygon fill; preview line должен совпадать
+  со стилем рабочей editable line;
+- «Сохранить локально» завершает активный EDIT, но сохраняет lease/token за
+  client до явного release/sync/discard;
+- добавить перенос всей geometry drag-ом, отдельно от vertex drag;
+- добавить coordinate editor в отдельном окне: табличный ввод точек и
+  multi-row paste из clipboard.
+
+### Геометрические операции
+
+- сохранить существующий режим «Вырезать область…» для рисуемого cutter
+  polygon;
+- добавить использование существующей polygon geometry как cutter;
+- добавить split line в выбранной точке/узле на две geometry;
+- добавить split polygon режущей линией на две geometry;
+- все destructive topology operations должны сохранять lease + optimistic
+  revision + atomic transaction contract.
+
+### Notification / realtime infrastructure
+
+Нужен общий client notification pool с подпиской UI и возможностью показывать
+несколько notifications одновременно.
+
+Типы:
+
+```text
+info
+log
+warn
+error
+```
+
+`info/log` могут быть auto-dismiss. `warn/error` по умолчанию persistent и
+закрываются пользователем явно. Конкретное событие может override-ить policy,
+если это обосновано.
+
+Через этот канал должны проходить user-visible сообщения admin WebSocket.
+Server-side publish обязан фильтровать recipients по актуальной ролевой модели,
+а не по permissions на момент открытия socket. Изменение роли/permissions
+должно применяться к notification delivery немедленно; клиент при следующем
+action также получает актуальную authorization check и при необходимости
+обновляет session/user state.
+
+Предусмотреть server-initiated logout/revoke event: активный client завершает
+admin session UI, очищает только session-scoped state и переводит пользователя
+на login без уничтожения независимых recoverable local drafts.
+
+### Point types и icons
+
+Point geometry должна получить отдельный business type, определяющий icon.
+
+В **Настройках интерфейса** нужен CRUD типов точек:
+
+- name/title;
+- active/inactive;
+- icon upload;
+- target width/height, default `32×32`;
+- anchor X/Y, default center;
+- delete с удалением связанного server file.
+
+Разрешённый input: только строго распознанные PNG/GIF/SVG. Нельзя доверять
+filename, extension или присланному MIME. Upload должен пройти signature/type
+validation, decode/sanitize и **принудительное безопасное пересохранение** в
+server-owned формате/файле до публикации. Для SVG требуется parse/sanitize с
+запретом script/external references либо rasterization; исходный пользовательский
+файл не должен отдаваться обратно как trusted asset.
+
+Icons хранятся в отдельном server-owned каталоге, metadata/type — в PostgreSQL.
+При delete type необходимо атомарно проверить references, удалить/заменить DB
+record согласно выбранной policy и убрать связанный файл без orphan assets.
+
 ## Проверки
 
 Для UI/application-only изменения:
