@@ -509,3 +509,42 @@ test('loadConfig treats metrics environment values as validated bootstrap input'
     },
   );
 });
+
+
+test('loadConfig validates optional MFA encryption key material', () => {
+  const key =
+    Buffer.alloc(
+      32,
+      9,
+    ).toString(
+      'base64url',
+    );
+  const config =
+    loadConfig(
+      {
+        ...REQUIRED_ENV,
+        ADMIN_MFA_ENCRYPTION_KEY:
+          key,
+      },
+      '/project',
+    );
+
+  assert.equal(
+    config.admin
+      .mfaEncryptionKey,
+    key,
+  );
+
+  assert.throws(
+    () =>
+      loadConfig(
+        {
+          ...REQUIRED_ENV,
+          ADMIN_MFA_ENCRYPTION_KEY:
+            'not-a-32-byte-key',
+        },
+        '/project',
+      ),
+    /ADMIN_MFA_ENCRYPTION_KEY/u,
+  );
+});

@@ -383,6 +383,29 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     env.METRICS_BEARER_TOKEN
       ?.trim() ||
     null;
+  const mfaEncryptionKey =
+    env.ADMIN_MFA_ENCRYPTION_KEY
+      ?.trim() ||
+    null;
+
+  if (
+    mfaEncryptionKey &&
+    (
+      !/^[A-Za-z0-9_-]{43}$/u
+        .test(
+          mfaEncryptionKey,
+        ) ||
+      Buffer.from(
+        mfaEncryptionKey,
+        'base64url',
+      ).length !==
+        32
+    )
+  ) {
+    throw new Error(
+      'ADMIN_MFA_ENCRYPTION_KEY must be an unpadded base64url encoding of exactly 32 bytes',
+    );
+  }
 
   if (
     metricsBearerToken &&
@@ -429,6 +452,7 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     admin: {
       allowedOrigins:
         adminAllowedOrigins,
+      mfaEncryptionKey,
     },
     metrics: {
       enabled:

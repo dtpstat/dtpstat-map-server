@@ -133,7 +133,7 @@ MAPBOX_ACCESS_TOKEN=pk....
 
 ## Миграции
 
-Текущий набор: `V001…V054`.
+Текущий набор: `V001…V055`.
 
 Последние migrations:
 
@@ -175,6 +175,7 @@ V051__active_descendant_spatial_relink.sql
 V052__covered_geometry_spatial_relink.sql
 V053__covered_descendant_spatial_relink.sql
 V054__admin_metrics_settings.sql
+V055__admin_mfa.sql
 ```
 
 Назначение `V023…V053`:
@@ -205,9 +206,10 @@ V054__admin_metrics_settings.sql
 - `V051` — PostGIS-version-independent fallback к active parent при отсутствии active descendants;
 - `V052` — bypass overlay для полностью покрытой geometry, устраняющий PostGIS 3.5/3.6 расхождение `ST_Intersects`/empty `ST_Intersection`;
 - `V053` — zero-score short-circuit для parent candidate, полностью покрытого active descendants, без ненадёжного `ST_Difference`;
-- `V054` — DB-backed Prometheus enable flag и SHA-256 bearer-token hash с одноразовым ENV bootstrap.
+- `V054` — DB-backed Prometheus enable flag и SHA-256 bearer-token hash с одноразовым ENV bootstrap;
+- `V055` — TOTP MFA encrypted-secret state, recovery-code hashes и одноразовые login challenges.
 
-Следующая migration: **V055+**. Опубликованные migration files не изменяются задним числом.
+Следующая migration: **V056+**. Опубликованные migration files не изменяются задним числом.
 
 Startup автоматически применяет pending migrations через отдельный
 `DATABASE_MIGRATION_ROLE` под PostgreSQL advisory lock, затем повторно сверяет

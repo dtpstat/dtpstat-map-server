@@ -8,6 +8,9 @@ import {
   createAdminSessionRepository,
 } from '../db/admin-session-repository.js';
 import {
+  createAdminMfaRepository,
+} from '../db/admin-mfa-repository.js';
+import {
   createAdminUserRepository,
 } from '../db/admin-user-repository.js';
 import {
@@ -31,6 +34,11 @@ export function createAdminSecurityPersistence(
     createAdminSessionRepository(
       database,
     );
+  const mfa =
+    dependencies.mfa ??
+    createAdminMfaRepository(
+      database,
+    );
   const accessControl =
     dependencies.accessControl ??
     createAdminAccessControlRepository(
@@ -45,6 +53,7 @@ export function createAdminSecurityPersistence(
   return {
     ...users,
     ...sessions,
+    ...mfa,
     ...accessControl,
     ...audit,
   };
