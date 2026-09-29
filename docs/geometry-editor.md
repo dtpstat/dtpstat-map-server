@@ -163,14 +163,14 @@ V049 empty-descendant spatial resolver fix
 
 ### Карта и режимы редактирования
 
-- leased геометрии обозначать на карте нейтральным серым состоянием;
-- phantom midpoint/segment для добавления узла снабдить явным hint;
-- унифицировать add/delete cursors одной визуальной системой;
-- для point/line/polygon drawing явно показывать активный режим и специальный
+- [x] leased геометрии обозначать на карте нейтральным серым состоянием;
+- [x] phantom midpoint/segment для добавления узла снабдить явным hint;
+- [x] унифицировать add/delete cursors одной визуальной системой;
+- [x] для point/line/polygon drawing явно показывать активный режим и специальный
   cursor;
-- line drawing не должен получать polygon fill; preview line должен совпадать
+- [x] line drawing не должен получать polygon fill; preview line должен совпадать
   со стилем рабочей editable line;
-- «Сохранить локально» завершает активный EDIT, но сохраняет lease/token за
+- [x] «Сохранить локально» завершает активный EDIT, но сохраняет lease/token за
   client до явного release/sync/discard;
 - добавить перенос всей geometry drag-ом, отдельно от vertex drag;
 - добавить coordinate editor в отдельном окне: табличный ввод точек и

@@ -75,6 +75,8 @@ if (section) {
   const DRAW_SOURCE = 'geometry-editor-draw';
   const BOUNDARY_SOURCE = 'geometry-editor-boundary';
   const IMPORT_SOURCE = 'geometry-editor-import-conflict';
+  const ADD_VERTEX_CURSOR =
+    'url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2228%22 height=%2228%22 viewBox=%220 0 28 28%22%3E%3Cpath d=%22M3 2l8.6 18.8 2.8-7.1 7.2-2.8L3 2z%22 fill=%22white%22 stroke=%22%2310181b%22 stroke-width=%221.5%22 stroke-linejoin=%22round%22/%3E%3Ccircle cx=%2220%22 cy=%2220%22 r=%226.5%22 fill=%22%232f9d71%22 stroke=%22white%22 stroke-width=%221.5%22/%3E%3Cpath d=%22M16.5 20h7M20 16.5v7%22 stroke=%22white%22 stroke-width=%222%22 stroke-linecap=%22round%22/%3E%3C/svg%3E") 3 2, pointer';
   const DELETE_VERTEX_CURSOR =
     'url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2228%22 height=%2228%22 viewBox=%220 0 28 28%22%3E%3Cpath d=%22M3 2l8.6 18.8 2.8-7.1 7.2-2.8L3 2z%22 fill=%22white%22 stroke=%22%2310181b%22 stroke-width=%221.5%22 stroke-linejoin=%22round%22/%3E%3Ccircle cx=%2220%22 cy=%2220%22 r=%226.5%22 fill=%22%23d84f57%22 stroke=%22white%22 stroke-width=%221.5%22/%3E%3Cpath d=%22M16.5 20h7%22 stroke=%22white%22 stroke-width=%222%22 stroke-linecap=%22round%22/%3E%3C/svg%3E") 3 2, pointer';
 
@@ -99,6 +101,7 @@ if (section) {
     dragPath: null,
     hoveredVertex: false,
     hoveredSegment: false,
+    hoveredGeometry: false,
     deleteModifier: false,
     suppressMapClick: false,
     importSession: null,
@@ -559,6 +562,12 @@ if (section) {
         id: item.id ?? -1,
         family: item.family ?? familyOf(item.geometry),
         isVisible: item.isVisible !== false,
+        isEditLocked:
+          Number.isSafeInteger(Number(item.id)) &&
+          state.editLeases.has(Number(item.id)),
+        isActiveEdit:
+          state.editing &&
+          String(item.id) === String(state.current?.id),
         lineColor: item.lineTypeColor ?? '#35c6b4',
         lineWidth: item.lineTypeWidth ?? 4,
         name: displayName(item),
@@ -754,6 +763,32 @@ if (section) {
     if (!map.getLayer(layer.id)) map.addLayer(layer, before);
   }
 
+  function refreshMapCursor() {
+    const canvas = state.map?.getCanvas();
+    if (!canvas) return;
+    if (state.drawing) {
+      canvas.style.cursor = 'crosshair';
+      return;
+    }
+    if (state.dragPath) {
+      canvas.style.cursor = 'move';
+      return;
+    }
+    if (state.hoveredVertex) {
+      canvas.style.cursor = state.deleteModifier
+        ? DELETE_VERTEX_CURSOR
+        : 'move';
+      return;
+    }
+    if (state.hoveredSegment) {
+      canvas.style.cursor = ADD_VERTEX_CURSOR;
+      return;
+    }
+    canvas.style.cursor = state.hoveredGeometry
+      ? 'pointer'
+      : '';
+  }
+
   async function ensureMap() {
     if (state.mapReady) return state.mapReady;
     state.mapReady = (async () => {
@@ -800,7 +835,12 @@ if (section) {
         source: MAP_SOURCE,
         filter: ['==', ['geometry-type'], 'Polygon'],
         paint: {
-          'fill-color': '#6f8da0',
+          'fill-color': [
+            'case',
+            ['get', 'isEditLocked'],
+            '#737d82',
+            '#6f8da0',
+          ],
           'fill-opacity': ['case', ['get', 'isVisible'], 0.2, 0.07],
         },
       });
@@ -810,7 +850,12 @@ if (section) {
         source: MAP_SOURCE,
         filter: ['==', ['geometry-type'], 'Polygon'],
         paint: {
-          'line-color': '#91a5ab',
+          'line-color': [
+            'case',
+            ['get', 'isEditLocked'],
+            '#737d82',
+            '#91a5ab',
+          ],
           'line-width': 2,
           'line-opacity': ['case', ['get', 'isVisible'], 0.8, 0.3],
         },
@@ -822,7 +867,12 @@ if (section) {
         filter: ['==', ['geometry-type'], 'LineString'],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
-          'line-color': ['coalesce', ['get', 'lineColor'], '#35c6b4'],
+          'line-color': [
+            'case',
+            ['get', 'isEditLocked'],
+            '#737d82',
+            ['coalesce', ['get', 'lineColor'], '#35c6b4'],
+          ],
           'line-width': ['coalesce', ['get', 'lineWidth'], 4],
           'line-opacity': ['case', ['get', 'isVisible'], 0.88, 0.28],
         },
@@ -834,7 +884,12 @@ if (section) {
         filter: ['==', ['geometry-type'], 'Point'],
         paint: {
           'circle-radius': 6,
-          'circle-color': '#91a5ab',
+          'circle-color': [
+            'case',
+            ['get', 'isEditLocked'],
+            '#737d82',
+            '#91a5ab',
+          ],
           'circle-stroke-color': '#061311',
           'circle-stroke-width': 1,
           'circle-opacity': ['case', ['get', 'isVisible'], 0.95, 0.3],
@@ -846,7 +901,17 @@ if (section) {
         type: 'fill',
         source: SELECTED_SOURCE,
         filter: ['==', ['geometry-type'], 'Polygon'],
-        paint: { 'fill-color': '#f3b74e', 'fill-opacity': 0.24 },
+        paint: {
+          'fill-color': [
+            'case',
+            ['get', 'isActiveEdit'],
+            '#f3b74e',
+            ['get', 'isEditLocked'],
+            '#737d82',
+            '#f3b74e',
+          ],
+          'fill-opacity': 0.24,
+        },
       });
       addLayerSafe(map, {
         id: 'geometry-editor-selected-line',
@@ -854,26 +919,55 @@ if (section) {
         source: SELECTED_SOURCE,
         filter: ['in', ['geometry-type'], ['literal', ['LineString', 'Polygon']]],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': '#f3b74e', 'line-width': 5 },
+        paint: {
+          'line-color': [
+            'case',
+            ['get', 'isActiveEdit'],
+            '#f3b74e',
+            ['get', 'isEditLocked'],
+            '#737d82',
+            '#f3b74e',
+          ],
+          'line-width': 5,
+        },
       });
       addLayerSafe(map, {
         id: 'geometry-editor-selected-point',
         type: 'circle',
         source: SELECTED_SOURCE,
         filter: ['==', ['geometry-type'], 'Point'],
-        paint: { 'circle-radius': 9, 'circle-color': '#f3b74e', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 },
+        paint: {
+          'circle-radius': 9,
+          'circle-color': [
+            'case',
+            ['get', 'isActiveEdit'],
+            '#f3b74e',
+            ['get', 'isEditLocked'],
+            '#737d82',
+            '#f3b74e',
+          ],
+          'circle-stroke-color': '#fff',
+          'circle-stroke-width': 2,
+        },
       });
       addLayerSafe(map, {
         id: 'geometry-editor-draw-line',
         type: 'line',
         source: DRAW_SOURCE,
-        paint: { 'line-color': '#ff6b72', 'line-width': 4, 'line-dasharray': [2, 1.2] },
+        filter: [
+          'in',
+          ['geometry-type'],
+          ['literal', ['LineString', 'Polygon']],
+        ],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#f3b74e', 'line-width': 5 },
       });
       addLayerSafe(map, {
         id: 'geometry-editor-draw-fill',
         type: 'fill',
         source: DRAW_SOURCE,
-        paint: { 'fill-color': '#ff6b72', 'fill-opacity': 0.18 },
+        filter: ['==', ['geometry-type'], 'Polygon'],
+        paint: { 'fill-color': '#f3b74e', 'fill-opacity': 0.18 },
       });
       addLayerSafe(map, {
         id: 'geometry-editor-import-existing',
@@ -944,25 +1038,6 @@ if (section) {
           'circle-stroke-width': 1,
         },
       });
-
-      function refreshHandleCursor() {
-        const canvas = map.getCanvas();
-        if (state.dragPath) {
-          canvas.style.cursor = 'move';
-          return;
-        }
-        if (state.hoveredVertex) {
-          canvas.style.cursor = state.deleteModifier
-            ? DELETE_VERTEX_CURSOR
-            : 'move';
-          return;
-        }
-        if (state.hoveredSegment) {
-          canvas.style.cursor = 'copy';
-          return;
-        }
-        canvas.style.cursor = '';
-      }
 
       function projectedSegmentCoordinate(candidate, event) {
         const coordinates = candidate?.geometry?.coordinates;
@@ -1051,7 +1126,7 @@ if (section) {
           captureCurrentDraft();
         }
 
-        refreshHandleCursor();
+        refreshMapCursor();
       });
 
       map.on('click', (event) => {
@@ -1067,6 +1142,13 @@ if (section) {
         updateDrawControls();
       });
 
+      const addVertexHint =
+        new globalThis.mapboxgl.Popup({
+          closeButton: false,
+          closeOnClick: false,
+          offset: 10,
+        });
+
       for (const layerId of [
         'geometry-editor-lines', 'geometry-editor-polygon-lines',
         'geometry-editor-polygons', 'geometry-editor-points',
@@ -1081,32 +1163,45 @@ if (section) {
           const id = Number(event.features?.[0]?.properties?.id);
           if (Number.isSafeInteger(id) && id > 0) void selectGeometry(id);
         });
-        map.on('mouseenter', layerId, () => { map.getCanvas().style.cursor = 'pointer'; });
-        map.on('mouseleave', layerId, () => { if (!state.dragPath) map.getCanvas().style.cursor = ''; });
+        map.on('mouseenter', layerId, () => {
+          state.hoveredGeometry = true;
+          refreshMapCursor();
+        });
+        map.on('mouseleave', layerId, () => {
+          state.hoveredGeometry = false;
+          refreshMapCursor();
+        });
       }
       map.on('mouseenter', 'geometry-editor-vertices', () => {
         state.hoveredVertex = true;
-        refreshHandleCursor();
+        refreshMapCursor();
       });
       map.on('mouseleave', 'geometry-editor-vertices', () => {
         state.hoveredVertex = false;
-        refreshHandleCursor();
+        refreshMapCursor();
       });
       map.on('mouseenter', 'geometry-editor-segment-hit', () => {
         state.hoveredSegment = true;
-        refreshHandleCursor();
+        refreshMapCursor();
       });
       map.on('mouseleave', 'geometry-editor-segment-hit', () => {
         state.hoveredSegment = false;
-        refreshHandleCursor();
+        refreshMapCursor();
       });
-      map.on('mouseenter', 'geometry-editor-midpoints', () => {
+      map.on('mouseenter', 'geometry-editor-midpoints', (event) => {
         state.hoveredSegment = true;
-        refreshHandleCursor();
+        refreshMapCursor();
+        if (!state.drawing && event.lngLat) {
+          addVertexHint
+            .setLngLat(event.lngLat)
+            .setText('Добавить узел')
+            .addTo(map);
+        }
       });
       map.on('mouseleave', 'geometry-editor-midpoints', () => {
         state.hoveredSegment = false;
-        refreshHandleCursor();
+        addVertexHint.remove();
+        refreshMapCursor();
       });
 
       state.map = map;
@@ -1280,8 +1375,8 @@ if (section) {
               state.draft,
           }
         : (
-            state.current ??
-            selectedSummary
+            selectedSummary ??
+            state.current
           );
 
     map.getSource(MAP_SOURCE)?.setData(
@@ -1619,6 +1714,11 @@ if (section) {
         activeLease &&
         activeLease.clientId !== realtimeClientId(),
       );
+    const leasedByThisClient =
+      Boolean(
+        activeLease &&
+        activeLease.clientId === realtimeClientId(),
+      );
 
     beginEditButton.hidden =
       !item?.id ||
@@ -1648,9 +1748,11 @@ if (section) {
             : blockedByOther
               ? 'Редактирует: ' +
                 (activeLease.username ?? 'другой пользователь')
-              : item?.id
-                ? 'Режим просмотра'
-                : '';
+              : leasedByThisClient
+                ? 'Локально сохранено · блокировка остаётся за вами'
+                : item?.id
+                  ? 'Режим просмотра'
+                  : '';
     }
 
     if (conflictMessage) {
@@ -2113,6 +2215,50 @@ if (section) {
           (knownLease.username ?? 'другой пользователь') +
           '».',
         'error',
+      );
+      return;
+    }
+
+    const existingDraft =
+      draftFor(requestedId);
+    const reusableToken =
+      existingDraft?.editToken &&
+      state.validatedEditTokens.get(
+        String(requestedId),
+      ) === existingDraft.editToken
+        ? existingDraft.editToken
+        : null;
+
+    if (
+      reusableToken &&
+      (
+        !knownLease ||
+        knownLease.clientId ===
+          realtimeClientId()
+      )
+    ) {
+      state.editing = true;
+      state.editLease = {
+        ...(knownLease ?? {}),
+        geometryId: Number(requestedId),
+        clientId: realtimeClientId(),
+        token: reusableToken,
+      };
+      state.blockedLease = null;
+      const effective =
+        applyGeometryDraft(
+          item,
+          existingDraft,
+        );
+      state.draft =
+        clone(effective.geometry);
+      applyForm(effective);
+      updateMapSources();
+      renderHistoryControls();
+      renderFormState();
+      setMessage(
+        'Редактирование продолжено с сохранённой блокировкой.',
+        'success',
       );
       return;
     }
@@ -3223,6 +3369,7 @@ if (section) {
       );
     renderFormState();
     renderList();
+    updateMapSources();
   }
 
   async function refresh({ keepSelection = true, fit = false } = {}) {
@@ -3404,16 +3551,33 @@ if (section) {
     }
     finishDrawButton.disabled = !canFinish;
 
+    modeLabel.classList.toggle(
+      'is-drawing',
+      active,
+    );
     if (drawing?.mode === 'cut') {
       modeLabel.textContent =
-        'Вырезание: точек ' +
+        'Вырезание области · точек: ' +
+        drawing.coordinates.length +
+        ' · замкнётся автоматически';
+    } else if (drawing?.mode === 'point') {
+      modeLabel.textContent =
+        'Добавление точки · кликните по карте';
+    } else if (drawing?.mode === 'line') {
+      modeLabel.textContent =
+        'Добавление линии · точек: ' +
+        drawing.coordinates.length +
+        ' · клик — следующая точка';
+    } else if (drawing?.mode === 'polygon') {
+      modeLabel.textContent =
+        'Добавление полигона · точек: ' +
         drawing.coordinates.length +
         ' · замкнётся автоматически';
     } else {
-      modeLabel.textContent = drawing
-        ? 'Рисование ' + drawing.mode + ': точек ' + drawing.coordinates.length
-        : editingModeText(state.current);
+      modeLabel.textContent =
+        editingModeText(state.current);
     }
+    refreshMapCursor();
     renderHistoryControls();
     renderMergeState();
   }
@@ -3637,8 +3801,21 @@ if (section) {
       return;
     }
 
+    if (!isLocalGeometryId(state.current?.id)) {
+      state.editing = false;
+      state.history = [];
+      state.future = [];
+      state.selectedVertexPath = null;
+      rebuildDraftOverlay();
+      updateMapSources();
+      renderHistoryControls();
+      renderFormState();
+    }
+
     setMessage(
-      'Изменения сохранены в localStorage. Для записи в БД используйте «Синхронизировать».',
+      isLocalGeometryId(state.current?.id)
+        ? 'Изменения сохранены в localStorage. Для записи в БД используйте «Синхронизировать».'
+        : 'Изменения сохранены в localStorage. Активное редактирование завершено, блокировка остаётся за вами.',
       'success',
     );
   }
@@ -4548,8 +4725,7 @@ if (section) {
     if (event.key === 'Control' || event.key === 'Meta') {
       state.deleteModifier = true;
       if (!section.hidden && state.map) {
-        const canvas = state.map.getCanvas();
-        if (state.hoveredVertex) canvas.style.cursor = DELETE_VERTEX_CURSOR;
+        refreshMapCursor();
       }
     }
     if (section.hidden) return;
@@ -4572,20 +4748,14 @@ if (section) {
     if (event.key !== 'Control' && event.key !== 'Meta') return;
     state.deleteModifier = false;
     if (!section.hidden && state.map) {
-      const canvas = state.map.getCanvas();
-      if (state.hoveredVertex) canvas.style.cursor = 'move';
-      else if (state.hoveredSegment) canvas.style.cursor = 'copy';
-      else if (!state.dragPath) canvas.style.cursor = '';
+      refreshMapCursor();
     }
   });
 
   window.addEventListener('blur', () => {
     state.deleteModifier = false;
     if (!section.hidden && state.map && !state.dragPath) {
-      const canvas = state.map.getCanvas();
-      if (state.hoveredVertex) canvas.style.cursor = 'move';
-      else if (state.hoveredSegment) canvas.style.cursor = 'copy';
-      else canvas.style.cursor = '';
+      refreshMapCursor();
     }
   });
 

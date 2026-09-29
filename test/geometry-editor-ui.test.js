@@ -759,3 +759,60 @@ test('geometry editor exposes normal unlinked geometry and persistent explicit e
   assert.match(drafts, /\.\.\.clone\(draft\)/u);
 });
 
+
+
+test('geometry editor marks leases and exposes coherent map editing modes', async () => {
+  const [
+    editor,
+    styles,
+  ] = await Promise.all([
+    read('admin/geometry-editor.js'),
+    read('admin/geometry-editor.css'),
+  ]);
+
+  assert.match(editor, /isEditLocked:[\s\S]*state\.editLeases\.has/u);
+  assert.match(editor, /'#737d82'/u);
+  assert.match(editor, /ADD_VERTEX_CURSOR/u);
+  assert.match(editor, /DELETE_VERTEX_CURSOR/u);
+  assert.match(editor, /setText\('Добавить узел'\)/u);
+  assert.match(editor, /canvas\.style\.cursor = 'crosshair'/u);
+  assert.match(
+    editor,
+    /geometry-editor-draw-line[\s\S]*'line-color': '#f3b74e'[\s\S]*'line-width': 5/u,
+  );
+  assert.match(
+    editor,
+    /geometry-editor-draw-fill[\s\S]*filter: \['==', \['geometry-type'\], 'Polygon'\]/u,
+  );
+  assert.match(editor, /Добавление точки · кликните по карте/u);
+  assert.match(editor, /Добавление линии · точек:/u);
+  assert.match(styles, /> span\.is-drawing/u);
+});
+
+test('saving locally leaves the lease but exits active edit and can resume it', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /async function saveCurrent\(\)[\s\S]*captureCurrentDraft\(\)[\s\S]*state\.editing = false/u,
+  );
+  assert.match(
+    editor,
+    /Активное редактирование завершено, блокировка остаётся за вами/u,
+  );
+  assert.match(
+    editor,
+    /const reusableToken =[\s\S]*validatedEditTokens[\s\S]*state\.editing = true/u,
+  );
+  assert.match(
+    editor,
+    /Редактирование продолжено с сохранённой блокировкой/u,
+  );
+  assert.match(
+    editor,
+    /leasedByThisClient[\s\S]*Локально сохранено · блокировка остаётся за вами/u,
+  );
+});

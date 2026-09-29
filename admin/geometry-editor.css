@@ -652,3 +652,9 @@
 .geometry-editor-city-filter input {
   margin: 0;
 }
+
+
+.geometry-editor-map-toolbar > span.is-drawing {
+  color: #f3b74e;
+  font-weight: 700;
+}
