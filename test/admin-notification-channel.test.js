@@ -118,6 +118,19 @@ test('admin notification domain normalizes safe levels persistence delivery and 
       }),
     /Unsupported notification control action/u,
   );
+
+  assert.throws(
+    () =>
+      normalizeAdminNotification({
+        level:
+          'info',
+        message:
+          'bad permission',
+        permission:
+          'unknown-capability',
+      }),
+    /Unsupported notification permission/u,
+  );
 });
 
 test('admin notification channel is a focused publish subscribe boundary', () => {

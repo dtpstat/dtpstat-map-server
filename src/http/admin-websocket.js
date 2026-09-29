@@ -202,8 +202,12 @@ export function createAdminWebSocketGateway({
                 context.user;
 
               if (
-                securityService
-                  ?.authenticateRequest &&
+                (
+                  securityService
+                    ?.authenticateRealtime ||
+                  securityService
+                    ?.authenticateRequest
+                ) &&
                 context.sessionToken
               ) {
                 const authenticate =

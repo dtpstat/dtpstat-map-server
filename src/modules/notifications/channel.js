@@ -14,6 +14,21 @@ const CONTROL_ACTIONS =
     'logout',
   ]);
 
+const PERMISSIONS =
+  new Set([
+    'any',
+    'profile',
+    'data',
+    'interface',
+    'osm-editor',
+    'geometry-editor',
+    'users',
+    'audit',
+    'users-or-audit',
+    'security',
+    'superuser',
+  ]);
+
 const DEFAULT_TIMEOUTS =
   Object.freeze({
     info: 5_000,
@@ -241,6 +256,26 @@ export function normalizeAdminNotification(
           level
         ];
 
+  const permission =
+    stringValue(
+      definition.permission,
+      {
+        fallback:
+          'any',
+        maxLength: 64,
+      },
+    );
+
+  if (
+    !PERMISSIONS.has(
+      permission,
+    )
+  ) {
+    throw new TypeError(
+      'Unsupported notification permission',
+    );
+  }
+
   return {
     type:
       'notification',
@@ -287,15 +322,7 @@ export function normalizeAdminNotification(
         ),
     },
     delivery: {
-      permission:
-        stringValue(
-          definition.permission,
-          {
-            fallback:
-              'any',
-            maxLength: 64,
-          },
-        ),
+      permission,
       audience:
         audienceValue(
           definition.audience,
