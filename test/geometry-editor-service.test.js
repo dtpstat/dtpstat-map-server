@@ -128,10 +128,22 @@ function fixture(rows) {
         current.get(id),
       );
     },
-    async lockGeometries() {
-      return structuredClone(
-        rows,
-      );
+    async lockGeometries(
+      _client,
+      ids,
+    ) {
+      return ids
+        .map(
+          (id) =>
+            current.get(id),
+        )
+        .filter(Boolean)
+        .map(
+          (item) =>
+            structuredClone(
+              item,
+            ),
+        );
     },
     async lineTypeExists() {
       return true;
