@@ -14,6 +14,10 @@ import {
 import {
   createAdminOriginGuard,
 } from './admin-origin.js';
+import {
+  adminNoStoreHeaders,
+  createTransportSecurityHeaders,
+} from './security-headers.js';
 
 const CITY_MARKER_PNG =
   Buffer.from(
@@ -164,7 +168,16 @@ export function installAppHttpMiddleware(
   );
 
   app.use(
+    createTransportSecurityHeaders({
+      environment:
+        config.environment,
+    }),
+  );
+
+  app.use(
     helmet({
+      strictTransportSecurity:
+        false,
       crossOriginEmbedderPolicy:
         false,
       contentSecurityPolicy: {
@@ -233,6 +246,7 @@ export function installAppHttpMiddleware(
 
   app.use(
     '/api/admin',
+    adminNoStoreHeaders,
     adminOriginGuard,
     requireAdminApiVersion,
     adminAuth
@@ -267,6 +281,11 @@ export function installAppHttpMiddleware(
   app.use(
     '/admin',
     helmet({
+      strictTransportSecurity:
+        false,
+      xFrameOptions: {
+        action: 'deny',
+      },
       crossOriginEmbedderPolicy:
         false,
       contentSecurityPolicy: {
