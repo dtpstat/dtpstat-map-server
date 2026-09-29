@@ -880,6 +880,89 @@ async function verifyGeometryEditorInfrastructure(
       `,
       [childBoundaryId],
     );
+
+    const relinkDiagnostics =
+      await boundaryClient.query(
+        `
+          SELECT
+            child.is_active
+              AS "childActive",
+            child.parent_id::bigint
+              AS "childParentId",
+            parent.is_active
+              AS "parentActive",
+            GeometryType(geometry.geom)
+              AS "geometryType",
+            ST_Intersects(
+              parent.geom,
+              geometry.geom
+            ) AS "parentIntersects",
+            GeometryType(
+              ST_Intersection(
+                parent.geom,
+                geometry.geom
+              )
+            ) AS "intersectionType",
+            ST_IsEmpty(
+              ST_Intersection(
+                parent.geom,
+                geometry.geom
+              )
+            ) AS "intersectionEmpty",
+            ST_Length(
+              ST_CollectionExtract(
+                ST_Intersection(
+                  parent.geom,
+                  geometry.geom
+                ),
+                2
+              )::geography
+            )::double precision
+              AS "parentMatchedLength",
+            resolved.boundary_id::bigint
+              AS "resolvedBoundaryId",
+            resolved.city_id::bigint
+              AS "resolvedCityId"
+          FROM city_geometries
+            AS geometry
+          JOIN city_boundaries
+            AS child
+            ON child.id =
+               $2::bigint
+          JOIN city_boundaries
+            AS parent
+            ON parent.id =
+               $3::bigint
+          LEFT JOIN LATERAL
+            resolve_geometry_admin_links(
+              geometry.geom
+            ) AS resolved
+            ON TRUE
+          WHERE geometry.id =
+                $1::bigint
+        `,
+        [
+          geometry.id,
+          childBoundaryId,
+          parentBoundaryId,
+        ],
+      );
+
+    const relinkDiagnostic =
+      relinkDiagnostics.rows[0];
+
+    assert.equal(
+      Number(
+        relinkDiagnostic
+          ?.resolvedBoundaryId,
+      ),
+      parentBoundaryId,
+      'Direct spatial resolver did not fall back to the active parent: ' +
+        JSON.stringify(
+          relinkDiagnostic,
+        ),
+    );
+
     await boundaryClient.query(
       'SELECT relink_all_city_geometries()',
     );
