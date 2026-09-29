@@ -1692,6 +1692,89 @@ if (section) {
         }
       });
 
+      map.on(
+        'dblclick',
+        (event) => {
+          const drawing =
+            state.drawing;
+
+          if (
+            !drawing ||
+            ![
+              'line',
+              'polygon',
+              'cut',
+            ].includes(
+              drawing.mode,
+            )
+          ) {
+            return;
+          }
+
+          event.preventDefault();
+          event.originalEvent
+            ?.preventDefault?.();
+          event.originalEvent
+            ?.stopPropagation?.();
+
+          const coordinates =
+            drawing.coordinates;
+
+          if (
+            coordinates.length >=
+            2
+          ) {
+            const previous =
+              state.map.project(
+                coordinates.at(
+                  -2,
+                ),
+              );
+            const last =
+              state.map.project(
+                coordinates.at(
+                  -1,
+                ),
+              );
+            const repeatedClickDistance =
+              Math.hypot(
+                last.x -
+                  previous.x,
+                last.y -
+                  previous.y,
+              );
+
+            if (
+              repeatedClickDistance <=
+              8
+            ) {
+              coordinates.pop();
+            }
+          }
+
+          const minimum =
+            drawing.mode ===
+              'line'
+              ? 2
+              : 3;
+
+          if (
+            coordinates.length <
+            minimum
+          ) {
+            updateMapSources();
+            updateDrawControls();
+            return;
+          }
+
+          drawing.previewCoordinate =
+            null;
+          updateMapSources();
+          updateDrawControls();
+          void finishDrawing();
+        },
+      );
+
       const addVertexHint =
         new globalThis.mapboxgl.Popup({
           closeButton: false,
@@ -5231,7 +5314,7 @@ if (section) {
       modeLabel.textContent =
         'Вырезание области · точек: ' +
         drawing.coordinates.length +
-        ' · замкнётся автоматически';
+        ' · двойной клик — вырезать';
     } else if (drawing?.mode === 'split') {
       modeLabel.textContent =
         drawing.coordinates.length ===
@@ -5245,12 +5328,12 @@ if (section) {
       modeLabel.textContent =
         'Добавление линии · точек: ' +
         drawing.coordinates.length +
-        ' · клик — следующая точка';
+        ' · клик — следующая точка · двойной клик — завершить';
     } else if (drawing?.mode === 'polygon') {
       modeLabel.textContent =
         'Добавление полигона · точек: ' +
         drawing.coordinates.length +
-        ' · замкнётся автоматически';
+        ' · двойной клик — завершить';
     } else {
       modeLabel.textContent =
         editingModeText(state.current);

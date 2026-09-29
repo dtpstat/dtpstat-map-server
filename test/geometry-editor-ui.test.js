@@ -1151,3 +1151,32 @@ test('geometry editor keeps creation and edit activation explicit and selects lo
     /\.geometry-editor-map-controls\s*\{[\s\S]*position: absolute;[\s\S]*top: 3\.55rem;[\s\S]*left: \.55rem;/u,
   );
 });
+
+
+test('geometry drawing can finish naturally with a map double click', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /map\.on\([\s\S]*'dblclick'[\s\S]*'line'[\s\S]*'polygon'[\s\S]*'cut'/u,
+  );
+  assert.match(
+    editor,
+    /repeatedClickDistance[\s\S]*<=\s*8[\s\S]*coordinates\.pop\(\)/u,
+  );
+  assert.match(
+    editor,
+    /drawing\.mode ===[\s\S]*'line'[\s\S]*\? 2[\s\S]*: 3/u,
+  );
+  assert.match(
+    editor,
+    /двойной клик — завершить/u,
+  );
+  assert.match(
+    editor,
+    /двойной клик — вырезать/u,
+  );
+});
