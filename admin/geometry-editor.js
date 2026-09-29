@@ -124,7 +124,6 @@ if (section) {
     draft: null,
     history: [],
     future: [],
-    selectedVertexPath: null,
     drawing: null,
     map: null,
     mapReady: null,
@@ -446,7 +445,6 @@ if (section) {
     state.draft = clone(effective.geometry);
     state.history = [];
     state.future = [];
-    state.selectedVertexPath = null;
     applyForm(effective);
     rebuildDraftOverlay();
     renderList();
@@ -692,10 +690,6 @@ if (section) {
       : null;
   }
 
-  function midpoint(a, b) {
-    return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-  }
-
   function pathKey(path) {
     return JSON.stringify(path);
   }
@@ -773,7 +767,6 @@ if (section) {
           properties: {
             kind: 'vertex',
             path: pathKey([]),
-            selected: pathKey(state.selectedVertexPath) === pathKey([]),
           },
         });
         continue;
@@ -788,7 +781,6 @@ if (section) {
           properties: {
             kind: 'vertex',
             path: pathKey(vertexPath),
-            selected: pathKey(state.selectedVertexPath) === pathKey(vertexPath),
           },
         });
         const nextIndex = sequence.closed
@@ -804,16 +796,6 @@ if (section) {
           properties: {
             kind: 'segment',
             path: pathKey([...sequence.prefix, index]),
-            nextIndex,
-          },
-        });
-        features.push({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: midpoint(coords[index], coords[nextIndex]) },
-          properties: {
-            kind: 'midpoint',
-            path: pathKey([...sequence.prefix, index]),
-            nextIndex,
           },
         });
       }
@@ -1359,32 +1341,10 @@ if (section) {
         source: HANDLE_SOURCE,
         filter: ['==', ['get', 'kind'], 'vertex'],
         paint: {
-          'circle-radius': [
-            'case',
-            ['==', ['get', 'selected'], true],
-            8,
-            6,
-          ],
-          'circle-color': [
-            'case',
-            ['==', ['get', 'selected'], true],
-            '#ff6b6b',
-            '#f3b74e',
-          ],
+          'circle-radius': 6,
+          'circle-color': '#f3b74e',
           'circle-stroke-color': '#fff',
           'circle-stroke-width': 1.5,
-        },
-      });
-      addLayerSafe(map, {
-        id: 'geometry-editor-midpoints',
-        type: 'circle',
-        source: HANDLE_SOURCE,
-        filter: ['==', ['get', 'kind'], 'midpoint'],
-        paint: {
-          'circle-radius': 4,
-          'circle-color': '#35c6b4',
-          'circle-stroke-color': '#061311',
-          'circle-stroke-width': 1,
         },
       });
 
@@ -1430,7 +1390,7 @@ if (section) {
         event.originalEvent?.stopPropagation?.();
         state.suppressMapClick = true;
         const prefixAndIndex = JSON.parse(candidate.properties.path);
-        insertMidpoint(
+        insertVertexOnSegment(
           prefixAndIndex,
           projectedSegmentCoordinate(candidate, event),
         );
@@ -1468,7 +1428,6 @@ if (section) {
         if (originalEvent?.ctrlKey || originalEvent?.metaKey) return;
 
         const path = JSON.parse(candidate.properties.path);
-        selectVertex(path);
         state.dragPath = path;
         map.dragPan.disable();
         pushHistory();
@@ -1619,13 +1578,6 @@ if (section) {
         updateDrawControls();
       });
 
-      const addVertexHint =
-        new globalThis.mapboxgl.Popup({
-          closeButton: false,
-          closeOnClick: false,
-          offset: 10,
-        });
-
       for (const layerId of [
         'geometry-editor-lines',
         'geometry-editor-polygon-lines',
@@ -1672,26 +1624,6 @@ if (section) {
         state.hoveredSegment = false;
         refreshMapCursor();
       });
-      map.on('mouseenter', 'geometry-editor-midpoints', (event) => {
-        state.hoveredSegment = true;
-        refreshMapCursor();
-        if (
-          !state.drawing &&
-          !state.moveGeometryMode &&
-          event.lngLat
-        ) {
-          addVertexHint
-            .setLngLat(event.lngLat)
-            .setText('Добавить узел')
-            .addTo(map);
-        }
-      });
-      map.on('mouseleave', 'geometry-editor-midpoints', () => {
-        state.hoveredSegment = false;
-        addVertexHint.remove();
-        refreshMapCursor();
-      });
-
       state.map = map;
       await syncPointTypeMapImages();
       return map;
@@ -2016,7 +1948,6 @@ if (section) {
     }
     state.future.push(clone(state.draft));
     state.draft = state.history.pop();
-    state.selectedVertexPath = null;
     updateDraftMap();
     captureCurrentDraft();
     modeLabel.textContent = editingModeText(state.current);
@@ -2033,21 +1964,12 @@ if (section) {
     }
     state.history.push(clone(state.draft));
     state.draft = state.future.pop();
-    state.selectedVertexPath = null;
     updateDraftMap();
     captureCurrentDraft();
     modeLabel.textContent = editingModeText(state.current);
   }
 
 
-  function selectVertex(path) {
-    if (!state.editing) return;
-    state.selectedVertexPath = path;
-    updateMapSources();
-    renderHistoryControls();
-    modeLabel.textContent =
-      `Узел ${path.length ? path.join('.') : 'Point'} выбран · Ctrl+клик по узлу — удалить`;
-  }
 
   function moveVertex(path, coordinate, { record = true } = {}) {
     if (!state.editing || !state.draft) return;
@@ -2069,7 +1991,7 @@ if (section) {
   }
 
 
-  function insertMidpoint(prefixAndIndex, coordinate) {
+  function insertVertexOnSegment(prefixAndIndex, coordinate) {
     if (
       !state.editing ||
       !state.draft ||
@@ -2088,14 +2010,10 @@ if (section) {
       : index + 1;
     coords.splice(insertAt, 0, coordinate);
     if (closed) coords[coords.length - 1] = [...coords[0]];
-    state.selectedVertexPath = [
-      ...prefix,
-      insertAt % (closed ? coords.length - 1 : coords.length),
-    ];
     updateDraftMap();
     captureCurrentDraft();
     modeLabel.textContent =
-      'Новый узел добавлен · перетащите его или Ctrl+кликните для удаления';
+      'Новый узел добавлен · перетащите узел или Ctrl+кликните по нему для удаления';
   }
 
 
@@ -2135,7 +2053,6 @@ if (section) {
       coords.pop();
       coords.push([...coords[0]]);
     }
-    state.selectedVertexPath = null;
     updateDraftMap();
     captureCurrentDraft();
     modeLabel.textContent = editingModeText(state.current);
@@ -2500,8 +2417,6 @@ if (section) {
 
     state.moveGeometryMode =
       next;
-    state.selectedVertexPath =
-      null;
 
     if (next) {
       closeCoordinateWindow();
@@ -2543,8 +2458,6 @@ if (section) {
 
       pushHistory();
       state.draft = next;
-      state.selectedVertexPath =
-        null;
       updateDraftMap();
       captureCurrentDraft();
       refreshCoordinateWindow();
@@ -3151,7 +3064,6 @@ if (section) {
     state.blockedLease = null;
     state.history = [];
     state.future = [];
-    state.selectedVertexPath = null;
     applyForm(item);
     rebuildDraftOverlay();
     renderList();
@@ -3190,7 +3102,6 @@ if (section) {
     state.blockedLease = null;
     state.history = [];
     state.future = [];
-    state.selectedVertexPath = null;
     applyForm(effective);
     rebuildDraftOverlay();
     renderList();
@@ -3237,7 +3148,6 @@ if (section) {
     state.draft = null;
     state.history = [];
     state.future = [];
-    state.selectedVertexPath = null;
     applyForm(null);
     renderList();
     updateMapSources();
@@ -3529,7 +3439,6 @@ if (section) {
     state.draft = null;
     state.history = [];
     state.future = [];
-    state.selectedVertexPath = null;
     state.editing = false;
     state.editLease = null;
     state.blockedLease = null;
@@ -3848,7 +3757,6 @@ if (section) {
     state.draft = null;
     state.history = [];
     state.future = [];
-    state.selectedVertexPath = null;
     applyForm(null);
     renderList();
     renderImportConflicts();
@@ -4954,7 +4862,6 @@ if (section) {
       };
       state.history = [];
       state.future = [];
-      state.selectedVertexPath = null;
       updateMapSources();
       updateDrawControls();
       renderFormState();
@@ -5008,7 +4915,6 @@ if (section) {
     state.draft = null;
     state.history = [];
     state.future = [];
-    state.selectedVertexPath = null;
     applyForm(state.current);
     renderList();
     updateMapSources();
@@ -5306,7 +5212,6 @@ if (section) {
       state.editing = false;
       state.history = [];
       state.future = [];
-      state.selectedVertexPath = null;
       rebuildDraftOverlay();
       updateMapSources();
       renderHistoryControls();
@@ -5947,7 +5852,6 @@ if (section) {
       state.blockedLease = null;
       state.history = [];
       state.future = [];
-      state.selectedVertexPath = null;
       await refresh({
         keepSelection: true,
         fit: false,
@@ -6050,7 +5954,6 @@ if (section) {
           state.blockedLease = null;
           state.history = [];
           state.future = [];
-          state.selectedVertexPath = null;
           void refresh({
             keepSelection: true,
             fit: false,
