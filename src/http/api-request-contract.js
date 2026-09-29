@@ -779,6 +779,52 @@ export const API_REQUEST_CONTRACTS =
     ),
     c(
       'GET',
+      '/admin/profile/mfa',
+    ),
+    c(
+      'POST',
+      '/admin/profile/mfa/enroll',
+      {
+        body: 'json-object',
+        bodyKeys: [
+          'currentPassword',
+        ],
+      },
+    ),
+    c(
+      'POST',
+      '/admin/profile/mfa/confirm',
+      {
+        body: 'json-object',
+        bodyKeys: [
+          'code',
+        ],
+      },
+    ),
+    c(
+      'POST',
+      '/admin/profile/mfa/recovery-codes',
+      {
+        body: 'json-object',
+        bodyKeys: [
+          'currentPassword',
+          'code',
+        ],
+      },
+    ),
+    c(
+      'DELETE',
+      '/admin/profile/mfa',
+      {
+        body: 'json-object',
+        bodyKeys: [
+          'currentPassword',
+          'code',
+        ],
+      },
+    ),
+    c(
+      'GET',
       '/admin/profile/avatar',
     ),
     c(

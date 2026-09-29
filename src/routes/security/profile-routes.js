@@ -573,6 +573,303 @@ export function registerAdminProfileRoutes(
   );
 
   router.get(
+    '/admin/profile/mfa',
+    adminAuth.requireProfile,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const status =
+          await securityService
+            .getMfaStatus(
+              request.adminUser.id,
+            );
+
+        if (!status) {
+          response
+            .status(404)
+            .json({
+              error:
+                'Administrator not found',
+            });
+          return;
+        }
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            mfa: status,
+          });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/profile/mfa/enroll',
+    adminAuth.requireProfile,
+    operationAudit(
+      'profile.mfa.enroll.start',
+    ),
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const enrollment =
+          await securityService
+            .beginMfaEnrollment(
+              request.adminUser.id,
+              request.body,
+            );
+
+        if (!enrollment) {
+          response
+            .status(404)
+            .json({
+              error:
+                'Administrator not found',
+            });
+          return;
+        }
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            enrollment,
+          });
+      } catch (error) {
+        if (
+          handleAdminSecurityValidation(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/profile/mfa/confirm',
+    adminAuth.requireProfile,
+    operationAudit(
+      'profile.mfa.enable',
+    ),
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const result =
+          await securityService
+            .confirmMfaEnrollment(
+              request.adminUser.id,
+              request.body,
+              request.adminSessionId,
+            );
+
+        notificationEvents
+          ?.publish({
+            level: 'warn',
+            message:
+              'Двухфакторная аутентификация включена. Другие активные сессии завершены.',
+            permission: 'any',
+            audience: {
+              userIds: [
+                request.adminUser.id,
+              ],
+              excludeSessionIds: [
+                request.adminSessionId,
+              ],
+            },
+            control: {
+              action: 'logout',
+              reason:
+                'mfa-enabled',
+            },
+            source: {
+              kind:
+                'admin-profile',
+              id:
+                String(
+                  request.adminUser.id,
+                ),
+            },
+          });
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            mfa: result,
+          });
+      } catch (error) {
+        if (
+          handleAdminSecurityValidation(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/profile/mfa/recovery-codes',
+    adminAuth.requireProfile,
+    operationAudit(
+      'profile.mfa.recovery.rotate',
+    ),
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const result =
+          await securityService
+            .regenerateMfaRecoveryCodes(
+              request.adminUser.id,
+              request.body,
+            );
+
+        if (!result) {
+          response
+            .status(404)
+            .json({
+              error:
+                'Administrator not found',
+            });
+          return;
+        }
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            mfa: result,
+          });
+      } catch (error) {
+        if (
+          handleAdminSecurityValidation(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.delete(
+    '/admin/profile/mfa',
+    adminAuth.requireProfile,
+    operationAudit(
+      'profile.mfa.disable',
+    ),
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const result =
+          await securityService
+            .disableOwnMfa(
+              request.adminUser.id,
+              request.body,
+              request.adminSessionId,
+            );
+
+        if (!result) {
+          response
+            .status(404)
+            .json({
+              error:
+                'Administrator not found',
+            });
+          return;
+        }
+
+        notificationEvents
+          ?.publish({
+            level: 'warn',
+            message:
+              'Двухфакторная аутентификация отключена. Другие активные сессии завершены.',
+            permission: 'any',
+            audience: {
+              userIds: [
+                request.adminUser.id,
+              ],
+              excludeSessionIds: [
+                request.adminSessionId,
+              ],
+            },
+            control: {
+              action: 'logout',
+              reason:
+                'mfa-disabled',
+            },
+            source: {
+              kind:
+                'admin-profile',
+              id:
+                String(
+                  request.adminUser.id,
+                ),
+            },
+          });
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            mfa: result,
+          });
+      } catch (error) {
+        if (
+          handleAdminSecurityValidation(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.get(
     '/admin/profile/avatar',
     adminAuth.requireProfile,
     async (request, response, next) => {

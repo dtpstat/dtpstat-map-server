@@ -452,6 +452,62 @@ function security(config) {
       return testUser;
     },
 
+    async getMfaStatus() {
+      return {
+        enabled: false,
+        available: false,
+        enrolledAt: null,
+        enrollmentPending: false,
+        recoveryCodesRemaining: 0,
+      };
+    },
+
+    async beginMfaEnrollment() {
+      return {
+        secret:
+          'JBSWY3DPEHPK3PXP',
+        provisioningUri:
+          'otpauth://totp/DTP-Stat:test',
+        expiresAt:
+          new Date(
+            Date.now() +
+            600000,
+          ).toISOString(),
+      };
+    },
+
+    async confirmMfaEnrollment() {
+      return {
+        enabled: true,
+        enrolledAt:
+          new Date()
+            .toISOString(),
+        recoveryCodes: [
+          'ABCD-EFGH-IJKL-MNOP',
+        ],
+        recoveryCodesRemaining:
+          1,
+      };
+    },
+
+    async regenerateMfaRecoveryCodes() {
+      return {
+        recoveryCodes: [
+          'ABCD-EFGH-IJKL-MNOP',
+        ],
+        recoveryCodesRemaining:
+          1,
+      };
+    },
+
+    async disableOwnMfa() {
+      return {
+        enabled: false,
+        recoveryCodesRemaining:
+          0,
+      };
+    },
+
     async getAvatar() {
       return null;
     },

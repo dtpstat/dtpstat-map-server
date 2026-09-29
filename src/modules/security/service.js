@@ -10,6 +10,9 @@ import {
 import {
   createSecurityAuthService,
 } from './auth-service.js';
+import {
+  createSecurityMfaService,
+} from './mfa-service.js';
 
 /**
  * Compatibility application façade for admin security.
@@ -37,6 +40,19 @@ export function createAdminSecurityService(
       },
     );
 
+  const mfa =
+    createSecurityMfaService(
+      repository,
+      {
+        appendAudit:
+          audit.appendAudit,
+        mfaEncryptionKey:
+          options
+            .mfaEncryptionKey ??
+          null,
+      },
+    );
+
   const accounts =
     createSecurityAccountService(
       repository,
@@ -52,6 +68,7 @@ export function createAdminSecurityService(
 
   return {
     ...authentication,
+    ...mfa,
     ...accounts,
     ...administration,
     ...audit,

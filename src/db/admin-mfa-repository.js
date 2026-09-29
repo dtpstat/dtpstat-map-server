@@ -108,6 +108,106 @@ export function createAdminMfaRepository(
       );
     },
 
+    async completeMfaEnrollment(
+      userId,
+      lastUsedStep,
+      codeHashes,
+    ) {
+      const client =
+        typeof database.connect ===
+          'function'
+          ? await database.connect()
+          : null;
+      const target =
+        client ??
+        database;
+
+      try {
+        if (client) {
+          await target.query(
+            'BEGIN',
+          );
+        }
+
+        const enabled =
+          await target.query(
+            `UPDATE admin_users
+             SET
+               mfa_enabled=TRUE,
+               mfa_secret_ciphertext=mfa_pending_secret_ciphertext,
+               mfa_pending_secret_ciphertext=NULL,
+               mfa_pending_created_at=NULL,
+               mfa_last_used_step=$2::bigint,
+               mfa_enrolled_at=NOW(),
+               updated_at=NOW()
+             WHERE id=$1::bigint
+               AND NOT mfa_enabled
+               AND mfa_pending_secret_ciphertext IS NOT NULL
+             RETURNING
+               id::integer AS id,
+               mfa_enrolled_at AS "enrolledAt"`,
+            [
+              userId,
+              lastUsedStep,
+            ],
+          );
+
+        if (!enabled.rows[0]) {
+          if (client) {
+            await target.query(
+              'ROLLBACK',
+            );
+          }
+          return null;
+        }
+
+        await target.query(
+          `DELETE FROM admin_mfa_recovery_codes
+           WHERE user_id=$1::bigint`,
+          [
+            userId,
+          ],
+        );
+
+        for (
+          const hash of
+          codeHashes
+        ) {
+          await target.query(
+            `INSERT INTO admin_mfa_recovery_codes (
+               user_id,
+               code_hash
+             )
+             VALUES (
+               $1::bigint,
+               $2::bytea
+             )`,
+            [
+              userId,
+              hash,
+            ],
+          );
+        }
+
+        if (client) {
+          await target.query(
+            'COMMIT',
+          );
+        }
+
+        return enabled.rows[0];
+      } catch (error) {
+        if (client) {
+          await target.query(
+            'ROLLBACK',
+          );
+        }
+        throw error;
+      } finally {
+        client?.release();
+      }
+    },
+
     async enableMfa(
       userId,
       lastUsedStep,
