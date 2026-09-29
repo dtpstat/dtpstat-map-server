@@ -297,6 +297,62 @@ async function acceptAndWaitForAdminTask(response, baseUrl, authorization) {
   };
 }
 
+test('API request observability emits a stable correlation header', async () => {
+  await withServer(async (baseUrl) => {
+    const generated =
+      await versionedFetch(
+        `${baseUrl}/api/health`,
+      );
+
+    assert.equal(
+      generated.status,
+      200,
+    );
+    assert.match(
+      generated.headers.get(
+        'x-request-id',
+      ) ?? '',
+      /^[0-9a-f-]{36}$/u,
+    );
+
+    const supplied =
+      await versionedFetch(
+        `${baseUrl}/api/health`,
+        {
+          headers: {
+            'X-Request-ID':
+              'trace.test-123',
+          },
+        },
+      );
+
+    assert.equal(
+      supplied.headers.get(
+        'x-request-id',
+      ),
+      'trace.test-123',
+    );
+
+    const invalid =
+      await versionedFetch(
+        `${baseUrl}/api/health`,
+        {
+          headers: {
+            'X-Request-ID':
+              'bad request id',
+          },
+        },
+      );
+
+    assert.match(
+      invalid.headers.get(
+        'x-request-id',
+      ) ?? '',
+      /^[0-9a-f-]{36}$/u,
+    );
+  });
+});
+
 test('API exposes public config, health, and ordered cities', async () => {
   await withServer(async (baseUrl) => {
     const [configResponse, healthResponse, citiesResponse] = await Promise.all([

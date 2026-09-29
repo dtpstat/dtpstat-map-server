@@ -37,6 +37,9 @@ function logRejectedRequest(
   }
 
   const details = {
+    requestId:
+      request.requestId ??
+      null,
     method:
       request.method,
     path:

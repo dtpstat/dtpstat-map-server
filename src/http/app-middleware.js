@@ -18,6 +18,9 @@ import {
   adminNoStoreHeaders,
   createTransportSecurityHeaders,
 } from './security-headers.js';
+import {
+  createApiRequestObservability,
+} from './request-observability.js';
 
 const CITY_MARKER_PNG =
   Buffer.from(
@@ -165,6 +168,10 @@ export function installAppHttpMiddleware(
       ? config.http
         .trustProxyHops
       : false,
+  );
+
+  app.use(
+    createApiRequestObservability(),
   );
 
   app.use(
