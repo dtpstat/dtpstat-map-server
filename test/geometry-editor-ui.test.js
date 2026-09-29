@@ -837,7 +837,7 @@ test('geometry editor exposes optimistic polygon cutter and line-blade split ope
   );
   assert.match(
     page,
-    /Вырезать выбранным полигоном/u,
+    /Вырезать полигоном/u,
   );
   assert.match(
     page,
