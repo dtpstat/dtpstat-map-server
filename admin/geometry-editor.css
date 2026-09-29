@@ -747,12 +747,6 @@
 }
 
 
-.geometry-editor-map-toolbar #geometry-move-toggle.is-active {
-  border-color: #f3b74e;
-  color: #ffe1a0;
-  background: #2a2110;
-}
-
 .geometry-coordinate-window {
   position: fixed;
   top: max(5rem, 8vh);

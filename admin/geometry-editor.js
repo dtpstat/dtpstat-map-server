@@ -66,7 +66,6 @@ if (section) {
   const redoButton = document.querySelector('#geometry-redo');
   const finishDrawButton = document.querySelector('#geometry-finish-draw');
   const cancelDrawButton = document.querySelector('#geometry-cancel-draw');
-  const moveGeometryButton = document.querySelector('#geometry-move-toggle');
   const coordinateOpenButton = document.querySelector('#geometry-coordinate-open');
   const coordinateWindow = document.querySelector('#geometry-coordinate-window');
   const coordinateCloseButton = document.querySelector('#geometry-coordinate-close');
@@ -128,11 +127,11 @@ if (section) {
     map: null,
     mapReady: null,
     dragPath: null,
-    moveGeometryMode: false,
     geometryDrag: null,
     coordinateWindowOpen: false,
     hoveredVertex: false,
     hoveredSegment: false,
+    hoveredMidpoint: false,
     hoveredGeometry: false,
     deleteModifier: false,
     suppressMapClick: false,
@@ -757,8 +756,7 @@ if (section) {
     if (
       !geometry ||
       !state.editing ||
-      state.drawing ||
-      state.moveGeometryMode
+      state.drawing
     ) {
       return emptyCollection();
     }
@@ -973,13 +971,6 @@ if (section) {
       canvas.style.cursor = 'grabbing';
       return;
     }
-    if (state.moveGeometryMode) {
-      canvas.style.cursor =
-        state.hoveredGeometry
-          ? 'grab'
-          : 'move';
-      return;
-    }
     if (state.dragPath) {
       canvas.style.cursor = 'move';
       return;
@@ -990,8 +981,12 @@ if (section) {
         : 'move';
       return;
     }
-    if (state.hoveredSegment) {
+    if (state.hoveredMidpoint) {
       canvas.style.cursor = ADD_VERTEX_CURSOR;
+      return;
+    }
+    if (state.hoveredSegment) {
+      canvas.style.cursor = 'grab';
       return;
     }
     canvas.style.cursor = state.hoveredGeometry
@@ -1231,78 +1226,6 @@ if (section) {
         },
       });
 
-      const selectedDragLayers = [
-        'geometry-editor-selected-fill',
-        'geometry-editor-selected-line',
-        'geometry-editor-selected-point',
-        'geometry-editor-selected-point-icon',
-      ];
-
-      const beginGeometryDrag =
-        (event) => {
-          if (
-            !state.moveGeometryMode ||
-            !state.editing ||
-            !state.draft ||
-            state.drawing ||
-            state.geometryDrag
-          ) {
-            return;
-          }
-
-          event.preventDefault();
-          event.originalEvent
-            ?.preventDefault?.();
-          event.originalEvent
-            ?.stopPropagation?.();
-
-          state.suppressMapClick =
-            true;
-          state.geometryDrag = {
-            origin:
-              event.lngLat
-                .toArray(),
-            original:
-              clone(
-                state.draft,
-              ),
-            moved: false,
-          };
-
-          pushHistory();
-          map.dragPan.disable();
-          refreshMapCursor();
-        };
-
-      for (
-        const layerId of
-        selectedDragLayers
-      ) {
-        map.on(
-          'mousedown',
-          layerId,
-          beginGeometryDrag,
-        );
-        map.on(
-          'mouseenter',
-          layerId,
-          () => {
-            state.hoveredGeometry =
-              true;
-            refreshMapCursor();
-          },
-        );
-        map.on(
-          'mouseleave',
-          layerId,
-          () => {
-            state.hoveredGeometry =
-              false;
-            refreshMapCursor();
-          },
-        );
-      }
-
       addLayerSafe(map, {
         id: 'geometry-editor-draw-line',
         type: 'line',
@@ -1357,6 +1280,72 @@ if (section) {
           'line-opacity': 0.01,
         },
       });
+
+      const beginGeometryDrag =
+        (event) => {
+          if (
+            !state.editing ||
+            !state.draft ||
+            state.drawing ||
+            state.geometryDrag
+          ) {
+            return;
+          }
+
+          const handleHits =
+            map.queryRenderedFeatures(
+              event.point,
+              {
+                layers: [
+                  'geometry-editor-vertices',
+                  'geometry-editor-midpoints',
+                ],
+              },
+            );
+          if (handleHits.length > 0) {
+            return;
+          }
+
+          if (state.coordinateWindowOpen) {
+            closeCoordinateWindow();
+          }
+
+          event.preventDefault();
+          event.originalEvent
+            ?.preventDefault?.();
+          event.originalEvent
+            ?.stopPropagation?.();
+
+          state.suppressMapClick =
+            true;
+          state.geometryDrag = {
+            origin:
+              event.lngLat
+                .toArray(),
+            screenOrigin:
+              event.point
+                ? [
+                    event.point.x,
+                    event.point.y,
+                  ]
+                : null,
+            original:
+              clone(
+                state.draft,
+              ),
+            moved: false,
+          };
+
+          pushHistory();
+          map.dragPan.disable();
+          refreshMapCursor();
+        };
+
+      map.on(
+        'mousedown',
+        'geometry-editor-segment-hit',
+        beginGeometryDrag,
+      );
       addLayerSafe(map, {
         id: 'geometry-editor-vertices',
         type: 'circle',
@@ -1389,7 +1378,6 @@ if (section) {
           !candidate ||
           !state.draft ||
           state.drawing ||
-          state.moveGeometryMode ||
           state.suppressMapClick
         ) {
           return;
@@ -1429,8 +1417,7 @@ if (section) {
         if (
           !candidate ||
           !state.draft ||
-          state.drawing ||
-          state.moveGeometryMode
+          state.drawing
         ) return;
         const originalEvent = event.originalEvent;
         if (!(originalEvent?.ctrlKey || originalEvent?.metaKey)) return;
@@ -1447,8 +1434,7 @@ if (section) {
         if (
           !candidate ||
           !state.draft ||
-          state.drawing ||
-          state.moveGeometryMode
+          state.drawing
         ) return;
         event.preventDefault();
         const originalEvent = event.originalEvent;
@@ -1464,6 +1450,36 @@ if (section) {
           state.geometryDrag &&
           state.draft
         ) {
+          if (
+            !state.geometryDrag
+              .moved &&
+            state.geometryDrag
+              .screenOrigin &&
+            event.point
+          ) {
+            const [
+              startX,
+              startY,
+            ] =
+              state.geometryDrag
+                .screenOrigin;
+            const pixelDistance =
+              Math.hypot(
+                event.point.x -
+                  startX,
+                event.point.y -
+                  startY,
+              );
+
+            if (pixelDistance < 3) {
+              return;
+            }
+
+            state.geometryDrag
+              .moved =
+              true;
+          }
+
           const current =
             event.lngLat
               .toArray();
@@ -1484,12 +1500,17 @@ if (section) {
                 dx,
                 dy,
               );
-            state.geometryDrag
-              .moved =
-              Math.abs(dx) >
-                Number.EPSILON ||
-              Math.abs(dy) >
-                Number.EPSILON;
+            if (
+              !state.geometryDrag
+                .moved
+            ) {
+              state.geometryDrag
+                .moved =
+                Math.abs(dx) >
+                  Number.EPSILON ||
+                Math.abs(dy) >
+                  Number.EPSILON;
+            }
             updateMapSources();
           } catch {
             // Keep the last valid position when pointer crosses WGS84 bounds.
@@ -1622,7 +1643,6 @@ if (section) {
         map.on('click', layerId, (event) => {
           if (
             state.drawing ||
-            state.moveGeometryMode ||
             state.suppressMapClick
           ) return;
           const vertexHits = map.queryRenderedFeatures(event.point, {
@@ -1659,9 +1679,10 @@ if (section) {
         refreshMapCursor();
       });
       map.on('mouseenter', 'geometry-editor-midpoints', (event) => {
+        state.hoveredMidpoint = true;
+        refreshMapCursor();
         if (
           !state.drawing &&
-          !state.moveGeometryMode &&
           event.lngLat
         ) {
           addVertexHint
@@ -1671,7 +1692,9 @@ if (section) {
         }
       });
       map.on('mouseleave', 'geometry-editor-midpoints', () => {
+        state.hoveredMidpoint = false;
         addVertexHint.remove();
+        refreshMapCursor();
       });
       state.map = map;
       await syncPointTypeMapImages();
@@ -2381,8 +2404,6 @@ if (section) {
       return;
     }
 
-    state.moveGeometryMode =
-      false;
     state.coordinateWindowOpen =
       true;
     coordinateWindow.hidden =
@@ -2403,18 +2424,8 @@ if (section) {
         !state.importSession,
       );
 
-    moveGeometryButton.disabled =
-      !enabled;
     coordinateOpenButton.disabled =
       !enabled;
-
-    if (
-      !enabled &&
-      state.moveGeometryMode
-    ) {
-      state.moveGeometryMode =
-        false;
-    }
 
     if (
       !enabled &&
@@ -2423,65 +2434,8 @@ if (section) {
       closeCoordinateWindow();
     }
 
-    moveGeometryButton.classList
-      .toggle(
-        'is-active',
-        state.moveGeometryMode,
-      );
-    moveGeometryButton.textContent =
-      state.moveGeometryMode
-        ? 'Перемещение включено'
-        : 'Переместить';
-    moveGeometryButton.setAttribute(
-      'aria-pressed',
-      String(
-        state.moveGeometryMode,
-      ),
-    );
   }
 
-  function setMoveGeometryMode(
-    enabled,
-  ) {
-    const next =
-      Boolean(enabled);
-
-    if (
-      next &&
-      (
-        !state.editing ||
-        !state.draft ||
-        state.drawing ||
-        state.importSession
-      )
-    ) {
-      return;
-    }
-
-    if (
-      state.geometryDrag
-    ) {
-      return;
-    }
-
-    state.moveGeometryMode =
-      next;
-
-    if (next) {
-      closeCoordinateWindow();
-      modeLabel.textContent =
-        'Перемещение геометрии · перетащите объект целиком';
-    } else {
-      modeLabel.textContent =
-        editingModeText(
-          state.current,
-        );
-    }
-
-    updateMapSources();
-    renderGeometryToolState();
-    refreshMapCursor();
-  }
 
   function applyCoordinateTable() {
     const descriptor =
@@ -3170,7 +3124,6 @@ if (section) {
 
 
   async function selectGeometry(id, { focus = true } = {}) {
-    setMoveGeometryMode(false);
     closeCoordinateWindow();
 
     if (state.importSession) {
@@ -3478,8 +3431,6 @@ if (section) {
   }
 
   function clearSelection() {
-    state.moveGeometryMode =
-      false;
     state.geometryDrag =
       null;
     closeCoordinateWindow();
@@ -4853,7 +4804,6 @@ if (section) {
   }
 
   async function startDrawing(mode) {
-    setMoveGeometryMode(false);
     closeCoordinateWindow();
 
     if (state.importSession) {
@@ -6117,13 +6067,6 @@ if (section) {
   );
 
 
-  moveGeometryButton.addEventListener(
-    'click',
-    () =>
-      setMoveGeometryMode(
-        !state.moveGeometryMode,
-      ),
-  );
   coordinateOpenButton.addEventListener(
     'click',
     openCoordinateWindow,
@@ -6310,14 +6253,6 @@ if (section) {
       state.coordinateWindowOpen
     ) {
       closeCoordinateWindow();
-      return;
-    }
-    if (
-      !editingText &&
-      event.key === 'Escape' &&
-      state.moveGeometryMode
-    ) {
-      setMoveGeometryMode(false);
       return;
     }
     if (!editingText && event.key === 'Escape' && state.drawing) cancelDrawing();

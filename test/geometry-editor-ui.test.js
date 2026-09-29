@@ -971,7 +971,6 @@ test('geometry editor exposes coordinate table editing and whole geometry drag a
     ]);
 
   for (const id of [
-    'geometry-move-toggle',
     'geometry-coordinate-open',
     'geometry-coordinate-window',
     'geometry-coordinate-sequence',
@@ -1010,9 +1009,13 @@ test('geometry editor exposes coordinate table editing and whole geometry drag a
     /pushHistory\(\);[\s\S]*state\.draft = next;[\s\S]*captureCurrentDraft\(\)/u,
   );
 
-  assert.match(
+  assert.doesNotMatch(
+    html,
+    /id="geometry-move-toggle"/u,
+  );
+  assert.doesNotMatch(
     editor,
-    /moveGeometryMode: false/u,
+    /moveGeometryMode|setMoveGeometryMode|moveGeometryButton|selectedDragLayers/u,
   );
   assert.match(
     editor,
@@ -1020,7 +1023,11 @@ test('geometry editor exposes coordinate table editing and whole geometry drag a
   );
   assert.match(
     editor,
-    /selectedDragLayers[\s\S]*geometry-editor-selected-fill[\s\S]*geometry-editor-selected-line[\s\S]*geometry-editor-selected-point/u,
+    /'mousedown',[\s\S]*'geometry-editor-segment-hit',[\s\S]*beginGeometryDrag/u,
+  );
+  assert.match(
+    editor,
+    /screenOrigin[\s\S]*Math\.hypot[\s\S]*pixelDistance < 3/u,
   );
   assert.match(
     editor,
@@ -1056,8 +1063,8 @@ test('geometry editor exposes coordinate table editing and whole geometry drag a
     styles,
     /\.geometry-coordinate-window\s*\{[\s\S]*position: fixed/u,
   );
-  assert.match(
+  assert.doesNotMatch(
     styles,
-    /#geometry-move-toggle\.is-active/u,
+    /#geometry-move-toggle/u,
   );
 });
