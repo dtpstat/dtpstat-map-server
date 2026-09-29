@@ -171,6 +171,16 @@ export function parseCoordinateText(
   );
 }
 
+function samePosition(
+  left,
+  right,
+) {
+  return (
+    left?.[0] === right?.[0] &&
+    left?.[1] === right?.[1]
+  );
+}
+
 function sequence(
   path,
   label,
@@ -182,7 +192,11 @@ function sequence(
 ) {
   const editable =
     closed &&
-    coordinates.length > 1
+    coordinates.length > 1 &&
+    samePosition(
+      coordinates[0],
+      coordinates.at(-1),
+    )
       ? coordinates.slice(0, -1)
       : coordinates;
 

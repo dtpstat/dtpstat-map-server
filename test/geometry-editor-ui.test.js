@@ -1008,7 +1008,7 @@ test('geometry editor exposes coordinate table editing and whole geometry drag a
   );
   assert.match(
     editor,
-    /state\.pendingExternalDraftSync[\s\S]*state\.geometryDrag/u,
+    /state\.pendingExternalDraftSync[\s\S]*state\.geometryDrag[\s\S]*state\.coordinateWindowOpen/u,
   );
   assert.match(
     editor,

@@ -414,6 +414,7 @@ if (section) {
       !state.pendingExternalDraftSync ||
       state.dragPath ||
       state.geometryDrag ||
+      state.coordinateWindowOpen ||
       state.drawing
     ) {
       return;
@@ -2265,6 +2266,7 @@ if (section) {
     coordinateWindow.hidden =
       true;
     setCoordinateMessage('');
+    flushPendingExternalDraftSync();
   }
 
   function openCoordinateWindow() {
