@@ -121,7 +121,7 @@ export function parseCoordinateText(
 
   const lines =
     source
-      .split(/\\r?\\n/u)
+      .split(/\r?\n/u)
       .map(
         (line) =>
           line.trim(),
