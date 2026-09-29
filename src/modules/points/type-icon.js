@@ -1766,12 +1766,17 @@ function sanitizeSvgStyleSheet(
         '}',
         open + 1,
       );
-    if (
-      close < 0 ||
+    const nestedOpen =
       source.indexOf(
         '{',
         open + 1,
-      ) < close
+      );
+    if (
+      close < 0 ||
+      (
+        nestedOpen >= 0 &&
+        nestedOpen < close
+      )
     ) {
       fail(
         'SVG stylesheet nesting is not allowed',
@@ -1870,6 +1875,15 @@ function validateSvgAttribute(
       'SVG attribute is not allowed: ' +
       name,
     );
+  }
+
+  if (
+    name === 'style'
+  ) {
+    validateSvgStyle(
+      value,
+    );
+    return;
   }
 
   if (
@@ -1990,15 +2004,6 @@ function validateSvgAttribute(
         'SVG fill rule is unsupported',
       );
     }
-    return;
-  }
-
-  if (
-    name === 'style'
-  ) {
-    validateSvgStyle(
-      value,
-    );
     return;
   }
 
