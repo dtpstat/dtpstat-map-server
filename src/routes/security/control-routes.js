@@ -79,6 +79,51 @@ export function registerAdminSecurityControlRoutes(
     },
   );
 
+  router.post(
+    '/admin/security/metrics-token',
+    adminAuth.requireSecurity,
+    operationAudit(
+      'security.metrics-token.rotate',
+    ),
+    async (
+      _request,
+      response,
+      next,
+    ) => {
+      try {
+        response.json(
+          await securityService
+            .rotateMetricsToken(),
+        );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.delete(
+    '/admin/security/metrics-token',
+    adminAuth.requireSecurity,
+    operationAudit(
+      'security.metrics-token.clear',
+    ),
+    async (
+      _request,
+      response,
+      next,
+    ) => {
+      try {
+        response.json({
+          settings:
+            await securityService
+              .clearMetricsToken(),
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   router.get(
     '/admin/security/ip-blocks',
     adminAuth.requireSecurity,

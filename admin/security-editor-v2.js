@@ -166,6 +166,31 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
                   <label>Максимальная жизнь сессии, сек. <input name="sessionAbsoluteSeconds" type="number" min="300" max="2592000" required data-human-unit="seconds"></label>
                   <label>Хранить аудит, дней (0 = бессрочно) <input name="auditRetentionDays" type="number" min="0" max="3650" required data-human-unit="days"></label>
                 </fieldset>
+                <fieldset><legend>Prometheus metrics</legend>
+                  <label class="check">
+                    <input name="metricsEnabled" type="checkbox">
+                    Включить защищённый endpoint <code>/metrics</code>
+                  </label>
+                  <p id="security-metrics-token-status" class="security-info">
+                    Проверяем состояние bearer token…
+                  </p>
+                  <div class="security-metrics-actions">
+                    <button type="button" class="secondary"
+                            id="security-metrics-token-rotate"
+                            data-dirty-ignore>
+                      Сгенерировать token
+                    </button>
+                    <button type="button" class="danger"
+                            id="security-metrics-token-clear"
+                            data-dirty-ignore>
+                      Очистить token
+                    </button>
+                  </div>
+                  <p class="security-info">
+                    Token показывается только один раз. В базе хранится только SHA-256 hash.
+                    После ротации старый token перестаёт работать сразу.
+                  </p>
+                </fieldset>
               </div>
             </details>
             <button type="submit">Сохранить параметры</button>
@@ -259,6 +284,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   let auditOffset = 0;
   const auditLimit = 100;
   let secretTimer = null;
+  let metricsTokenConfigured = false;
   let auditDetailEntry = null;
   let auditDetailMode = 'tree';
   const jsonBranchRenderers = new WeakMap();
@@ -304,6 +330,39 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     };
     overlay.querySelector('#security-secret-copy').addEventListener('click', async () => {
       await navigator.clipboard.writeText(password);
+      overlay.querySelector('#security-secret-copy').textContent = 'Скопировано';
+    });
+    overlay.querySelector('#security-secret-close').addEventListener('click', close);
+    secretTimer = setTimeout(close, 5 * 60 * 1000);
+  }
+
+  function showMetricsBearerToken(token) {
+    const overlay = host.querySelector('#security-secret-overlay');
+    if (secretTimer) clearTimeout(secretTimer);
+    overlay.hidden = false;
+    overlay.innerHTML = `
+      <div class="security-secret-card" role="dialog" aria-modal="true"
+           aria-label="Prometheus bearer token">
+        <h3>Новый Prometheus bearer token</h3>
+        <p>Скопируйте token сейчас. После закрытия его plaintext больше получить нельзя.</p>
+        <code class="security-secret-value"></code>
+        <div class="security-secret-actions">
+          <button type="button" id="security-secret-copy">Копировать</button>
+          <button type="button" class="secondary" id="security-secret-close">Закрыть</button>
+        </div>
+        <small>В базе сохранён только SHA-256 hash. Ротация немедленно отменяет предыдущий token.</small>
+      </div>
+    `;
+    overlay.querySelector('.security-secret-value').textContent = token;
+    const close = () => {
+      overlay.querySelector('.security-secret-value').textContent = '';
+      overlay.replaceChildren();
+      overlay.hidden = true;
+      if (secretTimer) clearTimeout(secretTimer);
+      secretTimer = null;
+    };
+    overlay.querySelector('#security-secret-copy').addEventListener('click', async () => {
+      await navigator.clipboard.writeText(token);
       overlay.querySelector('#security-secret-copy').textContent = 'Скопировано';
     });
     overlay.querySelector('#security-secret-close').addEventListener('click', close);
@@ -1050,6 +1109,25 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     if (event.key === 'Escape' && !auditOverlay?.hidden) closeAuditDetails();
   });
 
+  function renderMetricsSettings(settings) {
+    metricsTokenConfigured = Boolean(settings.metricsTokenConfigured);
+    const status = host.querySelector('#security-metrics-token-status');
+    const rotate = host.querySelector('#security-metrics-token-rotate');
+    const clear = host.querySelector('#security-metrics-token-clear');
+
+    if (status) {
+      status.textContent = metricsTokenConfigured
+        ? 'Bearer token настроен. Plaintext в базе не хранится.'
+        : 'Bearer token не настроен. Сначала сгенерируйте token.';
+    }
+    if (rotate) {
+      rotate.textContent = metricsTokenConfigured
+        ? 'Заменить token'
+        : 'Сгенерировать token';
+    }
+    if (clear) clear.disabled = !metricsTokenConfigured;
+  }
+
   async function loadSettings() {
     if (!canManageSecurity) return;
     const form = host.querySelector('#security-settings-form');
@@ -1062,6 +1140,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         if (control.type === 'checkbox') control.checked = Boolean(value);
         else control.value = value;
       }
+      renderMetricsSettings(payload.settings);
       bindHumanUnits(form);
       securitySettingsDirty?.markClean();
       setMessage(message, 'Параметры загружены.');
@@ -1084,23 +1163,100 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     const booleanKeys = [
       'passwordRequireLowercase','passwordRequireUppercase',
       'passwordRequireDigit','passwordRequireSpecial',
+      'metricsEnabled',
     ];
     const settings = Object.fromEntries([
       ...numericKeys.map((key) => [key, Number(form.elements[key].value)]),
       ...booleanKeys.map((key) => [key, form.elements[key].checked]),
     ]);
+    if (settings.metricsEnabled && !metricsTokenConfigured) {
+      setMessage(
+        host.querySelector('#security-settings-message'),
+        'Сначала сгенерируйте Prometheus bearer token.',
+        'error',
+      );
+      return;
+    }
     try {
-      await api('/api/admin/security/settings', {
+      const payload = await api('/api/admin/security/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
       });
+      renderMetricsSettings(payload.settings);
       securitySettingsDirty?.markClean();
       setMessage(host.querySelector('#security-settings-message'), 'Параметры сохранены.', 'success');
     } catch (error) {
       setMessage(host.querySelector('#security-settings-message'), error.message, 'error');
     }
   });
+
+  host.querySelector('#security-metrics-token-rotate')
+    ?.addEventListener('click', async () => {
+      const confirmed = await adminConfirm({
+        title: metricsTokenConfigured
+          ? 'Заменить Prometheus token?'
+          : 'Сгенерировать Prometheus token?',
+        message: metricsTokenConfigured
+          ? 'Текущий token перестанет работать сразу после ротации.'
+          : 'Новый token будет показан только один раз.',
+        confirmLabel: metricsTokenConfigured
+          ? 'Заменить token'
+          : 'Сгенерировать',
+        cancelLabel: 'Отмена',
+        destructive: metricsTokenConfigured,
+      });
+      if (!confirmed) return;
+
+      try {
+        const payload = await api('/api/admin/security/metrics-token', {
+          method: 'POST',
+        });
+        renderMetricsSettings(payload.settings);
+        showMetricsBearerToken(payload.token);
+        await loadSettings();
+      } catch (error) {
+        setMessage(
+          host.querySelector('#security-settings-message'),
+          error.message,
+          'error',
+        );
+      }
+    });
+
+  host.querySelector('#security-metrics-token-clear')
+    ?.addEventListener('click', async () => {
+      if (!metricsTokenConfigured) return;
+      const confirmed = await adminConfirm({
+        title: 'Очистить Prometheus token?',
+        message: 'Endpoint /metrics будет выключен, а текущий token перестанет работать.',
+        confirmLabel: 'Очистить token',
+        cancelLabel: 'Отмена',
+        destructive: true,
+      });
+      if (!confirmed) return;
+
+      try {
+        const payload = await api('/api/admin/security/metrics-token', {
+          method: 'DELETE',
+        });
+        renderMetricsSettings(payload.settings);
+        const form = host.querySelector('#security-settings-form');
+        if (form?.elements.metricsEnabled) form.elements.metricsEnabled.checked = false;
+        securitySettingsDirty?.markClean();
+        setMessage(
+          host.querySelector('#security-settings-message'),
+          'Prometheus token очищен; metrics выключены.',
+          'success',
+        );
+      } catch (error) {
+        setMessage(
+          host.querySelector('#security-settings-message'),
+          error.message,
+          'error',
+        );
+      }
+    });
 
   function ipBlockCard(block) {
     const row = document.createElement('article');

@@ -493,3 +493,11 @@ body.security-modal-open { overflow: hidden; }
     flex: 1 1 100%;
   }
 }
+
+
+.security-metrics-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
