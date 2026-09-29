@@ -901,3 +901,18 @@
     width: 100%;
   }
 }
+
+
+.geometry-coordinate-table input[aria-invalid="true"] {
+  border-color: #d84f57;
+  outline: 1px solid rgb(216 79 87 / 55%);
+  background: rgb(216 79 87 / 8%);
+}
+
+.geometry-coordinate-row-actions {
+  gap: .45rem;
+}
+
+.geometry-coordinate-row-actions button {
+  width: auto;
+}

@@ -788,6 +788,10 @@
               </div>
 
               <div class="geometry-coordinate-row-actions">
+                <button class="secondary" id="geometry-coordinate-clear"
+                        type="button">
+                  Очистить всё
+                </button>
                 <button class="secondary" id="geometry-coordinate-add-row"
                         type="button">
                   Добавить строку
@@ -801,8 +805,9 @@
                           placeholder="37.6173 55.7558&#10;37.6200 55.7600"></textarea>
                 <small>
                   Одна точка на строку: «долгота широта».
-                  Допустимы пробел, Tab, «;» или «,» между числами;
-                  десятичный разделитель — точка.
+                  Десятичный разделитель — точка или запятая.
+                  При десятичной запятой разделяйте координаты пробелом,
+                  Tab или «;».
                 </small>
               </label>
 

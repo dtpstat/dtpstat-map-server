@@ -5,6 +5,7 @@ import {
   GeometryCoordinateError,
   coordinateSequences,
   normalizeCoordinate,
+  normalizeCoordinateInput,
   parseCoordinateText,
   replaceCoordinateSequence,
   translateGeometry,
@@ -32,13 +33,39 @@ test('coordinate text parser accepts bounded WGS84 rows and common separators', 
   );
 });
 
-test('coordinate text parser rejects ambiguous malformed oversized and out-of-range input', () => {
+test('coordinate text parser normalizes decimal commas and rejects malformed oversized and out-of-range input', () => {
+  assert.deepEqual(
+    parseCoordinateText(
+      '37,615 55,75\n37,620;55,760',
+    ),
+    [
+      [37.615, 55.75],
+      [37.62, 55.76],
+    ],
+  );
+
+  assert.equal(
+    normalizeCoordinateInput(
+      ' 37,615 ',
+    ),
+    '37.615',
+  );
+
   assert.throws(
     () =>
       parseCoordinateText(
-        '37,615 55,75',
+        '37,615,55,75',
       ),
     GeometryCoordinateError,
+  );
+
+  assert.throws(
+    () =>
+      normalizeCoordinate(
+        '',
+        '0',
+      ),
+    /Долгота должна быть числом/u,
   );
 
   assert.throws(

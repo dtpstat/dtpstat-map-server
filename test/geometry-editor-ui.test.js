@@ -975,6 +975,7 @@ test('geometry editor exposes coordinate table editing and whole geometry drag a
     'geometry-coordinate-window',
     'geometry-coordinate-sequence',
     'geometry-coordinate-table-body',
+    'geometry-coordinate-clear',
     'geometry-coordinate-paste',
     'geometry-coordinate-import',
     'geometry-coordinate-apply',
@@ -999,6 +1000,18 @@ test('geometry editor exposes coordinate table editing and whole geometry drag a
   assert.match(
     editor,
     /parseCoordinateText\([\s\S]*coordinatePaste\.value/u,
+  );
+  assert.match(
+    editor,
+    /function refreshCoordinateValidation\(\)[\s\S]*coordinateApply\.disabled/u,
+  );
+  assert.match(
+    editor,
+    /normalizeCoordinateInput\([\s\S]*setCustomValidity/u,
+  );
+  assert.match(
+    editor,
+    /coordinateClear\.addEventListener\([\s\S]*replaceChildren/u,
   );
   assert.match(
     editor,

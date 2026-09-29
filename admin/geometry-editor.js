@@ -8,6 +8,7 @@ import {
 import {
   coordinateSequences,
   normalizeCoordinate,
+  normalizeCoordinateInput,
   parseCoordinateText,
   replaceCoordinateSequence,
   translateGeometry,
@@ -72,6 +73,7 @@ if (section) {
   const coordinateSequence = document.querySelector('#geometry-coordinate-sequence');
   const coordinateTableBody = document.querySelector('#geometry-coordinate-table-body');
   const coordinateAddRow = document.querySelector('#geometry-coordinate-add-row');
+  const coordinateClear = document.querySelector('#geometry-coordinate-clear');
   const coordinatePaste = document.querySelector('#geometry-coordinate-paste');
   const coordinateImport = document.querySelector('#geometry-coordinate-import');
   const coordinateApply = document.querySelector('#geometry-coordinate-apply');
@@ -2169,6 +2171,121 @@ if (section) {
     );
   }
 
+  function coordinateInputValidity(
+    input,
+  ) {
+    const axis =
+      input.dataset
+        .coordinate;
+    const canonical =
+      normalizeCoordinateInput(
+        input.value,
+      );
+
+    if (
+      input.value !==
+      canonical
+    ) {
+      const start =
+        input.selectionStart;
+      const end =
+        input.selectionEnd;
+      input.value =
+        canonical;
+      if (
+        start !== null &&
+        end !== null
+      ) {
+        input.setSelectionRange(
+          start,
+          end,
+        );
+      }
+    }
+
+    try {
+      if (
+        axis ===
+        'longitude'
+      ) {
+        normalizeCoordinate(
+          canonical,
+          0,
+        );
+      } else {
+        normalizeCoordinate(
+          0,
+          canonical,
+        );
+      }
+
+      input.setCustomValidity(
+        '',
+      );
+      input.removeAttribute(
+        'aria-invalid',
+      );
+      input.title =
+        '';
+      return true;
+    } catch (error) {
+      input.setCustomValidity(
+        error.message,
+      );
+      input.setAttribute(
+        'aria-invalid',
+        'true',
+      );
+      input.title =
+        error.message;
+      return false;
+    }
+  }
+
+  function refreshCoordinateValidation() {
+    const descriptor =
+      currentCoordinateSequence();
+    const rows = [
+      ...coordinateTableBody
+        .querySelectorAll(
+          'tr',
+        ),
+    ];
+    const inputs = [
+      ...coordinateTableBody
+        .querySelectorAll(
+          '[data-coordinate]',
+        ),
+    ];
+    const valid =
+      inputs.every(
+        coordinateInputValidity,
+      );
+    const countValid =
+      Boolean(
+        descriptor &&
+        (
+          state.draft?.type ===
+          'Point'
+            ? rows.length ===
+              1
+            : rows.length >=
+              descriptor.minimum
+        )
+      );
+
+    coordinateApply.disabled =
+      !descriptor ||
+      !state.editing ||
+      !valid ||
+      !countValid;
+
+    return (
+      valid &&
+      countValid
+    );
+  }
+
   function coordinateRow(
     coordinate,
     index,
@@ -2203,6 +2320,16 @@ if (section) {
         coordinate?.[0] ??
         '',
       );
+    lon.addEventListener(
+      'input',
+      () =>
+        refreshCoordinateValidation(),
+    );
+    lon.addEventListener(
+      'blur',
+      () =>
+        refreshCoordinateValidation(),
+    );
     lonCell.append(lon);
 
     const latCell =
@@ -2223,6 +2350,16 @@ if (section) {
         coordinate?.[1] ??
         '',
       );
+    lat.addEventListener(
+      'input',
+      () =>
+        refreshCoordinateValidation(),
+    );
+    lat.addEventListener(
+      'blur',
+      () =>
+        refreshCoordinateValidation(),
+    );
     latCell.append(lat);
 
     const actionCell =
@@ -2249,6 +2386,7 @@ if (section) {
       () => {
         row.remove();
         renumberCoordinateRows();
+        refreshCoordinateValidation();
       },
     );
     actionCell.append(remove);
@@ -2325,17 +2463,20 @@ if (section) {
         true;
       coordinateAddRow.disabled =
         true;
+      coordinateClear.disabled =
+        true;
       return;
     }
 
     renderCoordinateRows(
       descriptor.coordinates,
     );
-    coordinateApply.disabled =
-      false;
     coordinateAddRow.disabled =
       state.draft?.type ===
       'Point';
+    coordinateClear.disabled =
+      false;
+    refreshCoordinateValidation();
     setCoordinateMessage('');
   }
 
@@ -6106,6 +6247,18 @@ if (section) {
         ),
       );
       renumberCoordinateRows();
+      refreshCoordinateValidation();
+    },
+  );
+  coordinateClear.addEventListener(
+    'click',
+    () => {
+      coordinateTableBody
+        .replaceChildren();
+      refreshCoordinateValidation();
+      setCoordinateMessage(
+        'Таблица очищена. Добавьте строки вручную или вставьте координаты массово.',
+      );
     },
   );
   coordinateImport.addEventListener(
@@ -6119,6 +6272,7 @@ if (section) {
         renderCoordinateRows(
           parsed,
         );
+        refreshCoordinateValidation();
         setCoordinateMessage(
           'Точки загружены в таблицу. Нажмите «Применить к черновику».',
           'success',
