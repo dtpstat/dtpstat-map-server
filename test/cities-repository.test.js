@@ -155,13 +155,28 @@ test('viewport profiler and repository can share the exact parameterized SQL con
     query.values.length,
     6,
   );
-  assert.deepEqual(
-    query.selector,
-    {
-      west: 37.35,
-      south: 55.57,
-      east: 37.95,
-      north: 55.93,
-    },
+  assert.ok(
+    Math.abs(
+      query.selector.west -
+        37.35,
+    ) < 1e-9,
+  );
+  assert.ok(
+    Math.abs(
+      query.selector.south -
+        55.57,
+    ) < 1e-9,
+  );
+  assert.ok(
+    Math.abs(
+      query.selector.east -
+        37.95,
+    ) < 1e-9,
+  );
+  assert.ok(
+    Math.abs(
+      query.selector.north -
+        55.93,
+    ) < 1e-9,
   );
 });

@@ -216,33 +216,51 @@ function planSummary(
 ) {
   const scans = [];
   const sequentialScans = [];
-  let sharedHitBlocks = 0;
-  let sharedReadBlocks = 0;
-  let rows = 0;
+
+  function nodeMetrics(
+    plan,
+  ) {
+    return {
+      nodeType:
+        plan[
+          'Node Type'
+        ],
+      relation:
+        plan[
+          'Relation Name'
+        ] ??
+        null,
+      actualRows:
+        Number(
+          plan[
+            'Actual Rows'
+          ] ?? 0,
+        ),
+      actualLoops:
+        Number(
+          plan[
+            'Actual Loops'
+          ] ?? 0,
+        ),
+      sharedHitBlocks:
+        Number(
+          plan[
+            'Shared Hit Blocks'
+          ] ?? 0,
+        ),
+      sharedReadBlocks:
+        Number(
+          plan[
+            'Shared Read Blocks'
+          ] ?? 0,
+        ),
+    };
+  }
 
   function visit(plan) {
     if (!plan) {
       return;
     }
-
-    sharedHitBlocks +=
-      Number(
-        plan[
-          'Shared Hit Blocks'
-        ] ?? 0,
-      );
-    sharedReadBlocks +=
-      Number(
-        plan[
-          'Shared Read Blocks'
-        ] ?? 0,
-      );
-    rows +=
-      Number(
-        plan[
-          'Actual Rows'
-        ] ?? 0,
-      );
 
     if (
       plan[
@@ -250,15 +268,9 @@ function planSummary(
       ]
     ) {
       scans.push({
-        nodeType:
-          plan[
-            'Node Type'
-          ],
-        relation:
-          plan[
-            'Relation Name'
-          ] ??
-          null,
+        ...nodeMetrics(
+          plan,
+        ),
         index:
           plan[
             'Index Name'
@@ -273,10 +285,9 @@ function planSummary(
       'Seq Scan'
     ) {
       sequentialScans.push(
-        plan[
-          'Relation Name'
-        ] ??
-          null,
+        nodeMetrics(
+          plan,
+        ),
       );
     }
 
@@ -303,18 +314,47 @@ function planSummary(
           'Execution Time'
         ],
       ),
-    planRows:
-      rows,
-    sharedHitBlocks,
-    sharedReadBlocks,
+    root: {
+      actualRows:
+        Number(
+          explain.Plan[
+            'Actual Rows'
+          ] ?? 0,
+        ),
+      actualLoops:
+        Number(
+          explain.Plan[
+            'Actual Loops'
+          ] ?? 0,
+        ),
+      sharedHitBlocks:
+        Number(
+          explain.Plan[
+            'Shared Hit Blocks'
+          ] ?? 0,
+        ),
+      sharedReadBlocks:
+        Number(
+          explain.Plan[
+            'Shared Read Blocks'
+          ] ?? 0,
+        ),
+      tempReadBlocks:
+        Number(
+          explain.Plan[
+            'Temp Read Blocks'
+          ] ?? 0,
+        ),
+      tempWrittenBlocks:
+        Number(
+          explain.Plan[
+            'Temp Written Blocks'
+          ] ?? 0,
+        ),
+    },
     indexScans:
       scans,
-    sequentialScans:
-      [
-        ...new Set(
-          sequentialScans,
-        ),
-      ],
+    sequentialScans,
   };
 }
 
