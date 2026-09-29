@@ -659,7 +659,7 @@ test('geometry workspace keeps new and failed bulk work locally and clears only 
   );
   assert.match(
     editor,
-    /async function startDrawing\(mode\)[\s\S]*state\.drawing = \{ mode, coordinates: \[\] \}/u,
+    /async function startDrawing\(mode\)[\s\S]*state\.drawing = \{[\s\S]*mode,[\s\S]*coordinates: \[\],[\s\S]*previewCoordinate: null,[\s\S]*\}/u,
   );
   assert.match(
     editor,
@@ -754,7 +754,7 @@ test('geometry editor exposes normal unlinked geometry and persistent explicit e
   );
   assert.match(html, /id="geometry-begin-edit"/u);
   assert.match(html, /id="geometry-takeover-edit"/u);
-  assert.match(html, /Очистить локальные изменения/u);
+  assert.match(html, /Сбросить локальное/u);
   assert.match(styles, /\.geometry-editor-row\.is-unlinked/u);
   assert.match(drafts, /\.\.\.clone\(draft\)/u);
 });
