@@ -275,7 +275,7 @@ export function parseCoordinateText(
       const parts =
         line
           .split(
-            /(?:\\s*[;\\t]\\s*|\\s+)/u,
+            /(?:\s*[;\t]\s*|\s+)/u,
           )
           .filter(
             Boolean,

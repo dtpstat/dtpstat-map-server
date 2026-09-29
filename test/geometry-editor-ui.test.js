@@ -597,7 +597,11 @@ test('geometry workspace validates exact persisted tokens and scopes takeover to
   );
   assert.match(
     editor,
-    /state\.validatedEditTokens\.get\([\s\S]*String\(item\.id\)[\s\S]*=== local\.editToken/u,
+    /const draftTokenIsValid =[\s\S]*state\.validatedEditTokens\.get\([\s\S]*String\(state\.selectedId\)[\s\S]*=== currentDraft\.editToken[\s\S]*state\.editing =[\s\S]*state\.editing &&[\s\S]*draftTokenIsValid/u,
+  );
+  assert.match(
+    editor,
+    /function adoptGeometryDetail[\s\S]*state\.editing = false;[\s\S]*state\.editLease = null;/u,
   );
   assert.match(
     editor,
@@ -902,7 +906,7 @@ test('geometry editor exposes optimistic polygon cutter and line-blade split ope
   );
   assert.match(
     editor,
-    /\['point',[\s\S]*'split'[\s\S]*\.includes\([\s\S]*drawing\?\.mode/u,
+    /finishDrawButton\.hidden =[\s\S]*'point'[\s\S]*'split'[\s\S]*\.includes\([\s\S]*drawing\?\.mode/u,
   );
   assert.match(
     editor,
