@@ -1,15 +1,3 @@
-function mfaStateFields() {
-  return `
-    user_id::integer AS "userId",
-    mfa_enabled AS "enabled",
-    mfa_secret_ciphertext AS "secretCiphertext",
-    mfa_pending_secret_ciphertext AS "pendingSecretCiphertext",
-    mfa_pending_created_at AS "pendingCreatedAt",
-    mfa_last_used_step::bigint AS "lastUsedStep",
-    mfa_enrolled_at AS "enrolledAt"
-  `;
-}
-
 /** @param {{ query: Function, connect?: Function }} database */
 export function createAdminMfaRepository(
   database,
