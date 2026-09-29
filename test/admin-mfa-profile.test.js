@@ -7,7 +7,6 @@ import {
   createSecurityMfaService,
 } from '../src/modules/security/mfa-service.js';
 import {
-  encryptMfaSecret,
   generateTotpSecret,
   recoveryCodeHash,
   totpCode,
