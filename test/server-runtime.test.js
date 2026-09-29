@@ -181,6 +181,8 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
         {
           sessionCookieSecureOnly:
             true,
+          mfaEncryptionKey:
+            null,
         },
       );
       calls.push(
