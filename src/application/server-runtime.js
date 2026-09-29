@@ -223,6 +223,10 @@ export function createServerRuntime({
           sessionCookieSecureOnly:
             config.environment ===
             'production',
+          mfaEncryptionKey:
+            config.admin
+              ?.mfaEncryptionKey ??
+            null,
         },
       );
   const derivedState =

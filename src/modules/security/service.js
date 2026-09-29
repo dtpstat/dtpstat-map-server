@@ -17,7 +17,10 @@ import {
  * The public service shape stays stable while authentication, account
  * management, security administration and audit evolve independently.
  */
-export function createAdminSecurityService(repository) {
+export function createAdminSecurityService(
+  repository,
+  options = {},
+) {
   const audit =
     createSecurityAuditService(repository);
 
@@ -25,7 +28,12 @@ export function createAdminSecurityService(repository) {
     createSecurityAuthService(
       repository,
       {
-        appendAudit: audit.appendAudit,
+        appendAudit:
+          audit.appendAudit,
+        mfaEncryptionKey:
+          options
+            .mfaEncryptionKey ??
+          null,
       },
     );
 

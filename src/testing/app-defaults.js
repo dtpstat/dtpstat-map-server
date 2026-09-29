@@ -398,6 +398,13 @@ function security(config) {
       };
     },
 
+    async completeMfaLogin() {
+      return {
+        status:
+          'invalid-challenge',
+      };
+    },
+
     async logout() {},
     async appendAudit() {},
 

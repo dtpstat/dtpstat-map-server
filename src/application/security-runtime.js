@@ -78,6 +78,12 @@ export function createSecurityRuntime(
     dependencies.securityService ??
     createAdminSecurityService(
       repository,
+      {
+        mfaEncryptionKey:
+          dependencies
+            .mfaEncryptionKey ??
+          null,
+      },
     );
 
   const adminAuth =

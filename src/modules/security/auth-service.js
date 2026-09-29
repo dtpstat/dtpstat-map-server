@@ -12,10 +12,20 @@ import {
   generateAdminSessionToken,
   verifyAdminPassword,
 } from './credentials.js';
+import {
+  decryptMfaSecret,
+  generateMfaChallengeToken,
+  mfaChallengeTokenHash,
+  recoveryCodeHash,
+  verifyTotpCode,
+} from './mfa.js';
 
 export function createSecurityAuthService(
   repository,
-  { appendAudit },
+  {
+    appendAudit,
+    mfaEncryptionKey = null,
+  },
 ) {
   async function ipAccessState(ipAddress) {
     const ip = normalizeAdminIp(ipAddress);
@@ -229,6 +239,122 @@ export function createSecurityAuthService(
     };
   }
 
+  async function completeSuccessfulAuthentication(
+    rawUser,
+    settings,
+    context,
+    startedAt,
+    method,
+  ) {
+    const ipAddress =
+      normalizeAdminIp(
+        context.ipAddress,
+      );
+    const now =
+      new Date();
+
+    await repository.clearIpFailures(
+      ipAddress,
+    );
+
+    const authenticated =
+      await repository.recordSuccessfulLogin(
+        rawUser.id,
+        now.toISOString(),
+      ) ??
+      rawUser;
+
+    await appendAudit({
+      eventType:
+        'authentication',
+      operationType:
+        'admin.login',
+      status:
+        'succeeded',
+      durationMs:
+        Date.now() -
+        startedAt,
+      ipAddress,
+      userId:
+        rawUser.id,
+      username:
+        rawUser.username,
+      details: {
+        method,
+      },
+    });
+
+    return {
+      user:
+        publicAdminUser(
+          authenticated,
+        ),
+      rawUser:
+        authenticated,
+      securitySettings:
+        settings,
+    };
+  }
+
+  async function createLoginSession(
+    authenticated,
+    context,
+  ) {
+    const settings =
+      authenticated
+        .securitySettings ??
+      await repository
+        .getSecuritySettings();
+    const token =
+      generateAdminSessionToken();
+    const expiresAt =
+      new Date(
+        Date.now() +
+        settings
+          .sessionAbsoluteSeconds *
+        1000,
+      ).toISOString();
+    const userAgent =
+      String(
+        context.userAgent ??
+        '',
+      )
+        .slice(
+          0,
+          1000,
+        ) ||
+      null;
+    const ipAddress =
+      normalizeAdminIp(
+        context.ipAddress,
+      );
+
+    const session =
+      await repository.createSession({
+        userId:
+          authenticated
+            .user.id,
+        tokenHash:
+          adminSessionTokenHash(
+            token,
+          ),
+        expiresAt,
+        ipAddress,
+        userAgent,
+      });
+
+    return {
+      status:
+        'success',
+      user:
+        authenticated.user,
+      token,
+      sessionId:
+        session.id,
+      expiresAt,
+    };
+  }
+
   async function authenticateCredentials(
     usernameValue,
     password,
@@ -430,46 +556,53 @@ export function createSecurityAuthService(
         };
     }
 
-    await repository.clearIpFailures(
-      ipState.ipAddress,
-    );
-
-    const authenticated =
-      await repository.recordSuccessfulLogin(
-        user.id,
-        now.toISOString(),
-      ) ?? user;
-
-    if (context.recordLogin !== false) {
-      await appendAudit({
-        eventType: 'authentication',
-        operationType: 'admin.login',
-        status: 'succeeded',
-        durationMs: Date.now() - startedAt,
-        ipAddress: ipState.ipAddress,
-        userId: user.id,
-        username: user.username,
-        details: {
-          method:
-            context.method ?? 'password',
-        },
-      });
+    if (
+      context.deferSuccess ===
+      true
+    ) {
+      return {
+        status:
+          'success',
+        user:
+          publicAdminUser(
+            user,
+          ),
+        rawUser:
+          user,
+        securitySettings:
+          settings,
+        startedAt,
+      };
     }
 
-    return {
-      status: 'success',
-      user: publicAdminUser(authenticated),
-      rawUser: authenticated,
-      securitySettings:
+    const completed =
+      await completeSuccessfulAuthentication(
+        user,
         settings,
+        context,
+        startedAt,
+        context.method ??
+          'password',
+      );
+
+    return {
+      status:
+        'success',
+      ...completed,
     };
   }
 
-  async function login(payload, context = {}) {
+  async function login(
+    payload,
+    context = {},
+  ) {
     if (
       !payload ||
-      typeof payload !== 'object' ||
-      Array.isArray(payload)
+      typeof payload !==
+        'object' ||
+      Array.isArray(
+        payload,
+      )
     ) {
       throw new AdminSecurityValidationError(
         'Request body must be a JSON object',
@@ -482,42 +615,448 @@ export function createSecurityAuthService(
         payload.password,
         {
           ...context,
-          method: 'session',
-          recordLogin: true,
+          method:
+            'session',
+          deferSuccess:
+            true,
         },
       );
 
-    if (result.status !== 'success') {
+    if (
+      result.status !==
+      'success'
+    ) {
       return result;
     }
 
+    const mfaState =
+      typeof repository
+        .getMfaState ===
+        'function'
+        ? await repository
+            .getMfaState(
+              result.rawUser.id,
+            )
+        : null;
+
+    if (
+      mfaState?.enabled
+    ) {
+      if (
+        !mfaEncryptionKey
+      ) {
+        await appendAudit({
+          eventType:
+            'authentication',
+          operationType:
+            'admin.login',
+          status:
+            'failed',
+          durationMs:
+            Date.now() -
+            result.startedAt,
+          ipAddress:
+            normalizeAdminIp(
+              context.ipAddress,
+            ),
+          userId:
+            result.rawUser.id,
+          username:
+            result.rawUser
+              .username,
+          details: {
+            reason:
+              'mfa-key-unavailable',
+          },
+        });
+
+        return {
+          status:
+            'mfa-unavailable',
+        };
+      }
+
+      await repository
+        .purgeExpiredMfaChallenges();
+
+      const challengeToken =
+        generateMfaChallengeToken();
+      const expiresAt =
+        new Date(
+          Date.now() +
+          5 * 60 * 1000,
+        ).toISOString();
+      const ipAddress =
+        normalizeAdminIp(
+          context.ipAddress,
+        );
+      const userAgent =
+        String(
+          context.userAgent ??
+          '',
+        )
+          .slice(
+            0,
+            1000,
+          ) ||
+        null;
+
+      await repository
+        .createMfaChallenge({
+          tokenHash:
+            mfaChallengeTokenHash(
+              challengeToken,
+            ),
+          userId:
+            result.rawUser.id,
+          expiresAt,
+          ipAddress,
+          userAgent,
+        });
+
+      await appendAudit({
+        eventType:
+          'authentication',
+        operationType:
+          'admin.login',
+        status:
+          'challenge',
+        durationMs:
+          Date.now() -
+          result.startedAt,
+        ipAddress,
+        userId:
+          result.rawUser.id,
+        username:
+          result.rawUser
+            .username,
+        details: {
+          method:
+            'password+mfa',
+        },
+      });
+
+      return {
+        status:
+          'mfa-required',
+        challengeToken,
+        expiresAt,
+      };
+    }
+
+    const authenticated =
+      await completeSuccessfulAuthentication(
+        result.rawUser,
+        result.securitySettings,
+        context,
+        result.startedAt,
+        'password',
+      );
+
+    return createLoginSession(
+      authenticated,
+      context,
+    );
+  }
+
+  async function completeMfaLogin(
+    payload,
+    context = {},
+  ) {
+    if (
+      !payload ||
+      typeof payload !==
+        'object' ||
+      Array.isArray(
+        payload,
+      )
+    ) {
+      throw new AdminSecurityValidationError(
+        'Request body must be a JSON object',
+      );
+    }
+
+    const challengeToken =
+      typeof payload
+        .challengeToken ===
+        'string'
+        ? payload
+            .challengeToken
+            .trim()
+        : '';
+    const code =
+      typeof payload.code ===
+        'string'
+        ? payload.code
+            .trim()
+        : '';
+
+    if (
+      !/^[A-Za-z0-9_-]{40,128}$/u
+        .test(
+          challengeToken,
+        ) ||
+      code.length >
+        128
+    ) {
+      return {
+        status:
+          'invalid-challenge',
+      };
+    }
+
+    const challenge =
+      await repository
+        .consumeMfaChallenge(
+          mfaChallengeTokenHash(
+            challengeToken,
+          ),
+        );
+
+    if (!challenge) {
+      return {
+        status:
+          'invalid-challenge',
+      };
+    }
+
+    const requestIp =
+      normalizeAdminIp(
+        context.ipAddress,
+      );
+    const requestUserAgent =
+      String(
+        context.userAgent ??
+        '',
+      )
+        .slice(
+          0,
+          1000,
+        ) ||
+      null;
+
+    if (
+      (
+        challenge.ipAddress ??
+        null
+      ) !==
+        requestIp ||
+      (
+        challenge.userAgent ??
+        null
+      ) !==
+        requestUserAgent
+    ) {
+      await appendAudit({
+        eventType:
+          'authentication',
+        operationType:
+          'admin.login',
+        status:
+          'failed',
+        durationMs:
+          null,
+        ipAddress:
+          requestIp,
+        userId:
+          challenge.userId,
+        username:
+          null,
+        details: {
+          reason:
+            'mfa-challenge-context-mismatch',
+        },
+      });
+
+      return {
+        status:
+          'invalid-challenge',
+      };
+    }
+
+    const rawUser =
+      await repository
+        .getAuthUser(
+          challenge.userId,
+        );
+    const mfaState =
+      rawUser &&
+      await repository
+        .getMfaState(
+          challenge.userId,
+        );
+
+    if (
+      !rawUser ||
+      !mfaState?.enabled ||
+      !mfaState
+        .secretCiphertext
+    ) {
+      return {
+        status:
+          'invalid-challenge',
+      };
+    }
+
+    if (
+      !mfaEncryptionKey
+    ) {
+      return {
+        status:
+          'mfa-unavailable',
+      };
+    }
+
     const settings =
-      await repository.getSecuritySettings();
-    const token =
-      generateAdminSessionToken();
-    const expiresAt = new Date(
-      Date.now() +
-      settings.sessionAbsoluteSeconds * 1000,
-    ).toISOString();
+      await repository
+        .getSecuritySettings();
+    const startedAt =
+      Date.now();
+    let method =
+      null;
+    let valid =
+      false;
 
-    const session = await repository.createSession({
-      userId: result.user.id,
-      tokenHash: adminSessionTokenHash(token),
-      expiresAt,
-      ipAddress:
-        normalizeAdminIp(context.ipAddress),
-      userAgent:
-        String(context.userAgent ?? '')
-          .slice(0, 1000) || null,
-    });
+    if (
+      /^\d{6}$/u.test(
+        code,
+      )
+    ) {
+      const secret =
+        decryptMfaSecret(
+          mfaState
+            .secretCiphertext,
+          mfaEncryptionKey,
+        );
+      const verification =
+        verifyTotpCode(
+          secret,
+          code,
+          {
+            lastUsedStep:
+              mfaState
+                .lastUsedStep,
+          },
+        );
 
-    return {
-      status: 'success',
-      user: result.user,
-      token,
-      sessionId: session.id,
-      expiresAt,
-    };
+      if (
+        verification.valid &&
+        await repository
+          .advanceMfaStep(
+            rawUser.id,
+            verification.step,
+          )
+      ) {
+        valid =
+          true;
+        method =
+          'password+totp';
+      }
+    } else {
+      const hash =
+        recoveryCodeHash(
+          code,
+        );
+
+      if (
+        hash &&
+        await repository
+          .consumeMfaRecoveryCode(
+            rawUser.id,
+            hash,
+          )
+      ) {
+        valid =
+          true;
+        method =
+          'password+recovery';
+      }
+    }
+
+    if (!valid) {
+      const updated =
+        await repository
+          .recordFailedLogin(
+            rawUser.id,
+            new Date()
+              .toISOString(),
+            settings,
+          );
+      const accountRetry =
+        secondsUntil(
+          updated
+            ?.lockedUntil,
+        );
+      const ipRetry =
+        await recordFailedIp(
+          requestIp,
+          rawUser.username,
+          settings,
+          startedAt,
+        );
+
+      await appendAudit({
+        eventType:
+          'authentication',
+        operationType:
+          'admin.login',
+        status:
+          accountRetry ||
+          ipRetry
+            ? 'locked'
+            : 'failed',
+        durationMs:
+          Date.now() -
+          startedAt,
+        ipAddress:
+          requestIp,
+        userId:
+          rawUser.id,
+        username:
+          rawUser.username,
+        details: {
+          reason:
+            'invalid-mfa',
+        },
+      });
+
+      if (ipRetry) {
+        return {
+          status:
+            'ip-locked',
+          retryAfterSeconds:
+            ipRetry,
+        };
+      }
+
+      if (accountRetry) {
+        return {
+          status:
+            'locked',
+          retryAfterSeconds:
+            accountRetry,
+        };
+      }
+
+      return {
+        status:
+          'invalid-mfa',
+      };
+    }
+
+    const authenticated =
+      await completeSuccessfulAuthentication(
+        rawUser,
+        settings,
+        context,
+        startedAt,
+        method,
+      );
+
+    return createLoginSession(
+      authenticated,
+      context,
+    );
   }
 
   async function authenticateSession(
@@ -693,6 +1232,7 @@ export function createSecurityAuthService(
     authenticateRequest,
     authenticateRealtime,
     login,
+    completeMfaLogin,
     logout,
   };
 }

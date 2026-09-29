@@ -34,6 +34,47 @@ export function registerAdminProfileRoutes(
         request.secure === true,
     });
 
+  const sendLoginSession =
+    (
+      request,
+      response,
+      result,
+    ) => {
+      const maxAge =
+        Math.max(
+          1,
+          Math.floor(
+            (
+              new Date(
+                result.expiresAt,
+              ).valueOf() -
+              Date.now()
+            ) /
+            1000,
+          ),
+        );
+
+      response
+        .set(
+          'Cache-Control',
+          'no-store',
+        )
+        .set(
+          'Set-Cookie',
+          adminSessionCookie(
+            result.token,
+            maxAge,
+            sessionCookieOptions(
+              request,
+            ),
+          ),
+        )
+        .json({
+          user:
+            result.user,
+        });
+    };
+
   const operationAudit = (type) =>
     createAdminOperationAudit(
       securityService,
@@ -139,37 +180,168 @@ export function registerAdminProfileRoutes(
           return;
         }
 
-        const maxAge =
-          Math.max(
-            1,
-            Math.floor(
-              (
-                new Date(
-                  result.expiresAt,
-                ).valueOf() -
-                Date.now()
-              ) / 1000,
-            ),
-          );
+        if (
+          result.status ===
+          'mfa-unavailable'
+        ) {
+          response
+            .status(503)
+            .json({
+              error:
+                'Multi-factor authentication is temporarily unavailable',
+            });
+          return;
+        }
 
-        response
-          .set(
-            'Cache-Control',
-            'no-store',
+        if (
+          result.status ===
+          'mfa-required'
+        ) {
+          response
+            .status(202)
+            .set(
+              'Cache-Control',
+              'no-store',
+            )
+            .json({
+              mfaRequired:
+                true,
+              challengeToken:
+                result
+                  .challengeToken,
+              expiresAt:
+                result.expiresAt,
+            });
+          return;
+        }
+
+        sendLoginSession(
+          request,
+          response,
+          result,
+        );
+      } catch (error) {
+        if (
+          handleAdminSecurityValidation(
+            response,
+            error,
           )
-          .set(
-            'Set-Cookie',
-            adminSessionCookie(
-              result.token,
-              maxAge,
-              sessionCookieOptions(
-                request,
+        ) {
+          return;
+        }
+
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/login/mfa',
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const result =
+          await securityService
+            .completeMfaLogin(
+              request.body,
+              {
+                ipAddress:
+                  requestClientIp(
+                    request,
+                  ),
+                userAgent:
+                  request.get(
+                    'user-agent',
+                  ),
+              },
+            );
+
+        if (
+          result.status ===
+          'mfa-unavailable'
+        ) {
+          response
+            .status(503)
+            .json({
+              error:
+                'Multi-factor authentication is temporarily unavailable',
+            });
+          return;
+        }
+
+        if (
+          result.status ===
+          'ip-locked'
+        ) {
+          response
+            .set(
+              'Retry-After',
+              String(
+                result
+                  .retryAfterSeconds ??
+                1,
               ),
-            ),
-          )
-          .json({
-            user: result.user,
-          });
+            )
+            .status(429)
+            .json({
+              error:
+                'Too many failed login attempts from this IP address',
+              retryAfterSeconds:
+                result
+                  .retryAfterSeconds,
+            });
+          return;
+        }
+
+        if (
+          result.status ===
+          'locked'
+        ) {
+          response
+            .set(
+              'Retry-After',
+              String(
+                result
+                  .retryAfterSeconds ??
+                1,
+              ),
+            )
+            .status(423)
+            .json({
+              error:
+                'Administrator account is temporarily locked',
+              retryAfterSeconds:
+                result
+                  .retryAfterSeconds,
+            });
+          return;
+        }
+
+        if (
+          result.status !==
+          'success'
+        ) {
+          response
+            .status(401)
+            .json({
+              error:
+                result.status ===
+                'invalid-mfa'
+                  ? 'Invalid verification code'
+                  : 'MFA challenge expired or invalid',
+            });
+          return;
+        }
+
+        sendLoginSession(
+          request,
+          response,
+          result,
+        );
       } catch (error) {
         if (
           handleAdminSecurityValidation(

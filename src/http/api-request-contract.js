@@ -733,6 +733,18 @@ export const API_REQUEST_CONTRACTS =
     ),
     c(
       'POST',
+      '/admin/login/mfa',
+      {
+        body:
+          'json-object',
+        bodyKeys: [
+          'challengeToken',
+          'code',
+        ],
+      },
+    ),
+    c(
+      'POST',
       '/admin/logout',
     ),
     c(
