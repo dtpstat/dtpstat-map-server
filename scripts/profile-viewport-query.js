@@ -216,10 +216,24 @@ function planSummary(
 ) {
   const scans = [];
   const sequentialScans = [];
+  const timedNodes = [];
 
   function nodeMetrics(
     plan,
   ) {
+    const actualLoops =
+      Number(
+        plan[
+          'Actual Loops'
+        ] ?? 0,
+      );
+    const averageTotalMs =
+      Number(
+        plan[
+          'Actual Total Time'
+        ] ?? 0,
+      );
+
     return {
       nodeType:
         plan[
@@ -230,16 +244,37 @@ function planSummary(
           'Relation Name'
         ] ??
         null,
+      index:
+        plan[
+          'Index Name'
+        ] ??
+        null,
+      planRows:
+        Number(
+          plan[
+            'Plan Rows'
+          ] ?? 0,
+        ),
       actualRows:
         Number(
           plan[
             'Actual Rows'
           ] ?? 0,
         ),
-      actualLoops:
+      actualLoops,
+      averageTotalMs:
+        round(
+          averageTotalMs,
+        ),
+      inclusiveTotalMs:
+        round(
+          averageTotalMs *
+            actualLoops,
+        ),
+      rowsRemovedByFilter:
         Number(
           plan[
-            'Actual Loops'
+            'Rows Removed by Filter'
           ] ?? 0,
         ),
       sharedHitBlocks:
@@ -262,20 +297,23 @@ function planSummary(
       return;
     }
 
+    const metrics =
+      nodeMetrics(
+        plan,
+      );
+
+    timedNodes.push(
+      metrics,
+    );
+
     if (
       plan[
         'Index Name'
       ]
     ) {
-      scans.push({
-        ...nodeMetrics(
-          plan,
-        ),
-        index:
-          plan[
-            'Index Name'
-          ],
-      });
+      scans.push(
+        metrics,
+      );
     }
 
     if (
@@ -285,9 +323,7 @@ function planSummary(
       'Seq Scan'
     ) {
       sequentialScans.push(
-        nodeMetrics(
-          plan,
-        ),
+        metrics,
       );
     }
 
@@ -327,6 +363,14 @@ function planSummary(
             'Actual Loops'
           ] ?? 0,
         ),
+      actualTotalMs:
+        round(
+          Number(
+            explain.Plan[
+              'Actual Total Time'
+            ] ?? 0,
+          ),
+        ),
       sharedHitBlocks:
         Number(
           explain.Plan[
@@ -352,6 +396,22 @@ function planSummary(
           ] ?? 0,
         ),
     },
+    hotNodes:
+      timedNodes
+        .sort(
+          (
+            left,
+            right,
+          ) =>
+            right
+              .inclusiveTotalMs -
+            left
+              .inclusiveTotalMs,
+        )
+        .slice(
+          0,
+          10,
+        ),
     indexScans:
       scans,
     sequentialScans,
