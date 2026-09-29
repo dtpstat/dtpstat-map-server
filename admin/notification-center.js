@@ -273,15 +273,25 @@ export function createNotificationPool(
       );
 
       while (
-        items.size >
+        [...items.values()]
+          .filter(
+            (item) =>
+              !item.persistent,
+          )
+          .length >
         maxSize
       ) {
-        const oldestId =
-          items.keys()
-            .next()
-            .value;
+        const oldestTransient =
+          [...items.entries()]
+            .find(
+              ([, item]) =>
+                !item.persistent,
+            );
+        if (!oldestTransient) {
+          break;
+        }
         items.delete(
-          oldestId,
+          oldestTransient[0],
         );
       }
 

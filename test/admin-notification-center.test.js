@@ -4,7 +4,7 @@ import {
   createNotificationPool,
 } from '../admin/notification-center.js';
 
-test('client notification pool supports multiple typed dismissible notifications', async () => {
+test('client notification pool supports multiple typed dismissible notifications', () => {
   let nextId = 0;
   const events = [];
   const pool =
@@ -88,5 +88,68 @@ test('client notification pool supports multiple typed dismissible notifications
   assert.equal(
     events.at(-1).kind,
     'dismissed',
+  );
+});
+
+
+test('client notification pool never evicts persistent warn or error entries', () => {
+  let nextId = 0;
+  const pool =
+    createNotificationPool({
+      randomUUID:
+        () =>
+          'bounded-' +
+          (++nextId),
+      maxSize: 1,
+    });
+
+  const warn =
+    pool.publish({
+      level: 'warn',
+      message: 'Persistent warning',
+    });
+  const error =
+    pool.publish({
+      level: 'error',
+      message: 'Persistent error',
+    });
+
+  pool.publish({
+    level: 'info',
+    message: 'Old transient',
+  });
+  const latest =
+    pool.publish({
+      level: 'log',
+      message: 'Latest transient',
+    });
+
+  const snapshot =
+    pool.snapshot();
+
+  assert.ok(
+    snapshot.some(
+      (item) =>
+        item.id === warn.id,
+    ),
+  );
+  assert.ok(
+    snapshot.some(
+      (item) =>
+        item.id === error.id,
+    ),
+  );
+  assert.ok(
+    snapshot.some(
+      (item) =>
+        item.id === latest.id,
+    ),
+  );
+  assert.equal(
+    snapshot.filter(
+      (item) =>
+        !item.persistent,
+    ).length,
+    1,
   );
 });
