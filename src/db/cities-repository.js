@@ -76,6 +76,7 @@ const CITY_GEOMETRIES_SQL = `
           'geometry', ST_AsGeoJSON(city_geometries.geom)::json,
           'properties', city_geometries.properties || jsonb_build_object(
             'businessTypeCode', line_type.code,
+            'pointTypeId', city_geometries.point_type_id,
             'lanes', city_geometries.lanes,
             'length', city_geometries.length_m,
             'lanes_length', city_geometries.lane_length_m
@@ -88,14 +89,23 @@ const CITY_GEOMETRIES_SQL = `
   FROM cities
   LEFT JOIN city_geometries
     ON city_geometries.city_id = cities.id
+   AND city_geometries.is_visible
    AND EXISTS (
      SELECT 1
      FROM city_boundaries AS active_boundary
      WHERE active_boundary.id = city_geometries.boundary_id
        AND active_boundary.is_active
    )
-  LEFT JOIN line_types AS line_type ON line_type.id = city_geometries.line_type_id
+  LEFT JOIN line_types AS line_type
+    ON line_type.id = city_geometries.line_type_id
+  LEFT JOIN point_types AS point_type
+    ON point_type.id = city_geometries.point_type_id
   WHERE cities.id = $1::bigint
+    AND (
+      city_geometries.id IS NULL
+      OR GeometryType(city_geometries.geom) <> 'POINT'
+      OR point_type.is_active
+    )
   GROUP BY cities.id
 `;
 
@@ -110,6 +120,7 @@ const VIEWPORT_GEOMETRIES_SQL = `
       geometry.id,
       geometry.city_id,
       line_type.code AS business_type_code,
+      geometry.point_type_id,
       geometry.lanes,
       geometry.length_m,
       geometry.lane_length_m,
@@ -122,7 +133,19 @@ const VIEWPORT_GEOMETRIES_SQL = `
     JOIN city_boundaries AS active_boundary
       ON active_boundary.id = geometry.boundary_id
      AND active_boundary.is_active
-    JOIN line_types AS line_type ON line_type.id = geometry.line_type_id
+    LEFT JOIN line_types AS line_type
+      ON line_type.id = geometry.line_type_id
+    LEFT JOIN point_types AS point_type
+      ON point_type.id = geometry.point_type_id
+    WHERE geometry.is_visible
+      AND (
+        line_type.id IS NOT NULL
+        OR (
+          GeometryType(geometry.geom) = 'POINT'
+          AND point_type.id IS NOT NULL
+          AND point_type.is_active
+        )
+      )
   ),
   center_city AS (
     SELECT boundary.city_id::integer AS id
@@ -156,6 +179,7 @@ const VIEWPORT_GEOMETRIES_SQL = `
           'properties', visible_geometries.properties || jsonb_build_object(
             'cityId', visible_geometries.city_id,
             'businessTypeCode', visible_geometries.business_type_code,
+            'pointTypeId', visible_geometries.point_type_id,
             'lanes', visible_geometries.lanes,
             'length', visible_geometries.length_m,
             'lanes_length', visible_geometries.lane_length_m
@@ -194,9 +218,9 @@ export function createCitiesRepository(database) {
     },
 
     /**
-     * Return complete line geometries that intersect a selector 20% larger
-     * than the visible viewport. The original center remains the city-selection
-     * point; only the line selector is expanded.
+     * Return public line and typed Point geometries intersecting a selector
+     * 20% larger than the visible viewport. The original center remains the
+     * city-selection point; geometries are never clipped.
      *
      * @param {{ west: number, south: number, east: number, north: number, centerLng: number, centerLat: number }} viewport
      */

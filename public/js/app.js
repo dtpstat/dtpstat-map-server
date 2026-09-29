@@ -1,6 +1,7 @@
 import {
   loadCities,
   loadLineTypes,
+  loadPointTypes,
   loadMapConfig,
   loadProjectSettings,
   loadReportConfig,
@@ -73,7 +74,9 @@ let mapController = null;
 let citiesById = new Map();
 let focusedCityId = null;
 let lineTypesSignature = '';
+let pointTypesSignature = '';
 let lineTypesRefresh = null;
+let pointTypesRefresh = null;
 let lineDisplayRefresh = null;
 let openMapRefresh = null;
 let derivedDataRefresh = null;
@@ -155,6 +158,78 @@ function applyLineTypes(lineTypes) {
   return true;
 }
 
+async function applyPointTypes(
+  pointTypes,
+) {
+  const signature =
+    JSON.stringify(
+      pointTypes.map(
+        ({
+          id,
+          name,
+          isActive,
+          displayWidth,
+          displayHeight,
+          anchorX,
+          anchorY,
+          iconUrl,
+        }) => ({
+          id,
+          name,
+          isActive,
+          displayWidth,
+          displayHeight,
+          anchorX,
+          anchorY,
+          iconUrl,
+        }),
+      ),
+    );
+
+  if (
+    signature ===
+    pointTypesSignature
+  ) {
+    return false;
+  }
+
+  pointTypesSignature =
+    signature;
+  await mapController
+    .setPointTypes(
+      pointTypes,
+    );
+  return true;
+}
+
+async function refreshPointTypes() {
+  if (!mapController) {
+    return;
+  }
+  if (pointTypesRefresh) {
+    return pointTypesRefresh;
+  }
+
+  pointTypesRefresh =
+    (async () => {
+      try {
+        await applyPointTypes(
+          await loadPointTypes(),
+        );
+      } catch (error) {
+        console.error(
+          'Не удалось обновить типы точек',
+          error,
+        );
+      } finally {
+        pointTypesRefresh =
+          null;
+      }
+    })();
+
+  return pointTypesRefresh;
+}
+
 async function refreshLineTypes() {
   if (!mapController) return;
   if (lineTypesRefresh) return lineTypesRefresh;
@@ -197,7 +272,10 @@ async function refreshOpenMap() {
   openMapRefresh = (async () => {
     try {
       await refreshLineDisplayOptions();
-      await refreshLineTypes();
+      await Promise.all([
+        refreshLineTypes(),
+        refreshPointTypes(),
+      ]);
       mapController.refreshViewport();
     } finally {
       openMapRefresh = null;
@@ -220,14 +298,22 @@ async function refreshDerivedData() {
   derivedDataRefresh = (async () => {
     setCityStatus('Обновляем таблицу и линии…');
     try {
-      const [cities, lineTypes] = await Promise.all([
+      const [
+        cities,
+        lineTypes,
+        pointTypes,
+      ] = await Promise.all([
         loadCities(),
         loadLineTypes(),
+        loadPointTypes(),
       ]);
       cityList.setCities(cities);
       citiesById = new Map(cities.map((city) => [city.id, city]));
       mapController.setCities(cities);
       applyLineTypes(lineTypes);
+      await applyPointTypes(
+        pointTypes,
+      );
       if (focusedCityId !== null && !citiesById.has(focusedCityId)) {
         focusedCityId = null;
         cityList.select(null);
@@ -312,10 +398,16 @@ async function start() {
     cityList.setCities(cities);
     setCityStatus(cities.length ? '' : 'Данные пока не загружены');
 
-    const [mapConfig, projectSettings, lineTypes] = await Promise.all([
+    const [
+      mapConfig,
+      projectSettings,
+      lineTypes,
+      pointTypes,
+    ] = await Promise.all([
       loadMapConfig(),
       loadProjectSettings(),
       loadLineTypes(),
+      loadPointTypes(),
     ]);
     mapController = await createMapController({
       ...mapConfig,
@@ -325,6 +417,9 @@ async function start() {
     if (!lineTypes.length) throw new Error('Справочник типов линий пуст');
 
     applyLineTypes(lineTypes);
+    await applyPointTypes(
+      pointTypes,
+    );
     citiesById = new Map(cities.map((city) => [city.id, city]));
     mapController.setCities(cities);
     mapController.onCitySelect((cityId) => {

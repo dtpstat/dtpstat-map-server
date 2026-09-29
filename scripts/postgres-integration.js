@@ -25,6 +25,9 @@ import {
   createPointTypesRepository,
 } from '../src/db/point-types-repository.js';
 import {
+  createCitiesRepository,
+} from '../src/db/cities-repository.js';
+import {
   createGeometryEditorStorage,
 } from '../src/db/geometry-editor-storage.js';
 import {
@@ -945,6 +948,128 @@ async function verifyGeometryEditorInfrastructure(
     childLinkedAgain.boundaryId,
     childBoundaryId,
     'Reactivated nested city did not regain the geometry',
+  );
+
+  const pointTypesRepository =
+    createPointTypesRepository(
+      pool,
+    );
+  const publicCitiesRepository =
+    createCitiesRepository(
+      pool,
+    );
+  const publicPointType =
+    await pointTypesRepository
+      .create({
+        name:
+          'Integration public point ' +
+          crypto
+            .randomBytes(4)
+            .toString('hex'),
+      });
+
+  const typedPointResult =
+    await service.sync(
+      {
+        items: [{
+          kind: 'create',
+          localId:
+            'integration-typed-point',
+          value: {
+            geometry: {
+              type: 'Point',
+              coordinates: [
+                30.03,
+                50.03,
+              ],
+            },
+            pointTypeId:
+              publicPointType.id,
+            displayName:
+              'Integration typed point',
+          },
+        }],
+      },
+      {
+        id: editUserId,
+        username:
+          'geometry-integration',
+        isSuperuser: false,
+      },
+    );
+
+  const typedPoint =
+    typedPointResult
+      .created[0]
+      .geometry;
+
+  assert.equal(
+    typedPoint.pointTypeId,
+    publicPointType.id,
+  );
+  assert.equal(
+    typedPoint.boundaryId,
+    childBoundaryId,
+  );
+
+  const publicViewport = {
+    west: 30.02,
+    south: 50.02,
+    east: 30.04,
+    north: 50.04,
+    centerLng: 30.03,
+    centerLat: 50.03,
+  };
+
+  const activePointFeed =
+    await publicCitiesRepository
+      .getViewportGeometries(
+        publicViewport,
+      );
+  const activePointFeature =
+    activePointFeed.features.find(
+      (feature) =>
+        Number(feature.id) ===
+        Number(typedPoint.id),
+    );
+
+  assert.equal(
+    activePointFeature
+      ?.geometry
+      ?.type,
+    'Point',
+  );
+  assert.equal(
+    Number(
+      activePointFeature
+        ?.properties
+        ?.pointTypeId,
+    ),
+    publicPointType.id,
+  );
+
+  await pointTypesRepository
+    .update(
+      publicPointType.id,
+      {
+        isActive: false,
+      },
+    );
+
+  const inactivePointFeed =
+    await publicCitiesRepository
+      .getViewportGeometries(
+        publicViewport,
+      );
+
+  assert.equal(
+    inactivePointFeed.features.some(
+      (feature) =>
+        Number(feature.id) ===
+        Number(typedPoint.id),
+    ),
+    false,
+    'Inactive point type remained visible in the public viewport',
   );
 
   const takeover =

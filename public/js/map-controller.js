@@ -1,8 +1,16 @@
 import { CITY_MARKER_ICON_URL } from './city-marker-icon.js';
+import {
+  pointTypeIconOffset,
+  pointTypeImageId,
+  syncPointTypeImages,
+} from './point-type-map-icons.js';
 
 const SOURCE_ID = 'bus-lanes';
 const LAYER_PREFIX = 'bus-lanes-lines-';
 const LABEL_LAYER_PREFIX = 'bus-lanes-labels-';
+const POINT_LAYER_ID = 'project-point-geometries';
+const POINT_FALLBACK_LAYER_ID = 'project-point-geometries-fallback';
+const POINT_IMAGE_PREFIX = 'public-point-type';
 const CITY_SOURCE_ID = 'ranked-cities';
 const CITY_LAYER_ID = 'ranked-cities-markers';
 const CITY_IMAGE_ID = 'ranked-city-bus';
@@ -176,9 +184,12 @@ export async function createMapController(config) {
     closeOnClick: false,
     offset: 8,
   });
+  let rawGeoJson = EMPTY_COLLECTION;
   let currentGeoJson = EMPTY_COLLECTION;
   let currentCities = EMPTY_COLLECTION;
   let currentLineTypes = [DEFAULT_LINE_TYPE];
+  let currentPointTypes = [];
+  let pointImageIds = new Set();
   let viewportHandler = null;
   let citySelectHandler = null;
   let cityMarkerIconSize = 1;
@@ -225,6 +236,222 @@ export async function createMapController(config) {
     } else {
       map.setLayoutProperty(CITY_LAYER_ID, 'icon-size', cityMarkerIconSize);
     }
+  }
+
+  function decoratePointFeatures(
+    geojson,
+  ) {
+    const pointTypes =
+      new Map(
+        currentPointTypes
+          .filter(
+            (pointType) =>
+              pointType.isActive !==
+              false,
+          )
+          .map(
+            (pointType) => [
+              Number(pointType.id),
+              pointType,
+            ],
+          ),
+      );
+
+    return {
+      ...geojson,
+      features:
+        (geojson.features ?? [])
+          .map(
+            (feature) => {
+              if (
+                feature?.geometry
+                  ?.type !==
+                  'Point'
+              ) {
+                return feature;
+              }
+
+              const pointType =
+                pointTypes.get(
+                  Number(
+                    feature
+                      .properties
+                      ?.pointTypeId,
+                  ),
+                );
+
+              if (!pointType) {
+                return feature;
+              }
+
+              const imageId =
+                pointTypeImageId(
+                  pointType,
+                  POINT_IMAGE_PREFIX,
+                );
+              const imageReady =
+                imageId &&
+                map.hasImage(
+                  imageId,
+                );
+
+              return {
+                ...feature,
+                properties: {
+                  ...(feature.properties ??
+                    {}),
+                  pointIconName:
+                    imageReady
+                      ? imageId
+                      : '',
+                  pointIconOffset:
+                    pointTypeIconOffset(
+                      pointType,
+                    ),
+                },
+              };
+            },
+          ),
+    };
+  }
+
+  function ensurePointLayers() {
+    const labelLayerId =
+      findTopLabelLayerId(
+        map.getStyle().layers,
+      );
+
+    if (
+      !map.getLayer(
+        POINT_FALLBACK_LAYER_ID,
+      )
+    ) {
+      map.addLayer(
+        {
+          id:
+            POINT_FALLBACK_LAYER_ID,
+          type: 'circle',
+          source: SOURCE_ID,
+          minzoom:
+            ROAD_DATA_MIN_ZOOM,
+          filter: [
+            'all',
+            [
+              '==',
+              ['geometry-type'],
+              'Point',
+            ],
+            [
+              '==',
+              [
+                'coalesce',
+                [
+                  'get',
+                  'pointIconName',
+                ],
+                '',
+              ],
+              '',
+            ],
+          ],
+          paint: {
+            'circle-radius': 5,
+            'circle-color':
+              '#496d78',
+            'circle-stroke-color':
+              '#ffffff',
+            'circle-stroke-width':
+              1.25,
+            'circle-opacity':
+              0.85,
+          },
+        },
+        labelLayerId,
+      );
+    }
+
+    if (
+      !map.getLayer(
+        POINT_LAYER_ID,
+      )
+    ) {
+      map.addLayer(
+        {
+          id:
+            POINT_LAYER_ID,
+          type: 'symbol',
+          source: SOURCE_ID,
+          minzoom:
+            ROAD_DATA_MIN_ZOOM,
+          filter: [
+            'all',
+            [
+              '==',
+              ['geometry-type'],
+              'Point',
+            ],
+            [
+              '!=',
+              [
+                'coalesce',
+                [
+                  'get',
+                  'pointIconName',
+                ],
+                '',
+              ],
+              '',
+            ],
+          ],
+          layout: {
+            'icon-image': [
+              'get',
+              'pointIconName',
+            ],
+            'icon-size': 1,
+            'icon-offset': [
+              'get',
+              'pointIconOffset',
+            ],
+            'icon-allow-overlap':
+              true,
+            'icon-ignore-placement':
+              true,
+          },
+        },
+        labelLayerId,
+      );
+    }
+  }
+
+  async function syncMapPointTypes() {
+    pointImageIds =
+      await syncPointTypeImages(
+        map,
+        currentPointTypes.filter(
+          (pointType) =>
+            pointType.isActive !==
+            false,
+        ),
+        {
+          prefix:
+            POINT_IMAGE_PREFIX,
+          previousIds:
+            pointImageIds,
+        },
+      );
+
+    currentGeoJson =
+      decoratePointFeatures(
+        rawGeoJson,
+      );
+
+    ensurePointLayers();
+    map
+      .getSource(SOURCE_ID)
+      ?.setData(
+        currentGeoJson,
+      );
   }
 
   function removeBusLaneLayers() {
@@ -306,6 +533,8 @@ export async function createMapController(config) {
   async function ensureMapLayers() {
     await ensureCityMarkerLayer();
     ensureBusLaneLayers();
+    ensurePointLayers();
+    await syncMapPointTypes();
   }
 
   await ensureMapLayers();
@@ -365,6 +594,13 @@ export async function createMapController(config) {
       currentLineTypes = normalized;
       ensureBusLaneLayers();
     },
+    async setPointTypes(pointTypes) {
+      currentPointTypes =
+        Array.isArray(pointTypes)
+          ? pointTypes
+          : [];
+      await syncMapPointTypes();
+    },
     setLineDisplayOptions(options = {}) {
       const nextShowLineLabels = Boolean(options.showLineLabels);
       const nextShowLinePopups = options.showLinePopups !== false;
@@ -399,14 +635,30 @@ export async function createMapController(config) {
     },
     setViewportData(geojson) {
       lineNamePopup.remove();
-      currentGeoJson = geojson;
+      rawGeoJson = geojson;
+      currentGeoJson =
+        decoratePointFeatures(
+          geojson,
+        );
       ensureBusLaneLayers();
-      map.getSource(SOURCE_ID).setData(geojson);
+      ensurePointLayers();
+      map
+        .getSource(SOURCE_ID)
+        .setData(
+          currentGeoJson,
+        );
     },
     clearViewportData() {
       lineNamePopup.remove();
-      currentGeoJson = EMPTY_COLLECTION;
-      map.getSource(SOURCE_ID).setData(EMPTY_COLLECTION);
+      rawGeoJson =
+        EMPTY_COLLECTION;
+      currentGeoJson =
+        EMPTY_COLLECTION;
+      map
+        .getSource(SOURCE_ID)
+        .setData(
+          EMPTY_COLLECTION,
+        );
     },
     focusCity(bounds) {
       lineNamePopup.remove();

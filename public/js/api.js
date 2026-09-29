@@ -37,6 +37,11 @@ export async function loadLineTypes() {
   return payload.lineTypes;
 }
 
+export async function loadPointTypes() {
+  const payload = await getJson('/api/point-types', { cache: 'no-store' });
+  return payload.pointTypes;
+}
+
 export async function loadReportConfig() {
   return getJson('/api/report-config');
 }

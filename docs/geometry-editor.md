@@ -275,8 +275,15 @@ Startup reconciliation дополнительно удаляет server-owned or
 оставшиеся после аварийного завершения процесса, и считает DB references на
 отсутствующие files.
 
-Остаётся UI-этап: CRUD/upload preview в **Настройках интерфейса** и rendering
-point icons на admin/public map.
+UI-этап также закрыт:
+
+- CRUD типов точек находится в **Настройках интерфейса → Типы точек**;
+- там же доступны preview, upload/reset icon, display width/height и anchor X/Y;
+- Point geometry выбирает `pointTypeId` в обычном local draft/lease/revision flow;
+- admin map показывает icon поверх fallback Point marker;
+- public viewport отдаёт только видимые линии и видимые Point с активным типом;
+- public map загружает versioned icon assets, rasterizes PNG/GIF/SVG в настроенный
+  display size и применяет anchor без отдельного небезопасного asset path.
 
 ## Проверки
 

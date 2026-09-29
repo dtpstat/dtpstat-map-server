@@ -66,7 +66,7 @@ test('viewport selector is twenty percent larger overall and clamps WGS84 bounds
   });
 });
 
-test('viewport query uses padded selector, returns complete intersecting lines and numeric type code', async () => {
+test('viewport query uses padded selector and returns public lines plus active typed points', async () => {
   let sql;
   let values;
   const expected = {
@@ -103,7 +103,27 @@ test('viewport query uses padded selector, returns complete intersecting lines a
   assert.match(sql, /geometry\.geom\s+FROM viewport/);
   assert.doesNotMatch(sql, /ST_Intersection\(geometry\.geom, viewport\.geom\)/);
   assert.match(sql, /line_type\.code AS business_type_code/);
+  assert.match(
+    sql,
+    /geometry\.point_type_id/,
+  );
+  assert.match(
+    sql,
+    /LEFT JOIN point_types AS point_type/,
+  );
+  assert.match(
+    sql,
+    /GeometryType\(geometry\.geom\) = 'POINT'[\s\S]*point_type\.is_active/u,
+  );
+  assert.match(
+    sql,
+    /WHERE geometry\.is_visible/u,
+  );
   assert.match(sql, /'businessTypeCode', visible_geometries\.business_type_code/);
+  assert.match(
+    sql,
+    /'pointTypeId', visible_geometries\.point_type_id/u,
+  );
   assert.match(sql, /ST_Covers\(boundary\.geom, viewport\.center\)/);
   assert.match(
     sql,
