@@ -51,6 +51,12 @@ async function fixture() {
     async getMfaState() {
       return state;
     },
+    async getSecuritySettings() {
+      return {
+        mfaRequired:
+          false,
+      };
+    },
     async saveMfaPendingSecret(
       _userId,
       ciphertext,
@@ -326,6 +332,7 @@ test('MFA status never exposes encrypted or plaintext secrets', async () => {
       'enrolledAt',
       'enrollmentPending',
       'recoveryCodesRemaining',
+      'required',
     ],
   );
 });
