@@ -344,3 +344,94 @@ test('request observability records bounded-route HTTP metrics', () => {
     ],
   );
 });
+
+
+test('request observability canonicalizes early API rejects before Express route matching', () => {
+  const observations = [];
+  const times = [
+    10,
+    20,
+    30,
+    40,
+    50,
+    60,
+  ];
+  const middleware =
+    createApiRequestObservability({
+      now:
+        () =>
+          times.shift(),
+      createRequestId:
+        () =>
+          'generated-id',
+      metrics: {
+        observeHttpRequest(
+          details,
+        ) {
+          observations.push(
+            details,
+          );
+        },
+      },
+      log() {},
+    });
+
+  for (
+    const [
+      originalUrl,
+      statusCode,
+    ] of [
+      [
+        '/api/cities/42/geometries?bad=1',
+        400,
+      ],
+      [
+        '/api/admin/ws',
+        426,
+      ],
+      [
+        '/api/not-a-real-route',
+        404,
+      ],
+    ]
+  ) {
+    const request = {
+      path:
+        originalUrl
+          .split('?')[0],
+      originalUrl,
+      method:
+        'GET',
+      get() {
+        return undefined;
+      },
+    };
+    const response =
+      createResponse();
+    response.statusCode =
+      statusCode;
+
+    middleware(
+      request,
+      response,
+      () => {},
+    );
+    response.writableEnded =
+      true;
+    response.emit(
+      'finish',
+    );
+  }
+
+  assert.deepEqual(
+    observations.map(
+      (entry) =>
+        entry.route,
+    ),
+    [
+      '/api/cities/:cityId/geometries',
+      '/api/admin/ws',
+      '__unmatched__',
+    ],
+  );
+});

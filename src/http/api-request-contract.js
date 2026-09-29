@@ -1845,6 +1845,47 @@ export function createApiRequestContractMiddleware({
 }
 
 
+export function apiMetricRoute(
+  request,
+) {
+  const path =
+    apiPath(
+      request,
+    );
+  const method =
+    String(
+      request.method ??
+      '',
+    )
+      .toUpperCase();
+
+  const contract =
+    contractFor(
+      method,
+      path,
+    ) ??
+    contractsForPath(
+      path,
+    )[0] ??
+    null;
+
+  if (contract) {
+    return (
+      '/api' +
+      contract.path
+    );
+  }
+
+  if (
+    path ===
+    '/admin/ws'
+  ) {
+    return '/api/admin/ws';
+  }
+
+  return '__unmatched__';
+}
+
 export function apiContractKey(
   method,
   path,

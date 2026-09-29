@@ -2,6 +2,9 @@ import crypto from 'node:crypto';
 import {
   serviceLog,
 } from '../service-log.js';
+import {
+  apiMetricRoute,
+} from './api-request-contract.js';
 
 export const REQUEST_ID_HEADER =
   'X-Request-ID';
@@ -39,49 +42,6 @@ function requestPath(
     request.url ??
     '',
   ).split('?')[0];
-}
-
-function requestMetricRoute(
-  request,
-) {
-  const routePath =
-    request.route
-      ?.path;
-
-  if (
-    typeof routePath !==
-      'string'
-  ) {
-    return '__unmatched__';
-  }
-
-  const path =
-    requestPath(
-      request,
-    );
-
-  if (
-    path.startsWith(
-      '/api',
-    ) &&
-    !routePath.startsWith(
-      '/api',
-    )
-  ) {
-    return (
-      '/api' +
-      (
-        routePath.startsWith(
-          '/',
-        )
-          ? routePath
-          : '/' +
-            routePath
-      )
-    );
-  }
-
-  return routePath;
 }
 
 function requestRoute(
@@ -225,7 +185,7 @@ export function createApiRequestObservability(
           method:
             request.method,
           route:
-            requestMetricRoute(
+            apiMetricRoute(
               request,
             ),
           statusCode,
