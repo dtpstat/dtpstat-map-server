@@ -1094,6 +1094,60 @@ if (section) {
           'circle-stroke-width': 2,
         },
       });
+
+      const selectedDragLayers = [
+        'geometry-editor-selected-fill',
+        'geometry-editor-selected-line',
+        'geometry-editor-selected-point',
+      ];
+
+      const beginGeometryDrag =
+        (event) => {
+          if (
+            !state.moveGeometryMode ||
+            !state.editing ||
+            !state.draft ||
+            state.drawing ||
+            state.geometryDrag
+          ) {
+            return;
+          }
+
+          event.preventDefault();
+          event.originalEvent
+            ?.preventDefault?.();
+          event.originalEvent
+            ?.stopPropagation?.();
+
+          state.suppressMapClick =
+            true;
+          state.geometryDrag = {
+            origin:
+              event.lngLat
+                .toArray(),
+            original:
+              clone(
+                state.draft,
+              ),
+            moved: false,
+          };
+
+          pushHistory();
+          map.dragPan.disable();
+          refreshMapCursor();
+        };
+
+      for (
+        const layerId of
+        selectedDragLayers
+      ) {
+        map.on(
+          'mousedown',
+          layerId,
+          beginGeometryDrag,
+        );
+      }
+
       addLayerSafe(map, {
         id: 'geometry-editor-draw-line',
         type: 'line',
@@ -1208,7 +1262,13 @@ if (section) {
 
       map.on('click', 'geometry-editor-segment-hit', (event) => {
         const candidate = event.features?.[0];
-        if (!candidate || !state.draft || state.drawing || state.suppressMapClick) return;
+        if (
+          !candidate ||
+          !state.draft ||
+          state.drawing ||
+          state.moveGeometryMode ||
+          state.suppressMapClick
+        ) return;
 
         // A vertex sits on the same line, so it wins over the wider segment hitbox.
         const vertexHits = map.queryRenderedFeatures(event.point, {
@@ -1228,7 +1288,12 @@ if (section) {
 
       map.on('click', 'geometry-editor-vertices', (event) => {
         const candidate = event.features?.[0];
-        if (!candidate || !state.draft || state.drawing) return;
+        if (
+          !candidate ||
+          !state.draft ||
+          state.drawing ||
+          state.moveGeometryMode
+        ) return;
         const originalEvent = event.originalEvent;
         if (!(originalEvent?.ctrlKey || originalEvent?.metaKey)) return;
 
@@ -1241,7 +1306,12 @@ if (section) {
 
       map.on('mousedown', 'geometry-editor-vertices', (event) => {
         const candidate = event.features?.[0];
-        if (!candidate || !state.draft || state.drawing) return;
+        if (
+          !candidate ||
+          !state.draft ||
+          state.drawing ||
+          state.moveGeometryMode
+        ) return;
         event.preventDefault();
         const originalEvent = event.originalEvent;
         if (originalEvent?.ctrlKey || originalEvent?.metaKey) return;
@@ -1253,6 +1323,43 @@ if (section) {
         pushHistory();
       });
       map.on('mousemove', (event) => {
+        if (
+          state.geometryDrag &&
+          state.draft
+        ) {
+          const current =
+            event.lngLat
+              .toArray();
+          const dx =
+            current[0] -
+            state.geometryDrag
+              .origin[0];
+          const dy =
+            current[1] -
+            state.geometryDrag
+              .origin[1];
+
+          try {
+            state.draft =
+              translateGeometry(
+                state.geometryDrag
+                  .original,
+                dx,
+                dy,
+              );
+            state.geometryDrag
+              .moved =
+              Math.abs(dx) >
+                Number.EPSILON ||
+              Math.abs(dy) >
+                Number.EPSILON;
+            updateMapSources();
+          } catch {
+            // Keep the last valid position when pointer crosses WGS84 bounds.
+          }
+          return;
+        }
+
         if (
           state.dragPath &&
           state.draft
@@ -1278,6 +1385,45 @@ if (section) {
         updateDrawingPreview();
       });
       map.on('mouseup', () => {
+        if (
+          state.geometryDrag
+        ) {
+          const drag =
+            state.geometryDrag;
+          state.geometryDrag =
+            null;
+          map.dragPan.enable();
+
+          if (!drag.moved) {
+            state.history.pop();
+            renderHistoryControls();
+          } else {
+            updateDraftMap();
+
+            if (
+              state.pendingExternalDraftSync
+            ) {
+              flushPendingExternalDraftSync();
+            } else {
+              captureCurrentDraft();
+              setMessage(
+                'Геометрия перемещена в локальном черновике.',
+                'success',
+              );
+            }
+          }
+
+          window.setTimeout(
+            () => {
+              state.suppressMapClick =
+                false;
+            },
+            0,
+          );
+          refreshMapCursor();
+          return;
+        }
+
         if (!state.dragPath) return;
         state.dragPath = null;
         map.dragPan.enable();
@@ -1334,7 +1480,11 @@ if (section) {
         'geometry-editor-polygons', 'geometry-editor-points',
       ]) {
         map.on('click', layerId, (event) => {
-          if (state.drawing || state.suppressMapClick) return;
+          if (
+            state.drawing ||
+            state.moveGeometryMode ||
+            state.suppressMapClick
+          ) return;
           const vertexHits = map.queryRenderedFeatures(event.point, {
             layers: ['geometry-editor-vertices'],
           });
@@ -1371,7 +1521,11 @@ if (section) {
       map.on('mouseenter', 'geometry-editor-midpoints', (event) => {
         state.hoveredSegment = true;
         refreshMapCursor();
-        if (!state.drawing && event.lngLat) {
+        if (
+          !state.drawing &&
+          !state.moveGeometryMode &&
+          event.lngLat
+        ) {
           addVertexHint
             .setLngLat(event.lngLat)
             .setText('Добавить узел')
@@ -2866,6 +3020,9 @@ if (section) {
 
 
   async function selectGeometry(id, { focus = true } = {}) {
+    setMoveGeometryMode(false);
+    closeCoordinateWindow();
+
     if (state.importSession) {
       setMessage(
         'Сначала разрешите конфликты подготовленного импорта.',
@@ -5671,6 +5828,82 @@ if (section) {
   );
 
 
+  moveGeometryButton.addEventListener(
+    'click',
+    () =>
+      setMoveGeometryMode(
+        !state.moveGeometryMode,
+      ),
+  );
+  coordinateOpenButton.addEventListener(
+    'click',
+    openCoordinateWindow,
+  );
+  coordinateCloseButton.addEventListener(
+    'click',
+    closeCoordinateWindow,
+  );
+  coordinateSequence.addEventListener(
+    'change',
+    renderCoordinateSequence,
+  );
+  coordinateAddRow.addEventListener(
+    'click',
+    () => {
+      const rows = [
+        ...coordinateTableBody
+          .querySelectorAll('tr'),
+      ];
+      const last =
+        rows.at(-1);
+      const fallback = last
+        ? [
+            last.querySelector(
+              '[data-coordinate="longitude"]',
+            )?.value ?? '',
+            last.querySelector(
+              '[data-coordinate="latitude"]',
+            )?.value ?? '',
+          ]
+        : ['', ''];
+
+      coordinateTableBody.append(
+        coordinateRow(
+          fallback,
+          rows.length,
+        ),
+      );
+      renumberCoordinateRows();
+    },
+  );
+  coordinateImport.addEventListener(
+    'click',
+    () => {
+      try {
+        const parsed =
+          parseCoordinateText(
+            coordinatePaste.value,
+          );
+        renderCoordinateRows(
+          parsed,
+        );
+        setCoordinateMessage(
+          'Точки загружены в таблицу. Нажмите «Применить к черновику».',
+          'success',
+        );
+      } catch (error) {
+        setCoordinateMessage(
+          error.message,
+          'error',
+        );
+      }
+    },
+  );
+  coordinateApply.addEventListener(
+    'click',
+    applyCoordinateTable,
+  );
+
   undoButton.addEventListener('click', undo);
   redoButton.addEventListener('click', redo);
   finishDrawButton.addEventListener('click', () => void finishDrawing());
@@ -5759,6 +5992,22 @@ if (section) {
       redo();
       return;
     }
+    if (
+      !editingText &&
+      event.key === 'Escape' &&
+      state.coordinateWindowOpen
+    ) {
+      closeCoordinateWindow();
+      return;
+    }
+    if (
+      !editingText &&
+      event.key === 'Escape' &&
+      state.moveGeometryMode
+    ) {
+      setMoveGeometryMode(false);
+      return;
+    }
     if (!editingText && event.key === 'Escape' && state.drawing) cancelDrawing();
   });
 
@@ -5772,7 +6021,12 @@ if (section) {
 
   window.addEventListener('blur', () => {
     state.deleteModifier = false;
-    if (!section.hidden && state.map && !state.dragPath) {
+    if (
+      !section.hidden &&
+      state.map &&
+      !state.dragPath &&
+      !state.geometryDrag
+    ) {
       refreshMapCursor();
     }
   });
