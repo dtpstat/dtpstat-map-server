@@ -87,6 +87,22 @@ LINE_TYPE_ID
 
 `PROPERTIES JSONB`, включая `placemarkName`, не индексируется: сейчас JSONB не используется как search predicate.
 
+`CITY_ID` и `BOUNDARY_ID` начиная с `V045` являются nullable derived links:
+они ускоряют administrative/report access, но не определяют lifecycle или
+revision геометрии.
+
+## GEOMETRY_EDIT_LEASES
+
+```text
+PRIMARY KEY (GEOMETRY_ID)
+UNIQUE (TOKEN)
+INDEX (EXPIRES_AT)
+```
+
+Lease row короткоживущая и удаляется/заменяется по editor lifecycle.
+`GENERATION` защищает от silent resume после force takeover/reacquisition;
+отдельный индекс по `USER_ID` сейчас не нужен для hot path.
+
 ## LINE_TYPES
 
 ```text

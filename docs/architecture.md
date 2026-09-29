@@ -122,6 +122,14 @@ authorization, derived refresh и другими subsystem dependencies.
 SQL не должен «утекать» в route handlers или application composition только
 ради удобства.
 
+Runtime SQL принимает внешние значения только через bind parameters. Каждый
+`$N` placeholder в runtime repository/storage boundary обязан иметь явный
+PostgreSQL type cast (`$1::bigint`, `$2::text`, `$3::jsonb` и т.п.).
+Интерполяция допускается только для заранее reviewed внутренних
+identifier/fragments, которые нельзя выразить bind parameter. Этот контракт
+закреплён static regression test и не должен обходиться локальными
+исключениями.
+
 ### HTTP
 
 - endpoint/routing — `src/routes`;

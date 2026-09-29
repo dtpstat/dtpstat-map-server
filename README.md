@@ -14,6 +14,7 @@ Node.js/Express + PostgreSQL/PostGIS сервер интерактивной к�
 - города и административные границы из OSM/Overpass;
 - пакетная загрузка `place=city/town` и настраиваемого диапазона `boundary=administrative`;
 - дерево вложенности OSM-полигонов, ручные active/displayName/displayType и Mapbox-preview;
+- универсальный редактор геометрий с Point/LineString/MultiLineString/Polygon/MultiPolygon, edit leases, localStorage workspace и atomic bulk sync;
 - импорт GeoJSON, KML и Google My Maps;
 - переносимый GeoJSON/KML со словарём `LINE_TYPES`;
 - сохранение `<Placemark><name>` как `properties.placemarkName`;
@@ -109,7 +110,7 @@ HTTP_PORT=3002
 
 ## Миграции
 
-Текущая последовательность: `V001…V033`.
+Текущая последовательность: `V001…V049`.
 
 Последние изменения:
 
@@ -133,8 +134,22 @@ HTTP_PORT=3002
 | `V033` | вертикальное key/value-хранилище `REPORT_CONFIG` вместо растущей singleton-строки |
 | `V034` | настраиваемая политика паролей администраторов |
 | `V035` | отдельное право редактора OSM-дерева |
+| `V036` | отдельное право редактора геометрий |
+| `V037` | универсальная модель `CITY_GEOMETRIES` для point/line/polygon и editor metadata |
+| `V038` | staging/import-conflict model редактора геометрий |
+| `V039` | синхронизация active boundaries с canonical `CITIES` для редактора |
+| `V040` | geometry model invariants и derived length normalization |
+| `V041` | deferred identity/pending guards для city/boundary model |
+| `V042` | nullable/effective geometry ownership transition |
+| `V043` | final-state geometry constraints |
+| `V044` | suspended geometry rebinding transition |
+| `V045` | независимые геометрии и spatial-derived `CITY_ID/BOUNDARY_ID` |
+| `V046` | cooperative geometry edit leases |
+| `V047` | admin request rate-limit settings |
+| `V048` | persistent request-incident/IP lockout state |
+| `V049` | spatial relink fix для territories без непустой descendant geometry |
 
-Следующая migration: **V036+**. Уже опубликованные migrations не редактируются задним числом.
+Следующая migration: **V050+**. Уже опубликованные migrations не редактируются задним числом.
 
 История хранится в:
 
@@ -206,6 +221,8 @@ checkpoint требует явного подтверждения; старый 
 - `city_populations`;
 - `city_boundaries`;
 - `city_geometries`;
+- `geometry_edit_leases`;
+- `geometry_import_sessions` / `geometry_import_stage`;
 - `line_types`;
 - `project_settings`;
 - `report_config`;
@@ -232,6 +249,8 @@ CAN_MANAGE_INTERFACE
 CAN_MANAGE_USERS
 CAN_VIEW_AUDIT
 CAN_MANAGE_SECURITY
+CAN_EDIT_OSM
+CAN_EDIT_GEOMETRIES
 IS_SUPERUSER
 ```
 
@@ -347,9 +366,9 @@ GET  /api/admin/settings/export
 POST /api/admin/settings/import
 ```
 
-Текущий package: `project-settings`, **schemaVersion 7**.
+Текущий package: `project-settings`, **schemaVersion 9**.
 
-Импорт принимает `v1…v7` и нормализует legacy fields. V5 добавил `rank.sort`, V6 — `publicDownloadName`, V7 — пороги разделения больших/малых городов.
+Импорт принимает `v1…v9` и нормализует legacy fields. V5 добавил `rank.sort`, V6 — `publicDownloadName`, V7 — пороги разделения больших/малых городов, V8 — password policy, V9 — per-user/global HTTP request rate limits.
 
 Переносятся project settings, line types, report config, security policy и public Mapbox token. Не переносятся users/password hashes/sessions/audit, source data, `.env`, TLS/DB secrets и custom city marker binary.
 
@@ -431,4 +450,5 @@ migrations и выполняются integration checks. В `finally` време
 - [kml-transfer.md](docs/kml-transfer.md) — portable KML;
 - [report-config.md](docs/report-config.md) — metrics/table/CSV/ranking;
 - [project-settings-transfer.md](docs/project-settings-transfer.md) — перенос конфигурации;
-- [database-indexes.md](docs/database-indexes.md) — актуальные indexes/access paths.
+- [database-indexes.md](docs/database-indexes.md) — актуальные indexes/access paths;
+- [geometry-editor.md](docs/geometry-editor.md) — модель геометрий, spatial links, edit leases, local workspace и concurrency.

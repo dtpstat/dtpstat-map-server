@@ -48,6 +48,8 @@ DB-backed session cookie. Bootstrap credentials из `.env` используют
 | `CAN_MANAGE_USERS` | users |
 | `CAN_VIEW_AUDIT` | audit log |
 | `CAN_MANAGE_SECURITY` | security policy/blocks |
+| `CAN_EDIT_OSM` | отдельный доступ к OSM object editor |
+| `CAN_EDIT_GEOMETRIES` | отдельный доступ к geometry editor и mutation API |
 
 `IS_SUPERUSER=true` даёт все permissions.
 
@@ -191,6 +193,26 @@ HTTP responses with error status, malformed JSON, oversized bodies,
 unsupported encodings and unknown admin API routes are also recorded. Raw and
 streaming upload bodies are not reparsed as JSON; their headers/query remain
 covered and their own schema/size validators remain authoritative.
+
+## Strict API contract and client version
+
+Каждый admin route имеет явный contract: HTTP method, path parameters, query,
+headers и JSON fields. Неизвестные/дублирующиеся поля, server-owned identity/
+permission attributes, method-override headers, malformed/confusable names и
+mutating query parameters отклоняются до business handler. Mutating
+`POST/PUT/PATCH/DELETE` используют body как единственный источник application
+input.
+
+Browser admin client передаёт текущую API version для каждого
+`/api/admin/*` запроса. Несовместимый client получает `426`; UI блокирует
+дальнейшие mutations и требует reload, не удаляя local geometry workspace.
+Admin WebSocket versioned отдельно через subprotocol и также не принимает
+несовместимый client.
+
+Contract/probing violations считаются security incidents. Начиная с `V048`
+счётчик и request-specific IP lockout сохраняются в
+`ADMIN_LOGIN_IP_STATE`; supplied значения подозрительных параметров в
+security log не записываются.
 
 ## Origin / CSRF boundary
 
@@ -342,8 +364,9 @@ npm run admin:unblock -- --ip 203.0.113.10
 - [deployment.md](deployment.md)
 - [database-indexes.md](database-indexes.md)
 - [project-settings-transfer.md](project-settings-transfer.md)
+- [geometry-editor.md](geometry-editor.md)
 
-Текущая security migration в этой ветке — `V047__admin_request_security.sql`; следующее изменение DB schema должно использовать **V048+**.
+Последняя security migration — `V048__admin_request_incident_lockout.sql`; общая последовательность schema уже включает `V049__empty_descendant_spatial_relink.sql`, поэтому следующее изменение DB schema должно использовать **V050+**.
 
 
 ## Future security backlog

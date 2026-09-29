@@ -170,7 +170,7 @@ Content-Type: application/vnd.google-earth.kml+xml
 
 Нужен `CAN_MANAGE_DATA` или superuser.
 
-Interactive web-admin использует session cookie. Для scripted API можно использовать DB-backed HTTP Basic. Bootstrap ENV credentials после создания DB-user не являются login fallback.
+Interactive web-admin и scripted online admin clients используют session-only authentication. HTTP Basic не поддерживается. Scripted client должен создать DB-backed session через `POST /api/admin/login` и соблюдать тот же API-version/Origin contract, что и browser admin; bootstrap ENV credentials остаются только initial bootstrap/recovery source.
 
 Import участвует в общем single-task guard раздела **Управление данными** и заменяет line data транзакционно.
 
