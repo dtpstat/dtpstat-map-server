@@ -133,7 +133,7 @@ MAPBOX_ACCESS_TOKEN=pk....
 
 ## Миграции
 
-Текущий набор: `V001…V050`.
+Текущий набор: `V001…V051`.
 
 Последние migrations:
 
@@ -171,9 +171,10 @@ V047__admin_request_security.sql
 V048__admin_request_incident_lockout.sql
 V049__empty_descendant_spatial_relink.sql
 V050__point_types.sql
+V051__active_descendant_spatial_relink.sql
 ```
 
-Назначение `V023…V050`:
+Назначение `V023…V051`:
 
 - `V023` — logical `FULL_NAME` OSM boundary, merge relation fragments по `PLACE_TYPE + FULL_NAME`, sync `CITIES.FULL_NAME`;
 - `V024` — ordered `REPORT_CONFIG.RANK_SORT`;
@@ -197,9 +198,10 @@ V050__point_types.sql
 - `V047` — DB-backed HTTP request rate limits;
 - `V048` — persistent request-security incident/IP lockout state;
 - `V049` — корректный spatial resolver при EMPTY descendant aggregate;
-- `V050` — dictionary типов точек, icon metadata и optional point-type link для Point geometry.
+- `V050` — dictionary типов точек, icon metadata и optional point-type link для Point geometry;
+- `V051` — PostGIS-version-independent fallback к active parent при отсутствии active descendants.
 
-Следующая migration: **V051+**. Опубликованные migration files не изменяются задним числом.
+Следующая migration: **V052+**. Опубликованные migration files не изменяются задним числом.
 
 Startup автоматически применяет pending migrations через отдельный
 `DATABASE_MIGRATION_ROLE` под PostgreSQL advisory lock, затем повторно сверяет

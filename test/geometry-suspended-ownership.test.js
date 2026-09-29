@@ -79,3 +79,40 @@ test('geometry administrative links are optional spatially derived state', async
     /ACTIVE_DESCENDANTS IS NULL[\s\S]*ST_INTERSECTION/u,
   );
 });
+
+
+test('V051 excludes inactive descendants before spatial aggregation', async () => {
+  const migration =
+    await fs.readFile(
+      path.join(
+        root,
+        'db/migrations/V051__active_descendant_spatial_relink.sql',
+      ),
+      'utf8',
+    );
+
+  assert.match(
+    migration,
+    /ACTIVE_DESCENDANT_UNIONS/u,
+  );
+  assert.match(
+    migration,
+    /FROM DESCENDANTS\s+WHERE IS_ACTIVE\s+GROUP BY ROOT_ID/u,
+  );
+  assert.doesNotMatch(
+    migration,
+    /ST_COLLECT\(GEOM\) FILTER/u,
+  );
+  assert.match(
+    migration,
+    /ACTIVE_DESCENDANTS[\s\S]*IS NULL[\s\S]*ST_INTERSECTION/u,
+  );
+  assert.match(
+    migration,
+    /RELINK_ALL_CITY_GEOMETRIES/u,
+  );
+  assert.match(
+    migration,
+    /ASSERT_CITY_GEOMETRY_INVARIANTS/u,
+  );
+});
