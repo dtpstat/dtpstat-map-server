@@ -3791,7 +3791,7 @@ test('app composition root delegates API public-site and terminal HTTP assembly'
 });
 
 
-test('PostgreSQL integration harness uses the configured database and an isolated temporary schema', async () => {
+test('PostgreSQL integration keeps PostGIS data isolated and privilege tests disposable', async () => {
   const script = await fs.readFile(
     path.join(
       root,
@@ -3815,6 +3815,10 @@ test('PostgreSQL integration harness uses the configured database and an isolate
   );
   assert.match(
     script,
+    /dtp_it_priv_/u,
+  );
+  assert.match(
+    script,
     /applyMigrations\(/u,
   );
   assert.match(
@@ -3827,6 +3831,30 @@ test('PostgreSQL integration harness uses the configured database and an isolate
   );
   assert.match(
     script,
+    /configureRuntimePrivileges\(/u,
+  );
+  assert.match(
+    script,
+    /DROP DATABASE IF EXISTS/u,
+  );
+  assert.match(
+    script,
+    /DROP ROLE IF EXISTS/u,
+  );
+  assert.match(
+    script,
+    /CREATE TEMP TABLE privilege_temp/u,
+  );
+  assert.match(
+    script,
+    /Runtime CREATE in application schema/u,
+  );
+  assert.match(
+    script,
+    /Runtime ALTER TABLE/u,
+  );
+  assert.match(
+    script,
     /createProjectSettingsTransferRepository\(/u,
   );
   assert.match(
@@ -3834,14 +3862,6 @@ test('PostgreSQL integration harness uses the configured database and an isolate
     /createDataExportStorageRepository\(/u,
   );
 
-  assert.doesNotMatch(
-    script,
-    /CREATE DATABASE/u,
-  );
-  assert.doesNotMatch(
-    script,
-    /DROP DATABASE/u,
-  );
   assert.doesNotMatch(
     script,
     /CREATE EXTENSION/u,
