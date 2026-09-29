@@ -17,6 +17,9 @@ import {
 import {
   createTestAppDefaults,
 } from './testing/app-defaults.js';
+import {
+  createRuntimeMetrics,
+} from './observability/runtime-metrics.js';
 
 /**
  * @param {{
@@ -47,6 +50,7 @@ import {
  *   securityService?: ReturnType<import('./modules/security/service.js').createAdminSecurityService>,
  *   realtimeEvents?: { publish: Function },
  *   notificationEvents?: { publish: Function },
+ *   metrics?: ReturnType<typeof createRuntimeMetrics>,
  *   config: any
  * }} dependencies
  */
@@ -78,9 +82,13 @@ export function createApp({
   securityService,
   realtimeEvents,
   notificationEvents,
+  metrics,
   config,
 }) {
   const app = express();
+  const effectiveMetrics =
+    metrics ??
+    createRuntimeMetrics();
 
   const testDefaults =
     config.environment === 'test'
@@ -199,6 +207,8 @@ export function createApp({
         effectiveAdminAuth,
       securityService:
         effectiveSecurityService,
+      metrics:
+        effectiveMetrics,
     },
   );
 

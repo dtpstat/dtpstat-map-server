@@ -56,6 +56,9 @@ import {
 import {
   createPointTypeIconFileStore,
 } from '../modules/points/icon-file-store.js';
+import {
+  createRuntimeMetrics,
+} from '../observability/runtime-metrics.js';
 
 const DEFAULT_FACTORIES =
   Object.freeze({
@@ -228,6 +231,10 @@ export function createServerRuntime({
         publicDownloadService,
         reportConfigService,
       });
+  const metrics =
+    createRuntimeMetrics({
+      pool,
+    });
 
   const bootstrapDependencies = {
     config,
@@ -296,6 +303,7 @@ export function createServerRuntime({
     osmCityUpdateService,
     adminAuth,
     securityService,
+    metrics,
     config,
   };
 

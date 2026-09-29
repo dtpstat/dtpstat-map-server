@@ -279,6 +279,25 @@ location / {
 
 WebSocket headers нужны для `/api/admin/ws`.
 
+### Prometheus metrics
+
+Metrics endpoint по умолчанию выключен. Для production:
+
+```dotenv
+METRICS_ENABLED=true
+METRICS_BEARER_TOKEN=replace-with-a-separate-random-token-at-least-32-characters
+```
+
+Scrape endpoint: `GET /metrics` с заголовком
+`Authorization: Bearer <METRICS_BEARER_TOKEN>`. Без корректного token endpoint
+возвращает `401`; без `METRICS_ENABLED=true` route вообще не регистрируется.
+Production startup fail-closed, если metrics включены без token длиной минимум
+32 символа.
+
+Экспортируются bounded-label HTTP request counters/histogram, process
+uptime/RSS/heap и состояние runtime PostgreSQL pool. Query string, request body,
+cookies, authorization values и request IDs в Prometheus labels не попадают.
+
 ### Admin Origin / CSRF / X-Forwarded-Proto
 
 Production startup требует `ADMIN_ALLOWED_ORIGINS` с точными HTTPS origins

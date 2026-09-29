@@ -21,6 +21,9 @@ import {
 import {
   createApiRequestObservability,
 } from './request-observability.js';
+import {
+  installMetricsEndpoint,
+} from './metrics-endpoint.js';
 
 const CITY_MARKER_PNG =
   Buffer.from(
@@ -115,6 +118,7 @@ export function installAppHttpMiddleware(
     config,
     adminAuth,
     securityService,
+    metrics,
   },
 ) {
   const isProduction =
@@ -171,7 +175,9 @@ export function installAppHttpMiddleware(
   );
 
   app.use(
-    createApiRequestObservability(),
+    createApiRequestObservability({
+      metrics,
+    }),
   );
 
   app.use(
@@ -249,6 +255,14 @@ export function installAppHttpMiddleware(
 
   app.use(
     compression(),
+  );
+
+  installMetricsEndpoint(
+    app,
+    {
+      config,
+      metrics,
+    },
   );
 
   app.use(

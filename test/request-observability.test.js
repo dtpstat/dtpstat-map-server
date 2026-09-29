@@ -272,3 +272,75 @@ test('request observability marks failed and aborted API requests', () => {
     true,
   );
 });
+
+
+test('request observability records bounded-route HTTP metrics', () => {
+  const observations = [];
+  const times = [
+    100,
+    125,
+  ];
+  const middleware =
+    createApiRequestObservability({
+      now:
+        () =>
+          times.shift(),
+      createRequestId:
+        () =>
+          'generated-id',
+      metrics: {
+        observeHttpRequest(
+          details,
+        ) {
+          observations.push(
+            details,
+          );
+        },
+      },
+      log() {},
+    });
+  const request = {
+    path:
+      '/api/cities/42/geometries',
+    originalUrl:
+      '/api/cities/42/geometries?secret=value',
+    method:
+      'GET',
+    route: {
+      path:
+        '/cities/:cityId/geometries',
+    },
+    get() {
+      return undefined;
+    },
+  };
+  const response =
+    createResponse();
+
+  middleware(
+    request,
+    response,
+    () => {},
+  );
+  response.writableEnded =
+    true;
+  response.emit(
+    'finish',
+  );
+
+  assert.deepEqual(
+    observations,
+    [
+      {
+        method:
+          'GET',
+        route:
+          '/api/cities/:cityId/geometries',
+        statusCode:
+          200,
+        durationMs:
+          25,
+      },
+    ],
+  );
+});

@@ -396,3 +396,78 @@ test('loadConfig requires exact HTTPS admin origins in production', () => {
     ],
   );
 });
+
+
+test('loadConfig keeps metrics disabled by default', () => {
+  const config =
+    loadConfig(
+      REQUIRED_ENV,
+      '/project',
+    );
+
+  assert.deepEqual(
+    config.metrics,
+    {
+      enabled: false,
+      bearerToken: null,
+    },
+  );
+});
+
+test('loadConfig requires a dedicated metrics bearer token in production', () => {
+  const production = {
+    ...REQUIRED_ENV,
+    NODE_ENV:
+      'production',
+    ADMIN_ALLOWED_ORIGINS:
+      'https://admin.example',
+    DATABASE_MIGRATION_ROLE:
+      'example_migrator',
+    DATABASE_MIGRATION_ROLE_PASSWORD:
+      'migration-secret',
+    METRICS_ENABLED:
+      'true',
+  };
+
+  assert.throws(
+    () =>
+      loadConfig(
+        production,
+        '/project',
+      ),
+    /METRICS_BEARER_TOKEN/u,
+  );
+
+  assert.throws(
+    () =>
+      loadConfig(
+        {
+          ...production,
+          METRICS_BEARER_TOKEN:
+            'too-short',
+        },
+        '/project',
+      ),
+    /at least 32 characters/u,
+  );
+
+  const token =
+    '0123456789abcdef0123456789abcdef';
+  const config =
+    loadConfig(
+      {
+        ...production,
+        METRICS_BEARER_TOKEN:
+          token,
+      },
+      '/project',
+    );
+
+  assert.deepEqual(
+    config.metrics,
+    {
+      enabled: true,
+      bearerToken: token,
+    },
+  );
+});

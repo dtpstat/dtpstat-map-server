@@ -41,6 +41,49 @@ function requestPath(
   ).split('?')[0];
 }
 
+function requestMetricRoute(
+  request,
+) {
+  const routePath =
+    request.route
+      ?.path;
+
+  if (
+    typeof routePath !==
+      'string'
+  ) {
+    return '__unmatched__';
+  }
+
+  const path =
+    requestPath(
+      request,
+    );
+
+  if (
+    path.startsWith(
+      '/api',
+    ) &&
+    !routePath.startsWith(
+      '/api',
+    )
+  ) {
+    return (
+      '/api' +
+      (
+        routePath.startsWith(
+          '/',
+        )
+          ? routePath
+          : '/' +
+            routePath
+      )
+    );
+  }
+
+  return routePath;
+}
+
 function requestRoute(
   request,
 ) {
@@ -83,7 +126,8 @@ function durationMs(
  * @param {{
  *   log?: typeof serviceLog,
  *   now?: () => number,
- *   createRequestId?: () => string
+ *   createRequestId?: () => string,
+ *   metrics?: { observeHttpRequest: (details: object) => void }
  * }} [options]
  */
 export function createApiRequestObservability(
@@ -99,6 +143,9 @@ export function createApiRequestObservability(
   const createRequestId =
     options.createRequestId ??
     crypto.randomUUID;
+  const metrics =
+    options.metrics ??
+    null;
 
   return (
     request,
@@ -172,6 +219,19 @@ export function createApiRequestObservability(
             }
           : {}),
       };
+
+      metrics
+        ?.observeHttpRequest({
+          method:
+            request.method,
+          route:
+            requestMetricRoute(
+              request,
+            ),
+          statusCode,
+          durationMs:
+            details.durationMs,
+        });
 
       log(
         aborted ||

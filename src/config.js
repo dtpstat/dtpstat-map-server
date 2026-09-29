@@ -373,6 +373,46 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
       'ADMIN_ALLOWED_ORIGINS',
       environment,
     );
+  const metricsEnabled =
+    booleanValue(
+      env,
+      'METRICS_ENABLED',
+      false,
+    );
+  const metricsBearerToken =
+    env.METRICS_BEARER_TOKEN
+      ?.trim() ||
+    null;
+
+  if (
+    metricsBearerToken &&
+    (
+      metricsBearerToken.length >
+        512 ||
+      /[\r\n]/u.test(
+        metricsBearerToken,
+      )
+    )
+  ) {
+    throw new Error(
+      'METRICS_BEARER_TOKEN must be a single value up to 512 characters',
+    );
+  }
+
+  if (
+    environment ===
+      'production' &&
+    metricsEnabled &&
+    (
+      !metricsBearerToken ||
+      metricsBearerToken.length <
+        32
+    )
+  ) {
+    throw new Error(
+      'METRICS_BEARER_TOKEN with at least 32 characters is required when metrics are enabled in production',
+    );
+  }
 
   if (
     environment ===
@@ -391,6 +431,12 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     admin: {
       allowedOrigins:
         adminAllowedOrigins,
+    },
+    metrics: {
+      enabled:
+        metricsEnabled,
+      bearerToken:
+        metricsBearerToken,
     },
     projectRoot,
     http: {
