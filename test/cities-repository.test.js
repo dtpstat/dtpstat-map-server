@@ -131,6 +131,14 @@ test('viewport query uses padded selector and returns public lines plus active t
   assert.match(sql, /ST_Covers\(boundary\.geom, viewport\.center\)/);
   assert.match(
     sql,
+    /ORDER BY boundary\.area_m2, boundary\.city_id/u,
+  );
+  assert.doesNotMatch(
+    sql,
+    /ST_Area\(boundary\.geom::geography\)/u,
+  );
+  assert.match(
+    sql,
     /geometry_boundary\.id = geometry_presence\.boundary_id[\s\S]*geometry_boundary\.is_active[\s\S]*geometry_presence\.city_id = boundary\.city_id/,
   );
 });

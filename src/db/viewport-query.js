@@ -107,7 +107,7 @@ export const VIEWPORT_GEOMETRIES_SQL = `
         AND geometry_boundary.is_active
        WHERE geometry_presence.city_id = boundary.city_id
      )
-    ORDER BY ST_Area(boundary.geom::geography), boundary.city_id
+    ORDER BY boundary.area_m2, boundary.city_id
     LIMIT 1
   )
   SELECT json_build_object(
