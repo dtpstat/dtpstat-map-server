@@ -29,6 +29,8 @@ jobs:
         run: npm ls --all
       - name: Reject high or critical production vulnerabilities
         run: npm audit --omit=dev --audit-level=high
+      - name: Reject committed high-confidence secrets
+        run: npm run security:secrets
 
   check:
     runs-on: ubuntu-latest

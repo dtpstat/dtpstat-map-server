@@ -21,7 +21,8 @@
     "test:integration": "node scripts/postgres-integration.js",
     "test:geometry-schema": "node scripts/verify-geometry-schema-ci.js",
     "test:geometry-upgrade": "node scripts/verify-geometry-upgrade-ci.js",
-    "perf:viewport": "node scripts/profile-viewport-query.js"
+    "perf:viewport": "node scripts/profile-viewport-query.js",
+    "security:secrets": "node scripts/check-secrets.js"
   },
   "dependencies": {
     "compression": "^1.8.1",
