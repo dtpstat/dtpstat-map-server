@@ -22,13 +22,22 @@ POST /api/admin/logout
 GET  /api/admin/me
 ```
 
-Успешный login создаёт HttpOnly cookie:
+Успешный login создаёт HttpOnly session cookie. В production используется
+host-only cookie:
 
 ```text
-dtpstat_admin_session
+__Host-dtpstat_admin_session
 ```
 
-Cookie использует `SameSite=Strict`; при HTTPS — `Secure`.
+Production cookie всегда имеет `Secure; HttpOnly; SameSite=Strict; Path=/`,
+не содержит `Domain` и сервер принимает session token только под
+`__Host-` именем. Legacy `dtpstat_admin_session` в production не является
+fallback.
+
+В development/test сохраняется `dtpstat_admin_session` для совместимости с
+локальным HTTP; при HTTPS к ней добавляется `Secure`. Первый deployment с
+переходом на `__Host-` завершает ранее открытые browser sessions и требует
+повторного login.
 
 В `ADMIN_SESSIONS` хранится SHA-256 hash token, а не plaintext token.
 
@@ -398,5 +407,4 @@ npm run admin:unblock -- --ip 203.0.113.10
 - MFA/passkeys/TOTP для admin/superuser;
 - dependency/CodeQL/Dependabot policy в CI/CD;
 - optional external audit/security collectors (например Zabbix/SIEM);
-- `__Host-` session cookie migration;
 - отдельный расширенный regression suite для всех production security headers.
