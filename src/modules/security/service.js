@@ -64,6 +64,13 @@ export function createAdminSecurityService(
   const administration =
     createSecurityAdministrationService(
       repository,
+      {
+        mfaAvailable:
+          Boolean(
+            options
+              .mfaEncryptionKey,
+          ),
+      },
     );
 
   return {

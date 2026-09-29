@@ -232,10 +232,19 @@ export function createSecurityMfaService(
         );
     }
 
+    const securitySettings =
+      await repository
+        .getSecuritySettings();
+
     return {
       enabled:
         Boolean(
           state.enabled,
+        ),
+      required:
+        Boolean(
+          securitySettings
+            .mfaRequired,
         ),
       available:
         Boolean(
@@ -647,6 +656,19 @@ export function createSecurityMfaService(
     currentSessionId =
       null,
   ) {
+    const securitySettings =
+      await repository
+        .getSecuritySettings();
+
+    if (
+      securitySettings
+        .mfaRequired
+    ) {
+      throw new AdminSecurityValidationError(
+        'MFA is required by administrator policy',
+      );
+    }
+
     requireObject(
       payload,
       [

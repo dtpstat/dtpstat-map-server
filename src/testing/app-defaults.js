@@ -235,6 +235,7 @@ function securitySettings() {
     passwordRequireUppercase: false,
     passwordRequireDigit: false,
     passwordRequireSpecial: false,
+    mfaRequired: false,
     metricsEnabled: false,
     metricsTokenConfigured: false,
   };
@@ -456,6 +457,7 @@ function security(config) {
     async getMfaStatus() {
       return {
         enabled: false,
+        required: false,
         available: false,
         enrolledAt: null,
         enrollmentPending: false,

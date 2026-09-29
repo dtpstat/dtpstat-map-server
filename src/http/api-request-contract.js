@@ -105,6 +105,7 @@ const SECURITY_SETTINGS_KEYS = [
   'passwordRequireDigit',
   'passwordRequireSpecial',
   'metricsEnabled',
+  'mfaRequired',
 ];
 
 const USER_CAPABILITY_KEYS = [

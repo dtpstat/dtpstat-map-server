@@ -250,6 +250,7 @@ export function normalizeAdminSecuritySettings(payload) {
     'passwordRequireDigit',
     'passwordRequireSpecial',
     'metricsEnabled',
+    'mfaRequired',
   ]);
 
   const unknown = Object.keys(payload)
@@ -360,6 +361,10 @@ export function normalizeAdminSecuritySettings(payload) {
     metricsEnabled: booleanField(
       payload.metricsEnabled,
       'metricsEnabled',
+    ),
+    mfaRequired: booleanField(
+      payload.mfaRequired,
+      'mfaRequired',
     ),
   };
 

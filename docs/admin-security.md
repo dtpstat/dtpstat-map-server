@@ -434,3 +434,19 @@ target account, and is recorded by the administrative operation audit as
 
 The reset endpoint never returns an MFA secret or recovery code. The affected
 administrator must sign in with their password and enroll MFA again.
+
+
+## Mandatory MFA policy
+
+V056 adds the deployment-local `MFA_REQUIRED` security policy. It defaults to
+`false` and is intentionally not part of project-settings export/import,
+because enforcing MFA depends on the local `ADMIN_MFA_ENCRYPTION_KEY`.
+
+When enabled, an administrator without enrolled MFA can still authenticate and
+access profile routes needed to enroll TOTP. All other administrative
+permissions and WebSocket upgrades remain blocked with an MFA-enrollment
+required state until enrollment completes. This avoids locking out new or
+recovered accounts.
+
+The policy cannot be enabled unless the runtime MFA encryption key is
+configured. A user cannot disable their own MFA while the policy is enabled.

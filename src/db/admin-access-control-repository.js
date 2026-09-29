@@ -16,6 +16,7 @@ const SECURITY_FIELDS_SQL = `
   password_require_uppercase AS "passwordRequireUppercase",
   password_require_digit AS "passwordRequireDigit",
   password_require_special AS "passwordRequireSpecial",
+  mfa_required AS "mfaRequired",
   metrics_enabled AS "metricsEnabled",
   (metrics_bearer_token_hash IS NOT NULL) AS "metricsTokenConfigured",
   updated_at AS "updatedAt"
@@ -178,6 +179,7 @@ export function createAdminAccessControlRepository(database) {
            password_require_digit=$16::boolean,
            password_require_special=$17::boolean,
            metrics_enabled=$18::boolean,
+           mfa_required=$19::boolean,
            updated_at=NOW()
          WHERE id=1
          RETURNING ${SECURITY_FIELDS_SQL}`,
@@ -200,6 +202,7 @@ export function createAdminAccessControlRepository(database) {
           settings.passwordRequireDigit,
           settings.passwordRequireSpecial,
           settings.metricsEnabled,
+          settings.mfaRequired,
         ],
       );
       if (!result.rows[0]) {

@@ -452,6 +452,26 @@ export function createAdminAuthorization(
           }
 
           if (
+            result
+              .securitySettings
+              ?.mfaRequired &&
+            !user.mfaEnabled &&
+            !options
+              .allowMfaEnrollmentPending
+          ) {
+            sendAdminAuthorizationError(
+              response,
+              428,
+              'MFA enrollment required',
+              {
+                code:
+                  'mfa_enrollment_required',
+              },
+            );
+            return;
+          }
+
+          if (
             !adminHasPermission(
               user,
               permission,
@@ -558,6 +578,8 @@ export function createAdminAuthorization(
         {
           allowPasswordChangePending:
             true,
+          allowMfaEnrollmentPending:
+            true,
         },
       ),
 
@@ -629,6 +651,20 @@ export function createAdminAuthorization(
         return {
           status:
             'password-change-required',
+          user: result.user,
+        };
+      }
+
+      if (
+        result
+          .securitySettings
+          ?.mfaRequired &&
+        !result.user
+          .mfaEnabled
+      ) {
+        return {
+          status:
+            'mfa-enrollment-required',
           user: result.user,
         };
       }

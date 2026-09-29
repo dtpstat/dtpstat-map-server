@@ -54,6 +54,9 @@ function metricsTokenMatches(
 
 export function createSecurityAdministrationService(
   repository,
+  {
+    mfaAvailable = false,
+  } = {},
 ) {
   async function createIpBlock(
     payload,
@@ -125,6 +128,15 @@ export function createSecurityAdministrationService(
       normalizeAdminSecuritySettings(
         payload,
       );
+
+    if (
+      normalized.mfaRequired &&
+      !mfaAvailable
+    ) {
+      throw new AdminSecurityValidationError(
+        'Configure ADMIN_MFA_ENCRYPTION_KEY before requiring MFA',
+      );
+    }
 
     if (
       normalized.metricsEnabled
