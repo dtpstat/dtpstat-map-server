@@ -401,6 +401,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           ${user.isBootstrap ? '<span>BOOTSTRAP</span>' : ''}
           ${user.isSuperuser ? '<span>SUPERUSER</span>' : ''}
           ${user.mustChangePassword ? '<span class="is-warning">TEMP PASSWORD</span>' : ''}
+          ${user.mfaEnabled ? '<span>MFA</span>' : ''}
           ${user.isBlocked ? '<span class="is-danger">BLOCKED</span>' : ''}
         </div>
       </div>
@@ -434,6 +435,9 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         <h4>Доступ</h4>
         <div class="security-access-actions">
           <button type="button" class="secondary" id="security-temp-password">Создать временный пароль</button>
+          ${currentUser.isSuperuser && user.mfaEnabled && !isSelf
+            ? '<button type="button" class="danger" id="security-user-mfa-reset">Сбросить MFA</button>'
+            : ''}
           ${user.isBlocked
             ? '<button type="button" id="security-user-unblock">Разблокировать</button>'
             : `<button type="button" class="secondary" id="security-user-block" ${protectedUser || isSelf ? 'disabled' : ''}>Заблокировать</button>`}
@@ -507,6 +511,50 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         setMessage(host.querySelector('#security-users-message'), error.message, 'error');
       }
     });
+
+    detail.querySelector('#security-user-mfa-reset')
+      ?.addEventListener('click', async () => {
+        const confirmed = await adminConfirm({
+          title: 'Сбросить MFA?',
+          message:
+            `MFA пользователя ${user.username} будет отключена, recovery codes и активные MFA challenge удалены, все его сессии будут завершены.`,
+          confirmLabel:
+            'Сбросить MFA',
+          cancelLabel:
+            'Отмена',
+          destructive:
+            true,
+        });
+        if (!confirmed) return;
+
+        try {
+          await api(
+            `/api/admin/security/users/${user.id}/mfa`,
+            {
+              method:
+                'DELETE',
+            },
+          );
+          await loadUsers(
+            user.id,
+          );
+          setMessage(
+            host.querySelector(
+              '#security-users-message',
+            ),
+            'MFA пользователя сброшена; активные сессии завершены.',
+            'success',
+          );
+        } catch (error) {
+          setMessage(
+            host.querySelector(
+              '#security-users-message',
+            ),
+            error.message,
+            'error',
+          );
+        }
+      });
 
     const blockButton = detail.querySelector('#security-user-block');
     const blockForm = detail.querySelector('#security-user-block-form');

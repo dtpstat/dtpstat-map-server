@@ -433,6 +433,9 @@ export function publicAdminUser(user) {
     mustChangePassword: Boolean(
       user.mustChangePassword,
     ),
+    mfaEnabled: Boolean(
+      user.mfaEnabled,
+    ),
     hasAvatar: Boolean(user.hasAvatar),
     avatarMime: user.avatarMime ?? null,
     lockedUntil: user.lockedUntil ?? null,

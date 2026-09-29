@@ -421,3 +421,16 @@ project settings export, audit details или service logs.
 выключает endpoint. ENV `METRICS_ENABLED` / `METRICS_BEARER_TOKEN` служат
 только одноразовым bootstrap и после `METRICS_SETTINGS_INITIALIZED=true` не
 переопределяют настройки администратора.
+
+
+## Administrative MFA recovery
+
+A superuser can reset MFA for another administrator from
+**Users → Access → Reset MFA**. The operation cannot target the current
+superuser account. Reset removes the encrypted TOTP secret, pending enrollment,
+recovery-code hashes and pending MFA challenges, revokes all sessions for the
+target account, and is recorded by the administrative operation audit as
+`security.user.mfa.reset`.
+
+The reset endpoint never returns an MFA secret or recovery code. The affected
+administrator must sign in with their password and enroll MFA again.

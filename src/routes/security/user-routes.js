@@ -274,6 +274,97 @@ export function registerAdminUserRoutes(
     },
   );
 
+  router.delete(
+    '/admin/security/users/:userId/mfa',
+    adminAuth.requireSuperuser,
+    operationAudit(
+      'security.user.mfa.reset',
+    ),
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      const userId =
+        parsePositiveInteger(
+          request.params.userId,
+        );
+
+      if (!userId) {
+        response
+          .status(400)
+          .json({
+            error:
+              'userId must be a positive integer',
+          });
+        return;
+      }
+
+      try {
+        const result =
+          await securityService
+            .resetUserMfa(
+              userId,
+              request.adminUser.id,
+            );
+
+        if (!result) {
+          response
+            .status(404)
+            .json({
+              error:
+                'Administrator user not found',
+            });
+          return;
+        }
+
+        notificationEvents
+          ?.publish({
+            level: 'warn',
+            message:
+              'MFA администратора сброшена. Активные сессии завершены.',
+            permission: 'any',
+            audience: {
+              userIds: [
+                result.userId,
+              ],
+            },
+            control: {
+              action: 'logout',
+              reason:
+                'admin-mfa-reset',
+            },
+            source: {
+              kind:
+                'security-user',
+              id:
+                String(
+                  result.userId,
+                ),
+            },
+          });
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json(result);
+      } catch (error) {
+        if (
+          handleAdminSecurityValidation(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+
+        next(error);
+      }
+    },
+  );
+
   router.post(
     '/admin/security/users/:userId/temporary-password',
     adminAuth.requireUsers,

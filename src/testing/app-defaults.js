@@ -307,6 +307,7 @@ function security(config) {
     isBootstrap: true,
     isBlocked: false,
     mustChangePassword: false,
+    mfaEnabled: false,
     hasAvatar: false,
   };
 
@@ -497,6 +498,17 @@ function security(config) {
         ],
         recoveryCodesRemaining:
           1,
+      };
+    },
+
+    async resetUserMfa(
+      userId,
+    ) {
+      return {
+        userId:
+          Number(userId),
+        username,
+        enabled: false,
       };
     },
 

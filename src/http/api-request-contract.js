@@ -928,6 +928,10 @@ export const API_REQUEST_CONTRACTS =
       '/admin/security/users/:userId',
     ),
     c(
+      'DELETE',
+      '/admin/security/users/:userId/mfa',
+    ),
+    c(
       'POST',
       '/admin/security/users/:userId/temporary-password',
     ),

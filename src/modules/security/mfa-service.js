@@ -580,6 +580,67 @@ export function createSecurityMfaService(
     };
   }
 
+  async function resetUserMfa(
+    userId,
+    actorUserId,
+  ) {
+    if (
+      Number(userId) ===
+      Number(actorUserId)
+    ) {
+      throw new AdminSecurityValidationError(
+        'You cannot reset your own MFA from user administration',
+      );
+    }
+
+    const user =
+      await repository
+        .getAuthUser(
+          userId,
+        );
+
+    if (!user) {
+      return null;
+    }
+
+    const state =
+      await repository
+        .getMfaState(
+          userId,
+        );
+
+    if (
+      !state?.enabled
+    ) {
+      throw new AdminSecurityValidationError(
+        'MFA is not enabled for this user',
+      );
+    }
+
+    if (
+      !await repository
+        .disableMfa(
+          userId,
+        )
+    ) {
+      return null;
+    }
+
+    await repository
+      .revokeUserSessions(
+        userId,
+        null,
+      );
+
+    return {
+      userId:
+        Number(userId),
+      username:
+        user.username,
+      enabled: false,
+    };
+  }
+
   async function disableOwnMfa(
     userId,
     payload,
@@ -668,6 +729,7 @@ export function createSecurityMfaService(
     beginMfaEnrollment,
     confirmMfaEnrollment,
     regenerateMfaRecoveryCodes,
+    resetUserMfa,
     disableOwnMfa,
   };
 }

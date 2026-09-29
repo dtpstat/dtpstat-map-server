@@ -18,6 +18,7 @@ const USER_FIELDS_SQL = `
   manual_block_reason AS "manualBlockReason",
   manual_blocked_by::integer AS "manualBlockedBy",
   must_change_password AS "mustChangePassword",
+  mfa_enabled AS "mfaEnabled",
   (avatar_data IS NOT NULL) AS "hasAvatar",
   avatar_mime AS "avatarMime",
   failed_login_count AS "failedLoginCount",
