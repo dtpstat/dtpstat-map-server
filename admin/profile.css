@@ -127,3 +127,37 @@
   .profile-sessions-panel { grid-column: auto; }
   .profile-section-heading { flex-direction: column; }
 }
+
+
+.profile-mfa-enrollment,
+.profile-mfa-recovery-codes,
+.profile-mfa-action {
+  margin-top: .75rem;
+}
+
+.profile-secret-value {
+  display: block;
+  margin-top: .3rem;
+  padding: .55rem;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.profile-secret-uri {
+  max-height: 6rem;
+  overflow: auto;
+}
+
+.profile-mfa-recovery-codes {
+  padding: .75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.profile-mfa-recovery-codes pre {
+  white-space: pre-wrap;
+  user-select: all;
+  font-size: .8rem;
+}

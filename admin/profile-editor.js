@@ -101,6 +101,90 @@ if (host) {
         <p id="profile-password-message" class="profile-message" role="status"></p>
       </section>
 
+      <section class="profile-panel profile-mfa-panel">
+        <div class="profile-section-heading">
+          <div>
+            <h3>Multi-factor authentication</h3>
+            <p class="profile-muted">TOTP-код из authenticator app или одноразовый recovery code.</p>
+          </div>
+          <strong id="profile-mfa-state">—</strong>
+        </div>
+
+        <div id="profile-mfa-required" class="profile-warning" hidden>
+          MFA обязательна. До настройки второго фактора остальные разделы админки недоступны.
+        </div>
+        <div id="profile-mfa-unavailable" class="profile-warning" hidden>
+          MFA недоступна: на сервере не настроен ключ шифрования.
+        </div>
+
+        <form id="profile-mfa-enroll-form" class="profile-form">
+          <label>Текущий пароль
+            <input name="currentPassword" type="password" required autocomplete="current-password">
+          </label>
+          <button type="submit">Настроить MFA</button>
+        </form>
+
+        <div id="profile-mfa-enrollment" class="profile-mfa-enrollment" hidden>
+          <p class="profile-muted">
+            Добавьте аккаунт в authenticator app по provisioning URI или вручную по secret,
+            затем подтвердите шестизначный код.
+          </p>
+          <label>Secret
+            <code id="profile-mfa-secret" class="profile-secret-value"></code>
+          </label>
+          <label>Provisioning URI
+            <code id="profile-mfa-uri" class="profile-secret-value profile-secret-uri"></code>
+          </label>
+          <form id="profile-mfa-confirm-form" class="profile-form">
+            <label>Код из приложения
+              <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
+                     required autocomplete="one-time-code">
+            </label>
+            <button type="submit">Подтвердить и включить MFA</button>
+          </form>
+        </div>
+
+        <div id="profile-mfa-enabled-actions" hidden>
+          <p class="profile-muted">
+            Неиспользованных recovery codes:
+            <strong id="profile-mfa-recovery-count">0</strong>
+          </p>
+          <details class="profile-mfa-action">
+            <summary>Создать новые recovery codes</summary>
+            <form id="profile-mfa-recovery-form" class="profile-form">
+              <label>Текущий пароль
+                <input name="currentPassword" type="password" required autocomplete="current-password">
+              </label>
+              <label>TOTP или recovery code
+                <input name="code" required autocomplete="one-time-code">
+              </label>
+              <button type="submit">Заменить recovery codes</button>
+            </form>
+          </details>
+          <details class="profile-mfa-action">
+            <summary>Отключить MFA</summary>
+            <form id="profile-mfa-disable-form" class="profile-form">
+              <label>Текущий пароль
+                <input name="currentPassword" type="password" required autocomplete="current-password">
+              </label>
+              <label>TOTP или recovery code
+                <input name="code" required autocomplete="one-time-code">
+              </label>
+              <button type="submit" class="danger" id="profile-mfa-disable">Отключить MFA</button>
+            </form>
+          </details>
+        </div>
+
+        <div id="profile-mfa-recovery-codes" class="profile-mfa-recovery-codes" hidden>
+          <strong>Сохраните recovery codes сейчас</strong>
+          <p class="profile-muted">После скрытия plaintext-коды получить снова нельзя; можно только выпустить новые.</p>
+          <pre id="profile-mfa-recovery-values"></pre>
+          <button type="button" class="secondary" id="profile-mfa-recovery-hide">Скрыть codes</button>
+        </div>
+
+        <p id="profile-mfa-message" class="profile-message" role="status"></p>
+      </section>
+
       <section class="profile-panel profile-sessions-panel">
         <div class="profile-section-heading">
           <div>
@@ -121,10 +205,16 @@ if (host) {
   const passwordMessage = host.querySelector('#profile-password-message');
   const sessionsMessage = host.querySelector('#profile-sessions-message');
   const sessionsHost = host.querySelector('#profile-sessions');
+  const mfaMessage = host.querySelector('#profile-mfa-message');
+  const mfaEnrollForm = host.querySelector('#profile-mfa-enroll-form');
+  const mfaConfirmForm = host.querySelector('#profile-mfa-confirm-form');
+  const mfaRecoveryForm = host.querySelector('#profile-mfa-recovery-form');
+  const mfaDisableForm = host.querySelector('#profile-mfa-disable-form');
   const accountDirty = trackDirtyForm(accountForm, { label: 'Профиль' });
   let currentSessionId = null;
   let currentUser = null;
   let passwordPolicy = null;
+  let mfaStatus = null;
 
   function passwordPolicyError(value) {
     if (!passwordPolicy) return null;
@@ -224,6 +314,118 @@ if (host) {
     currentSessionId = session.sessionId ?? null;
     renderUser(session.user);
     return session;
+  }
+
+  function hideRecoveryCodes() {
+    const panel =
+      host.querySelector(
+        '#profile-mfa-recovery-codes',
+      );
+    const values =
+      host.querySelector(
+        '#profile-mfa-recovery-values',
+      );
+    values.textContent = '';
+    panel.hidden = true;
+  }
+
+  function showRecoveryCodes(
+    codes,
+  ) {
+    const panel =
+      host.querySelector(
+        '#profile-mfa-recovery-codes',
+      );
+    const values =
+      host.querySelector(
+        '#profile-mfa-recovery-values',
+      );
+    values.textContent =
+      codes.join('\n');
+    panel.hidden = false;
+  }
+
+  function renderMfaStatus(
+    status,
+  ) {
+    mfaStatus = status;
+    const enabled =
+      Boolean(
+        status.enabled,
+      );
+    const required =
+      Boolean(
+        status.required,
+      );
+
+    host.querySelector(
+      '#profile-mfa-state',
+    ).textContent =
+      enabled
+        ? 'Включена'
+        : 'Выключена';
+
+    host.querySelector(
+      '#profile-mfa-required',
+    ).hidden =
+      !required ||
+      enabled;
+
+    host.querySelector(
+      '#profile-mfa-unavailable',
+    ).hidden =
+      Boolean(
+        status.available,
+      );
+
+    mfaEnrollForm.hidden =
+      enabled;
+
+    mfaEnrollForm
+      .querySelector(
+        'button',
+      ).disabled =
+      !status.available;
+
+    host.querySelector(
+      '#profile-mfa-enrollment',
+    ).hidden =
+      !status.enrollmentPending;
+
+    host.querySelector(
+      '#profile-mfa-enabled-actions',
+    ).hidden =
+      !enabled;
+
+    host.querySelector(
+      '#profile-mfa-recovery-count',
+    ).textContent =
+      String(
+        status.recoveryCodesRemaining ??
+        0,
+      );
+
+    const disableButton =
+      host.querySelector(
+        '#profile-mfa-disable',
+      );
+    disableButton.disabled =
+      required;
+    disableButton.title =
+      required
+        ? 'MFA обязательна политикой безопасности'
+        : '';
+  }
+
+  async function loadMfaStatus() {
+    const payload =
+      await api(
+        '/api/admin/profile/mfa',
+      );
+    renderMfaStatus(
+      payload.mfa,
+    );
+    return payload.mfa;
   }
 
   function sessionCard(session) {
@@ -331,6 +533,256 @@ if (host) {
     }
   });
 
+  mfaEnrollForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!mfaEnrollForm.reportValidity()) return;
+    hideRecoveryCodes();
+
+    try {
+      const payload =
+        await api(
+          '/api/admin/profile/mfa/enroll',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify({
+              currentPassword:
+                mfaEnrollForm
+                  .elements
+                  .currentPassword
+                  .value,
+            }),
+          },
+        );
+
+      mfaEnrollForm.reset();
+
+      host.querySelector(
+        '#profile-mfa-secret',
+      ).textContent =
+        payload.enrollment.secret;
+
+      host.querySelector(
+        '#profile-mfa-uri',
+      ).textContent =
+        payload.enrollment
+          .provisioningUri;
+
+      host.querySelector(
+        '#profile-mfa-enrollment',
+      ).hidden =
+        false;
+
+      message(
+        mfaMessage,
+        'Enrollment создан. Подтвердите код из authenticator app.',
+        'success',
+      );
+
+      await loadMfaStatus();
+    } catch (error) {
+      message(
+        mfaMessage,
+        error.message,
+        'error',
+      );
+    }
+  });
+
+  mfaConfirmForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!mfaConfirmForm.reportValidity()) return;
+
+    try {
+      const payload =
+        await api(
+          '/api/admin/profile/mfa/confirm',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify({
+              code:
+                mfaConfirmForm
+                  .elements
+                  .code
+                  .value,
+            }),
+          },
+        );
+
+      mfaConfirmForm.reset();
+
+      host.querySelector(
+        '#profile-mfa-secret',
+      ).textContent = '';
+      host.querySelector(
+        '#profile-mfa-uri',
+      ).textContent = '';
+
+      showRecoveryCodes(
+        payload.mfa
+          .recoveryCodes,
+      );
+
+      await loadMfaStatus();
+      await globalThis
+        .dtpstatReloadAdminSession?.();
+
+      message(
+        mfaMessage,
+        'MFA включена. Сохраните recovery codes.',
+        'success',
+      );
+    } catch (error) {
+      message(
+        mfaMessage,
+        error.message,
+        'error',
+      );
+    }
+  });
+
+  mfaRecoveryForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!mfaRecoveryForm.reportValidity()) return;
+
+    try {
+      const payload =
+        await api(
+          '/api/admin/profile/mfa/recovery-codes',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify({
+              currentPassword:
+                mfaRecoveryForm
+                  .elements
+                  .currentPassword
+                  .value,
+              code:
+                mfaRecoveryForm
+                  .elements
+                  .code
+                  .value,
+            }),
+          },
+        );
+
+      mfaRecoveryForm.reset();
+
+      showRecoveryCodes(
+        payload.mfa
+          .recoveryCodes,
+      );
+
+      await loadMfaStatus();
+
+      message(
+        mfaMessage,
+        'Recovery codes заменены.',
+        'success',
+      );
+    } catch (error) {
+      message(
+        mfaMessage,
+        error.message,
+        'error',
+      );
+    }
+  });
+
+  mfaDisableForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!mfaDisableForm.reportValidity()) return;
+
+    if (
+      mfaStatus?.required
+    ) {
+      message(
+        mfaMessage,
+        'MFA обязательна политикой безопасности.',
+        'error',
+      );
+      return;
+    }
+
+    const confirmed =
+      await adminConfirm({
+        title:
+          'Отключить MFA?',
+        message:
+          'Второй фактор и recovery codes будут удалены. Остальные активные сессии завершатся.',
+        confirmLabel:
+          'Отключить MFA',
+        cancelLabel:
+          'Отмена',
+        destructive:
+          true,
+      });
+
+    if (!confirmed) return;
+
+    try {
+      await api(
+        '/api/admin/profile/mfa',
+        {
+          method: 'DELETE',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify({
+            currentPassword:
+              mfaDisableForm
+                .elements
+                .currentPassword
+                .value,
+            code:
+              mfaDisableForm
+                .elements
+                .code
+                .value,
+          }),
+        },
+      );
+
+      mfaDisableForm.reset();
+      hideRecoveryCodes();
+
+      await loadMfaStatus();
+      await globalThis
+        .dtpstatReloadAdminSession?.();
+
+      message(
+        mfaMessage,
+        'MFA отключена.',
+        'success',
+      );
+    } catch (error) {
+      message(
+        mfaMessage,
+        error.message,
+        'error',
+      );
+    }
+  });
+
+  host.querySelector(
+    '#profile-mfa-recovery-hide',
+  ).addEventListener(
+    'click',
+    hideRecoveryCodes,
+  );
+
   host.querySelector('#profile-avatar-file').addEventListener('change', async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -385,5 +837,9 @@ if (host) {
 
   window.addEventListener('dtpstat:admin-session-changed', (event) => renderUser(event.detail.user));
   await loadSession();
-  await Promise.all([loadSessions(), loadPasswordPolicy()]);
+  await Promise.all([
+    loadSessions(),
+    loadPasswordPolicy(),
+    loadMfaStatus(),
+  ]);
 }
