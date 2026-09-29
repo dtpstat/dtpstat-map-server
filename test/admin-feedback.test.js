@@ -14,7 +14,10 @@ test('admin action feedback never observes its own toast output', async () => {
   const feedback = await source('admin/action-feedback.js');
 
   assert.match(feedback, /const MESSAGE_SELECTOR =/);
-  assert.match(feedback, /element\.matches\(MESSAGE_SELECTOR\)/);
+  assert.match(
+    feedback,
+    /element\.matches\(\s*MESSAGE_SELECTOR,?\s*\)/u,
+  );
   assert.match(feedback, /if \(node === host \|\| host\.contains\(node\)\) continue;/);
   assert.match(feedback, /if \(isFeedbackSource\(node\)\) watch\(node\);/);
   assert.doesNotMatch(feedback, /if \(toneFromElement\(node\)\) watch\(node\);/);
