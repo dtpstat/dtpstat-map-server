@@ -1,7 +1,5 @@
 import {
-  expandViewportBounds,
   viewportGeometryQuery,
-  VIEWPORT_EXPANSION_RATIO,
 } from './viewport-query.js';
 
 export {
