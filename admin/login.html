@@ -22,6 +22,21 @@
       </label>
       <button type="submit">Войти</button>
     </form>
+    <form id="admin-mfa-form" hidden>
+      <label>Код подтверждения
+        <input name="code" type="text" maxlength="128" required
+               autocomplete="one-time-code" autocapitalize="characters"
+               spellcheck="false"
+               aria-describedby="admin-mfa-hint">
+      </label>
+      <small id="admin-mfa-hint" class="admin-login-hint">
+        Введите 6-значный код приложения-аутентификатора или резервный код.
+      </small>
+      <button type="submit">Подтвердить</button>
+      <button type="button" class="secondary" id="admin-mfa-back">
+        Ввести логин и пароль заново
+      </button>
+    </form>
     <p id="admin-login-message" class="notice" role="status"></p>
   </main>
 </body>

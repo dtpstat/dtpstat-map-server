@@ -20,3 +20,17 @@
 .admin-login-hint { color: var(--muted); }
 .admin-login-card form { display: grid; gap: 1rem; margin-top: 1.2rem; }
 .admin-login-card label { display: grid; gap: .4rem; }
+
+
+#admin-mfa-form[hidden],
+#admin-login-form[hidden] {
+  display: none;
+}
+
+#admin-mfa-form small {
+  margin-top: -.45rem;
+}
+
+#admin-mfa-form .secondary {
+  width: 100%;
+}

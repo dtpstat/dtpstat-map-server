@@ -101,6 +101,10 @@ test('protected admin request detection is same-origin and excludes login', () =
   const base = 'https://example.test/admin/';
   assert.equal(isProtectedAdminRequest('/api/admin/me', base), true);
   assert.equal(isProtectedAdminRequest('/api/admin/login', base), false);
+  assert.equal(
+    isProtectedAdminRequest('/api/admin/login/mfa', base),
+    false,
+  );
   assert.equal(isProtectedAdminRequest('/api/config', base), false);
   assert.equal(
     isProtectedAdminRequest('https://other.test/api/admin/me', base),

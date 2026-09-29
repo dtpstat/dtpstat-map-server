@@ -60,9 +60,11 @@ export function isProtectedAdminRequest(
       baseHref,
     );
 
-  return (
-    url.pathname !==
-      '/api/admin/login'
+  return ![
+    '/api/admin/login',
+    '/api/admin/login/mfa',
+  ].includes(
+    url.pathname,
   );
 }
 
