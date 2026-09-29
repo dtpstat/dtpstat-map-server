@@ -168,19 +168,6 @@ export function registerAdminProfileRoutes(
         }
 
         if (
-          result.status !==
-          'success'
-        ) {
-          response
-            .status(401)
-            .json({
-              error:
-                'Invalid username or password',
-            });
-          return;
-        }
-
-        if (
           result.status ===
           'mfa-unavailable'
         ) {
@@ -211,6 +198,19 @@ export function registerAdminProfileRoutes(
                   .challengeToken,
               expiresAt:
                 result.expiresAt,
+            });
+          return;
+        }
+
+        if (
+          result.status !==
+          'success'
+        ) {
+          response
+            .status(401)
+            .json({
+              error:
+                'Invalid username or password',
             });
           return;
         }
