@@ -403,6 +403,12 @@ export function registerAdminProfileRoutes(
 
       response.json({
         user: request.adminUser,
+        mfaRequired:
+          Boolean(
+            request
+              .adminSecuritySettings
+              ?.mfaRequired,
+          ),
         sessionId:
           request.adminSessionId,
         expiresAt:

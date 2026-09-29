@@ -142,6 +142,22 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
               </div>
             </fieldset>
 
+            <section class="security-mfa-policy-panel" aria-labelledby="security-mfa-policy-title">
+              <div class="security-mfa-policy-heading">
+                <div>
+                  <h3 id="security-mfa-policy-title">Multi-factor authentication</h3>
+                  <p class="security-info">
+                    При обязательной MFA пользователь без второго фактора получает
+                    доступ только к профилю до завершения настройки.
+                  </p>
+                </div>
+                <label class="security-mfa-policy-toggle">
+                  <input name="mfaRequired" type="checkbox">
+                  <span>Обязательна</span>
+                </label>
+              </div>
+            </section>
+
             <section class="security-metrics-panel" aria-labelledby="security-metrics-title">
               <div class="security-metrics-heading">
                 <div>
@@ -1264,7 +1280,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     const booleanKeys = [
       'passwordRequireLowercase','passwordRequireUppercase',
       'passwordRequireDigit','passwordRequireSpecial',
-      'metricsEnabled',
+      'metricsEnabled','mfaRequired',
     ];
     const settings = Object.fromEntries([
       ...numericKeys.map((key) => [key, Number(form.elements[key].value)]),

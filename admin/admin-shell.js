@@ -23,10 +23,15 @@ function canAccessSecurity(user) {
   );
 }
 
-function permissionFingerprint(user) {
+function permissionFingerprint(
+  user,
+  mfaRequired = false,
+) {
   return [
     Boolean(user?.isSuperuser),
     Boolean(user?.mustChangePassword),
+    Boolean(mfaRequired),
+    Boolean(user?.mfaEnabled),
     Boolean(user?.canManageData),
     Boolean(user?.canEditGeometries),
     Boolean(user?.canEditOsm),
@@ -254,15 +259,33 @@ async function loadDataEditors() {
   setupDataSectionLockExtensions();
 }
 
-function setupPrimarySections(user) {
-  const mustChangePassword = Boolean(user.mustChangePassword);
-  const dataAccess = !mustChangePassword && canManageData(user);
+function setupPrimarySections(
+  user,
+  {
+    mfaRequired = false,
+  } = {},
+) {
+  const mustChangePassword =
+    Boolean(
+      user.mustChangePassword,
+    );
+  const mustEnrollMfa =
+    Boolean(
+      mfaRequired &&
+      !user.mfaEnabled,
+    );
+  const restricted =
+    mustChangePassword ||
+    mustEnrollMfa;
+  const dataAccess =
+    !restricted &&
+    canManageData(user);
   const permissions = {
     data: dataAccess,
-    geometries: !mustChangePassword && canEditGeometries(user),
-    'osm-objects': !mustChangePassword && canEditOsm(user),
-    interface: !mustChangePassword && canManageInterface(user),
-    security: !mustChangePassword && canAccessSecurity(user),
+    geometries: !restricted && canEditGeometries(user),
+    'osm-objects': !restricted && canEditOsm(user),
+    interface: !restricted && canManageInterface(user),
+    security: !restricted && canAccessSecurity(user),
     profile: true,
   };
   const tabs = [...document.querySelectorAll('[data-admin-section-tab]')];
@@ -298,7 +321,7 @@ function setupPrimarySections(user) {
   };
 
   for (const tab of tabs) tab.addEventListener('click', () => select(tab.dataset.adminSectionTab));
-  const initial = mustChangePassword
+  const initial = restricted
     ? 'profile'
     : readTabState('primary', available, available[0]);
   select(initial);
@@ -373,10 +396,24 @@ async function startAdminShell() {
     ensureProfileSection();
     ensureTopbarActions();
     updateUserBadge(user);
-    setupPrimarySections(user);
+    setupPrimarySections(
+      user,
+      {
+        mfaRequired:
+          session.mfaRequired,
+      },
+    );
 
     await import('./profile-editor.js');
-    if (!user.mustChangePassword) {
+    const restricted =
+      Boolean(
+        user.mustChangePassword ||
+        (
+          session.mfaRequired &&
+          !user.mfaEnabled
+        ),
+      );
+    if (!restricted) {
       if (canManageData(user)) await loadDataEditors();
       if (canEditGeometries(user)) await import('./geometry-editor.js');
       if (canEditOsm(user)) await import('./osm-boundary-editor.js');
@@ -385,7 +422,10 @@ async function startAdminShell() {
     }
 
     let activePermissionFingerprint =
-      permissionFingerprint(user);
+      permissionFingerprint(
+        user,
+        session.mfaRequired,
+      );
 
     window.addEventListener(
       'dtpstat:admin-session-changed',
@@ -401,6 +441,8 @@ async function startAdminShell() {
         const nextFingerprint =
           permissionFingerprint(
             nextUser,
+            event.detail
+              ?.mfaRequired,
           );
         if (
           nextFingerprint !==

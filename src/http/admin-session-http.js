@@ -114,6 +114,10 @@ export function applyAdminSessionContext(
   request.adminAuthMethod =
     'session';
 
+  request.adminSecuritySettings =
+    result.securitySettings ??
+    null;
+
   request.adminSessionExpiresAt =
     result
       .sessionEffectiveExpiresAt ??
