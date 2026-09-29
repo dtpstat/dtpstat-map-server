@@ -139,6 +139,23 @@ identifier/fragments, которые нельзя выразить bind paramete
 Route получает service/repository через dependency injection; прямой импорт из
 `src/db` запрещён.
 
+### Notifications и realtime
+
+Notification semantics принадлежат `src/modules/notifications`: допустимые
+уровни, persistence policy, audience/control envelope и нормализация payload.
+Этот слой transport-neutral и не знает о WebSocket/Express/DOM.
+
+`src/http/admin-websocket.js` — только transport/security adapter: он получает
+notification/realtime events через dependency injection, перед каждой доставкой
+повторно проверяет актуальную DB-backed session/permission state и фильтрует
+audience. WebSocket gateway не должен становиться источником notification
+business rules.
+
+Client-side `admin/notification-center.js` владеет notification pool/state, а
+`admin/action-feedback.js` только рендерит этот state. `admin/realtime-client.js`
+адаптирует transport events в notification channel и не должен дублировать
+toast storage/rendering.
+
 ### Общая инфраструктура
 
 Только действительно domain-neutral код размещается в `src/shared`.

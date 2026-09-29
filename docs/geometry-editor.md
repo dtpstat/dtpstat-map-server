@@ -188,32 +188,31 @@ V049 empty-descendant spatial resolver fix
 
 ### Notification / realtime infrastructure
 
-Нужен общий client notification pool с подпиской UI и возможностью показывать
-несколько notifications одновременно.
+Реализовано:
 
-Типы:
+- [x] общий client notification pool с publish/subscribe/dismiss/snapshot;
+- [x] несколько notifications одновременно;
+- [x] типы `info`, `log`, `warn`, `error`;
+- [x] `info/log` auto-dismiss, `warn/error` persistent до явного закрытия;
+- [x] user-visible WebSocket data-change/task/log/success проходят через общий
+  notification channel;
+- [x] server notification channel отделён от WebSocket transport;
+- [x] перед каждой WS-delivery выполняется read-only повторная проверка session
+  и текущих permissions;
+- [x] realtime authorization не touch-ит `last_seen_at` и поэтому server push
+  не продлевает idle-session;
+- [x] role/permission change публикует targeted `refresh-session`; клиент
+  перечитывает `/api/admin/me`, а при изменении capability set reload-ит UI;
+- [x] revoke/block/delete/password reset публикуют targeted control event;
+  revoked socket получает server-initiated logout и закрывается;
+- [x] delivery audience поддерживает user/session targets и исключение текущей
+  session; delivery metadata не отправляется браузеру.
 
-```text
-info
-log
-warn
-error
-```
-
-`info/log` могут быть auto-dismiss. `warn/error` по умолчанию persistent и
-закрываются пользователем явно. Конкретное событие может override-ить policy,
-если это обосновано.
-
-Через этот канал должны проходить user-visible сообщения admin WebSocket.
-Server-side publish обязан фильтровать recipients по актуальной ролевой модели,
-а не по permissions на момент открытия socket. Изменение роли/permissions
-должно применяться к notification delivery немедленно; клиент при следующем
-action также получает актуальную authorization check и при необходимости
-обновляет session/user state.
-
-Предусмотреть server-initiated logout/revoke event: активный client завершает
-admin session UI, очищает только session-scoped state и переводит пользователя
-на login без уничтожения независимых recoverable local drafts.
+Security rule: notification text рендерится только через `textContent`; HTML
+из notification payload не интерпретируется. `warn/error` нельзя превратить
+в auto-dismiss сообщением с сервера. Notification channel не является способом
+обойти RBAC: transport повторно проверяет authoritative DB-backed session/user
+state непосредственно перед отправкой.
 
 ### Point types и icons
 

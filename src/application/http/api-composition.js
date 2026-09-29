@@ -56,12 +56,14 @@ export function installApplicationApiRoutes(
     adminAuth,
     securityService,
     realtimeEvents,
+    notificationEvents,
     config,
   },
 ) {
   const commonAdmin = {
     adminAuth,
     securityService,
+    notificationEvents,
     maxBodyBytes:
       config.importApi
         .maxBodyBytes,

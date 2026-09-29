@@ -44,6 +44,7 @@ export function registerAdminProfileRoutes(
     adminAuth,
     jsonBody,
     avatarBody,
+    notificationEvents,
   },
 ) {
   const operationAudit = (type) =>
@@ -258,6 +259,36 @@ export function registerAdminProfileRoutes(
               request.body,
             );
 
+        notificationEvents
+          ?.publish({
+            level: 'info',
+            message:
+              'Профиль администратора обновлён в другой активной сессии.',
+            permission: 'any',
+            audience: {
+              userIds: [
+                request.adminUser.id,
+              ],
+              excludeSessionIds: [
+                request.adminSessionId,
+              ],
+            },
+            control: {
+              action:
+                'refresh-session',
+              reason:
+                'profile-updated',
+            },
+            source: {
+              kind:
+                'admin-profile',
+              id:
+                String(
+                  request.adminUser.id,
+                ),
+            },
+          });
+
         response
           .set(
             'Cache-Control',
@@ -320,6 +351,35 @@ export function registerAdminProfileRoutes(
               request.body,
               request.adminSessionId,
             );
+
+        notificationEvents
+          ?.publish({
+            level: 'warn',
+            message:
+              'Пароль изменён. Другие активные сессии администратора завершены.',
+            permission: 'any',
+            audience: {
+              userIds: [
+                request.adminUser.id,
+              ],
+              excludeSessionIds: [
+                request.adminSessionId,
+              ],
+            },
+            control: {
+              action: 'logout',
+              reason:
+                'password-changed',
+            },
+            source: {
+              kind:
+                'admin-profile',
+              id:
+                String(
+                  request.adminUser.id,
+                ),
+            },
+          });
 
         response
           .set(
@@ -473,6 +533,35 @@ export function registerAdminProfileRoutes(
               request.adminSessionId,
             );
 
+        notificationEvents
+          ?.publish({
+            level: 'warn',
+            message:
+              'Эта административная сессия была отозвана.',
+            permission: 'any',
+            audience: {
+              userIds: [
+                request.adminUser.id,
+              ],
+              excludeSessionIds: [
+                request.adminSessionId,
+              ],
+            },
+            control: {
+              action: 'logout',
+              reason:
+                'other-sessions-revoked',
+            },
+            source: {
+              kind:
+                'admin-session',
+              id:
+                String(
+                  request.adminUser.id,
+                ),
+            },
+          });
+
         response.json({ revoked });
       } catch (error) {
         next(error);
@@ -520,6 +609,30 @@ export function registerAdminProfileRoutes(
         const deletingCurrent =
           request.adminSessionId ===
           sessionId;
+
+        notificationEvents
+          ?.publish({
+            level: 'warn',
+            message:
+              'Эта административная сессия была отозвана.',
+            permission: 'any',
+            audience: {
+              sessionIds: [
+                sessionId,
+              ],
+            },
+            control: {
+              action: 'logout',
+              reason:
+                'session-revoked',
+            },
+            source: {
+              kind:
+                'admin-session',
+              id:
+                String(sessionId),
+            },
+          });
 
         if (deletingCurrent) {
           response.set(

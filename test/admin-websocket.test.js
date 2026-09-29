@@ -6,6 +6,9 @@ import {
   createRealtimeEventBus,
 } from '../src/shared/events/realtime-event-bus.js';
 import {
+  createAdminNotificationChannel,
+} from '../src/modules/notifications/channel.js';
+import {
   createAdminTaskManager,
 } from '../src/shared/tasks/admin-task-manager.js';
 import {
@@ -638,6 +641,267 @@ test('geometry realtime snapshots and live changes require the dedicated geometr
     dataSocket.close();
     osmSocket.close();
     geometrySocket.close();
+    await gateway.close();
+    await new Promise(
+      (resolve, reject) =>
+        server.close(
+          (error) =>
+            error
+              ? reject(error)
+              : resolve(),
+        ),
+    );
+  }
+});
+
+
+test('admin WebSocket reauthorizes delivery and forces revoked sessions out', async () => {
+  let geometryAllowed = true;
+  let sessionValid = true;
+
+  const currentUser = () => ({
+    id: 41,
+    username: 'dynamic-user',
+    canManageData: false,
+    canEditOsm: false,
+    canEditGeometries:
+      geometryAllowed,
+    isSuperuser: false,
+  });
+
+  const adminAuth = {
+    async authenticateUpgrade() {
+      return {
+        status: 'success',
+        user: currentUser(),
+        token: 'dynamic-token',
+        sessionId: 410,
+      };
+    },
+  };
+
+  const securityService = {
+    async authenticateRequest({
+      sessionToken,
+    }) {
+      assert.equal(
+        sessionToken,
+        'dynamic-token',
+      );
+
+      return sessionValid
+        ? {
+          status: 'success',
+          user: currentUser(),
+          sessionId: 410,
+        }
+        : {
+          status: 'invalid',
+          user: null,
+        };
+    },
+  };
+
+  const adminTasks =
+    createAdminTaskManager({
+      randomUUID:
+        () => 'dynamic-task',
+    });
+  const realtimeEvents =
+    createRealtimeEventBus({
+      randomUUID:
+        () => 'dynamic-change',
+    });
+  const notificationEvents =
+    createAdminNotificationChannel({
+      randomUUID:
+        () => 'dynamic-notification',
+      now:
+        () =>
+          '2026-09-29T01:00:00.000Z',
+    });
+
+  const gateway =
+    createAdminWebSocketGateway({
+      adminTasks,
+      adminAuth,
+      realtimeEvents,
+      notificationEvents,
+      securityService,
+    });
+  const server =
+    http.createServer(
+      (_request, response) =>
+        response.end(),
+    );
+
+  gateway.attach(server);
+  await new Promise(
+    (resolve) =>
+      server.listen(
+        0,
+        '127.0.0.1',
+        resolve,
+      ),
+  );
+
+  const address =
+    server.address();
+  const url =
+    `ws://127.0.0.1:${address.port}/api/admin/ws`;
+  const messages = [];
+  const socket =
+    await openSocket(
+      url,
+      'anything',
+      messages,
+    );
+
+  const flush = async () => {
+    await new Promise(
+      (resolve) =>
+        setImmediate(resolve),
+    );
+    await new Promise(
+      (resolve) =>
+        setImmediate(resolve),
+    );
+  };
+
+  try {
+    realtimeEvents.publish({
+      resource:
+        'city-geometries',
+      permission:
+        'geometry-editor',
+      message:
+        'allowed',
+    });
+    await flush();
+
+    assert.ok(
+      messages.some(
+        (message) =>
+          message.type ===
+            'data-change' &&
+          message.change
+            ?.message ===
+            'allowed',
+      ),
+    );
+
+    geometryAllowed = false;
+
+    notificationEvents.publish({
+      level: 'info',
+      message:
+        'Permissions changed',
+      permission: 'any',
+      audience: {
+        userIds: [41],
+      },
+      control: {
+        action:
+          'refresh-session',
+        reason:
+          'role-changed',
+      },
+    });
+    await flush();
+
+    const notification =
+      messages.find(
+        (message) =>
+          message.type ===
+            'notification',
+      );
+
+    assert.equal(
+      notification
+        ?.notification
+        ?.message,
+      'Permissions changed',
+    );
+    assert.equal(
+      notification
+        ?.notification
+        ?.control
+        ?.action,
+      'refresh-session',
+    );
+    assert.equal(
+      'delivery' in
+        (notification ?? {}),
+      false,
+    );
+
+    const beforeDenied =
+      messages.length;
+
+    realtimeEvents.publish({
+      resource:
+        'city-geometries',
+      permission:
+        'geometry-editor',
+      message:
+        'must-not-leak',
+    });
+    await flush();
+
+    assert.equal(
+      messages.some(
+        (message) =>
+          message.type ===
+            'data-change' &&
+          message.change
+            ?.message ===
+            'must-not-leak',
+      ),
+      false,
+    );
+    assert.equal(
+      messages.length,
+      beforeDenied,
+    );
+
+    sessionValid = false;
+    notificationEvents.publish({
+      level: 'warn',
+      message:
+        'Session revoked',
+      permission: 'any',
+      audience: {
+        sessionIds: [410],
+      },
+      control: {
+        action: 'logout',
+      },
+    });
+
+    await new Promise(
+      (resolve) =>
+        socket.once(
+          'close',
+          resolve,
+        ),
+    );
+
+    assert.ok(
+      messages.some(
+        (message) =>
+          message.type ===
+            'session-control' &&
+          message.action ===
+            'logout',
+      ),
+    );
+  } finally {
+    if (
+      socket.readyState ===
+        WebSocket.OPEN
+    ) {
+      socket.close();
+    }
     await gateway.close();
     await new Promise(
       (resolve, reject) =>

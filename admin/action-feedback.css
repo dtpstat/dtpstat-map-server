@@ -6,6 +6,8 @@
   width: min(30rem, calc(100vw - 2rem));
   display: grid;
   gap: .55rem;
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
   pointer-events: none;
 }
 
@@ -25,8 +27,9 @@
   pointer-events: auto;
 }
 
-.admin-feedback-toast.is-success { border-left-color: var(--success); }
 .admin-feedback-toast.is-info { border-left-color: var(--accent); }
+.admin-feedback-toast.is-log { border-left-color: #7f98a3; }
+.admin-feedback-toast.is-warn { border-left-color: #d59b32; }
 .admin-feedback-toast.is-error { border-left-color: var(--danger); }
 
 .admin-feedback-toast span {

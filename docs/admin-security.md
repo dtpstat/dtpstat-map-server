@@ -325,6 +325,28 @@ Audit deliberately **не хранит concrete values security/profile operatio
 
 Task state process-local: один Node process имеет собственный `createAdminTaskManager()`. Отдельные Node instances не должны делить active task/cancel state.
 
+
+### Realtime authorization и server-initiated session control
+
+WebSocket authorization не считается неизменной после handshake. Перед каждой
+task/data/notification delivery gateway повторно читает DB-backed session/user
+state через read-only realtime-auth path и заново применяет permission policy.
+Поэтому снятое право прекращает давать соответствующие события без reconnect.
+
+Realtime-auth намеренно **не** обновляет `ADMIN_SESSIONS.LAST_SEEN_AT`:
+server push не является пользовательской активностью и не продлевает idle
+session.
+
+Изменение роли/permissions отправляет targeted notification с control
+`refresh-session`. Browser перечитывает `GET /api/admin/me`; если capability
+set изменился, admin UI перезагружается, при этом persistent local geometry
+workspace не уничтожается.
+
+При revoke/block/delete/password reset gateway получает targeted delivery,
+обнаруживает уже недействительную session, отправляет `session-control/logout`
+и закрывает WebSocket. Audience фильтруется по user/session identity до
+доставки, а внутренние `permission/audience` metadata браузеру не передаются.
+
 ## Recovery: разблокировка
 
 ```bash

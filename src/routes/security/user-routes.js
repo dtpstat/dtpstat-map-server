@@ -12,6 +12,7 @@ export function registerAdminUserRoutes(
     securityService,
     adminAuth,
     jsonBody,
+    notificationEvents,
   },
 ) {
   const operationAudit = (type) =>
@@ -123,6 +124,29 @@ export function registerAdminUserRoutes(
           return;
         }
 
+        notificationEvents
+          ?.publish({
+            level: 'info',
+            message:
+              'Ваши права или профиль администратора изменены. Интерфейс обновит активную сессию.',
+            permission: 'any',
+            audience: {
+              userIds: [user.id],
+            },
+            control: {
+              action:
+                'refresh-session',
+              reason:
+                'admin-user-updated',
+            },
+            source: {
+              kind:
+                'security-user',
+              id:
+                String(user.id),
+            },
+          });
+
         response
           .set(
             'Cache-Control',
@@ -184,6 +208,28 @@ export function registerAdminUserRoutes(
           return;
         }
 
+        notificationEvents
+          ?.publish({
+            level: 'warn',
+            message:
+              'Учётная запись администратора удалена. Активная сессия будет завершена.',
+            permission: 'any',
+            audience: {
+              userIds: [user.id],
+            },
+            control: {
+              action: 'logout',
+              reason:
+                'admin-user-deleted',
+            },
+            source: {
+              kind:
+                'security-user',
+              id:
+                String(user.id),
+            },
+          });
+
         response.json({ user });
       } catch (error) {
         if (
@@ -238,6 +284,28 @@ export function registerAdminUserRoutes(
             });
           return;
         }
+
+        notificationEvents
+          ?.publish({
+            level: 'warn',
+            message:
+              'Пароль администратора сброшен. Другие активные сессии завершены.',
+            permission: 'any',
+            audience: {
+              userIds: [result.user.id],
+            },
+            control: {
+              action: 'logout',
+              reason:
+                'temporary-password-reset',
+            },
+            source: {
+              kind:
+                'security-user',
+              id:
+                String(result.user.id),
+            },
+          });
 
         response
           .set(
@@ -301,6 +369,28 @@ export function registerAdminUserRoutes(
             });
           return;
         }
+
+        notificationEvents
+          ?.publish({
+            level: 'warn',
+            message:
+              'Учётная запись администратора заблокирована. Активная сессия будет завершена.',
+            permission: 'any',
+            audience: {
+              userIds: [user.id],
+            },
+            control: {
+              action: 'logout',
+              reason:
+                'admin-user-blocked',
+            },
+            source: {
+              kind:
+                'security-user',
+              id:
+                String(user.id),
+            },
+          });
 
         response.json({ user });
       } catch (error) {

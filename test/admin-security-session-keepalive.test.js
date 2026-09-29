@@ -75,3 +75,44 @@ test('longer idle timeouts keep the one-minute write throttle', async () => {
   assert.equal(result.status, 'success');
   assert.equal(repository.touched.length, 0);
 });
+
+
+test('realtime session authorization never extends idle activity', async () => {
+  const repository = sessionRepository({
+    idleSeconds: 60,
+    lastSeenAt:
+      new Date(
+        Date.now() -
+        31_000,
+      ).toISOString(),
+  });
+  const service =
+    createAdminSecurityService(
+      repository,
+    );
+
+  const result =
+    await service
+      .authenticateRealtime({
+        sessionToken:
+          'test-session-token',
+        ipAddress: null,
+        userAgent: 'websocket',
+      });
+
+  assert.equal(
+    result.status,
+    'success',
+  );
+  assert.equal(
+    repository.touched.length,
+    0,
+  );
+  assert.ok(
+    Date.parse(
+      result.sessionIdleExpiresAt,
+    ) <
+      Date.now() +
+        31_000,
+  );
+});

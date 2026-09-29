@@ -19,3 +19,41 @@ test('admin action feedback never observes its own toast output', async () => {
   assert.match(feedback, /if \(isFeedbackSource\(node\)\) watch\(node\);/);
   assert.doesNotMatch(feedback, /if \(toneFromElement\(node\)\) watch\(node\);/);
 });
+
+
+test('admin action feedback renders the shared typed notification pool', async () => {
+  const [
+    feedback,
+    center,
+    styles,
+  ] = await Promise.all([
+    source('admin/action-feedback.js'),
+    source('admin/notification-center.js'),
+    source('admin/action-feedback.css'),
+  ]);
+
+  assert.match(
+    feedback,
+    /subscribeAdminNotifications/u,
+  );
+  assert.match(
+    feedback,
+    /dtpstatNotifications/u,
+  );
+  assert.match(
+    center,
+    /'info'[\s\S]*'log'[\s\S]*'warn'[\s\S]*'error'/u,
+  );
+  assert.match(
+    center,
+    /level === 'warn'[\s\S]*level === 'error'[\s\S]*true/u,
+  );
+  assert.match(
+    styles,
+    /\.admin-feedback-toast\.is-log/u,
+  );
+  assert.match(
+    styles,
+    /\.admin-feedback-toast\.is-warn/u,
+  );
+});

@@ -20,6 +20,7 @@ import {
 export function createAdminSecurityRouter({
   securityService,
   adminAuth,
+  notificationEvents,
   maxBodyBytes,
 }) {
   const router = Router();
@@ -46,6 +47,7 @@ export function createAdminSecurityRouter({
       adminAuth,
       jsonBody,
       avatarBody,
+      notificationEvents,
     },
   );
 
@@ -55,6 +57,7 @@ export function createAdminSecurityRouter({
       securityService,
       adminAuth,
       jsonBody,
+      notificationEvents,
     },
   );
 

@@ -56,7 +56,19 @@ test('admin realtime client owns the single websocket connection and mutation cl
   );
   assert.match(
     client,
-    /dtpstatAdminFeedback/u,
+    /publishAdminNotification/u,
+  );
+  assert.match(
+    client,
+    /session-control/u,
+  );
+  assert.match(
+    client,
+    /refresh-session/u,
+  );
+  assert.match(
+    client,
+    /admin-task-log/u,
   );
   assert.doesNotMatch(
     admin,

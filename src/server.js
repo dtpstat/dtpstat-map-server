@@ -77,6 +77,8 @@ async function main() {
       adminRuntime.adminTasks,
     realtimeEvents:
       adminRuntime.realtimeEvents,
+    notificationEvents:
+      adminRuntime.notificationEvents,
   });
   const servers = await runServiceOperation(
     'http-servers.start',

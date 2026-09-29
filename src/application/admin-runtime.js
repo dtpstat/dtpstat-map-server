@@ -8,6 +8,9 @@ import {
   createRealtimeEventBus,
 } from '../shared/events/realtime-event-bus.js';
 import {
+  createAdminNotificationChannel,
+} from '../modules/notifications/channel.js';
+import {
   createAdminWebSocketGateway,
 } from '../http/admin-websocket.js';
 
@@ -50,6 +53,7 @@ const DEFAULT_FACTORIES =
     createAdminTaskDerivedRefresh,
     createAdminTaskManager,
     createRealtimeEventBus,
+    createAdminNotificationChannel,
     createAdminWebSocketGateway,
   });
 
@@ -104,6 +108,10 @@ export function createAdminRuntime({
     runtimeFactories
       .createRealtimeEventBus();
 
+  const notificationEvents =
+    runtimeFactories
+      .createAdminNotificationChannel();
+
   const refreshAfterSuccessfulUpdate =
     runtimeFactories
       .createAdminTaskDerivedRefresh(
@@ -146,6 +154,7 @@ export function createAdminRuntime({
         adminTasks,
         adminAuth,
         realtimeEvents,
+        notificationEvents,
         allowedOrigins:
           adminAllowedOrigins,
         securityService,
@@ -155,5 +164,6 @@ export function createAdminRuntime({
     adminTasks,
     adminWebSocket,
     realtimeEvents,
+    notificationEvents,
   };
 }

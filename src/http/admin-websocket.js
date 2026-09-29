@@ -72,6 +72,7 @@ export function createAdminWebSocketGateway({
   adminTasks,
   adminAuth,
   realtimeEvents,
+  notificationEvents = null,
   allowedOrigins = new Set(),
   securityService = null,
   path = '/api/admin/ws',
@@ -82,37 +83,234 @@ export function createAdminWebSocketGateway({
     });
   const attachedServers =
     new Map();
-  const clientUsers =
+  const clientContexts =
     new WeakMap();
 
-  const forPermittedClients =
-    (permission, callback) => {
+  const audienceMatches =
+    (
+      context,
+      audience,
+    ) => {
+      if (!audience) {
+        return true;
+      }
+
+      if (
+        audience.excludeSessionIds
+          ?.includes(
+            context.sessionId,
+          )
+      ) {
+        return false;
+      }
+
+      const hasPositiveTarget =
+        Boolean(
+          audience.userIds
+            ?.length ||
+          audience.sessionIds
+            ?.length,
+        );
+
+      if (!hasPositiveTarget) {
+        return true;
+      }
+
+      return Boolean(
+        audience.userIds
+          ?.includes(
+            context.userId,
+          ) ||
+        audience.sessionIds
+          ?.includes(
+            context.sessionId,
+          ),
+      );
+    };
+
+  const sendSessionLogout =
+    (
+      client,
+      reason,
+    ) => {
+      send(
+        client,
+        {
+          type:
+            'session-control',
+          action:
+            'logout',
+          reason:
+            String(
+              reason ??
+              'session-invalid',
+            ).slice(
+              0,
+              160,
+            ),
+        },
+      );
+
+      if (
+        client.readyState ===
+        WebSocket.OPEN
+      ) {
+        client.close(
+          4001,
+          'Session invalid',
+        );
+      }
+    };
+
+  const enqueueDelivery =
+    (
+      client,
+      {
+        permission =
+          'any',
+        payload,
+        audience =
+          null,
+      },
+    ) => {
+      const context =
+        clientContexts.get(
+          client,
+        );
+      if (
+        !context ||
+        !audienceMatches(
+          context,
+          audience,
+        )
+      ) {
+        return;
+      }
+
+      context.queue =
+        context.queue
+          .then(
+            async () => {
+              if (
+                client.readyState !==
+                WebSocket.OPEN
+              ) {
+                return;
+              }
+
+              let user =
+                context.user;
+
+              if (
+                securityService
+                  ?.authenticateRequest &&
+                context.sessionToken
+              ) {
+                const authenticate =
+                  securityService
+                    .authenticateRealtime ??
+                  securityService
+                    .authenticateRequest;
+                const current =
+                  await authenticate.call(
+                    securityService,
+                    {
+                      sessionToken:
+                        context.sessionToken,
+                      ipAddress:
+                        context.ipAddress,
+                      userAgent:
+                        context.userAgent,
+                    },
+                  );
+
+                if (
+                  current.status !==
+                    'success' ||
+                  current.user
+                    ?.mustChangePassword
+                ) {
+                  sendSessionLogout(
+                    client,
+                    'session-' +
+                      current.status,
+                  );
+                  return;
+                }
+
+                user =
+                  current.user;
+                context.user =
+                  user;
+                context.userId =
+                  user.id;
+                context.sessionId =
+                  current.sessionId ??
+                  context.sessionId;
+              }
+
+              if (
+                !adminHasPermission(
+                  user,
+                  permission,
+                )
+              ) {
+                return;
+              }
+
+              if (
+                !audienceMatches(
+                  context,
+                  audience,
+                )
+              ) {
+                return;
+              }
+
+              send(
+                client,
+                payload,
+              );
+            },
+          )
+          .catch(
+            (error) => {
+              console.error(
+                'Admin WebSocket authorization refresh failed',
+                error,
+              );
+              sendSessionLogout(
+                client,
+                'authorization-refresh-failed',
+              );
+            },
+          );
+    };
+
+  const forAuthorizedClients =
+    (
+      definition,
+    ) => {
       for (
         const client of
         webSocketServer.clients
       ) {
-        const user =
-          clientUsers.get(client);
-        if (
-          !adminHasPermission(
-            user,
-            permission,
-          )
-        ) {
-          continue;
-        }
-        callback(client);
+        enqueueDelivery(
+          client,
+          definition,
+        );
       }
     };
 
   const unsubscribeTasks =
     adminTasks.subscribe(
       (event) => {
-        forPermittedClients(
-          'data',
-          (client) =>
-            send(client, event),
-        );
+        forAuthorizedClients({
+          permission:
+            'data',
+          payload:
+            event,
+        });
       },
     );
 
@@ -123,13 +321,42 @@ export function createAdminWebSocketGateway({
           message.change
             ?.permission ??
           'any';
-        forPermittedClients(
+        forAuthorizedClients({
           permission,
-          (client) =>
-            send(client, message),
-        );
+          payload:
+            message,
+        });
       },
     );
+
+  const unsubscribeNotifications =
+    notificationEvents
+      ?.subscribe?.(
+        (event) => {
+          const notification =
+            event?.notification;
+          if (!notification) {
+            return;
+          }
+
+          forAuthorizedClients({
+            permission:
+              event.delivery
+                ?.permission ??
+              'any',
+            audience:
+              event.delivery
+                ?.audience ??
+              null,
+            payload: {
+              type:
+                'notification',
+              notification,
+            },
+          });
+        },
+      ) ??
+    (() => {});
 
   webSocketServer.on(
     'connection',
@@ -141,9 +368,32 @@ export function createAdminWebSocketGateway({
       const user =
         authorization?.user ??
         null;
-      clientUsers.set(
+      clientContexts.set(
         socket,
-        user,
+        {
+          user,
+          userId:
+            user?.id ??
+            null,
+          sessionId:
+            authorization
+              ?.sessionId ??
+            null,
+          sessionToken:
+            authorization
+              ?.token ??
+            null,
+          ipAddress:
+            requestClientIp(
+              _request,
+            ),
+          userAgent:
+            _request.headers[
+              'user-agent'
+            ],
+          queue:
+            Promise.resolve(),
+        },
       );
 
       const canManageData =
@@ -420,6 +670,7 @@ export function createAdminWebSocketGateway({
     async close() {
       unsubscribeTasks();
       unsubscribeRealtime();
+      unsubscribeNotifications();
 
       for (
         const [

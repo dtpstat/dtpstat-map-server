@@ -44,6 +44,7 @@ import {
  *   adminAuth?: ReturnType<import('./http/admin-auth.js').createAdminAuthorization>,
  *   securityService?: ReturnType<import('./modules/security/service.js').createAdminSecurityService>,
  *   realtimeEvents?: { publish: Function },
+ *   notificationEvents?: { publish: Function },
  *   config: any
  * }} dependencies
  */
@@ -72,6 +73,7 @@ export function createApp({
   adminAuth,
   securityService,
   realtimeEvents,
+  notificationEvents,
   config,
 }) {
   const app = express();
@@ -201,6 +203,7 @@ export function createApp({
       securityService:
         effectiveSecurityService,
       realtimeEvents,
+      notificationEvents,
       config,
     },
   );

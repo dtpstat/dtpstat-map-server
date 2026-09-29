@@ -23,6 +23,20 @@ function canAccessSecurity(user) {
   );
 }
 
+function permissionFingerprint(user) {
+  return [
+    Boolean(user?.isSuperuser),
+    Boolean(user?.mustChangePassword),
+    Boolean(user?.canManageData),
+    Boolean(user?.canEditGeometries),
+    Boolean(user?.canEditOsm),
+    Boolean(user?.canManageInterface),
+    Boolean(user?.canManageUsers),
+    Boolean(user?.canViewAudit),
+    Boolean(user?.canManageSecurity),
+  ].join(':');
+}
+
 function ensureProfileSection() {
   const tabsHost = document.querySelector('#admin-primary-tabs');
   const sectionsHost = document.querySelector('.admin-sections');
@@ -352,7 +366,34 @@ async function startAdminShell() {
       if (canAccessSecurity(user)) await import('./security-editor-v2.js');
     }
 
-    window.addEventListener('dtpstat:admin-session-changed', (event) => updateUserBadge(event.detail.user));
+    let activePermissionFingerprint =
+      permissionFingerprint(user);
+
+    window.addEventListener(
+      'dtpstat:admin-session-changed',
+      (event) => {
+        const nextUser =
+          event.detail?.user;
+        if (!nextUser) return;
+
+        updateUserBadge(
+          nextUser,
+        );
+
+        const nextFingerprint =
+          permissionFingerprint(
+            nextUser,
+          );
+        if (
+          nextFingerprint !==
+          activePermissionFingerprint
+        ) {
+          activePermissionFingerprint =
+            nextFingerprint;
+          window.location.reload();
+        }
+      },
+    );
     window.addEventListener('dtpstat:password-changed', () => window.location.reload());
   } catch (error) {
     if (userBadge) userBadge.textContent = 'Ошибка авторизации';

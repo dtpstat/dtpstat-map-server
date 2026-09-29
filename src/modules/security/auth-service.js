@@ -524,6 +524,9 @@ export function createSecurityAuthService(
     token,
     context = {},
   ) {
+    const touchActivity =
+      context.touchActivity !==
+        false;
     if (!token) {
       return {
         status: 'missing',
@@ -610,6 +613,7 @@ export function createSecurityAuthService(
     );
 
     if (
+      touchActivity &&
       now.valueOf() -
       lastSeenAt.valueOf() >=
       idleTouchIntervalMs
@@ -661,6 +665,20 @@ export function createSecurityAuthService(
     );
   }
 
+  async function authenticateRealtime({
+    sessionToken,
+    ...context
+  }) {
+    return authenticateSession(
+      sessionToken,
+      {
+        ...context,
+        touchActivity:
+          false,
+      },
+    );
+  }
+
   async function logout(token) {
     if (token) {
       await repository.revokeSessionByHash(
@@ -673,6 +691,7 @@ export function createSecurityAuthService(
     ipAccessState,
     recordRequestSecurityIncident,
     authenticateRequest,
+    authenticateRealtime,
     login,
     logout,
   };

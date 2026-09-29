@@ -1,6 +1,9 @@
 import {
   ADMIN_API_VERSION,
 } from './api-contract-client.js';
+import {
+  publishAdminNotification,
+} from './notification-center.js';
 
 const CLIENT_ID_KEY =
   'dtpstat:realtime-client-id';
@@ -74,22 +77,165 @@ function setConnection(
   element.textContent = text;
 }
 
-function feedback(
-  text,
-  tone = 'info',
-  timeoutMs = 6000,
+function publishRealtimeNotification(
+  message,
 ) {
-  const show =
-    window
-      .dtpstatAdminFeedback;
   if (
-    typeof show === 'function'
+    message?.type ===
+      'notification' &&
+    message.notification
   ) {
-    show(
-      text,
-      tone,
-      timeoutMs,
+    return publishAdminNotification(
+      message.notification,
     );
+  }
+
+  if (
+    message?.type ===
+      'data-change' &&
+    message.change
+      ?.originClientId !==
+      realtimeClientId() &&
+    message.change
+      ?.message
+  ) {
+    return publishAdminNotification({
+      level: 'info',
+      message:
+        message.change.message,
+      source: {
+        kind:
+          'realtime-data-change',
+        id:
+          message.change.id ??
+          null,
+      },
+    });
+  }
+
+  if (
+    message?.type ===
+      'log' &&
+    message.entry?.message
+  ) {
+    const level =
+      message.entry.level ===
+        'error'
+        ? 'error'
+        : message.entry.level ===
+          'warning'
+          ? 'warn'
+          : 'log';
+
+    return publishAdminNotification({
+      level,
+      message:
+        message.entry.message,
+      source: {
+        kind:
+          'admin-task-log',
+        id:
+          message.taskId ??
+          null,
+      },
+    });
+  }
+
+  if (
+    message?.type ===
+      'task' &&
+    message.task
+  ) {
+    const taskType =
+      String(
+        message.task.type ??
+        'admin-task',
+      );
+    const status =
+      String(
+        message.task.status ??
+        'updated',
+      );
+
+    return publishAdminNotification({
+      level: 'log',
+      message:
+        'Задача ' +
+        taskType +
+        ': ' +
+        status,
+      source: {
+        kind:
+          'admin-task-state',
+        id:
+          message.task.id ??
+          null,
+      },
+    });
+  }
+
+  if (
+    message?.type ===
+      'success' &&
+    message.update
+  ) {
+    return publishAdminNotification({
+      level: 'info',
+      message:
+        'Задача ' +
+        String(
+          message.update.taskType ??
+          'admin-task',
+        ) +
+        ' успешно завершена.',
+      source: {
+        kind:
+          'admin-task-success',
+        id:
+          message.update.taskId ??
+          null,
+      },
+    });
+  }
+
+  return null;
+}
+
+function handleNotificationControl(
+  notification,
+) {
+  const action =
+    notification?.control
+      ?.action;
+
+  if (
+    action ===
+      'refresh-session'
+  ) {
+    void Promise.resolve(
+      window
+        .dtpstatReloadAdminSession
+        ?.(),
+    ).catch(
+      (error) =>
+        publishAdminNotification({
+          level: 'error',
+          message:
+            error?.message ??
+            'Не удалось обновить административную сессию.',
+        }),
+    );
+    return;
+  }
+
+  if (
+    action ===
+      'logout'
+  ) {
+    stopAdminRealtime();
+    window
+      .dtpstatAdminSessionGuard
+      ?.redirectToLogin?.();
   }
 }
 
@@ -102,19 +248,38 @@ function emit(message) {
       structuredClone(message);
   }
 
+  const notification =
+    publishRealtimeNotification(
+      message,
+    );
+
+  if (notification) {
+    handleNotificationControl(
+      notification,
+    );
+  }
+
   if (
     message?.type ===
-      'data-change' &&
-    message.change
-      ?.originClientId !==
-      realtimeClientId() &&
-    message.change
-      ?.message
+      'session-control' &&
+    message.action ===
+      'logout'
   ) {
-    feedback(
-      message.change.message,
-      'info',
-    );
+    const notification =
+      publishAdminNotification({
+        level: 'error',
+        message:
+          'Административная сессия завершена сервером.',
+        code:
+          message.reason ??
+          'session-revoked',
+      });
+    handleNotificationControl({
+      ...notification,
+      control: {
+        action: 'logout',
+      },
+    });
   }
 
   window.dispatchEvent(
@@ -194,10 +359,11 @@ function connect() {
           ),
         );
       } catch {
-        feedback(
-          'Получено некорректное WebSocket-событие.',
-          'error',
-        );
+        publishAdminNotification({
+          level: 'error',
+          message:
+            'Получено некорректное WebSocket-событие.',
+        });
       }
     },
   );
