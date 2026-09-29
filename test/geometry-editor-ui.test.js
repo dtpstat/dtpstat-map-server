@@ -853,6 +853,10 @@ test('geometry editor exposes optimistic polygon cutter and line-blade split ope
 
   assert.match(
     page,
+    /id="geometry-cut-area"[\s\S]*Вырезать область \/ отверстие/u,
+  );
+  assert.match(
+    page,
     /id="geometry-cut-selected"/u,
   );
   assert.match(

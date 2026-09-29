@@ -719,6 +719,147 @@ async function verifyGeometryEditorInfrastructure(
       },
     );
 
+  const polygonCreated =
+    await service.sync(
+      {
+        items: [{
+          kind:
+            'create',
+          localId:
+            'integration-local-polygon',
+          value: {
+            geometry: {
+              type:
+                'Polygon',
+              coordinates: [[
+                [30.022, 50.022],
+                [30.038, 50.022],
+                [30.038, 50.038],
+                [30.022, 50.038],
+                [30.022, 50.022],
+              ]],
+            },
+            displayName:
+              'Integration polygon cutout',
+          },
+        }],
+      },
+      {
+        id:
+          editUserId,
+        username:
+          'geometry-integration',
+        isSuperuser:
+          false,
+      },
+    );
+
+  const polygon =
+    polygonCreated
+      .created[0]
+      .geometry;
+
+  assert.equal(
+    polygon.boundaryId,
+    childBoundaryId,
+    'Cutout polygon must start inside the nested active city',
+  );
+
+  const polygonLease =
+    await service.beginEdit(
+      polygon.id,
+      {
+        id:
+          editUserId,
+        username:
+          'geometry-integration',
+        isSuperuser:
+          false,
+      },
+      'integration-polygon-client',
+    );
+
+  const cutPolygon =
+    await service.cut(
+      polygon.id,
+      {
+        geometry: {
+          type:
+            'Polygon',
+          coordinates: [[
+            [30.027, 50.027],
+            [30.033, 50.027],
+            [30.033, 50.033],
+            [30.027, 50.033],
+            [30.027, 50.027],
+          ]],
+        },
+      },
+      {
+        expectedUpdatedAt:
+          new Date(
+            polygon.updatedAt,
+          ).toISOString(),
+        editToken:
+          polygonLease.token,
+      },
+      {
+        id:
+          editUserId,
+        username:
+          'geometry-integration',
+        isSuperuser:
+          false,
+      },
+    );
+
+  assert.equal(
+    cutPolygon.id,
+    polygon.id,
+  );
+  assert.equal(
+    cutPolygon.boundaryId,
+    childBoundaryId,
+  );
+
+  const cutoutRings =
+    await pool.query(
+      `
+        SELECT
+          COALESCE(
+            SUM(
+              ST_NumInteriorRings(
+                part.geom
+              )
+            ),
+            0
+          )::integer AS "ringCount"
+        FROM city_geometries
+          AS geometry
+        CROSS JOIN LATERAL ST_Dump(
+          ST_CollectionExtract(
+            geometry.geom,
+            3
+          )
+        ) AS part
+        WHERE geometry.id =
+              $1::bigint
+      `,
+      [
+        polygon.id,
+      ],
+    );
+
+  assert.equal(
+    Number(
+      cutoutRings
+        .rows[0]
+        ?.ringCount,
+    ),
+    1,
+    'Interior polygon cut must persist exactly one polygon hole',
+  );
+
   const created =
     await service.sync(
       {
