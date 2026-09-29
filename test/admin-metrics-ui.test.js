@@ -83,3 +83,56 @@ test('security admin manages Prometheus access without exposing stored plaintext
     /METRICS_BEARER_TOKEN\s+TEXT/u,
   );
 });
+
+
+test('Prometheus controls are top-level and use a compact checkbox', async () => {
+  const [
+    editor,
+    css,
+  ] =
+    await Promise.all([
+      fs.readFile(
+        path.join(
+          root,
+          'admin/security-editor-v2.js',
+        ),
+        'utf8',
+      ),
+      fs.readFile(
+        path.join(
+          root,
+          'admin/security-v2.css',
+        ),
+        'utf8',
+      ),
+    ]);
+
+  const metricsIndex =
+    editor.indexOf(
+      'class="security-metrics-panel"',
+    );
+  const advancedIndex =
+    editor.indexOf(
+      'class="admin-advanced-settings"',
+    );
+
+  assert.ok(
+    metricsIndex >= 0,
+  );
+  assert.ok(
+    advancedIndex >= 0,
+  );
+  assert.ok(
+    metricsIndex <
+      advancedIndex,
+    'Prometheus controls must remain outside the advanced-settings disclosure',
+  );
+  assert.match(
+    editor,
+    /class="security-metrics-toggle"/u,
+  );
+  assert.match(
+    css,
+    /\.security-settings-form \.security-metrics-toggle input\[type="checkbox"\][\s\S]*width:\s*1rem;[\s\S]*height:\s*1rem;/u,
+  );
+});

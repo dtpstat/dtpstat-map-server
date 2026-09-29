@@ -142,6 +142,43 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
               </div>
             </fieldset>
 
+            <section class="security-metrics-panel" aria-labelledby="security-metrics-title">
+              <div class="security-metrics-heading">
+                <div>
+                  <h3 id="security-metrics-title">Prometheus metrics</h3>
+                  <p class="security-info">
+                    Эксплуатационный мониторинг приложения через защищённый
+                    <code>/metrics</code>.
+                  </p>
+                </div>
+                <label class="security-metrics-toggle">
+                  <input name="metricsEnabled" type="checkbox">
+                  <span>Включено</span>
+                </label>
+              </div>
+              <div class="security-metrics-body">
+                <p id="security-metrics-token-status" class="security-info">
+                  Проверяем состояние bearer token…
+                </p>
+                <div class="security-metrics-actions">
+                  <button type="button" class="secondary"
+                          id="security-metrics-token-rotate"
+                          data-dirty-ignore>
+                    Сгенерировать token
+                  </button>
+                  <button type="button" class="danger"
+                          id="security-metrics-token-clear"
+                          data-dirty-ignore>
+                    Очистить token
+                  </button>
+                </div>
+                <p class="security-info">
+                  Token показывается только один раз. В базе хранится только SHA-256 hash.
+                  После ротации старый token перестаёт работать сразу.
+                </p>
+              </div>
+            </section>
+
             <details class="admin-advanced-settings">
               <summary>Тонкая настройка блокировок, сессий и аудита</summary>
               <div class="admin-advanced-settings-body">
@@ -165,31 +202,6 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
                   <label>Idle timeout, сек. <input name="sessionIdleSeconds" type="number" min="60" max="86400" required data-human-unit="seconds"></label>
                   <label>Максимальная жизнь сессии, сек. <input name="sessionAbsoluteSeconds" type="number" min="300" max="2592000" required data-human-unit="seconds"></label>
                   <label>Хранить аудит, дней (0 = бессрочно) <input name="auditRetentionDays" type="number" min="0" max="3650" required data-human-unit="days"></label>
-                </fieldset>
-                <fieldset><legend>Prometheus metrics</legend>
-                  <label class="check">
-                    <input name="metricsEnabled" type="checkbox">
-                    Включить защищённый endpoint <code>/metrics</code>
-                  </label>
-                  <p id="security-metrics-token-status" class="security-info">
-                    Проверяем состояние bearer token…
-                  </p>
-                  <div class="security-metrics-actions">
-                    <button type="button" class="secondary"
-                            id="security-metrics-token-rotate"
-                            data-dirty-ignore>
-                      Сгенерировать token
-                    </button>
-                    <button type="button" class="danger"
-                            id="security-metrics-token-clear"
-                            data-dirty-ignore>
-                      Очистить token
-                    </button>
-                  </div>
-                  <p class="security-info">
-                    Token показывается только один раз. В базе хранится только SHA-256 hash.
-                    После ротации старый token перестаёт работать сразу.
-                  </p>
                 </fieldset>
               </div>
             </details>
