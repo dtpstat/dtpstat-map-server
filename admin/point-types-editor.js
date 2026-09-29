@@ -211,6 +211,38 @@ if (
       frame.className =
         'point-type-preview-frame';
 
+      const sourceWidth =
+        Number(
+          pointType.displayWidth ??
+          32,
+        );
+      const sourceHeight =
+        Number(
+          pointType.displayHeight ??
+          32,
+        );
+      const scale =
+        Math.min(
+          1,
+          96 / sourceWidth,
+          96 / sourceHeight,
+        );
+
+      const stage =
+        document.createElement(
+          'div',
+        );
+      stage.className =
+        'point-type-preview-stage';
+      stage.style.width =
+        sourceWidth *
+        scale +
+        'px';
+      stage.style.height =
+        sourceHeight *
+        scale +
+        'px';
+
       if (pointType.iconUrl) {
         const image =
           document.createElement(
@@ -222,10 +254,16 @@ if (
           'Иконка: ' +
           pointType.name;
         image.width =
-          pointType.displayWidth;
+          Math.round(
+            sourceWidth *
+            scale,
+          );
         image.height =
-          pointType.displayHeight;
-        frame.append(image);
+          Math.round(
+            sourceHeight *
+            scale,
+          );
+        stage.append(image);
       } else {
         const empty =
           document.createElement(
@@ -235,7 +273,7 @@ if (
           'point-type-preview-empty';
         empty.textContent =
           'нет иконки';
-        frame.append(empty);
+        stage.append(empty);
       }
 
       const anchor =
@@ -249,9 +287,7 @@ if (
           Number(
             pointType.anchorX,
           ) /
-          Number(
-            pointType.displayWidth,
-          ) *
+          sourceWidth *
           100
         ) + '%';
       anchor.style.top =
@@ -259,14 +295,13 @@ if (
           Number(
             pointType.anchorY,
           ) /
-          Number(
-            pointType.displayHeight,
-          ) *
+          sourceHeight *
           100
         ) + '%';
       anchor.title =
         'Anchor';
-      frame.append(anchor);
+      stage.append(anchor);
+      frame.append(stage);
 
       return frame;
     }
@@ -393,7 +428,22 @@ if (
             width.value;
           anchorY.max =
             height.value;
-      };
+
+          if (
+            Number(anchorX.value) >
+            Number(width.value)
+          ) {
+            anchorX.value =
+              width.value;
+          }
+          if (
+            Number(anchorY.value) >
+            Number(height.value)
+          ) {
+            anchorY.value =
+              height.value;
+          }
+        };
 
       width.addEventListener(
         'input',
