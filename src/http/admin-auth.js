@@ -46,6 +46,10 @@ export function createAdminAuthorization(
   const rateSettingsCacheMs =
     dependencies.rateSettingsCacheMs ??
     5_000;
+  const sessionCookieSecureOnly =
+    dependencies
+      .sessionCookieSecureOnly ===
+    true;
   let cachedRateSettings =
     null;
   let cachedRateSettingsUntil =
@@ -337,7 +341,13 @@ export function createAdminAuthorization(
     async (request) =>
       securityService.authenticateRequest({
         sessionToken:
-          adminSessionToken(request),
+          adminSessionToken(
+            request,
+            {
+              secureOnly:
+                sessionCookieSecureOnly,
+            },
+          ),
         ipAddress:
           requestClientIp(request),
         userAgent:
@@ -590,6 +600,10 @@ export function createAdminAuthorization(
             sessionToken:
               adminSessionToken(
                 request,
+                {
+                  secureOnly:
+                    sessionCookieSecureOnly,
+                },
               ),
             ipAddress:
               requestClientIp(

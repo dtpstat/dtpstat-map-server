@@ -22,6 +22,7 @@ export function createAdminSecurityRouter({
   adminAuth,
   notificationEvents,
   maxBodyBytes,
+  sessionCookieSecureOnly = false,
 }) {
   const router = Router();
 
@@ -48,6 +49,7 @@ export function createAdminSecurityRouter({
       jsonBody,
       avatarBody,
       notificationEvents,
+      sessionCookieSecureOnly,
     },
   );
 

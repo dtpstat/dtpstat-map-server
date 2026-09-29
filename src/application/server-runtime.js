@@ -216,6 +216,11 @@ export function createServerRuntime({
     runtimeFactories
       .createSecurityRuntime(
         pool,
+        {
+          sessionCookieSecureOnly:
+            config.environment ===
+            'production',
+        },
       );
   const derivedState =
     runtimeFactories

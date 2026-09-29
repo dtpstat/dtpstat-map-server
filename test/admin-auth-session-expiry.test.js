@@ -37,6 +37,68 @@ function response() {
   };
 }
 
+test('production authorization ignores the legacy admin session cookie name', async () => {
+  const observedTokens = [];
+  const adminAuth =
+    createAdminAuthorization(
+      {
+        async authenticateRequest(
+          input,
+        ) {
+          observedTokens.push(
+            input.sessionToken,
+          );
+          return {
+            status: 'missing',
+          };
+        },
+      },
+      {
+        sessionCookieSecureOnly:
+          true,
+      },
+    );
+
+  const legacy = request();
+  const legacyResponse =
+    response();
+
+  await adminAuth.requireProfile(
+    legacy,
+    legacyResponse,
+    () => {},
+  );
+
+  const hostPrefixed =
+    request();
+  hostPrefixed.headers.cookie =
+    '__Host-dtpstat_admin_session=test-token';
+  const hostResponse =
+    response();
+
+  await adminAuth.requireProfile(
+    hostPrefixed,
+    hostResponse,
+    () => {},
+  );
+
+  assert.deepEqual(
+    observedTokens,
+    [
+      null,
+      'test-token',
+    ],
+  );
+  assert.equal(
+    legacyResponse.statusCode,
+    401,
+  );
+  assert.equal(
+    hostResponse.statusCode,
+    401,
+  );
+});
+
 test('admin authorization exposes effective session expiry on protected response', async () => {
   const expiresAt = '2026-09-20T10:30:00.000Z';
   const adminAuth = createAdminAuthorization({

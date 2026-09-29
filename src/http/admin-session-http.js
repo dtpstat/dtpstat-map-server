@@ -1,5 +1,7 @@
-const SESSION_COOKIE =
+const LEGACY_SESSION_COOKIE =
   'dtpstat_admin_session';
+const HOST_SESSION_COOKIE =
+  '__Host-dtpstat_admin_session';
 
 function parseCookies(header) {
   const cookies = new Map();
@@ -36,19 +38,66 @@ function parseCookies(header) {
   return cookies;
 }
 
+export function adminSessionCookieName(
+  options = {},
+) {
+  return options.secureOnly === true
+    ? HOST_SESSION_COOKIE
+    : LEGACY_SESSION_COOKIE;
+}
+
 export function adminSessionToken(
   request,
+  options = {},
 ) {
   return (
     parseCookies(
       request.headers?.cookie,
-    ).get(SESSION_COOKIE) ??
+    ).get(
+      adminSessionCookieName(
+        options,
+      ),
+    ) ??
     null
   );
 }
 
-export function adminSessionCookieName() {
-  return SESSION_COOKIE;
+export function adminSessionCookie(
+  token,
+  maxAgeSeconds,
+  options = {},
+) {
+  const parts = [
+    `${adminSessionCookieName(
+      options,
+    )}=${encodeURIComponent(token)}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Strict',
+    `Max-Age=${Math.max(
+      0,
+      Math.floor(maxAgeSeconds),
+    )}`,
+  ];
+
+  if (
+    options.secureOnly === true ||
+    options.secure === true
+  ) {
+    parts.push('Secure');
+  }
+
+  return parts.join('; ');
+}
+
+export function clearAdminSessionCookie(
+  options = {},
+) {
+  return adminSessionCookie(
+    '',
+    0,
+    options,
+  );
 }
 
 export function applyAdminSessionContext(

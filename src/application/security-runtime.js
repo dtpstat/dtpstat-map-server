@@ -75,6 +75,12 @@ export function createSecurityRuntime(
     dependencies.adminAuth ??
     createAdminAuthorization(
       securityService,
+      {
+        sessionCookieSecureOnly:
+          dependencies
+            .sessionCookieSecureOnly ===
+          true,
+      },
     );
 
   return {

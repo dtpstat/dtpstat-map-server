@@ -2,8 +2,9 @@ import {
   requestClientIp,
 } from '../../shared/http/client-ip.js';
 import {
-  adminSessionCookieName,
+  adminSessionCookie,
   adminSessionToken,
+  clearAdminSessionCookie,
 } from '../../http/admin-session-http.js';
 import {
   createAdminOperationAudit,
@@ -13,30 +14,6 @@ import {
   parsePositiveInteger,
 } from './helpers.js';
 
-function cookieValue(
-  token,
-  request,
-  maxAgeSeconds,
-) {
-  const parts = [
-    `${adminSessionCookieName()}=${encodeURIComponent(token)}`,
-    'Path=/',
-    'HttpOnly',
-    'SameSite=Strict',
-    `Max-Age=${Math.max(0, Math.floor(maxAgeSeconds))}`,
-  ];
-
-  if (request.secure) {
-    parts.push('Secure');
-  }
-
-  return parts.join('; ');
-}
-
-function clearCookie(request) {
-  return cookieValue('', request, 0);
-}
-
 export function registerAdminProfileRoutes(
   router,
   {
@@ -45,8 +22,18 @@ export function registerAdminProfileRoutes(
     jsonBody,
     avatarBody,
     notificationEvents,
+    sessionCookieSecureOnly = false,
   },
 ) {
+  const sessionCookieOptions =
+    (request) => ({
+      secureOnly:
+        sessionCookieSecureOnly ===
+        true,
+      secure:
+        request.secure === true,
+    });
+
   const operationAudit = (type) =>
     createAdminOperationAudit(
       securityService,
@@ -172,10 +159,12 @@ export function registerAdminProfileRoutes(
           )
           .set(
             'Set-Cookie',
-            cookieValue(
+            adminSessionCookie(
               result.token,
-              request,
               maxAge,
+              sessionCookieOptions(
+                request,
+              ),
             ),
           )
           .json({
@@ -202,7 +191,12 @@ export function registerAdminProfileRoutes(
     async (request, response, next) => {
       try {
         await securityService.logout(
-          adminSessionToken(request),
+          adminSessionToken(
+            request,
+            sessionCookieOptions(
+              request,
+            ),
+          ),
         );
 
         response
@@ -212,7 +206,11 @@ export function registerAdminProfileRoutes(
           )
           .set(
             'Set-Cookie',
-            clearCookie(request),
+            clearAdminSessionCookie(
+              sessionCookieOptions(
+                request,
+              ),
+            ),
           )
           .status(204)
           .end();
@@ -637,7 +635,11 @@ export function registerAdminProfileRoutes(
         if (deletingCurrent) {
           response.set(
             'Set-Cookie',
-            clearCookie(request),
+            clearAdminSessionCookie(
+              sessionCookieOptions(
+                request,
+              ),
+            ),
           );
         }
 

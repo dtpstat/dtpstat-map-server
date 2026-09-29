@@ -72,6 +72,9 @@ export function installApplicationApiRoutes(
     maxBodyBytes:
       config.importApi
         .maxBodyBytes,
+    sessionCookieSecureOnly:
+      config.environment ===
+      'production',
   };
 
   app.use(

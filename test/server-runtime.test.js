@@ -10,6 +10,8 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
     name: 'pool',
   };
   const config = {
+    environment:
+      'production',
     projectRoot: '/srv/app',
     publicMap: {
       marker: 'public-map',
@@ -166,10 +168,20 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
     };
 
   factories.createSecurityRuntime =
-    (receivedPool) => {
+    (
+      receivedPool,
+      options,
+    ) => {
       assert.equal(
         receivedPool,
         pool,
+      );
+      assert.deepEqual(
+        options,
+        {
+          sessionCookieSecureOnly:
+            true,
+        },
       );
       calls.push(
         'createSecurityRuntime',

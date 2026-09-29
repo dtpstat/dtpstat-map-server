@@ -7,9 +7,11 @@ import {
   adminCsrfAllowed,
 } from '../src/http/admin-csrf.js';
 import {
+  adminSessionCookie,
   adminSessionCookieName,
   adminSessionToken,
   applyAdminSessionContext,
+  clearAdminSessionCookie,
 } from '../src/http/admin-session-http.js';
 
 function response() {
@@ -89,6 +91,70 @@ test('admin session HTTP helper parses the stable cookie and exposes effective e
       'x-dtpstat-admin-session-expires-at',
     ),
     '2026-09-24T15:00:00.000Z',
+  );
+});
+
+test('production admin session cookie uses a strict __Host contract', () => {
+  const request = {
+    headers: {
+      cookie:
+        'dtpstat_admin_session=legacy; __Host-dtpstat_admin_session=host%20token',
+    },
+  };
+
+  assert.equal(
+    adminSessionCookieName({
+      secureOnly: true,
+    }),
+    '__Host-dtpstat_admin_session',
+  );
+  assert.equal(
+    adminSessionToken(
+      request,
+      {
+        secureOnly: true,
+      },
+    ),
+    'host token',
+  );
+  assert.equal(
+    adminSessionToken(
+      {
+        headers: {
+          cookie:
+            'dtpstat_admin_session=legacy',
+        },
+      },
+      {
+        secureOnly: true,
+      },
+    ),
+    null,
+  );
+
+  const cookie =
+    adminSessionCookie(
+      'token value',
+      3600,
+      {
+        secureOnly: true,
+        secure: false,
+      },
+    );
+
+  assert.equal(
+    cookie,
+    '__Host-dtpstat_admin_session=token%20value; Path=/; HttpOnly; SameSite=Strict; Max-Age=3600; Secure',
+  );
+  assert.equal(
+    cookie.includes('Domain='),
+    false,
+  );
+  assert.equal(
+    clearAdminSessionCookie({
+      secureOnly: true,
+    }),
+    '__Host-dtpstat_admin_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0; Secure',
   );
 });
 
