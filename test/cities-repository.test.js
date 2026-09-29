@@ -5,6 +5,10 @@ import {
   expandViewportBounds,
   VIEWPORT_EXPANSION_RATIO,
 } from '../src/db/cities-repository.js';
+import {
+  viewportGeometryQuery,
+  VIEWPORT_GEOMETRIES_SQL,
+} from '../src/db/viewport-query.js';
 
 test('city list does not require population but does require line geometries', async () => {
   let sql;
@@ -128,5 +132,36 @@ test('viewport query uses padded selector and returns public lines plus active t
   assert.match(
     sql,
     /geometry_boundary\.id = geometry_presence\.boundary_id[\s\S]*geometry_boundary\.is_active[\s\S]*geometry_presence\.city_id = boundary\.city_id/,
+  );
+});
+
+
+test('viewport profiler and repository can share the exact parameterized SQL contract', () => {
+  const query =
+    viewportGeometryQuery({
+      west: 37.4,
+      south: 55.6,
+      east: 37.9,
+      north: 55.9,
+      centerLng: 37.62,
+      centerLat: 55.75,
+    });
+
+  assert.equal(
+    query.text,
+    VIEWPORT_GEOMETRIES_SQL,
+  );
+  assert.equal(
+    query.values.length,
+    6,
+  );
+  assert.deepEqual(
+    query.selector,
+    {
+      west: 37.35,
+      south: 55.57,
+      east: 37.95,
+      north: 55.93,
+    },
   );
 });

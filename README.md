@@ -460,3 +460,24 @@ PostGIS ожидается уже установленным в основной
 - [project-settings-transfer.md](docs/project-settings-transfer.md) — перенос конфигурации;
 - [database-indexes.md](docs/database-indexes.md) — актуальные indexes/access paths;
 - [geometry-editor.md](docs/geometry-editor.md) — модель геометрий, spatial links, edit leases, local workspace и concurrency.
+
+
+### Viewport performance profile
+
+Публичный hot path `/api/geometries` можно профилировать read-only на той же
+runtime-role и тем же SQL, который использует HTTP API:
+
+```bash
+npm run perf:viewport -- \
+  --bbox=37.4,55.6,37.9,55.9 \
+  --center=37.62,55.75 \
+  --iterations=5
+```
+
+`--center` необязателен; по умолчанию используется центр bbox. Profiler
+выполняет warm-up, несколько реальных запросов и
+`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` внутри `BEGIN READ ONLY`.
+Результат — JSON с p50/p95 latency, размером/числом features, planning/execution
+time, shared buffer hits/reads, index scans и sequential scans. Bbox ограничен
+тем же максимумом 20°×20°, что и public API. Profiler не создаёт и не изменяет
+DB objects.
