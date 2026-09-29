@@ -116,3 +116,24 @@ test('security mutations publish targeted session refresh and logout controls', 
     /touchActivity:\s*false/u,
   );
 });
+
+
+test('editing another administrator notifies both the target session and the operator', async () => {
+  const users =
+    await read(
+      'src/routes/security/user-routes.js',
+    );
+
+  assert.match(
+    users,
+    /audience:\s*\{\s*userIds: \[user\.id\]/u,
+  );
+  assert.match(
+    users,
+    /Number\(\s*request\.adminUser\?\.id[\s\S]*Number\(user\.id\)[\s\S]*Пользователь [\s\S]*изменения применены/u,
+  );
+  assert.match(
+    users,
+    /permission: 'users'[\s\S]*request\.adminUser\.id/u,
+  );
+});

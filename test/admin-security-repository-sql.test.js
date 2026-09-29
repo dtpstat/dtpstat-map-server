@@ -65,3 +65,35 @@ test('audit listing exposes avatar availability without changing historical user
   );
   assert.match(queryText, /AS "hasAvatar"/);
 });
+
+
+test('audit pagination uses real bind placeholders for limit and offset', async () => {
+  let queryText = '';
+  let queryValues = null;
+  const database = {
+    async query(text, values) {
+      queryText = text;
+      queryValues = values;
+      return { rows: [] };
+    },
+  };
+
+  const repository =
+    createAdminAuditRepository(
+      database,
+    );
+
+  await repository.listAudit({
+    limit: 25,
+    offset: 50,
+  });
+
+  assert.match(
+    queryText,
+    /LIMIT \$1::integer\s+OFFSET \$2::integer/u,
+  );
+  assert.deepEqual(
+    queryValues,
+    [25, 50],
+  );
+});

@@ -399,10 +399,22 @@ function operationFixture(
         current.get(id),
       );
     },
-    async lockGeometries() {
-      return structuredClone(
-        rows,
-      );
+    async lockGeometries(
+      _client,
+      ids,
+    ) {
+      return ids
+        .map(
+          (id) =>
+            current.get(id),
+        )
+        .filter(Boolean)
+        .map(
+          (item) =>
+            structuredClone(
+              item,
+            ),
+        );
     },
     async mergeGeometries(
       _client,
@@ -459,10 +471,7 @@ function operationFixture(
 
       const cut = {
         ...structuredClone(
-          rows.find(
-            (item) =>
-              item.id === id,
-          ),
+          current.get(id),
         ),
         updatedAt:
           '2026-09-25T13:00:00.000Z',
@@ -492,10 +501,7 @@ function operationFixture(
 
       const source = {
         ...structuredClone(
-          rows.find(
-            (item) =>
-              item.id === id,
-          ),
+          current.get(id),
         ),
         updatedAt:
           '2026-09-25T13:00:00.000Z',

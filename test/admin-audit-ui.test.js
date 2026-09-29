@@ -97,3 +97,16 @@ test('profile avatar hides fallback only after successful image load', async () 
 
 
 
+
+
+test('manual user block form remains hidden until the block action is opened', async () => {
+  const styles =
+    await read(
+      'admin/security-v2.css',
+    );
+
+  assert.match(
+    styles,
+    /\.security-inline-block-form\[hidden\]\s*\{\s*display:\s*none/u,
+  );
+});

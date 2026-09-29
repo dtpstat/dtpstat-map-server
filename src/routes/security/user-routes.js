@@ -147,6 +147,34 @@ export function registerAdminUserRoutes(
             },
           });
 
+        if (
+          Number(
+            request.adminUser?.id,
+          ) !==
+          Number(user.id)
+        ) {
+          notificationEvents
+            ?.publish({
+              level: 'info',
+              message:
+                'Пользователь ' +
+                user.username +
+                ': изменения применены.',
+              permission: 'users',
+              audience: {
+                userIds: [
+                  request.adminUser.id,
+                ],
+              },
+              source: {
+                kind:
+                  'security-user',
+                id:
+                  String(user.id),
+              },
+            });
+        }
+
         response
           .set(
             'Cache-Control',

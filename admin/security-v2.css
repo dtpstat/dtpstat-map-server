@@ -125,6 +125,7 @@
 .security-access-section { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
 .security-access-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .security-inline-block-form { margin-top: .7rem; display: grid; grid-template-columns: 12rem minmax(0,1fr) auto; gap: .5rem; align-items: end; }
+.security-inline-block-form[hidden] { display: none; }
 .security-block-reason,.security-info,.security-muted { color: var(--muted); font-size: .75rem; }
 button.danger { background: #51211f; border-color: #8e3a36; color: #ffd0cc; }
 
