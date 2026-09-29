@@ -4,7 +4,6 @@ import http from 'node:http';
 import test from 'node:test';
 import {
   installMetricsEndpoint,
-  PROMETHEUS_CONTENT_TYPE,
 } from '../src/http/metrics-endpoint.js';
 
 async function withMetricsServer(
@@ -132,18 +131,21 @@ test('metrics endpoint requires the configured bearer token', async () => {
         response.status,
         200,
       );
-      assert.match(
+      const contentType =
         response.headers.get(
           'content-type',
-        ) ?? '',
-        new RegExp(
-          PROMETHEUS_CONTENT_TYPE
-            .replace(
-              '; charset=utf-8',
-              '',
-            ),
-          'u',
-        ),
+        ) ?? '';
+      assert.match(
+        contentType,
+        /^text\/plain(?:;|$)/u,
+      );
+      assert.match(
+        contentType,
+        /charset=utf-8/u,
+      );
+      assert.match(
+        contentType,
+        /version=0\.0\.4/u,
       );
       assert.equal(
         response.headers.get(
