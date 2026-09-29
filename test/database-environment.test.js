@@ -7,6 +7,7 @@ import {
   loadAdminDatabaseConnection,
   loadApplicationDatabaseConnection,
   loadDatabaseSchema,
+  loadMigrationDatabaseConnection,
 } from '../src/db/database-environment.js';
 
 test('application database connection uses the dedicated role from env', () => {
@@ -28,6 +29,54 @@ test('application database connection uses the dedicated role from env', () => {
     password: ' secret with spaces ',
     ssl: { rejectUnauthorized: false },
   });
+});
+
+test('migration database connection can be separated from the runtime role', () => {
+  const dedicated =
+    loadMigrationDatabaseConnection({
+      DATABASE_HOST:
+        'database.internal',
+      DATABASE_PORT:
+        '55432',
+      DATABASE_NAME:
+        'buslines',
+      DATABASE_ROLE:
+        'buslines_app',
+      DATABASE_ROLE_PASSWORD:
+        'app-secret',
+      DATABASE_MIGRATION_ROLE:
+        'buslines_migrator',
+      DATABASE_MIGRATION_ROLE_PASSWORD:
+        'migration-secret',
+    });
+
+  assert.equal(
+    dedicated.user,
+    'buslines_migrator',
+  );
+  assert.equal(
+    dedicated.password,
+    'migration-secret',
+  );
+
+  const fallback =
+    loadMigrationDatabaseConnection({
+      DATABASE_NAME:
+        'buslines',
+      DATABASE_ROLE:
+        'buslines_app',
+      DATABASE_ROLE_PASSWORD:
+        'app-secret',
+    });
+
+  assert.equal(
+    fallback.user,
+    'buslines_app',
+  );
+  assert.equal(
+    fallback.password,
+    'app-secret',
+  );
 });
 
 test('database schema is a safe instance namespace with a backward-compatible default', () => {

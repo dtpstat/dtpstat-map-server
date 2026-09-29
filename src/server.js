@@ -44,11 +44,23 @@ async function main() {
     },
   });
 
-  const pool = createPool(config.database);
-  await prepareServerDatabase({
-    config,
-    pool,
-  });
+  const migrationPool =
+    createPool(
+      config.databaseMigration,
+    );
+  try {
+    await prepareServerDatabase({
+      config,
+      pool: migrationPool,
+    });
+  } finally {
+    await migrationPool.end();
+  }
+
+  const pool =
+    createPool(
+      config.database,
+    );
 
   const {
     bootstrapDependencies,

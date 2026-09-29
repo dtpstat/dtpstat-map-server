@@ -12,7 +12,7 @@ import {
   loadMigrations,
 } from '../src/db/migration-runner.js';
 import {
-  createDatabaseClient,
+  createMigrationDatabaseClient,
 } from './database.js';
 
 const projectRoot =
@@ -69,7 +69,7 @@ assert.ok(
 );
 
 const client =
-  createDatabaseClient();
+  createMigrationDatabaseClient();
 
 await client.connect();
 

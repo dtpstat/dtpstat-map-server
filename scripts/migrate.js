@@ -12,7 +12,9 @@ import {
   renderMigrationSql,
   validateMigrationSequence,
 } from '../src/db/migration-runner.js';
-import { createDatabaseClient } from './database.js';
+import {
+  createMigrationDatabaseClient,
+} from './database.js';
 
 export {
   applyMigrations,
@@ -30,7 +32,8 @@ async function main() {
   const migrations = await loadMigrations(migrationsDirectory);
   const schema = loadDatabaseSchema();
   const lockKey = databaseLockKey(schema, 'migrations');
-  const client = createDatabaseClient();
+  const client =
+    createMigrationDatabaseClient();
   await client.connect();
 
   try {

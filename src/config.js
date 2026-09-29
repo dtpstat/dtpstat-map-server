@@ -5,6 +5,7 @@ import { normalizeOsmUpdateUrl } from './modules/osm/osm-city-update-options.js'
 import {
   loadApplicationDatabaseConnection,
   loadDatabaseSchema,
+  loadMigrationDatabaseConnection,
 } from './db/database-environment.js';
 
 const DEFAULT_PROJECT_ROOT = path.resolve(
@@ -221,7 +222,16 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     'development';
   const httpEnabled = booleanValue(env, 'HTTP_ENABLED', true);
   const httpsEnabled = booleanValue(env, 'HTTPS_ENABLED', false);
-  const databaseSchema = loadDatabaseSchema(env);
+  const databaseSchema =
+    loadDatabaseSchema(env);
+  const applicationDatabase =
+    loadApplicationDatabaseConnection(
+      env,
+    );
+  const migrationDatabase =
+    loadMigrationDatabaseConnection(
+      env,
+    );
 
   if (!httpEnabled && !httpsEnabled) {
     throw new Error('At least one of HTTP_ENABLED or HTTPS_ENABLED must be true');
@@ -357,16 +367,30 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     throw new Error('OSM_CITY_UPDATE_URL must be included in OSM_CITY_UPDATE_ALLOWED_URLS');
   }
 
+  const adminAllowedOrigins =
+    originSetValue(
+      env,
+      'ADMIN_ALLOWED_ORIGINS',
+      environment,
+    );
+
+  if (
+    environment ===
+      'production' &&
+    migrationDatabase.user ===
+      applicationDatabase.user
+  ) {
+    throw new Error(
+      'DATABASE_MIGRATION_ROLE must be a dedicated role in production',
+    );
+  }
+
   return {
     environment,
     host: env.HOST?.trim() || '0.0.0.0',
     admin: {
       allowedOrigins:
-        originSetValue(
-          env,
-          'ADMIN_ALLOWED_ORIGINS',
-          environment,
-        ),
+        adminAllowedOrigins,
     },
     projectRoot,
     http: {
@@ -376,9 +400,18 @@ export function loadConfig(env = process.env, projectRoot = DEFAULT_PROJECT_ROOT
     },
     https: { enabled: httpsEnabled, port: httpsPort, keyPath, certPath },
     database: {
-      ...loadApplicationDatabaseConnection(env),
+      ...applicationDatabase,
       schema: databaseSchema,
       maxConnections: integerValue(env, 'DATABASE_POOL_MAX', 10, { min: 1, max: 100 }),
+      applicationNameComponent:
+        'server',
+    },
+    databaseMigration: {
+      ...migrationDatabase,
+      schema: databaseSchema,
+      maxConnections: 1,
+      applicationNameComponent:
+        'migrations',
     },
     importApi: {
       // Compatibility names kept for deployment continuity. These credentials

@@ -52,7 +52,7 @@ export function attachPoolErrorHandlers(
 }
 
 /**
- * @param {{ host: string, port: number, database: string, user: string, password: string, ssl: false | { rejectUnauthorized: boolean }, maxConnections: number, schema?: string }} config
+ * @param {{ host: string, port: number, database: string, user: string, password: string, ssl: false | { rejectUnauthorized: boolean }, maxConnections: number, schema?: string, applicationNameComponent?: string }} config
  */
 export function createPool(config) {
   const schema = normalizeDatabaseSchema(config.schema);
@@ -64,7 +64,12 @@ export function createPool(config) {
     password: config.password,
     max: config.maxConnections,
     ssl: config.ssl,
-    application_name: databaseApplicationName(schema, 'server'),
+    application_name:
+      databaseApplicationName(
+        schema,
+        config.applicationNameComponent ??
+          'server',
+      ),
     options: databaseSearchPath(schema),
   });
   pool.databaseSchema = schema;

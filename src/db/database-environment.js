@@ -153,6 +153,38 @@ export function loadApplicationDatabaseConnection(env = process.env) {
 }
 
 /**
+ * DDL/migration connection. Development/test deployments may omit the
+ * dedicated role and fall back to the application role for compatibility.
+ * Production configuration rejects that fallback in loadConfig().
+ *
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
+ */
+export function loadMigrationDatabaseConnection(env = process.env) {
+  const application =
+    loadApplicationDatabaseConnection(env);
+  const configuredRole =
+    env.DATABASE_MIGRATION_ROLE
+      ?.trim();
+  const user =
+    configuredRole ||
+    application.user;
+
+  return {
+    ...commonConnection(env),
+    database:
+      application.database,
+    user,
+    password:
+      user === application.user
+        ? application.password
+        : requiredSecret(
+            env,
+            'DATABASE_MIGRATION_ROLE_PASSWORD',
+          ),
+  };
+}
+
+/**
  * Superuser connection used only by `npm run db:init`.
  *
  * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]

@@ -33,6 +33,15 @@ test('loadConfig enables HTTP with safe generic defaults', () => {
   assert.equal(config.database.port, 5432);
   assert.equal(config.database.user, 'example_app');
   assert.equal(config.database.schema, 'buslanes');
+  assert.equal(
+    config.databaseMigration.user,
+    'example_app',
+  );
+  assert.equal(
+    config.databaseMigration
+      .applicationNameComponent,
+    'migrations',
+  );
   assert.equal(config.importApi.bootstrapUsername, 'importer');
   assert.equal(config.importApi.bootstrapPassword, 'test-secret');
   assert.equal(config.importApi.maxBodyBytes, 25 * 1024 * 1024);
@@ -340,6 +349,21 @@ test('loadConfig requires exact HTTPS admin origins in production', () => {
     /must use HTTPS origins/u,
   );
 
+  assert.throws(
+    () =>
+      loadConfig(
+        {
+          ...REQUIRED_ENV,
+          NODE_ENV:
+            'production',
+          ADMIN_ALLOWED_ORIGINS:
+            'https://admin.example',
+        },
+        '/project',
+      ),
+    /DATABASE_MIGRATION_ROLE must be a dedicated role/u,
+  );
+
   const config =
     loadConfig(
       {
@@ -348,9 +372,18 @@ test('loadConfig requires exact HTTPS admin origins in production', () => {
           'production',
         ADMIN_ALLOWED_ORIGINS:
           'https://admin.example, https://ops.example',
+        DATABASE_MIGRATION_ROLE:
+          'example_migrator',
+        DATABASE_MIGRATION_ROLE_PASSWORD:
+          'migration-secret',
       },
       '/project',
     );
+
+  assert.equal(
+    config.databaseMigration.user,
+    'example_migrator',
+  );
 
   assert.deepEqual(
     [
