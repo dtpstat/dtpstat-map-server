@@ -1,0 +1,191 @@
+.point-types-editor .mode-heading {
+  align-items: center;
+}
+
+.point-type-create-form {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) auto auto;
+  gap: .65rem;
+  align-items: end;
+  margin-bottom: .85rem;
+}
+
+.point-types-table {
+  display: grid;
+  gap: .75rem;
+}
+
+.point-type-row {
+  display: grid;
+  grid-template-columns: 8rem minmax(22rem, 1fr);
+  grid-template-areas:
+    "preview settings"
+    "preview icon";
+  gap: .65rem .8rem;
+  padding: .75rem;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #0f191c;
+}
+
+.point-type-preview-column {
+  grid-area: preview;
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: .45rem;
+}
+
+.point-type-preview-frame {
+  position: relative;
+  min-width: 5rem;
+  min-height: 5rem;
+  padding: .65rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(45deg, #132126 25%, transparent 25%),
+    linear-gradient(-45deg, #132126 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #132126 75%),
+    linear-gradient(-45deg, transparent 75%, #132126 75%),
+    #0a1215;
+  background-size: 12px 12px;
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+}
+
+.point-type-preview-frame img {
+  display: block;
+  max-width: 96px;
+  max-height: 96px;
+  object-fit: fill;
+}
+
+.point-type-preview-empty {
+  color: var(--muted);
+  font-size: .68rem;
+}
+
+.point-type-preview-anchor {
+  position: absolute;
+  width: .55rem;
+  height: .55rem;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #e05d65;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1px #071012;
+  pointer-events: none;
+}
+
+.point-type-settings-grid {
+  grid-area: settings;
+  display: grid;
+  grid-template-columns:
+    minmax(12rem, 2fr)
+    minmax(7rem, .8fr)
+    repeat(4, minmax(6rem, .7fr));
+  gap: .55rem;
+  align-items: end;
+}
+
+.point-type-settings-grid input {
+  min-width: 0;
+}
+
+.point-type-active {
+  align-self: center;
+  margin-bottom: .55rem;
+}
+
+.point-type-icon-controls {
+  grid-area: icon;
+  display: grid;
+  grid-template-columns: minmax(13rem, 1fr) auto;
+  gap: .55rem;
+  align-items: end;
+}
+
+.point-type-icon-file input {
+  width: 100%;
+}
+
+.point-type-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .45rem;
+}
+
+.point-type-row-actions button {
+  width: auto;
+}
+
+.point-types-message {
+  min-height: 1.25rem;
+  margin: .65rem 0 0;
+  color: var(--warning);
+  font-size: .78rem;
+}
+
+.point-types-message.is-success {
+  color: var(--success);
+}
+
+.point-types-message.is-error {
+  color: var(--danger);
+}
+
+.geometry-point-fields {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: .3rem 0 0;
+  padding: .65rem 0 0;
+}
+
+.geometry-point-fields small {
+  display: block;
+  margin-top: .3rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+@media (max-width: 1100px) {
+  .point-type-settings-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .point-type-create-form,
+  .point-type-row,
+  .point-type-icon-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .point-type-row {
+    grid-template-areas:
+      "preview"
+      "settings"
+      "icon";
+  }
+
+  .point-type-settings-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .point-type-row-actions {
+    justify-content: stretch;
+  }
+
+  .point-type-row-actions button {
+    flex: 1 1 10rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .point-type-settings-grid {
+    grid-template-columns: 1fr;
+  }
+}

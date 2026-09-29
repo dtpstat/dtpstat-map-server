@@ -14,6 +14,11 @@ import {
 } from './geometry-coordinate-model.js';
 import { publishDerivedDataChange } from './derived-data-events.js';
 import {
+  pointTypeIconOffset,
+  pointTypeImageId,
+  syncPointTypeImages,
+} from '../js/point-type-map-icons.js';
+import {
   realtimeClientId,
   realtimeMutationHeaders,
   subscribeAdminRealtime,
@@ -45,6 +50,7 @@ if (section) {
   const form = document.querySelector('#geometry-editor-form');
   const title = document.querySelector('#geometry-editor-selected-title');
   const lineFields = document.querySelector('#geometry-line-fields');
+  const pointFields = document.querySelector('#geometry-point-fields');
   const topologyActions = document.querySelector('#geometry-topology-actions');
   const message = document.querySelector('#geometry-editor-message');
   const conflictMessage = document.querySelector('#geometry-editor-conflict');
@@ -105,6 +111,10 @@ if (section) {
     lineTypes: [],
     lineTypesLoaded: false,
     lineTypesPromise: null,
+    pointTypes: [],
+    pointTypesLoaded: false,
+    pointTypesPromise: null,
+    pointImageIds: new Set(),
     city: null,
     serverGeometries: [],
     geometries: [],
@@ -244,6 +254,24 @@ if (section) {
       result.lineTypeColor = lineType.color;
       result.lineTypeWidth = lineType.width;
     }
+    const pointType = state.pointTypes.find(
+      (candidate) =>
+        candidate.id === result.pointTypeId,
+    );
+    if (pointType) {
+      result.pointTypeName = pointType.name;
+      result.pointTypeActive =
+        pointType.isActive !== false;
+      result.pointIconName =
+        pointTypeImageId(
+          pointType,
+          'geometry-point-type',
+        );
+      result.pointIconOffset =
+        pointTypeIconOffset(
+          pointType,
+        );
+    }
     return result;
   }
 
@@ -266,6 +294,24 @@ if (section) {
       result.lineTypeName = lineType.name;
       result.lineTypeColor = lineType.color;
       result.lineTypeWidth = lineType.width;
+    }
+    const pointType = state.pointTypes.find(
+      (candidate) =>
+        candidate.id === result.pointTypeId,
+    );
+    if (pointType) {
+      result.pointTypeName = pointType.name;
+      result.pointTypeActive =
+        pointType.isActive !== false;
+      result.pointIconName =
+        pointTypeImageId(
+          pointType,
+          'geometry-point-type',
+        );
+      result.pointIconOffset =
+        pointTypeIconOffset(
+          pointType,
+        );
     }
     return result;
   }
@@ -436,6 +482,8 @@ if (section) {
     if (selectedDraftChanged(change)) {
       if (
         state.dragPath ||
+        state.geometryDrag ||
+        state.coordinateWindowOpen ||
         state.drawing
       ) {
         state.pendingExternalDraftSync = true;
@@ -579,6 +627,14 @@ if (section) {
   }
 
   function feature(item) {
+    const pointIconName =
+      item.pointIconName &&
+      state.map?.hasImage(
+        item.pointIconName,
+      )
+        ? item.pointIconName
+        : null;
+
     return {
       type: 'Feature',
       id: item.id ?? undefined,
@@ -595,6 +651,11 @@ if (section) {
           String(item.id) === String(state.current?.id),
         lineColor: item.lineTypeColor ?? '#35c6b4',
         lineWidth: item.lineTypeWidth ?? 4,
+        pointTypeId:
+          item.pointTypeId ?? null,
+        pointIconName,
+        pointIconOffset:
+          item.pointIconOffset ?? [0, 0],
         name: displayName(item),
       },
     };
@@ -1026,7 +1087,19 @@ if (section) {
         id: 'geometry-editor-points',
         type: 'circle',
         source: MAP_SOURCE,
-        filter: ['==', ['geometry-type'], 'Point'],
+        filter: [
+          'all',
+          ['==', ['geometry-type'], 'Point'],
+          [
+            '==',
+            [
+              'coalesce',
+              ['get', 'pointIconName'],
+              '',
+            ],
+            '',
+          ],
+        ],
         paint: {
           'circle-radius': 6,
           'circle-color': [
@@ -1038,6 +1111,39 @@ if (section) {
           'circle-stroke-color': '#061311',
           'circle-stroke-width': 1,
           'circle-opacity': ['case', ['get', 'isVisible'], 0.95, 0.3],
+        },
+      });
+      addLayerSafe(map, {
+        id: 'geometry-editor-point-icons',
+        type: 'symbol',
+        source: MAP_SOURCE,
+        filter: [
+          'all',
+          ['==', ['geometry-type'], 'Point'],
+          [
+            '!=',
+            [
+              'coalesce',
+              ['get', 'pointIconName'],
+              '',
+            ],
+            '',
+          ],
+        ],
+        layout: {
+          'icon-image': ['get', 'pointIconName'],
+          'icon-size': 1,
+          'icon-offset': ['get', 'pointIconOffset'],
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        },
+        paint: {
+          'icon-opacity': [
+            'case',
+            ['get', 'isVisible'],
+            1,
+            0.35,
+          ],
         },
       });
 
@@ -1095,11 +1201,37 @@ if (section) {
           'circle-stroke-width': 2,
         },
       });
+      addLayerSafe(map, {
+        id: 'geometry-editor-selected-point-icon',
+        type: 'symbol',
+        source: SELECTED_SOURCE,
+        filter: [
+          'all',
+          ['==', ['geometry-type'], 'Point'],
+          [
+            '!=',
+            [
+              'coalesce',
+              ['get', 'pointIconName'],
+              '',
+            ],
+            '',
+          ],
+        ],
+        layout: {
+          'icon-image': ['get', 'pointIconName'],
+          'icon-size': 1,
+          'icon-offset': ['get', 'pointIconOffset'],
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        },
+      });
 
       const selectedDragLayers = [
         'geometry-editor-selected-fill',
         'geometry-editor-selected-line',
         'geometry-editor-selected-point',
+        'geometry-editor-selected-point-icon',
       ];
 
       const beginGeometryDrag =
@@ -1495,8 +1627,11 @@ if (section) {
         });
 
       for (const layerId of [
-        'geometry-editor-lines', 'geometry-editor-polygon-lines',
-        'geometry-editor-polygons', 'geometry-editor-points',
+        'geometry-editor-lines',
+        'geometry-editor-polygon-lines',
+        'geometry-editor-polygons',
+        'geometry-editor-points',
+        'geometry-editor-point-icons',
       ]) {
         map.on('click', layerId, (event) => {
           if (
@@ -1558,6 +1693,7 @@ if (section) {
       });
 
       state.map = map;
+      await syncPointTypeMapImages();
       return map;
     })();
 
@@ -2538,6 +2674,7 @@ if (section) {
     if (!draft) {
       title.textContent = 'Выберите геометрию';
       lineFields.hidden = true;
+      pointFields.hidden = true;
       topologyActions.hidden = true;
       meta.replaceChildren();
       sourceTags.textContent = '—';
@@ -2556,6 +2693,7 @@ if (section) {
         ? 'Новая: ' + typeLabel(pseudo)
         : displayName(pseudo);
     lineFields.hidden = family !== 'line';
+    pointFields.hidden = family !== 'point';
     renderTopologyState();
 
     if (family === 'line') {
@@ -2565,6 +2703,10 @@ if (section) {
       form.elements.lineTypeId.disabled = true;
       form.elements.lanes.disabled = true;
     }
+
+    form.elements.pointTypeId.disabled =
+      family !== 'point' ||
+      !enabled;
 
     meta.replaceChildren(
       metaItem('Тип', typeLabel(pseudo)),
@@ -2603,6 +2745,32 @@ if (section) {
     if (item?.lineTypeId) form.elements.lineTypeId.value = String(item.lineTypeId);
     else if (state.lineTypes[0]) form.elements.lineTypeId.value = String(state.lineTypes[0].id);
     form.elements.lanes.value = String(item?.lanes ?? 1);
+
+    if (
+      item?.pointTypeId
+    ) {
+      form.elements.pointTypeId.value =
+        String(item.pointTypeId);
+    } else if (
+      isLocalGeometryId(item?.id) ||
+      !item?.id
+    ) {
+      const defaultPointType =
+        state.pointTypes.find(
+          (pointType) =>
+            pointType.isActive !== false,
+        );
+      form.elements.pointTypeId.value =
+        defaultPointType
+          ? String(
+              defaultPointType.id,
+            )
+          : '';
+    } else {
+      form.elements.pointTypeId.value =
+        '';
+    }
+
     renderFormState();
   }
 
@@ -2613,6 +2781,7 @@ if (section) {
       displayName(item),
       item.geometryType,
       item.lineTypeName,
+      item.pointTypeName,
       item._draft ? 'черновик' : null,
       item._conflict ? 'конфликт' : null,
       !item.boundaryId ? 'без административной привязки' : null,
@@ -2682,6 +2851,7 @@ if (section) {
       details.className = 'geometry-editor-row-tags';
       details.textContent = [
         item.lineTypeName,
+        item.pointTypeName,
         item._draft ? 'черновик' : null,
         item._conflict ? 'конфликт' : null,
         rowLease
@@ -3083,6 +3253,7 @@ if (section) {
       if (state.selectedId !== id) return;
       const item = payload.geometry;
       if (item.family === 'line') await ensureLineTypes();
+      if (item.family === 'point') await ensurePointTypes();
       if (state.selectedId !== id) return;
 
       adoptGeometryDetail(item);
@@ -4026,6 +4197,128 @@ if (section) {
   }
 
 
+  function renderPointTypes() {
+    const previous =
+      form.elements
+        .pointTypeId
+        .value;
+
+    const empty =
+      document.createElement(
+        'option',
+      );
+    empty.value = '';
+    empty.textContent =
+      'Без типа';
+
+    const options =
+      state.pointTypes.map(
+        (pointType) => {
+          const option =
+            document.createElement(
+              'option',
+            );
+          option.value =
+            String(
+              pointType.id,
+            );
+          option.textContent =
+            pointType.name +
+            (
+              pointType.isActive ===
+                false
+                ? ' · выключен'
+                : ''
+            );
+          return option;
+        },
+      );
+
+    form.elements.pointTypeId
+      .replaceChildren(
+        empty,
+        ...options,
+      );
+
+    if (
+      [
+        empty,
+        ...options,
+      ].some(
+        (option) =>
+          option.value ===
+          previous,
+      )
+    ) {
+      form.elements.pointTypeId
+        .value =
+        previous;
+    }
+  }
+
+  async function syncPointTypeMapImages() {
+    if (!state.map) {
+      return;
+    }
+
+    state.pointImageIds =
+      await syncPointTypeImages(
+        state.map,
+        state.pointTypes,
+        {
+          prefix:
+            'geometry-point-type',
+          previousIds:
+            state.pointImageIds,
+        },
+      );
+
+    rebuildDraftOverlay();
+    updateMapSources();
+  }
+
+  async function ensurePointTypes({
+    force = false,
+  } = {}) {
+    if (
+      state.pointTypesLoaded &&
+      !force
+    ) {
+      return state.pointTypes;
+    }
+    if (
+      state.pointTypesPromise
+    ) {
+      return state.pointTypesPromise;
+    }
+
+    state.pointTypesPromise =
+      api('/api/point-types')
+        .then(
+          async (payload) => {
+            state.pointTypes =
+              payload.pointTypes ??
+              [];
+            state.pointTypesLoaded =
+              true;
+            renderPointTypes();
+            rebuildDraftOverlay();
+            renderList();
+            await syncPointTypeMapImages();
+            return state.pointTypes;
+          },
+        )
+        .finally(
+          () => {
+            state.pointTypesPromise =
+              null;
+          },
+        );
+
+    return state.pointTypesPromise;
+  }
+
+
   function renderLineTypes() {
     form.elements.lineTypeId.replaceChildren(...state.lineTypes.map((lineType) => {
       const option = document.createElement('option');
@@ -4686,6 +4979,19 @@ if (section) {
       }
     }
 
+    if (mode === 'point') {
+      try {
+        await ensurePointTypes();
+      } catch (error) {
+        setMessage(
+          'Не удалось загрузить типы точек: ' +
+            error.message,
+          'error',
+        );
+        return;
+      }
+    }
+
     state.drawing = {
       mode,
       coordinates: [],
@@ -4966,6 +5272,16 @@ if (section) {
             lanes: Number(form.elements.lanes.value),
           }
         : {}),
+      ...(family === 'point'
+        ? {
+            pointTypeId:
+              form.elements.pointTypeId.value
+                ? Number(
+                    form.elements.pointTypeId.value,
+                  )
+                : null,
+          }
+        : {}),
     };
   }
 
@@ -5148,6 +5464,7 @@ if (section) {
     form.elements.isVisible,
     form.elements.lineTypeId,
     form.elements.lanes,
+    form.elements.pointTypeId,
   ]) {
     control?.addEventListener('input', () => captureCurrentDraft());
     control?.addEventListener('change', () => captureCurrentDraft());
@@ -5987,8 +6304,31 @@ if (section) {
   searchInput.addEventListener('input', renderList);
   refreshButton.addEventListener('click', () => void refresh({ keepSelection: true }));
   recalculateButton.addEventListener('click', () => void recalculateDerived());
+  window.addEventListener(
+    'dtpstat:point-types-changed',
+    () => {
+      state.pointTypesLoaded =
+        false;
+      void ensurePointTypes({
+        force: true,
+      }).catch(
+        (error) =>
+          setMessage(
+            error.message,
+            'error',
+          ),
+      );
+    },
+  );
+
   window.addEventListener('dtpstat:geometry-editor-open', () => {
-    void refresh({ keepSelection: true, fit: false });
+    void Promise.all([
+      ensurePointTypes(),
+      refresh({
+        keepSelection: true,
+        fit: false,
+      }),
+    ]);
     window.setTimeout(() => state.map?.resize(), 0);
   });
 
@@ -6064,10 +6404,13 @@ if (section) {
     )
     .finally(
       () =>
-        void refresh({
-          keepSelection: false,
-          fit: true,
-        }),
+        void Promise.all([
+          ensurePointTypes(),
+          refresh({
+            keepSelection: false,
+            fit: true,
+          }),
+        ]),
     );
 
   window.setInterval(

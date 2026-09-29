@@ -64,6 +64,7 @@ test('admin interface loads editors and helpers explicitly without transitive si
     'project-settings-editor.js',
     'public-download-name-editor.js',
     'line-types-editor.js',
+    'point-types-editor.js',
     'report-config-editor.js',
     'report-range-ui.js',
     'project-branding.js',

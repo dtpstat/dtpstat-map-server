@@ -135,15 +135,29 @@ function normalizeInterfaceEditorNodes() {
   const projectPanel = document.querySelector('[data-interface-panel="project"]');
   const lineTypesTab = document.querySelector('[data-interface-tab="line-types"]');
   const lineTypesPanel = document.querySelector('[data-interface-panel="line-types"]');
+  const pointTypesTab = document.querySelector('[data-interface-tab="point-types"]');
+  const pointTypesPanel = document.querySelector('[data-interface-panel="point-types"]');
   const transferTab = document.querySelector('[data-interface-tab="project-transfer"]');
   const transferPanel = document.querySelector('[data-interface-panel="project-transfer"]');
   const tabs = document.querySelector('#interface-tabs');
   const panels = document.querySelector('#interface-panels');
 
-  for (const node of [projectTab, reportTab, lineTypesTab, transferTab]) {
+  for (const node of [
+    projectTab,
+    reportTab,
+    lineTypesTab,
+    pointTypesTab,
+    transferTab,
+  ]) {
     if (node) tabs?.append(node);
   }
-  for (const node of [projectPanel, reportPanel, lineTypesPanel, transferPanel]) {
+  for (const node of [
+    projectPanel,
+    reportPanel,
+    lineTypesPanel,
+    pointTypesPanel,
+    transferPanel,
+  ]) {
     if (node) panels?.append(node);
   }
 }
@@ -164,6 +178,9 @@ function setupInterfaceTabs() {
     if (key === 'line-types') {
       window.dispatchEvent(new CustomEvent('dtpstat:line-types-changed'));
     }
+    if (key === 'point-types') {
+      window.dispatchEvent(new CustomEvent('dtpstat:point-types-changed'));
+    }
   };
 
   for (const tab of tabs) tab.addEventListener('click', () => select(tab.dataset.interfaceTab));
@@ -180,6 +197,7 @@ async function loadInterfaceEditors(user) {
   await import('./project-settings-editor.js');
   await import('./public-download-name-editor.js');
   await import('./line-types-editor.js');
+  await import('./point-types-editor.js');
 
   // Compatibility bootstrap for the legacy report module only. The temporary
   // classes are removed immediately and normalizeInterfaceEditorNodes() strips

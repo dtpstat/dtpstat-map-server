@@ -6,6 +6,7 @@
   <title>Администрирование — карта данных</title>
   <link rel="stylesheet" href="/admin/admin.css">
   <link rel="stylesheet" href="/admin/line-types.css">
+  <link rel="stylesheet" href="/admin/point-types.css">
   <link rel="stylesheet" href="/vendor/mapbox-gl/mapbox-gl.css">
   <link rel="stylesheet" href="/admin/osm-boundary-editor.css">
   <link rel="stylesheet" href="/admin/geometry-editor.css">
@@ -79,6 +80,11 @@
                     data-interface-tab="line-types">
               Типы линий
             </button>
+            <button class="task-tab" id="interface-tab-point-types" type="button" role="tab"
+                    aria-selected="false" aria-controls="interface-panel-point-types"
+                    data-interface-tab="point-types">
+              Типы точек
+            </button>
           </nav>
           <div class="interface-panels" id="interface-panels">
             <article class="task-panel interface-task-panel" id="interface-panel-line-types"
@@ -88,6 +94,19 @@
               <p class="panel-description">NAME и CODE задаются импортом/БД; здесь редактируются только подпись легенды и визуальный стиль.</p>
               <section class="operation-panel transfer-mode line-types-editor">
                 <div id="line-types-editor-host"></div>
+              </section>
+            </article>
+
+            <article class="task-panel interface-task-panel" id="interface-panel-point-types"
+                     role="tabpanel" aria-labelledby="interface-tab-point-types"
+                     data-interface-panel="point-types" hidden>
+              <h3>Типы точек</h3>
+              <p class="panel-description">
+                Тип определяет иконку Point-геометрии на карте. Неактивные типы
+                остаются в данных, но не отображаются на публичной карте.
+              </p>
+              <section class="operation-panel transfer-mode point-types-editor">
+                <div id="point-types-editor-host"></div>
               </section>
             </article>
           </div>
@@ -678,6 +697,20 @@
                         <option value="2">2</option>
                       </select>
                     </label>
+                  </fieldset>
+
+                  <fieldset id="geometry-point-fields"
+                            class="geometry-point-fields" hidden>
+                    <legend>Параметры точки</legend>
+                    <label>Тип точки
+                      <select name="pointTypeId">
+                        <option value="">Без типа</option>
+                      </select>
+                    </label>
+                    <small>
+                      Тип определяет иконку на карте. Неактивный тип можно
+                      сохранить в данных, но публичная карта его не показывает.
+                    </small>
                   </fieldset>
 
                   <div class="geometry-editor-form-actions">
