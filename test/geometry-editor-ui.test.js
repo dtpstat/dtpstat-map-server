@@ -498,7 +498,7 @@ test('geometry editor keeps existing geometry read-only until explicit edit star
   );
   assert.match(
     editor,
-    /function insertMidpoint[\s\S]*!state\.editing/u,
+    /function insertVertexOnSegment[\s\S]*!state\.editing/u,
   );
   assert.match(
     editor,
@@ -613,7 +613,7 @@ test('geometry workspace validates exact persisted tokens and scopes takeover to
   );
   assert.match(
     editor,
-    /state\.history = \[\];[\s\S]*state\.future = \[\];[\s\S]*state\.selectedVertexPath = null/u,
+    /if \(selectedRevoked\)[\s\S]*state\.editing = false;[\s\S]*state\.editLease = null;[\s\S]*state\.blockedLease = null;[\s\S]*state\.history = \[\];[\s\S]*state\.future = \[\];/u,
   );
   assert.match(
     editor,
