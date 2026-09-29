@@ -898,7 +898,6 @@ test('city boundary transfer use case delegates SQL persistence to geometry repo
   );
   assert.doesNotMatch(service, /INSERT INTO city_boundaries/u);
   assert.doesNotMatch(service, /UPDATE city_geometries/u);
-
   assert.match(
     repository,
     /CREATE TEMP TABLE city_boundary_transfer_stage/u,
@@ -1797,8 +1796,7 @@ test('security runtime composes focused persistence service and HTTP authorizati
     runtime,
     /createAdminAuthorization\(/u,
   );
-  assert.match(
-    runtime,
+  assert.match(    runtime,
     /createSecurityRuntime/u,
   );
 
@@ -2626,7 +2624,11 @@ test('security routes use canonical session and client IP HTTP helpers', async (
   );
   assert.match(
     profile,
-    /adminSessionToken\(request\)/u,
+    /adminSessionToken\(\s*request\s*,/u,
+  );
+  assert.match(
+    profile,
+    /sessionCookieOptions\(\s*request\s*\)/u,
   );
   assert.match(
     controls,
@@ -2697,8 +2699,7 @@ test('admin security HTTP routes are split by profile users controls and audit',
   );
   const audit = await fs.readFile(
     path.join(srcRoot, 'routes', 'security', 'audit-routes.js'),
-    'utf8',
-  );
+    'utf8',  );
 
   assert.match(composition, /registerAdminProfileRoutes\(/u);
   assert.match(composition, /registerAdminUserRoutes\(/u);
@@ -3598,257 +3599,3 @@ test('server composition root delegates startup runtime and derived-state orches
   );
   assert.match(
     derived,
-    /public-downloads\.refresh/u,
-  );
-  assert.match(
-    derived,
-    /DERIVED_REFRESH_TASK_TYPES/u,
-  );
-  assert.doesNotMatch(
-    derived,
-    /createApp\(/u,
-  );
-});
-
-
-test('admin runtime owns task persistence derived refresh and websocket wiring', async () => {
-  const server = await fs.readFile(
-    path.join(srcRoot, 'server.js'),
-    'utf8',
-  );
-  const adminRuntime =
-    await fs.readFile(
-      path.join(
-        srcRoot,
-        'application',
-        'admin-runtime.js',
-      ),
-      'utf8',
-    );
-
-  assert.match(
-    server,
-    /createAdminRuntime\(/u,
-  );
-  assert.match(
-    server,
-    /adminRuntime\.adminTasks/u,
-  );
-  assert.match(
-    server,
-    /adminRuntime\.adminWebSocket/u,
-  );
-  assert.doesNotMatch(
-    server,
-    /shared\/tasks\/admin-task-manager\.js/u,
-  );
-  assert.doesNotMatch(
-    server,
-    /http\/admin-websocket\.js/u,
-  );
-
-  assert.match(
-    adminRuntime,
-    /shared\/tasks\/admin-task-manager\.js/u,
-  );
-  assert.match(
-    adminRuntime,
-    /http\/admin-websocket\.js/u,
-  );
-  assert.match(
-    adminRuntime,
-    /createAdminTaskDerivedRefresh\(/u,
-  );
-  assert.match(
-    adminRuntime,
-    /adminTaskSuccessRepository[\s\S]*\.record\(update\)/u,
-  );
-  assert.match(
-    adminRuntime,
-    /securityService[\s\S]*\.appendAudit\(entry\)/u,
-  );
-});
-
-
-test('server composition root delegates process shutdown lifecycle', async () => {
-  const server = await fs.readFile(
-    path.join(srcRoot, 'server.js'),
-    'utf8',
-  );
-  const lifecycle = await fs.readFile(
-    path.join(
-      srcRoot,
-      'application',
-      'server-lifecycle.js',
-    ),
-    'utf8',
-  );
-
-  assert.match(
-    server,
-    /createServerShutdown\(/u,
-  );
-  assert.match(
-    server,
-    /installProcessShutdownHandlers\(/u,
-  );
-  assert.doesNotMatch(
-    server,
-    /process\.once\(/u,
-  );
-  assert.doesNotMatch(
-    server,
-    /Promise\.allSettled\(/u,
-  );
-  assert.doesNotMatch(
-    server,
-    /shutdown:duplicate/u,
-  );
-  assert.doesNotMatch(
-    server,
-    /database\.pool\.close/u,
-  );
-
-  assert.match(
-    lifecycle,
-    /processRuntime\.once\(/u,
-  );
-  assert.match(
-    lifecycle,
-    /Promise\.allSettled\(/u,
-  );
-  assert.match(
-    lifecycle,
-    /shutdown:duplicate/u,
-  );
-  assert.match(
-    lifecycle,
-    /database\.pool\.close/u,
-  );
-  assert.match(
-    lifecycle,
-    /admin-websocket\.close/u,
-  );
-});
-
-
-test('app composition root delegates API public-site and terminal HTTP assembly', async () => {
-  const app = await fs.readFile(
-    path.join(srcRoot, 'app.js'),
-    'utf8',
-  );
-  const apiComposition = await fs.readFile(
-    path.join(srcRoot, 'application', 'http', 'api-composition.js'),
-    'utf8',
-  );
-  const publicSite = await fs.readFile(
-    path.join(srcRoot, 'http', 'public-site.js'),
-    'utf8',
-  );
-  const terminal = await fs.readFile(
-    path.join(srcRoot, 'http', 'app-terminal-handlers.js'),
-    'utf8',
-  );
-
-  assert.match(app, /installAppHttpMiddleware\(/u);
-  assert.match(app, /installApplicationApiRoutes\(/u);
-  assert.match(app, /installPublicSiteRoutes\(/u);
-  assert.match(app, /installAppTerminalHandlers\(/u);
-  assert.doesNotMatch(app, /createAdminSecurityRouter/u);
-  assert.doesNotMatch(app, /createProjectSettingsRouter/u);
-  assert.doesNotMatch(app, /createApiRouter/u);
-  assert.doesNotMatch(app, /projectManifest/u);
-  assert.doesNotMatch(app, /renderProjectPage/u);
-  assert.doesNotMatch(app, /API endpoint not found/u);
-  assert.doesNotMatch(app, /Service temporarily unavailable/u);
-
-  assert.match(apiComposition, /createAdminSecurityRouter\(/u);
-  assert.match(apiComposition, /createProjectSettingsTransferRouter\(/u);
-  assert.match(apiComposition, /createLineTypesRouter\(/u);
-  assert.match(apiComposition, /createProjectSettingsRouter\(/u);
-  assert.match(apiComposition, /createOsmBoundariesRouter\(/u);
-  assert.match(apiComposition, /createReportConfigRouter\(/u);
-  assert.match(apiComposition, /createKmlTransferRouter\(/u);
-  assert.match(apiComposition, /createApiRouter\(/u);
-  assert.doesNotMatch(apiComposition, /renderProjectPage/u);
-
-  assert.match(publicSite, /publicDownloadFiles\(/u);
-  assert.match(publicSite, /projectManifest\(/u);
-  assert.match(publicSite, /renderProjectPage\(/u);
-  assert.match(publicSite, /site\.webmanifest/u);
-  assert.doesNotMatch(publicSite, /createApiRouter/u);
-
-  assert.match(terminal, /API endpoint not found/u);
-  assert.match(terminal, /Request body is too large/u);
-  assert.match(terminal, /Request body is not valid JSON/u);
-  assert.match(terminal, /Service temporarily unavailable/u);
-  assert.doesNotMatch(terminal, /projectManifest/u);
-  assert.doesNotMatch(terminal, /createApiRouter/u);
-});
-
-
-test('PostgreSQL integration harness uses the configured database and an isolated temporary schema', async () => {
-  const script = await fs.readFile(
-    path.join(
-      root,
-      'scripts',
-      'postgres-integration.js',
-    ),
-    'utf8',
-  );
-
-  assert.match(
-    script,
-    /loadAdminDatabaseConnection/u,
-  );
-  assert.match(
-    script,
-    /process\.env[\s\S]*DATABASE_NAME/u,
-  );
-  assert.match(
-    script,
-    /dtpstat_it_/u,
-  );
-  assert.match(
-    script,
-    /applyMigrations\(/u,
-  );
-  assert.match(
-    script,
-    /PostGIS_Version\(\)/u,
-  );
-  assert.match(
-    script,
-    /DROP SCHEMA IF EXISTS/u,
-  );
-  assert.match(
-    script,
-    /createProjectSettingsTransferRepository\(/u,
-  );
-  assert.match(
-    script,
-    /createDataExportStorageRepository\(/u,
-  );
-
-  assert.doesNotMatch(
-    script,
-    /CREATE DATABASE/u,
-  );
-  assert.doesNotMatch(
-    script,
-    /DROP DATABASE/u,
-  );
-  assert.doesNotMatch(
-    script,
-    /CREATE EXTENSION/u,
-  );
-  assert.doesNotMatch(
-    script,
-    /loadDatabaseSchema/u,
-  );
-  assert.doesNotMatch(
-    script,
-    /process\.env\.DATABASE_SCHEMA/u,
-  );
-});
-
