@@ -773,6 +773,60 @@ async function verifyGeometryEditorInfrastructure(
     'Cutout polygon must start inside the nested active city',
   );
 
+  const discussionMessage =
+    await service
+      .postDiscussionMessage(
+        polygon.id,
+        {
+          id:
+            editUserId,
+          username:
+            'geometry-integration',
+        },
+        {
+          message:
+            'Integration geometry discussion',
+        },
+      );
+
+  assert.equal(
+    discussionMessage
+      .geometryId,
+    polygon.id,
+  );
+  assert.equal(
+    discussionMessage
+      .message,
+    'Integration geometry discussion',
+  );
+  assert.equal(
+    discussionMessage
+      .author
+      .userId,
+    editUserId,
+  );
+  assert.ok(
+    discussionMessage
+      .geometryRevision,
+  );
+
+  const discussion =
+    await service
+      .listDiscussion(
+        polygon.id,
+      );
+
+  assert.deepEqual(
+    discussion.messages
+      .map(
+        (entry) =>
+          entry.id,
+      ),
+    [
+      discussionMessage.id,
+    ],
+  );
+
   const polygonLease =
     await service.beginEdit(
       polygon.id,
