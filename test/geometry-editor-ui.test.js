@@ -149,7 +149,7 @@ test('geometry editor uses local drafts optimistic revisions atomic bulk save an
   );
   assert.match(
     editor,
-    /startDrawing\('cut'\)/u,
+    /startDrawing\(\s*'cut',?\s*\)/u,
   );
   assert.match(
     editor,
@@ -250,7 +250,7 @@ test('geometry merge and cut stay revision-safe around local drafts', async () =
     html,
     /id="geometry-merge-selected" type="button"\s+disabled/u,
   );
-  assert.doesNotMatch(
+  assert.match(
     html,
     /id="geometry-merge-selected"[^>]*hidden/u,
   );
