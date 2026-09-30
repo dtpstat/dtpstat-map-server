@@ -432,9 +432,11 @@ const MERGE_GEOMETRIES_SQL = `
   merged AS (
     SELECT CASE
       WHEN $3::text = 'line' THEN
-        ST_Multi(
+        ST_LineMerge(
           ST_CollectionExtract(
-            ST_Collect(geom),
+            ST_UnaryUnion(
+              ST_Collect(geom)
+            ),
             2
           )
         )

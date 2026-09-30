@@ -1701,6 +1701,65 @@ async function verifyGeometryEditorInfrastructure(
       ),
   );
 
+  const mergedSplitLine =
+    await service.merge(
+      {
+        items:
+          splitResult
+            .geometries
+            .map(
+              (item) => ({
+                id:
+                  item.id,
+                baseUpdatedAt:
+                  new Date(
+                    item.updatedAt,
+                  ).toISOString(),
+              }),
+            ),
+      },
+      {
+        id:
+          editUserId,
+        username:
+          'geometry-integration',
+        isSuperuser:
+          true,
+      },
+      'integration-split-merge-client',
+    );
+
+  assert.equal(
+    mergedSplitLine
+      .geometry
+      .geometry
+      .type,
+    'LineString',
+    'Merging the two contiguous parts of one split line must restore a LineString',
+  );
+  assert.equal(
+    mergedSplitLine
+      .geometry
+      .geometryType,
+    'LINESTRING',
+    'Persisted merged split line must not remain a MultiLineString',
+  );
+
+  const countAfterSplitMerge =
+    await pool.query(
+      'SELECT COUNT(*)::integer AS count FROM city_geometries',
+    );
+
+  assert.equal(
+    countAfterSplitMerge
+      .rows[0]
+      .count,
+    countBeforeSplitPreview
+      .rows[0]
+      .count,
+    'Merging the split parts must remove the companion geometry',
+  );
+
   const unlinked =
     await service.sync(
       {
