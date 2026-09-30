@@ -1100,7 +1100,6 @@ export function createGeometryEditorRouter({
     async (
       request,
       response,
-      next,
     ) => {
       try {
         const geometry =
@@ -1131,6 +1130,7 @@ export function createGeometryEditorRouter({
           error,
           'union-preview',
         );
+      }
     },
   );
 
@@ -1145,7 +1145,6 @@ export function createGeometryEditorRouter({
     async (
       request,
       response,
-      next,
     ) => {
       try {
         const geometry =
@@ -1176,6 +1175,7 @@ export function createGeometryEditorRouter({
           error,
           'cut-preview',
         );
+      }
     },
   );
 
@@ -1190,7 +1190,6 @@ export function createGeometryEditorRouter({
     async (
       request,
       response,
-      next,
     ) => {
       try {
         const geometries =
@@ -1221,6 +1220,7 @@ export function createGeometryEditorRouter({
           error,
           'split-preview',
         );
+      }
     },
   );
 
