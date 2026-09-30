@@ -58,9 +58,11 @@ if (section) {
   const meta = document.querySelector('#geometry-editor-meta');
   const sourceTags = document.querySelector('#geometry-source-tags');
   const mergeButton = document.querySelector('#geometry-merge-selected');
+  const bulkSelectButton = document.querySelector('#geometry-bulk-select');
   const deleteButton = document.querySelector('#geometry-delete');
   const revertButton = document.querySelector('#geometry-revert');
   const cutButton = document.querySelector('#geometry-cut-area');
+  const cutDirectButton = document.querySelector('#geometry-cut-direct');
   const cutSelectedButton = document.querySelector('#geometry-cut-selected');
   const splitButton = document.querySelector('#geometry-split');
   const undoButton = document.querySelector('#geometry-undo');
@@ -121,6 +123,7 @@ if (section) {
     geometries: [],
     selectedId: null,
     selectedSet: new Set(),
+    bulkSelecting: false,
     current: null,
     draft: null,
     history: [],
@@ -653,6 +656,12 @@ if (section) {
         isActiveEdit:
           state.editing &&
           String(item.id) === String(state.current?.id),
+        isEdited:
+          Boolean(
+            item._local ||
+            item._draft ||
+            item.wasEdited,
+          ),
         lineColor: item.lineTypeColor ?? '#35c6b4',
         lineWidth: item.lineTypeWidth ?? 4,
         pointTypeId:
@@ -1054,6 +1063,8 @@ if (section) {
             'case',
             ['get', 'isEditLocked'],
             '#737d82',
+            ['get', 'isEdited'],
+            '#a9823c',
             '#6f8da0',
           ],
           'fill-opacity': ['case', ['get', 'isVisible'], 0.2, 0.07],
@@ -1069,9 +1080,16 @@ if (section) {
             'case',
             ['get', 'isEditLocked'],
             '#737d82',
+            ['get', 'isEdited'],
+            '#d4a342',
             '#91a5ab',
           ],
-          'line-width': 2,
+          'line-width': [
+            'case',
+            ['get', 'isEdited'],
+            3,
+            2,
+          ],
           'line-opacity': ['case', ['get', 'isVisible'], 0.8, 0.3],
         },
       });
@@ -1086,9 +1104,20 @@ if (section) {
             'case',
             ['get', 'isEditLocked'],
             '#737d82',
+            ['get', 'isEdited'],
+            '#d4a342',
             ['coalesce', ['get', 'lineColor'], '#35c6b4'],
           ],
-          'line-width': ['coalesce', ['get', 'lineWidth'], 4],
+          'line-width': [
+            'case',
+            ['get', 'isEdited'],
+            [
+              '+',
+              ['coalesce', ['get', 'lineWidth'], 4],
+              1,
+            ],
+            ['coalesce', ['get', 'lineWidth'], 4],
+          ],
           'line-opacity': ['case', ['get', 'isVisible'], 0.88, 0.28],
         },
       });
@@ -1115,6 +1144,8 @@ if (section) {
             'case',
             ['get', 'isEditLocked'],
             '#737d82',
+            ['get', 'isEdited'],
+            '#d4a342',
             '#91a5ab',
           ],
           'circle-stroke-color': '#061311',
@@ -3080,6 +3111,18 @@ if (section) {
         );
       row.classList.toggle('is-selected', item.id === state.selectedId);
       row.classList.toggle('is-hidden', item.isVisible === false);
+      row.classList.toggle(
+        'is-edited',
+        Boolean(
+          item._local ||
+          item._draft ||
+          item.wasEdited,
+        ),
+      );
+      row.classList.toggle(
+        'is-bulk-selecting',
+        state.bulkSelecting,
+      );
       row.classList.toggle('has-draft', Boolean(item._draft));
       row.classList.toggle('has-conflict', Boolean(item._conflict));
       row.classList.toggle('is-unlinked', !item.boundaryId);
@@ -3122,6 +3165,11 @@ if (section) {
       details.textContent = [
         item.lineTypeName,
         item.pointTypeName,
+        item._local
+          ? 'новая'
+          : item.wasEdited
+            ? 'изменена'
+            : null,
         item._draft ? 'черновик' : null,
         item._conflict ? 'конфликт' : null,
         rowLease
@@ -3140,7 +3188,18 @@ if (section) {
       open.append(copy, type);
       open.addEventListener('click', () => void selectGeometry(item.id));
 
-      row.append(check, open);
+      if (
+        state.bulkSelecting
+      ) {
+        row.append(
+          check,
+          open,
+        );
+      } else {
+        row.append(
+          open,
+        );
+      }
       listHost.append(row);
     }
 
@@ -3302,6 +3361,19 @@ if (section) {
 
     cutButton.hidden =
       family !== 'polygon';
+    cutDirectButton.hidden =
+      !saved ||
+      family !== 'polygon';
+    cutDirectButton.disabled =
+      Boolean(
+        state.drawing ||
+        state.importSession ||
+        state.beginEditPendingId !== null,
+      );
+    cutDirectButton.title =
+      state.editing
+        ? 'Нарисовать область, которая станет отверстием или будет вычтена из полигона'
+        : 'Начать редактирование и вырезать область из полигона';
     cutSelectedButton.hidden =
       family !== 'polygon';
     splitButton.hidden =
@@ -3349,12 +3421,29 @@ if (section) {
   }
 
   function renderMergeState() {
-    const selected = selectedMergeItems();
-    const problem = mergeProblem(selected);
+    const selected =
+      selectedMergeItems();
+    const problem =
+      mergeProblem(
+        selected,
+      );
+
+    bulkSelectButton.disabled =
+      Boolean(
+        state.importSession ||
+        state.editing ||
+        state.drawing,
+      );
+    bulkSelectButton.textContent =
+      state.bulkSelecting
+        ? 'Закончить выбор'
+        : 'Выбрать несколько';
+
     mergeButton.disabled =
       Boolean(problem) ||
       Boolean(state.drawing);
     mergeButton.hidden =
+      !state.bulkSelecting ||
       selected.length === 0;
     mergeButton.textContent =
       `Объединить (${selected.length})`;
@@ -3378,6 +3467,7 @@ if (section) {
       geometryType: item.geometryType,
       displayName: item.displayName,
       isVisible: item.isVisible,
+      wasEdited: item.wasEdited,
       updatedAt: item.updatedAt,
       lineTypeId: item.lineTypeId,
       lanes: item.lanes,
@@ -5227,6 +5317,45 @@ if (section) {
     );
   }
 
+  async function startPolygonCut() {
+    const item =
+      state.current;
+
+    if (
+      !item?.id ||
+      isLocalGeometryId(
+        item.id,
+      ) ||
+      familyOf(
+        state.draft,
+      ) !==
+        'polygon'
+    ) {
+      return;
+    }
+
+    if (!state.editing) {
+      await beginEditing();
+    }
+
+    if (
+      !topologyTargetReady([
+        'polygon',
+      ])
+    ) {
+      setMessage(
+        'Для вырезания сначала синхронизируйте несохранённые изменения полигона.',
+        'error',
+      );
+      return;
+    }
+
+    await startDrawing(
+      'cut',
+    );
+  }
+
+
   async function startDrawing(mode) {
     closeCoordinateWindow();
 
@@ -6057,6 +6186,22 @@ if (section) {
   });
 
 
+  bulkSelectButton.addEventListener(
+    'click',
+    () => {
+      state.bulkSelecting =
+        !state.bulkSelecting;
+      if (
+        !state.bulkSelecting
+      ) {
+        state.selectedSet
+          .clear();
+      }
+      renderList();
+    },
+  );
+
+
   mergeButton.addEventListener('click', async () => {
     captureCurrentDraft();
 
@@ -6157,6 +6302,8 @@ if (section) {
           );
 
       state.selectedSet.clear();
+      state.bulkSelecting =
+        false;
       upsertGeometrySummary(
         payload.geometry,
       );
@@ -6638,9 +6785,16 @@ if (section) {
       void discardPendingImport(),
   );
 
-  cutButton.addEventListener('click', () => {
-    void startDrawing('cut');
-  });
+  cutButton.addEventListener(
+    'click',
+    () =>
+      void startPolygonCut(),
+  );
+  cutDirectButton.addEventListener(
+    'click',
+    () =>
+      void startPolygonCut(),
+  );
   cutSelectedButton.addEventListener(
     'click',
     () =>
@@ -6745,6 +6899,8 @@ if (section) {
 
   citySelect.addEventListener('change', () => {
     state.selectedSet.clear();
+    state.bulkSelecting =
+      false;
     void loadWorkspace(
       citySelect.value,
       {

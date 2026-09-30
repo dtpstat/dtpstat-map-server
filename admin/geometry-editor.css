@@ -157,7 +157,7 @@
   padding: .22rem;
   display: grid;
   grid-template-columns:
-    auto minmax(0, 1fr);
+    minmax(0, 1fr);
   align-items: center;
   gap: .3rem;
   border: 1px solid transparent;
@@ -177,6 +177,23 @@
 
 .geometry-editor-row.is-hidden {
   opacity: .55;
+}
+
+.geometry-editor-row.is-bulk-selecting {
+  grid-template-columns:
+    auto minmax(0, 1fr);
+}
+
+.geometry-editor-row.is-edited {
+  box-shadow:
+    inset 3px 0 #b8872d;
+  background:
+    rgb(184 135 45 / 7%);
+}
+
+.geometry-editor-row.is-edited.is-selected {
+  box-shadow:
+    inset 3px 0 #d4a342;
 }
 
 .geometry-editor-row.has-draft {
@@ -216,6 +233,14 @@
 #geometry-merge-selected {
   margin: .5rem;
   width: calc(100% - 1rem);
+}
+
+#geometry-merge-selected[hidden] {
+  display: none;
+}
+
+#geometry-bulk-select {
+  width: 100%;
 }
 
 .geometry-editor-row-copy {

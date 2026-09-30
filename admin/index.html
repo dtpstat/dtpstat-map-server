@@ -581,6 +581,10 @@
                     <button class="secondary" id="geometry-new-polygon"
                             type="button">Полигон</button>
                   </div>
+                  <button class="secondary" id="geometry-bulk-select"
+                          type="button">
+                    Выбрать несколько
+                  </button>
                 </div>
 
                 <div id="geometry-editor-list" class="geometry-editor-list">
@@ -588,13 +592,17 @@
                 </div>
 
                 <button id="geometry-merge-selected" type="button"
-                        disabled>Объединить выбранные</button>
+                        disabled hidden>Объединить выбранные</button>
               </section>
 
               <section class="geometry-editor-map-panel"
                        aria-label="Карта редактора геометрий">
                 <div class="geometry-editor-map-toolbar">
                   <span id="geometry-editor-mode">Выберите геометрию</span>
+                  <button class="secondary" id="geometry-cut-direct"
+                          type="button" hidden>
+                    Вырезать отверстие
+                  </button>
                   <button id="geometry-finish-draw"
                           type="button" hidden>Завершить</button>
                   <button class="secondary" id="geometry-cancel-draw"

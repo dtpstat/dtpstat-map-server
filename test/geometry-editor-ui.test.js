@@ -295,6 +295,92 @@ test('geometry merge and cut stay revision-safe around local drafts', async () =
 });
 
 
+test('geometry list highlights manually edited geometries and hides bulk checkboxes until requested', async () => {
+  const [
+    editor,
+    page,
+    styles,
+  ] =
+    await Promise.all([
+      read(
+        'admin/geometry-editor.js',
+      ),
+      read(
+        'admin/index.html',
+      ),
+      read(
+        'admin/geometry-editor.css',
+      ),
+    ]);
+
+  assert.match(
+    editor,
+    /summaryFromDetail[\s\S]*wasEdited: item\.wasEdited/u,
+  );
+  assert.match(
+    editor,
+    /row\.classList\.toggle\([\s\S]*'is-edited'[\s\S]*item\.wasEdited/u,
+  );
+  assert.match(
+    editor,
+    /isEdited:[\s\S]*item\._local[\s\S]*item\._draft[\s\S]*item\.wasEdited/u,
+  );
+  assert.match(
+    editor,
+    /state\.bulkSelecting[\s\S]*row\.append\([\s\S]*check[\s\S]*open/u,
+  );
+  assert.match(
+    page,
+    /id="geometry-bulk-select"[\s\S]*Выбрать несколько/u,
+  );
+  assert.match(
+    page,
+    /id="geometry-merge-selected"[\s\S]*hidden/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-editor-row\.is-edited[\s\S]*inset 3px 0/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-editor-row\.is-bulk-selecting[\s\S]*auto minmax/u,
+  );
+});
+
+
+test('selected polygon exposes a direct cutout action that acquires editing before drawing', async () => {
+  const [
+    editor,
+    page,
+  ] =
+    await Promise.all([
+      read(
+        'admin/geometry-editor.js',
+      ),
+      read(
+        'admin/index.html',
+      ),
+    ]);
+
+  assert.match(
+    page,
+    /id="geometry-cut-direct"[\s\S]*Вырезать отверстие/u,
+  );
+  assert.match(
+    editor,
+    /cutDirectButton\.hidden =[\s\S]*family !== 'polygon'/u,
+  );
+  assert.match(
+    editor,
+    /async function startPolygonCut\(\)[\s\S]*if \(!state\.editing\)[\s\S]*await beginEditing\(\)[\s\S]*startDrawing\([\s\S]*'cut'/u,
+  );
+  assert.match(
+    editor,
+    /cutDirectButton\.addEventListener[\s\S]*startPolygonCut/u,
+  );
+});
+
+
 test('geometry editor resolves staged import conflicts visually without dropping local drafts', async () => {
   const [
     editor,
