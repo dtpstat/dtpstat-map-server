@@ -5,6 +5,7 @@ import {
   geometryFamily,
   normalizeGeometryBulkUpdates,
   normalizeGeometryCreatePayload,
+  normalizeGeometryChanges,
   normalizeGeometrySyncRequest,
   normalizeGeometryTags,
   validateEditorGeometry,
