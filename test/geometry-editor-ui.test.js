@@ -381,6 +381,23 @@ test('selected polygon exposes a direct local cutout action without forced serve
 });
 
 
+test('cut preview on a new local polygon keeps an original snapshot for revert', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /async function cutTarget\([\s\S]*localTarget[\s\S]*existing\?\.kind ===[\s\S]*'create'[\s\S]*topologyOriginalValue:[\s\S]*existing\.value/u,
+  );
+  assert.match(
+    editor,
+    /topologyKind:[\s\S]*'cut'[\s\S]*topologyGroupId/u,
+  );
+});
+
+
 test('split preview creates one update draft and one linked local create until atomic sync', async () => {
   const editor =
     await read(

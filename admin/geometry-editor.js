@@ -5304,6 +5304,49 @@ if (section) {
           },
         );
 
+      const existing =
+        draftFor(
+          target.id,
+        );
+      const localTarget =
+        isLocalGeometryId(
+          target.id,
+        );
+
+      if (
+        localTarget &&
+        existing?.kind ===
+          'create' &&
+        !existing
+          .topologyGroupId
+      ) {
+        const {
+          groupId,
+          rootId,
+        } =
+          topologyGroupDefinition(
+            existing,
+            target.id,
+          );
+
+        drafts.upsert(
+          target.id,
+          {
+            ...existing,
+            topologyKind:
+              'cut',
+            topologyGroupId:
+              groupId,
+            topologyRootId:
+              rootId,
+            topologyOriginalValue:
+              clone(
+                existing.value,
+              ),
+          },
+        );
+      }
+
       pushHistory();
       state.draft =
         clone(
