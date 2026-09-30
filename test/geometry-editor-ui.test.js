@@ -372,6 +372,10 @@ test('selected polygon exposes a direct cutout action that acquires editing befo
   );
   assert.match(
     editor,
+    /async function startPolygonCut\(\)[\s\S]*isLocalGeometryId\([\s\S]*Сохранить полигон перед вырезанием\?[\s\S]*saveDraftEntries\(\[[\s\S]*local[\s\S]*\]\)[\s\S]*adoptGeometryDetail\([\s\S]*created/u,
+  );
+  assert.match(
+    editor,
     /async function startPolygonCut\(\)[\s\S]*if \(!state\.editing\)[\s\S]*await beginEditing\(\)[\s\S]*startDrawing\([\s\S]*'cut'/u,
   );
   assert.match(
@@ -1267,6 +1271,38 @@ test('geometry editor keeps creation and edit activation explicit and selects lo
   assert.match(
     styles,
     /\.geometry-editor-map-controls\s*\{[\s\S]*position: absolute;[\s\S]*top: 3\.55rem;[\s\S]*left: \.55rem;/u,
+  );
+});
+
+
+test('external local draft refresh does not silently re-enter edit mode', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  const start =
+    editor.indexOf(
+      'function syncSelectedDraftFromStorage()',
+    );
+  const end =
+    editor.indexOf(
+      'function scheduleGeometryServerSync',
+      start,
+    );
+  const source =
+    editor.slice(
+      start,
+      end,
+    );
+
+  assert.match(
+    source,
+    /isLocalGeometryId\(state\.selectedId\)[\s\S]*state\.draft = clone\(item\.geometry\)/u,
+  );
+  assert.doesNotMatch(
+    source,
+    /state\.editing = true;/u,
   );
 });
 

@@ -401,7 +401,6 @@ if (section) {
       const item = localCreateSummary(local);
       state.current = item;
       state.draft = clone(item.geometry);
-      state.editing = true;
       state.editLease = null;
       state.blockedLease = null;
       applyForm(item);
@@ -3362,7 +3361,6 @@ if (section) {
     cutButton.hidden =
       family !== 'polygon';
     cutDirectButton.hidden =
-      !saved ||
       family !== 'polygon';
     cutDirectButton.disabled =
       Boolean(
@@ -5318,20 +5316,99 @@ if (section) {
   }
 
   async function startPolygonCut() {
-    const item =
+    let item =
       state.current;
 
     if (
       !item?.id ||
-      isLocalGeometryId(
-        item.id,
-      ) ||
       familyOf(
         state.draft,
       ) !==
         'polygon'
     ) {
       return;
+    }
+
+    if (
+      isLocalGeometryId(
+        item.id,
+      )
+    ) {
+      const local =
+        draftFor(
+          item.id,
+        );
+
+      if (
+        local?.kind !==
+        'create'
+      ) {
+        setMessage(
+          'Локальный полигон больше не найден. Обновите список.',
+          'error',
+        );
+        return;
+      }
+
+      const confirmed =
+        await adminConfirm({
+          title:
+            'Сохранить полигон перед вырезанием?',
+          message:
+            'Для топологической операции этот полигон будет записан на сервер. Продолжить?',
+          confirmLabel:
+            'Сохранить и вырезать',
+          cancelLabel:
+            'Отмена',
+        });
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        const payload =
+          await saveDraftEntries([
+            local,
+          ]);
+        const created =
+          (
+            payload.created ??
+            []
+          ).find(
+            (entry) =>
+              String(
+                entry.localId,
+              ) ===
+              String(
+                item.id,
+              ),
+          )?.geometry ??
+          null;
+
+        if (!created) {
+          setMessage(
+            'Полигон сохранён, но сервер не вернул созданную геометрию. Обновите список.',
+            'error',
+          );
+          return;
+        }
+
+        item =
+          created;
+        upsertGeometrySummary(
+          created,
+        );
+        adoptGeometryDetail(
+          created,
+        );
+      } catch (error) {
+        setMessage(
+          error.message,
+          'error',
+        );
+        return;
+      }
     }
 
     if (!state.editing) {
