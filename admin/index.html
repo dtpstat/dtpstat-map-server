@@ -700,6 +700,10 @@
                     </button>
                     <span id="geometry-edit-lock-status"
                           class="geometry-edit-lock-status"></span>
+                    <button class="secondary" id="geometry-discussion-open"
+                            type="button" disabled>
+                      Обсуждение
+                    </button>
                   </div>
 
                   <p class="geometry-editor-editing-notice"
@@ -808,6 +812,46 @@
                 </form>
               </aside>
             </div>
+
+            <section class="geometry-discussion"
+                     id="geometry-discussion" hidden
+                     aria-label="Обсуждение геометрии"
+                     aria-live="polite">
+              <header class="geometry-discussion-header">
+                <div>
+                  <strong id="geometry-discussion-title">Обсуждение</strong>
+                  <small id="geometry-discussion-subtitle"></small>
+                </div>
+                <button class="secondary geometry-discussion-close"
+                        id="geometry-discussion-close"
+                        type="button"
+                        aria-label="Свернуть обсуждение"
+                        title="Свернуть обсуждение">×</button>
+              </header>
+
+              <div class="geometry-discussion-messages"
+                   id="geometry-discussion-messages"
+                   role="log"
+                   aria-live="polite"
+                   aria-relevant="additions">
+                <p class="empty-state">Сообщений пока нет.</p>
+              </div>
+
+              <form class="geometry-discussion-form"
+                    id="geometry-discussion-form">
+                <label class="visually-hidden"
+                       for="geometry-discussion-input">
+                  Сообщение
+                </label>
+                <textarea id="geometry-discussion-input"
+                          name="message"
+                          rows="2"
+                          maxlength="4000"
+                          required
+                          placeholder="Комментарий к геометрии…"></textarea>
+                <button type="submit">Отправить</button>
+              </form>
+            </section>
           </div>
 
           <section class="geometry-coordinate-window"
