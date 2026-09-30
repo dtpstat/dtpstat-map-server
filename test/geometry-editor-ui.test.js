@@ -1695,3 +1695,66 @@ test('geometry editor shows explicit editing notice and edits zoom/date visibili
     /\.geometry-display-window-grid/u,
   );
 });
+
+
+test('geometry editor includes editor identity and non-modal geometry discussion', async () => {
+  const html =
+    await read(
+      'admin/index.html',
+    );
+  const script =
+    await read(
+      'admin/geometry-editor.js',
+    );
+  const styles =
+    await read(
+      'admin/geometry-editor.css',
+    );
+
+  assert.match(
+    html,
+    /id="geometry-discussion-open"/u,
+  );
+  assert.match(
+    html,
+    /id="geometry-discussion"/u,
+  );
+  assert.match(
+    html,
+    /id="geometry-discussion-messages"/u,
+  );
+  assert.match(
+    html,
+    /id="geometry-discussion-form"/u,
+  );
+
+  assert.match(
+    script,
+    /function renderEditLockIdentity\(/u,
+  );
+  assert.match(
+    script,
+    /'geometry-discussions'/u,
+  );
+  assert.match(
+    script,
+    /async function loadDiscussion\(/u,
+  );
+  assert.match(
+    script,
+    /async function sendDiscussionMessage\(/u,
+  );
+
+  assert.match(
+    styles,
+    /\.geometry-discussion \{/u,
+  );
+  assert.match(
+    styles,
+    /position: fixed/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-edit-actor-avatar/u,
+  );
+});
