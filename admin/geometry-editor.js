@@ -5394,11 +5394,11 @@ if (section) {
         [];
 
       if (
-        parts.length !==
+        parts.length <
         2
       ) {
         throw new Error(
-          'Сервер не вернул две части разделения.',
+          'Сервер не вернул части разделения.',
         );
       }
 
@@ -5414,18 +5414,18 @@ if (section) {
           existing,
           target.id,
         );
-      const localId =
-        'local:' +
-        crypto.randomUUID();
       const localTarget =
         isLocalGeometryId(
           target.id,
         );
-      const companionValue =
-        topologyPartValue(
-          target,
-          parts[1],
-        );
+      const companionIds =
+        parts
+          .slice(1)
+          .map(
+            () =>
+              'local:' +
+              crypto.randomUUID(),
+          );
 
       state.draft =
         clone(
@@ -5463,6 +5463,16 @@ if (section) {
               groupId,
             topologyRootId:
               rootId,
+            topologyLocalIds: [
+              ...new Set([
+                ...(
+                  existing
+                    ?.topologyLocalIds ??
+                  []
+                ),
+                ...companionIds,
+              ]),
+            ],
             topologyOriginalValue:
               existing
                 .topologyOriginalValue ??
@@ -5485,7 +5495,7 @@ if (section) {
                   ?.topologyLocalIds ??
                 []
               ),
-              localId,
+              ...companionIds,
             ]),
           ];
 
@@ -5504,48 +5514,61 @@ if (section) {
         );
       }
 
-      drafts.upsert(
-        localId,
-        {
-          kind:
-            'create',
+      for (
+        const [
+          index,
           localId,
-          workspaceKey:
-            existing?.workspaceKey ??
-            state.workspaceKey ??
-            'unlinked',
-          value:
-            companionValue,
-          sourceGeometryId:
-            localTarget
-              ? (
-                  existing
-                    ?.sourceGeometryId ??
-                  null
-                )
-              : Number(
-                target.id,
+        ] of companionIds
+          .entries()
+      ) {
+        drafts.upsert(
+          localId,
+          {
+            kind:
+              'create',
+            localId,
+            workspaceKey:
+              existing?.workspaceKey ??
+              state.workspaceKey ??
+              'unlinked',
+            value:
+              topologyPartValue(
+                target,
+                parts[
+                  index + 1
+                ],
               ),
-          topologyKind:
-            'split',
-          topologyGroupId:
-            groupId,
-          topologyRootId:
-            rootId,
-          topologySourceId:
-            localTarget
-              ? (
-                  existing
-                    ?.topologySourceId ??
-                  null
-                )
-              : Number(
-                target.id,
-              ),
-          conflict:
-            false,
-        },
-      );
+            sourceGeometryId:
+              localTarget
+                ? (
+                    existing
+                      ?.sourceGeometryId ??
+                    null
+                  )
+                : Number(
+                  target.id,
+                ),
+            topologyKind:
+              'split',
+            topologyGroupId:
+              groupId,
+            topologyRootId:
+              rootId,
+            topologySourceId:
+              localTarget
+                ? (
+                    existing
+                      ?.topologySourceId ??
+                    null
+                  )
+                : Number(
+                  target.id,
+                ),
+            conflict:
+              false,
+          },
+        );
+      }
 
       if (
         localTarget
@@ -5575,7 +5598,9 @@ if (section) {
       renderHistoryControls();
       renderFormState();
       setMessage(
-        'Геометрия разделена только в локальных черновиках. «Отменить правки» вернёт исходную геометрию; «Синхронизировать» атомарно запишет обе части.',
+        'Геометрия разделена только в локальных черновиках: частей — ' +
+          parts.length +
+          '. «Отменить правки» вернёт исходную геометрию; «Синхронизировать» атомарно запишет все части.',
         'success',
       );
     } catch (error) {
@@ -5585,7 +5610,8 @@ if (section) {
     }
   }
 
-  async function cutWithSelectedGeometry() {
+
+  async function cutWithSelectedGeometry() {  async function cutWithSelectedGeometry() {
     const target =
       state.current;
     const cutter =
@@ -5970,12 +5996,9 @@ if (section) {
         updateDrawControls();
         renderFormState();
 
-        if (
-          !target?.id ||
-          !target.updatedAt
-        ) {
+        if (!target?.id) {
           setMessage(
-            'Не удалось определить серверную ревизию геометрии. Обновите список.',
+            'Не удалось определить редактируемую геометрию.',
             'error',
           );
           return;
@@ -6012,12 +6035,9 @@ if (section) {
         updateDrawControls();
         renderFormState();
 
-        if (
-          !target?.id ||
-          !target.updatedAt
-        ) {
+        if (!target?.id) {
           setMessage(
-            'Не удалось определить серверную ревизию полигона. Обновите список.',
+            'Не удалось определить редактируемый полигон.',
             'error',
           );
           return;
@@ -7633,8 +7653,11 @@ if (section) {
 
   cutButton.addEventListener(
     'click',
-    () =>
-      void startPolygonCut(),
+    () => {
+      topologyActions.open =
+        false;
+      void startPolygonCut();
+    },
   );
   cutDirectButton.addEventListener(
     'click',
@@ -7643,13 +7666,21 @@ if (section) {
   );
   cutSelectedButton.addEventListener(
     'click',
-    () =>
-      void cutWithSelectedGeometry(),
+    () => {
+      topologyActions.open =
+        false;
+      void cutWithSelectedGeometry();
+    },
   );
   splitButton.addEventListener(
     'click',
-    () =>
-      void startDrawing('split'),
+    () => {
+      topologyActions.open =
+        false;
+      void startDrawing(
+        'split',
+      );
+    },
   );
 
 
