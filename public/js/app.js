@@ -13,6 +13,9 @@ import {
   createMapController,
   ROAD_DATA_MIN_ZOOM,
 } from './map-controller.js';
+import {
+  hidePageStandby,
+} from './page-standby.js';
 
 const legendStylesheet = document.createElement('link');
 legendStylesheet.rel = 'stylesheet';
@@ -443,6 +446,8 @@ async function start() {
     setCityStatus('Приложение не удалось загрузить', true);
     setMapMessage(error.message || 'Ошибка запуска приложения', true);
     console.error(error);
+  } finally {
+    hidePageStandby();
   }
 }
 

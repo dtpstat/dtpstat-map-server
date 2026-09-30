@@ -1,6 +1,10 @@
 import {
   adminApiHeaders,
 } from './api-contract-client.js';
+import {
+  hidePageStandby,
+  showPageStandby,
+} from '../js/page-standby.js';
 
 const form = document.querySelector('#admin-login-form');
 const mfaForm = document.querySelector('#admin-mfa-form');
@@ -91,8 +95,15 @@ async function alreadyAuthenticated() {
 }
 
 if (await alreadyAuthenticated()) {
+  showPageStandby(
+    'Открываем админку…',
+  );
   window.location.replace('/admin/');
-} else if (form) {
+} else {
+  hidePageStandby();
+}
+
+if (form) {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!form.reportValidity()) return;
@@ -151,6 +162,9 @@ if (await alreadyAuthenticated()) {
           : '';
         throw new Error(`${payload?.error ?? `HTTP ${response.status}`}${retry}`);
       }
+      showPageStandby(
+        'Открываем админку…',
+      );
       window.location.replace('/admin/');
     } catch (error) {
       message.textContent = error.message;
@@ -261,6 +275,9 @@ if (
 
         mfaChallengeToken =
           null;
+        showPageStandby(
+          'Открываем админку…',
+        );
         window.location
           .replace(
             '/admin/',

@@ -1,5 +1,9 @@
 import { confirmDirtyNavigation, installDirtyTabGuard } from './admin-dirty-state.js';
 import { readTabState, writeTabState } from './admin-tab-state.js';
+import {
+  hidePageStandby,
+  showPageStandby,
+} from '../js/page-standby.js';
 
 function canManageData(user) {
   return Boolean(user?.isSuperuser || user?.canManageData);
@@ -97,6 +101,9 @@ function ensureTopbarActions() {
     })) return;
     button.disabled = true;
     button.textContent = 'Выходим…';
+    showPageStandby(
+      'Выходим из админки…',
+    );
     try {
       await fetch('/api/admin/logout', {
         method: 'POST',
@@ -450,11 +457,22 @@ async function startAdminShell() {
         ) {
           activePermissionFingerprint =
             nextFingerprint;
+          showPageStandby(
+            'Обновляем доступ…',
+          );
           window.location.reload();
         }
       },
     );
-    window.addEventListener('dtpstat:password-changed', () => window.location.reload());
+    window.addEventListener(
+      'dtpstat:password-changed',
+      () => {
+        showPageStandby(
+          'Обновляем сессию…',
+        );
+        window.location.reload();
+      },
+    );
   } catch (error) {
     if (userBadge) userBadge.textContent = 'Ошибка авторизации';
     const host = document.querySelector('#security-editor-host');
@@ -465,6 +483,8 @@ async function startAdminShell() {
       message.textContent = error.message ?? 'Не удалось загрузить административную сессию';
       host.append(message);
     }
+  } finally {
+    hidePageStandby();
   }
 }
 
