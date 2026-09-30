@@ -437,6 +437,7 @@ export const API_REQUEST_CONTRACTS =
           'themePreset',
           'showLineLabels',
           'showLinePopups',
+          'showGeometryTimeline',
           'mapboxAccessToken',
           'largeCityPopulationThreshold',
           'largeCityAreaKm2Threshold',

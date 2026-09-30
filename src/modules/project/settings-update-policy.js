@@ -20,6 +20,7 @@ export function normalizeProjectSettingsUpdate(payload) {
     themePreset: rawThemePreset,
     showLineLabels = false,
     showLinePopups: rawShowLinePopups,
+    showGeometryTimeline = false,
     mapboxAccessToken = null,
     largeCityPopulationThreshold = 400000,
     largeCityAreaKm2Threshold = null,
@@ -37,6 +38,14 @@ export function normalizeProjectSettingsUpdate(payload) {
   ) {
     throw new ProjectSettingsValidationError(
       'showLinePopups must be boolean',
+    );
+  }
+  if (
+    typeof showGeometryTimeline !==
+      'boolean'
+  ) {
+    throw new ProjectSettingsValidationError(
+      'showGeometryTimeline must be boolean',
     );
   }
 
@@ -76,6 +85,7 @@ export function normalizeProjectSettingsUpdate(payload) {
     showLineLabels,
     showLinePopups:
       hasShowLinePopups ? rawShowLinePopups : null,
+    showGeometryTimeline,
     mapboxAccessToken: normalizeMapboxAccessToken(
       mapboxAccessToken,
       { optional: true },

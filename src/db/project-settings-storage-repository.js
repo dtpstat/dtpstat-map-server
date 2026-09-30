@@ -8,6 +8,7 @@ const SELECT_SETTINGS_SQL = `
     theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
     show_line_popups AS "showLinePopups",
+    show_geometry_timeline AS "showGeometryTimeline",
     large_city_population_threshold::integer AS "largeCityPopulationThreshold",
     large_city_area_km2_threshold::double precision AS "largeCityAreaKm2Threshold",
     public_download_name AS "publicDownloadName",
@@ -65,6 +66,7 @@ const UPDATE_SETTINGS_SQL = `
     END,
     large_city_population_threshold = $10::integer,
     large_city_area_km2_threshold = $11::double precision,
+    show_geometry_timeline = $12::boolean,
     updated_at = now()
   WHERE id = 1
   RETURNING
@@ -76,6 +78,7 @@ const UPDATE_SETTINGS_SQL = `
     theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
     show_line_popups AS "showLinePopups",
+    show_geometry_timeline AS "showGeometryTimeline",
     large_city_population_threshold::integer AS "largeCityPopulationThreshold",
     large_city_area_km2_threshold::double precision AS "largeCityAreaKm2Threshold",
     public_download_name AS "publicDownloadName",
@@ -208,6 +211,7 @@ export function createProjectSettingsStorageRepository() {
           settings.mapboxAccessToken,
           settings.largeCityPopulationThreshold,
           settings.largeCityAreaKm2Threshold,
+          settings.showGeometryTimeline,
         ],
       );
       return requireRow(result);

@@ -61,6 +61,7 @@ test('project settings storage owns singleton read and update SQL', async () => 
     themePreset: 'modern',
     showLineLabels: true,
     showLinePopups: false,
+    showGeometryTimeline: true,
     mapboxAccessToken: null,
     largeCityPopulationThreshold: 500000,
     largeCityAreaKm2Threshold: 250,
@@ -77,8 +78,16 @@ test('project settings storage owns singleton read and update SQL', async () => 
     /^UPDATE project_settings/u,
   );
   assert.deepEqual(
-    database.queries[1].values.slice(-2),
-    [500000, 250],
+    database.queries[1].values.slice(-3),
+    [500000, 250, true],
+  );
+  assert.match(
+    database.queries[0].text,
+    /show_geometry_timeline AS "showGeometryTimeline"/u,
+  );
+  assert.match(
+    database.queries[1].text,
+    /show_geometry_timeline = \$12::boolean/u,
   );
 });
 

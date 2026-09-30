@@ -17,6 +17,7 @@ test('project settings update policy preserves optional runtime settings semanti
   assert.equal(normalized.themePreset, null);
   assert.equal(normalized.showLineLabels, false);
   assert.equal(normalized.showLinePopups, null);
+  assert.equal(normalized.showGeometryTimeline, false);
   assert.equal(normalized.mapboxAccessToken, null);
   assert.equal(normalized.largeCityPopulationThreshold, 400000);
   assert.equal(normalized.largeCityAreaKm2Threshold, null);
@@ -32,6 +33,7 @@ test('project settings update policy normalizes theme token and thresholds', () 
     themePreset: 'modern',
     showLineLabels: true,
     showLinePopups: false,
+    showGeometryTimeline: true,
     mapboxAccessToken: 'pk.test-public-token-value',
     largeCityPopulationThreshold: '500000',
     largeCityAreaKm2Threshold: '250.5',
@@ -40,6 +42,7 @@ test('project settings update policy normalizes theme token and thresholds', () 
   assert.equal(normalized.themePreset, 'modern');
   assert.equal(normalized.showLineLabels, true);
   assert.equal(normalized.showLinePopups, false);
+  assert.equal(normalized.showGeometryTimeline, true);
   assert.equal(
     normalized.mapboxAccessToken,
     'pk.test-public-token-value',
@@ -70,5 +73,21 @@ test('project settings update policy rejects invalid thresholds before DB work',
       largeCityAreaKm2Threshold: -1,
     }),
     /largeCityAreaKm2Threshold/u,
+  );
+});
+
+
+test('project settings update policy rejects non-boolean timeline setting', () => {
+  assert.throws(
+    () =>
+      normalizeProjectSettingsUpdate({
+        projectName: 'Test',
+        keywords: [],
+        footerHtml: '<p>Test</p>',
+        yandexMetrikaId: null,
+        googleAnalyticsId: null,
+        showGeometryTimeline: 'yes',
+      }),
+    /showGeometryTimeline must be boolean/u,
   );
 });

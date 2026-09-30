@@ -144,6 +144,12 @@ if (typeof document !== 'undefined') {
                 <small>При наведении указателя на линию показывается popup с KML Placemark/name. Эта настройка независима от постоянных подписей.</small>
               </label>
 
+              <label class="check project-setting-check">
+                <input name="showGeometryTimeline" type="checkbox">
+                Показывать временную шкалу геометрий
+                <small>На публичной карте появится горизонтальная шкала дат и кнопка Play для просмотра развития геометрий по полям «С» / «По».</small>
+              </label>
+
               <section class="project-settings-section" aria-labelledby="project-city-marker-title">
                 <div>
                   <h5 id="project-city-marker-title">Маркер города на дальнем зуме</h5>
@@ -273,6 +279,7 @@ if (typeof document !== 'undefined') {
       const themePreset = form.elements.namedItem('themePreset');
       const showLineLabels = form.elements.namedItem('showLineLabels');
       const showLinePopups = form.elements.namedItem('showLinePopups');
+      const showGeometryTimeline = form.elements.namedItem('showGeometryTimeline');
       const largeCityPopulationThreshold = form.elements.namedItem('largeCityPopulationThreshold');
       const largeCityAreaKm2Threshold = form.elements.namedItem('largeCityAreaKm2Threshold');
       const cityMarkerIcon = form.elements.namedItem('cityMarkerIcon');
@@ -398,6 +405,7 @@ if (typeof document !== 'undefined') {
         themePreset.value = settings.themePreset ?? 'classic';
         showLineLabels.checked = Boolean(settings.showLineLabels);
         showLinePopups.checked = settings.showLinePopups !== false;
+        showGeometryTimeline.checked = Boolean(settings.showGeometryTimeline);
         largeCityPopulationThreshold.value = String(
           settings.largeCityPopulationThreshold ?? 400000,
         );
@@ -523,6 +531,7 @@ if (typeof document !== 'undefined') {
               themePreset: themePreset.value,
               showLineLabels: showLineLabels.checked,
               showLinePopups: showLinePopups.checked,
+              showGeometryTimeline: showGeometryTimeline.checked,
               largeCityPopulationThreshold: Number(largeCityPopulationThreshold.value),
               largeCityAreaKm2Threshold: largeCityAreaKm2Threshold.value === ''
                 ? null

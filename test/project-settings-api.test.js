@@ -18,6 +18,7 @@ function createRepository() {
     themePreset: 'classic',
     showLineLabels: false,
     showLinePopups: true,
+    showGeometryTimeline: false,
     largeCityPopulationThreshold: 400000,
     largeCityAreaKm2Threshold: null,
     publicDownloadName: 'bus-lanes',
@@ -30,6 +31,7 @@ function createRepository() {
       const {
         showLineLabels = false,
         showLinePopups = settings.showLinePopups,
+        showGeometryTimeline = settings.showGeometryTimeline,
         mapboxAccessToken = null,
         largeCityPopulationThreshold =
           settings.largeCityPopulationThreshold,
@@ -41,6 +43,7 @@ function createRepository() {
         ...buildProjectSettingsPlan(base),
         showLineLabels,
         showLinePopups,
+        showGeometryTimeline,
         largeCityPopulationThreshold,
         largeCityAreaKm2Threshold,
         publicDownloadName: settings.publicDownloadName,
@@ -108,6 +111,7 @@ test('public project settings are readable while admin editor remains protected'
     assert.equal(publicSettings.themePreset, 'classic');
     assert.equal(publicSettings.showLineLabels, false);
     assert.equal(publicSettings.showLinePopups, true);
+    assert.equal(publicSettings.showGeometryTimeline, false);
     assert.equal(publicSettings.publicDownloadName, 'bus-lanes');
     assert.equal(publicSettings.yandexMetrikaId, null);
     assert.equal(publicSettings.googleAnalyticsId, null);
@@ -146,6 +150,7 @@ test('admin can update project settings including independent line labels and po
         themePreset: 'modern',
         showLineLabels: true,
         showLinePopups: false,
+        showGeometryTimeline: true,
         keywords: ['трамвай', 'обособление'],
         yandexMetrikaId: '12345678',
         googleAnalyticsId: 'g-ab12cd34ef',
@@ -158,6 +163,7 @@ test('admin can update project settings including independent line labels and po
     assert.equal(payload.settings.themePreset, 'modern');
     assert.equal(payload.settings.showLineLabels, true);
     assert.equal(payload.settings.showLinePopups, false);
+    assert.equal(payload.settings.showGeometryTimeline, true);
     assert.equal(payload.settings.publicDownloadName, 'bus-lanes');
     assert.equal(payload.settings.yandexMetrikaId, '12345678');
     assert.equal(payload.settings.googleAnalyticsId, 'G-AB12CD34EF');

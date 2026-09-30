@@ -91,8 +91,10 @@ test('admin interface loads editors and helpers explicitly without transitive si
   assert.match(editor, /themePreset: themePreset\.value/);
   assert.match(editor, /name="showLineLabels" type="checkbox"/);
   assert.match(editor, /name="showLinePopups" type="checkbox"/);
+  assert.match(editor, /name="showGeometryTimeline" type="checkbox"/);
   assert.match(editor, /showLineLabels: showLineLabels\.checked/);
   assert.match(editor, /showLinePopups: showLinePopups\.checked/);
+  assert.match(editor, /showGeometryTimeline: showGeometryTimeline\.checked/);
   assert.match(editor, /name="keywords"/);
   assert.match(editor, /name="yandexMetrikaId"/);
   assert.match(editor, /name="googleAnalyticsId"/);
