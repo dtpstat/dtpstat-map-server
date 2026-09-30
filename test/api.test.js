@@ -451,7 +451,7 @@ test('viewport geometry endpoint validates bounds and forwards the map center', 
 
   await withServer(async (baseUrl) => {
     const success = await versionedFetch(
-      `${baseUrl}/api/geometries?bbox=37.4,55.6,37.9,55.9&center=37.62,55.75`,
+      `${baseUrl}/api/geometries?bbox=37.4,55.6,37.9,55.9&center=37.62,55.75&zoom=11`,
     );
     assert.equal(success.status, 200);
     assert.equal(success.headers.get('cache-control'), 'no-store');
@@ -468,6 +468,7 @@ test('viewport geometry endpoint validates bounds and forwards the map center', 
       north: 55.9,
       centerLng: 37.62,
       centerLat: 55.75,
+      zoom: 11,
     });
 
     const defaultCenter = await versionedFetch(
@@ -476,6 +477,20 @@ test('viewport geometry endpoint validates bounds and forwards the map center', 
     assert.equal(defaultCenter.status, 200);
     assert.equal(receivedViewport.centerLng, 37.65);
     assert.equal(receivedViewport.centerLat, 55.75);
+    assert.equal(receivedViewport.zoom, 8);
+
+    const lowZoomWorld =
+      await versionedFetch(
+        `${baseUrl}/api/geometries?bbox=-180,-90,180,90&zoom=2`,
+      );
+    assert.equal(
+      lowZoomWorld.status,
+      200,
+    );
+    assert.equal(
+      receivedViewport.zoom,
+      2,
+    );
 
     for (const query of [
       '',
@@ -483,6 +498,8 @@ test('viewport geometry endpoint validates bounds and forwards the map center', 
       '?bbox=37.4,55.6,37.9,55.9&center=40,55.75',
       '?bbox=west,55.6,37.9,55.9',
       '?bbox=-180,-90,180,90',
+      '?bbox=37.4,55.6,37.9,55.9&zoom=25',
+      '?bbox=37.4,55.6,37.9,55.9&zoom=nope',
     ]) {
       const invalid = await versionedFetch(`${baseUrl}/api/geometries${query}`);
       assert.equal(invalid.status, 400);

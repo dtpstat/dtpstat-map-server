@@ -58,6 +58,9 @@ export function loadViewportGeometries(viewport, signal) {
   const query = new URLSearchParams({
     bbox: viewport.bbox.join(','),
     center: viewport.center.join(','),
+    zoom: String(
+      viewport.zoom,
+    ),
   });
   return getJson(`/api/geometries?${query}`, { signal });
 }

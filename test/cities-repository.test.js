@@ -94,6 +94,7 @@ test('viewport query uses padded selector and returns public lines plus active t
     north: 55.9,
     centerLng: 37.62,
     centerLat: 55.75,
+    zoom: 11,
   });
 
   assert.equal(result, expected);
@@ -101,7 +102,10 @@ test('viewport query uses padded selector and returns public lines plus active t
   assert.ok(Math.abs(values[1] - 55.57) < 1e-9);
   assert.ok(Math.abs(values[2] - 37.95) < 1e-9);
   assert.ok(Math.abs(values[3] - 55.93) < 1e-9);
-  assert.deepEqual(values.slice(4), [37.62, 55.75]);
+  assert.deepEqual(
+    values.slice(4),
+    [37.62, 55.75, 11],
+  );
   assert.match(sql, /geometry\.geom && viewport\.geom/);
   assert.match(sql, /ST_Intersects\(geometry\.geom, viewport\.geom\)/);
   assert.match(sql, /geometry\.geom\s+FROM viewport/);
@@ -118,6 +122,18 @@ test('viewport query uses padded selector and returns public lines plus active t
   assert.match(
     sql,
     /GeometryType\(geometry\.geom\) = 'POINT'[\s\S]*point_type\.is_active/u,
+  );
+  assert.match(
+    sql,
+    /'POLYGON'[\s\S]*'MULTIPOLYGON'/u,
+  );
+  assert.match(
+    sql,
+    /COALESCE\([\s\S]*geometry\.min_zoom[\s\S]*8\.0[\s\S]*<= viewport\.zoom/u,
+  );
+  assert.match(
+    sql,
+    /geometry\.max_zoom IS NULL[\s\S]*viewport\.zoom <=[\s\S]*geometry\.max_zoom/u,
   );
   assert.match(
     sql,
@@ -161,7 +177,7 @@ test('viewport profiler and repository can share the exact parameterized SQL con
   );
   assert.equal(
     query.values.length,
-    6,
+    7,
   );
   assert.ok(
     Math.abs(

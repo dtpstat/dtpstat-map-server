@@ -123,7 +123,7 @@ export function createCitiesRepository(database) {
      * 20% larger than the visible viewport. The original center remains the
      * city-selection point; geometries are never clipped.
      *
-     * @param {{ west: number, south: number, east: number, north: number, centerLng: number, centerLat: number }} viewport
+     * @param {{ west: number, south: number, east: number, north: number, centerLng: number, centerLat: number, zoom?: number }} viewport
      */
     async getViewportGeometries(viewport) {
       const query =

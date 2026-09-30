@@ -48,16 +48,51 @@ export function registerMapRoutes(router, {
   });
 
   router.get('/geometries', async (request, response, next) => {
-    const bbox = parseCoordinates(request.query.bbox, 4);
+    const zoom =
+      request.query.zoom ===
+        undefined
+        ? 8
+        : Number(
+            request.query.zoom,
+          );
+    if (
+      !Number.isFinite(zoom) ||
+      zoom < 0 ||
+      zoom > 24
+    ) {
+      response.status(400).json({
+        error:
+          'zoom must be a number between 0 and 24',
+      });
+      return;
+    }
+
+    const bbox =
+      parseCoordinates(
+        request.query.bbox,
+        4,
+      );
+    const maxLongitudeSpan =
+      zoom < 8
+        ? 360
+        : 20;
+    const maxLatitudeSpan =
+      zoom < 8
+        ? 180
+        : 20;
     if (
       !bbox ||
       bbox[0] < -180 || bbox[2] > 180 ||
       bbox[1] < -90 || bbox[3] > 90 ||
       bbox[0] >= bbox[2] || bbox[1] >= bbox[3] ||
-      bbox[2] - bbox[0] > 20 || bbox[3] - bbox[1] > 20
+      bbox[2] - bbox[0] >
+        maxLongitudeSpan ||
+      bbox[3] - bbox[1] >
+        maxLatitudeSpan
     ) {
       response.status(400).json({
-        error: 'bbox must be a WGS84 visible window with a maximum 20 degree span',
+        error:
+          'bbox must be a valid WGS84 visible window for the requested zoom',
       });
       return;
     }
@@ -82,6 +117,7 @@ export function registerMapRoutes(router, {
         north: bbox[3],
         centerLng: center[0],
         centerLat: center[1],
+        zoom,
       });
       response.set('Cache-Control', 'no-store');
       response.json(geojson);
