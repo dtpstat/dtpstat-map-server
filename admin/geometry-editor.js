@@ -320,7 +320,18 @@ if (section) {
   }
 
   function rebuildDraftOverlay() {
-    const server = state.serverGeometries.map(effectiveSummary);
+    const server =
+      state.serverGeometries
+        .filter(
+          (item) =>
+            draftFor(
+              item.id,
+            )?.kind !==
+              'delete',
+        )
+        .map(
+          effectiveSummary,
+        );
     const local = drafts.list()
       .filter(
         (entry) =>
@@ -337,6 +348,11 @@ if (section) {
       if (entry.kind === 'create') {
         return Boolean(entry.value?.geometry);
       }
+      if (entry.kind === 'delete') {
+        return Boolean(
+          entry.editToken,
+        );
+      }
       return Boolean(
         entry.editToken &&
         Object.keys(entry.changes ?? {}).length > 0,
@@ -351,8 +367,12 @@ if (section) {
     const created = entries.filter((draft) => draft.kind === 'create').length;
     const edited = entries.filter(
       (draft) =>
-        draft.kind !== 'create' &&
+        draft.kind === 'update' &&
         Object.keys(draft.changes ?? {}).length > 0,
+    ).length;
+    const deleted = entries.filter(
+      (draft) =>
+        draft.kind === 'delete',
     ).length;
 
     if (draftCount) {
@@ -360,6 +380,7 @@ if (section) {
         'Локально: ' + entries.length +
         (created ? ' · новых: ' + created : '') +
         (edited ? ' · изменено: ' + edited : '') +
+        (deleted ? ' · удалено: ' + deleted : '') +
         (conflicts ? ' · конфликтов: ' + conflicts : '');
     }
     if (saveAll) {
@@ -3143,13 +3164,10 @@ if (section) {
       check.checked = state.selectedSet.has(item.id);
       check.disabled = Boolean(
         state.importSession ||
-        item._local ||
-        item._draft ||
-        item._conflict ||
-        state.editLeases.has(Number(item.id))
+        item._conflict
       );
       check.title = check.disabled
-        ? 'Сначала сохраните или сбросьте локальный черновик'
+        ? 'Сначала разрешите конфликт этой геометрии'
         : 'Выбрать для групповой или topology-операции';
       check.setAttribute(
         'aria-label',
@@ -3218,8 +3236,16 @@ if (section) {
 
   function selectedMergeItems() {
     return [...state.selectedSet]
-      .sort((left, right) => left - right)
-      .map((id) => state.geometries.find((item) => item.id === id))
+      .map(
+        (id) =>
+          state.geometries.find(
+            (item) =>
+              String(
+                item.id,
+              ) ===
+              String(id),
+          ),
+      )
       .filter(Boolean);
   }
 
@@ -3228,8 +3254,8 @@ if (section) {
       return 'Сначала разрешите конфликты подготовленного импорта.';
     }
     if (items.length < 2) return 'Выберите минимум две геометрии.';
-    if (items.some((item) => item._draft || item._conflict)) {
-      return 'Сначала сохраните или сбросьте локальные черновики выбранных геометрий.';
+    if (items.some((item) => item._conflict)) {
+      return 'Сначала разрешите конфликты выбранных геометрий.';
     }
 
     const first = items[0];
@@ -3238,35 +3264,13 @@ if (section) {
     }
 
     if (
-      items.some((item) =>
-        item.cityId !== first.cityId ||
-        item.boundaryId !== first.boundaryId ||
-        item.family !== first.family)
+      items.some(
+        (item) =>
+          item.family !==
+            first.family,
+      )
     ) {
-      return 'Геометрии должны принадлежать одному городу, OSM-объекту и типу геометрии.';
-    }
-
-    if (
-      items.some((item) =>
-        item.isVisible !== first.isVisible)
-    ) {
-      return 'У объединяемых геометрий должна совпадать видимость.';
-    }
-
-    if (
-      first.family === 'line' &&
-      items.some((item) =>
-        item.lineTypeId !== first.lineTypeId ||
-        item.lanes !== first.lanes)
-    ) {
-      return 'У объединяемых линий должны совпадать тип линии и коэффициент полос.';
-    }
-
-    if (
-      items.some((item) =>
-        !item.updatedAt)
-    ) {
-      return 'Для одной из геометрий неизвестна серверная ревизия. Обновите список.';
+      return 'Геометрии должны иметь один тип геометрии.';
     }
 
     return null;
@@ -3294,12 +3298,8 @@ if (section) {
 
     if (
       cutter.family !== 'polygon' ||
-      !cutter.updatedAt ||
-      cutter._draft ||
-      cutter._conflict ||
-      state.editLeases.has(
-        Number(cutter.id),
-      )
+      !cutter.geometry ||
+      cutter._conflict
     ) {
       return null;
     }
@@ -5165,6 +5165,12 @@ if (section) {
       draftFor(
         rootId,
       );
+    const originalEntries =
+      clone(
+        root
+          ?.topologyOriginalEntries ??
+        [],
+      );
 
     if (
       root?.editToken
@@ -5194,6 +5200,27 @@ if (section) {
     }
 
     if (
+      originalEntries.length >
+        0
+    ) {
+      for (
+        const snapshot of
+        originalEntries
+      ) {
+        if (
+          snapshot?.id ===
+            undefined ||
+          !snapshot?.draft
+        ) {
+          continue;
+        }
+
+        drafts.upsert(
+          snapshot.id,
+          snapshot.draft,
+        );
+      }
+    } else if (
       isLocalGeometryId(
         rootId,
       ) &&
@@ -5614,7 +5641,7 @@ if (section) {
     ) {
       renderTopologyState();
       setMessage(
-        'Для вырезания выберите текущий редактируемый polygon и отметьте ровно один сохранённый polygon-cutter.',
+        'Для вырезания выберите текущий polygon и отметьте ровно один polygon-cutter.',
         'error',
       );
       return;
@@ -6262,6 +6289,27 @@ if (section) {
       );
     const items =
       expandedEntries.flatMap((entry) => {
+        if (entry.kind === 'delete') {
+          if (
+            !entry.editToken
+          ) {
+            return [];
+          }
+
+          return [{
+            kind:
+              'delete',
+            id:
+              Number(
+                entry.id,
+              ),
+            baseUpdatedAt:
+              entry.baseUpdatedAt,
+            editToken:
+              entry.editToken,
+          }];
+        }
+
         if (entry.kind === 'create') {
           return [{
             kind: 'create',
@@ -6332,11 +6380,22 @@ if (section) {
               String(item.localId),
           ),
       );
+    const deletedIds =
+      new Set(
+        (payload.deleted ?? [])
+          .map(
+            (item) =>
+              String(item.id),
+          ),
+      );
 
     const release =
       expandedEntries.filter(
         (entry) =>
           updatedIds.has(
+            String(entry.id),
+          ) ||
+          deletedIds.has(
             String(entry.id),
           ),
       );
@@ -6347,7 +6406,8 @@ if (section) {
     ) {
       if (
         updatedIds.has(String(entry.id)) ||
-        createdIds.has(String(entry.id))
+        createdIds.has(String(entry.id)) ||
+        deletedIds.has(String(entry.id))
       ) {
         drafts.remove(entry.id);
       }
@@ -6365,7 +6425,8 @@ if (section) {
     ) {
       if (
         updatedIds.has(String(entry.id)) ||
-        createdIds.has(String(entry.id))
+        createdIds.has(String(entry.id)) ||
+        deletedIds.has(String(entry.id))
       ) {
         state.validatedEditTokens.delete(
           String(entry.id),
@@ -6644,6 +6705,187 @@ if (section) {
   });
 
 
+  async function acquireOperationLeases(
+    items,
+  ) {
+    await validateWorkspaceEditTokens({
+      announce:
+        false,
+    });
+
+    const tokens =
+      new Map();
+    const acquired =
+      [];
+
+    try {
+      for (
+        const item of
+        items
+      ) {
+        if (
+          isLocalGeometryId(
+            item.id,
+          )
+        ) {
+          continue;
+        }
+
+        const existing =
+          draftFor(
+            item.id,
+          );
+        const validatedToken =
+          existing?.editToken &&
+          state.validatedEditTokens.get(
+            String(
+              item.id,
+            ),
+          ) ===
+            existing.editToken
+            ? existing.editToken
+            : null;
+
+        if (validatedToken) {
+          tokens.set(
+            String(
+              item.id,
+            ),
+            validatedToken,
+          );
+          continue;
+        }
+
+        const knownLease =
+          state.editLeases.get(
+            Number(
+              item.id,
+            ),
+          );
+
+        if (
+          knownLease &&
+          knownLease.clientId !==
+            realtimeClientId()
+        ) {
+          throw new Error(
+            'Геометрия «' +
+              displayName(
+                item,
+              ) +
+              '» редактируется другим пользователем.',
+          );
+        }
+
+        const payload =
+          await api(
+            '/api/admin/geometry-editor/geometries/' +
+              encodeURIComponent(
+                item.id,
+              ) +
+              '/edit-lock',
+            {
+              method:
+                'POST',
+            },
+          );
+        const lease =
+          payload.lease;
+
+        tokens.set(
+          String(
+            item.id,
+          ),
+          lease.token,
+        );
+        acquired.push({
+          id:
+            item.id,
+          kind:
+            'update',
+          editToken:
+            lease.token,
+        });
+        state.validatedEditTokens.set(
+          String(
+            item.id,
+          ),
+          lease.token,
+        );
+        state.editLeases.set(
+          Number(
+            item.id,
+          ),
+          {
+            ...lease,
+            token:
+              undefined,
+          },
+        );
+      }
+
+      return tokens;
+    } catch (error) {
+      await Promise.allSettled(
+        acquired.map(
+          releaseDraftLease,
+        ),
+      );
+
+      for (
+        const item of
+        acquired
+      ) {
+        state.validatedEditTokens.delete(
+          String(
+            item.id,
+          ),
+        );
+        state.editLeases.delete(
+          Number(
+            item.id,
+          ),
+        );
+      }
+
+      throw error;
+    }
+  }
+
+
+  function topologyDraftSnapshots(
+    items,
+  ) {
+    return items
+      .map(
+        (item) => ({
+          id:
+            item.id,
+          draft:
+            draftFor(
+              item.id,
+            ),
+        }),
+      )
+      .filter(
+        (snapshot) =>
+          Boolean(
+            snapshot.draft,
+          ),
+      )
+      .map(
+        (snapshot) => ({
+          id:
+            snapshot.id,
+          draft:
+            clone(
+              snapshot.draft,
+            ),
+        }),
+      );
+  }
+
+
   bulkSelectButton.addEventListener(
     'click',
     () => {
@@ -6660,160 +6902,335 @@ if (section) {
   );
 
 
-  mergeButton.addEventListener('click', async () => {
-    captureCurrentDraft();
+  mergeButton.addEventListener(
+    'click',
+    async () => {
+      captureCurrentDraft();
 
-    const items =
-      selectedMergeItems();
-    const problem =
-      mergeProblem(items);
-
-    if (problem) {
-      renderMergeState();
-      setMessage(
-        problem,
-        'error',
-      );
-      return;
-    }
-
-    const target =
-      items[0];
-
-    const confirmed =
-      await adminConfirm({
-        title:
-          'Объединить геометрии?',
-        message:
-          'Будет объединено геометрий: ' +
-          items.length +
-          '. Основной записью останется #' +
-          target.id +
-          '; остальные записи будут удалены.',
-        confirmLabel:
-          'Объединить',
-        cancelLabel:
-          'Отмена',
-        destructive:
-          true,
-      });
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      mergeButton.disabled =
-        true;
-      setMessage(
-        'Объединяем геометрии…',
-      );
-
-      const payload =
-        await api(
-          '/api/admin/geometry-editor/merge',
-          {
-            method:
-              'POST',
-            headers: {
-              'Content-Type':
-                'application/json',
-            },
-            body:
-              JSON.stringify({
-                items:
-                  items.map(
-                    (item) => ({
-                      id:
-                        item.id,
-                      baseUpdatedAt:
-                        item.updatedAt,
-                    }),
-                  ),
-              }),
-          },
+      let items =
+        selectedMergeItems();
+      let problem =
+        mergeProblem(
+          items,
         );
 
-      for (const item of items) {
-        drafts.remove(
-          item.id,
+      if (problem) {
+        renderMergeState();
+        setMessage(
+          problem,
+          'error',
         );
+        return;
       }
 
-      const mergedIds =
-        new Set(
-          payload
-            .sourceGeometryIds ??
-          items.map(
-            (item) =>
+      const target =
+        items.find(
+          (item) =>
+            !isLocalGeometryId(
               item.id,
-          ),
+            ),
+        ) ??
+        items[0];
+
+      const confirmed =
+        await adminConfirm({
+          title:
+            'Объединить геометрии?',
+          message:
+            'Геометрия будет вычислена локально. Атрибуты основной геометрии сохранятся; запись в БД произойдёт только после «Синхронизировать».',
+          confirmLabel:
+            'Объединить локально',
+          cancelLabel:
+            'Отмена',
+        });
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        mergeButton.disabled =
+          true;
+        setMessage(
+          'Вычисляем локальное объединение…',
         );
 
-      state.serverGeometries =
-        state.serverGeometries
-          .filter(
-            (item) =>
-              !mergedIds.has(
-                item.id,
-              ),
+        await validateWorkspaceEditTokens({
+          announce:
+            false,
+        });
+        rebuildDraftOverlay();
+
+        items =
+          selectedMergeItems();
+        problem =
+          mergeProblem(
+            items,
+          );
+        if (problem) {
+          throw new Error(
+            problem,
+          );
+        }
+
+        const payload =
+          await api(
+            '/api/admin/geometry-editor/topology/union-preview',
+            {
+              method:
+                'POST',
+              headers: {
+                'Content-Type':
+                  'application/json',
+              },
+              body:
+                JSON.stringify({
+                  geometries:
+                    items.map(
+                      (item) =>
+                        item.geometry,
+                    ),
+                }),
+            },
+          );
+        const geometry =
+          payload.geometry;
+
+        if (!geometry) {
+          throw new Error(
+            'Сервер не вернул результат объединения.',
+          );
+        }
+
+        const leaseTokens =
+          await acquireOperationLeases(
+            items,
+          );
+        const originalEntries =
+          topologyDraftSnapshots(
+            items,
+          );
+        const groupId =
+          crypto.randomUUID();
+        const rootId =
+          target.id;
+        const targetExisting =
+          draftFor(
+            target.id,
           );
 
-      state.selectedSet.clear();
-      state.bulkSelecting =
-        false;
-      upsertGeometrySummary(
-        payload.geometry,
-      );
-      adoptGeometryDetail(
-        payload.geometry,
-      );
-      refreshDraftControls();
-
-      setMessage(
-        'Геометрии объединены. Для обновления основной карты и статистики нажмите «Пересчитать».',
-        'success',
-      );
-    } catch (error) {
-      if (error.status === 409) {
-        for (
-          const conflict of
-          error
-            .payload
-            ?.details
-            ?.conflicts ??
-          []
+        if (
+          isLocalGeometryId(
+            target.id,
+          )
         ) {
-          const local =
-            draftFor(
-              conflict.id,
+          if (
+            targetExisting
+              ?.kind !==
+            'create'
+          ) {
+            throw new Error(
+              'Локальный черновик основной геометрии не найден.',
             );
-          if (local) {
-            drafts.markConflict(
-              conflict.id,
-              true,
+          }
+
+          drafts.upsert(
+            target.id,
+            {
+              ...targetExisting,
+              kind:
+                'create',
+              value: {
+                ...targetExisting.value,
+                geometry:
+                  clone(
+                    geometry,
+                  ),
+              },
+              topologyKind:
+                'union',
+              topologyGroupId:
+                groupId,
+              topologyRootId:
+                rootId,
+              topologyOriginalEntries:
+                originalEntries,
+            },
+          );
+        } else {
+          drafts.upsert(
+            target.id,
+            {
+              ...(targetExisting ??
+                {}),
+              kind:
+                'update',
+              baseUpdatedAt:
+                targetExisting
+                  ?.baseUpdatedAt ??
+                target.updatedAt,
+              editToken:
+                leaseTokens.get(
+                  String(
+                    target.id,
+                  ),
+                ) ??
+                targetExisting
+                  ?.editToken,
+              changes: {
+                ...(
+                  targetExisting
+                    ?.changes ??
+                  {}
+                ),
+                geometry:
+                  clone(
+                    geometry,
+                  ),
+              },
+              conflict:
+                false,
+              topologyKind:
+                'union',
+              topologyGroupId:
+                groupId,
+              topologyRootId:
+                rootId,
+              topologyOriginalEntries:
+                originalEntries,
+            },
+          );
+        }
+
+        for (
+          const item of
+          items
+        ) {
+          if (
+            String(
+              item.id,
+            ) ===
+            String(
+              target.id,
+            )
+          ) {
+            continue;
+          }
+
+          if (
+            isLocalGeometryId(
+              item.id,
+            )
+          ) {
+            drafts.remove(
+              item.id,
+            );
+            continue;
+          }
+
+          const existing =
+            draftFor(
+              item.id,
+            );
+
+          drafts.upsert(
+            item.id,
+            {
+              kind:
+                'delete',
+              baseUpdatedAt:
+                existing
+                  ?.baseUpdatedAt ??
+                item.updatedAt,
+              editToken:
+                leaseTokens.get(
+                  String(
+                    item.id,
+                  ),
+                ) ??
+                existing
+                  ?.editToken,
+              changes: {},
+              conflict:
+                false,
+              topologyKind:
+                'union',
+              topologyGroupId:
+                groupId,
+              topologyRootId:
+                rootId,
+            },
+          );
+        }
+
+        state.selectedSet.clear();
+        state.bulkSelecting =
+          false;
+        state.editing =
+          false;
+        state.editLease =
+          null;
+        state.blockedLease =
+          null;
+        rebuildDraftOverlay();
+        refreshDraftControls();
+
+        if (
+          isLocalGeometryId(
+            target.id,
+          )
+        ) {
+          adoptLocalGeometry(
+            draftFor(
+              target.id,
+            ),
+            {
+              focus:
+                false,
+            },
+          );
+        } else {
+          const serverTarget =
+            state.serverGeometries
+              .find(
+                (item) =>
+                  String(
+                    item.id,
+                  ) ===
+                  String(
+                    target.id,
+                  ),
+              );
+
+          if (serverTarget) {
+            adoptGeometryDetail(
+              serverTarget,
+              {
+                focus:
+                  false,
+              },
             );
           }
         }
 
-        await refresh({
-          keepSelection: false,
-          fit: false,
-        });
+        setMessage(
+          'Геометрии объединены только локально. «Отменить правки» восстановит исходные геометрии; «Синхронизировать» атомарно запишет результат.',
+          'success',
+        );
+      } catch (error) {
+        setMessage(
+          error.message,
+          'error',
+        );
+      } finally {
+        renderMergeState();
+        refreshDraftControls();
       }
-
-      setMessage(
-        error.message,
-        'error',
-      );
-    } finally {
-      renderMergeState();
-      refreshDraftControls();
-    }
-  });
+    },
+  );
 
 
-  async function recalculateDerived() {
+  async function recalculateDerived() {  async function recalculateDerived() {
     if (state.importSession) {
       setMessage(
         'Сначала разрешите конфликты подготовленного импорта.',
@@ -6915,8 +7332,13 @@ if (section) {
     const modified =
       entries.filter(
         (entry) =>
-          entry.kind !== 'create' &&
+          entry.kind === 'update' &&
           Object.keys(entry.changes ?? {}).length > 0,
+      ).length;
+    const deleted =
+      entries.filter(
+        (entry) =>
+          entry.kind === 'delete',
       ).length;
 
     const confirmed = await adminConfirm({
@@ -6926,6 +7348,8 @@ if (section) {
         created +
         ', изменённых геометрий — ' +
         modified +
+        ', удаляемых геометрий — ' +
+        deleted +
         '. Активные блокировки редактирования будут освобождены.',
       confirmLabel: 'Очистить localStorage',
       cancelLabel: 'Отмена',
