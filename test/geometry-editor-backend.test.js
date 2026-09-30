@@ -111,7 +111,7 @@ test('geometry editor backend follows current policy storage service runtime rou
   );
   assert.match(
     storage,
-    /WHEN \$3::text = 'line'[\s\S]*ST_LineMerge\([\s\S]*ST_UnaryUnion/u,
+    /WHEN \$3::text = 'line'[\s\S]*ST_RemoveRepeatedPoints\([\s\S]*ST_LineMerge\([\s\S]*ST_UnaryUnion[\s\S]*0\.0/u,
   );
   assert.doesNotMatch(
     storage,

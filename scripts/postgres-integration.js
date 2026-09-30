@@ -1701,6 +1701,26 @@ async function verifyGeometryEditorInfrastructure(
       ),
   );
 
+  const splitLeaseReleased =
+    await service.releaseEdit(
+      geometry.id,
+      takeover.lease.token,
+      {
+        id:
+          editUserId,
+        username:
+          'geometry-integration',
+        isSuperuser:
+          true,
+      },
+    );
+
+  assert.equal(
+    splitLeaseReleased,
+    true,
+    'Split source edit lease must be released before merge acquires both parts',
+  );
+
   const mergedSplitLine =
     await service.merge(
       {
@@ -1743,6 +1763,39 @@ async function verifyGeometryEditorInfrastructure(
       .geometryType,
     'LINESTRING',
     'Persisted merged split line must not remain a MultiLineString',
+  );
+
+  const mergedLinePointNormalization =
+    await pool.query(
+      `
+        SELECT
+          ST_NPoints(geom)::integer
+            AS "pointCount",
+          ST_NPoints(
+            ST_RemoveRepeatedPoints(
+              geom,
+              0.0
+            )
+          )::integer
+            AS "normalizedPointCount"
+        FROM city_geometries
+        WHERE id = $1::bigint
+      `,
+      [
+        mergedSplitLine
+          .geometry
+          .id,
+      ],
+    );
+
+  assert.equal(
+    mergedLinePointNormalization
+      .rows[0]
+      .pointCount,
+    mergedLinePointNormalization
+      .rows[0]
+      .normalizedPointCount,
+    'Merged line must not retain consecutive duplicate points',
   );
 
   const countAfterSplitMerge =
