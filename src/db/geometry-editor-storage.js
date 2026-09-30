@@ -563,14 +563,22 @@ const SPLIT_GEOMETRY_PREVIEW_SQL = `
       ST_Split(
         source.geom,
         prepared.blade
-      ) AS pieces
+      ) AS pieces,
+      GREATEST(
+        ST_NumGeometries(
+          source.geom
+        ),
+        1
+      ) AS source_part_count
     FROM source
     CROSS JOIN prepared
   ),
   dumped AS MATERIALIZED (
     SELECT
       dump.path,
-      dump.geom
+      dump.geom,
+      split_result
+        .source_part_count
     FROM split_result
     CROSS JOIN LATERAL ST_Dump(
       ST_CollectionExtract(
@@ -592,6 +600,7 @@ const SPLIT_GEOMETRY_PREVIEW_SQL = `
   numbered AS (
     SELECT
       geom,
+      source_part_count,
       ROW_NUMBER() OVER (
         ORDER BY path
       ) AS part_no,
@@ -603,7 +612,9 @@ const SPLIT_GEOMETRY_PREVIEW_SQL = `
       geom
     )::json AS geometry
   FROM numbered
-  WHERE part_count = 2
+  WHERE
+    part_count >
+      source_part_count
   ORDER BY part_no
 `;
 
@@ -944,7 +955,7 @@ export function createGeometryEditorStorage(
           ],
         );
 
-      return result.rows.length === 2
+      return result.rows.length >= 2
         ? result.rows.map(
           (row) =>
             row.geometry,
