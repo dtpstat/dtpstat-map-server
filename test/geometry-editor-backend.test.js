@@ -686,3 +686,24 @@ test('geometry sync owns deletion persistence while topology transforms stay pur
     /MERGE_GEOMETRIES_SQL/u,
   );
 });
+
+
+test('geometry storage persists zoom and validity windows as typed parameters', async () => {
+  const storage =
+    await read(
+      'src/db/geometry-editor-storage.js',
+    );
+
+  assert.match(
+    storage,
+    /min_zoom::double precision AS "minZoom"/u,
+  );
+  assert.match(
+    storage,
+    /valid_from::text AS "validFrom"/u,
+  );
+  assert.match(
+    storage,
+    /UPDATE_GEOMETRY_DISPLAY_WINDOW_SQL[\s\S]*min_zoom = \$2::double precision[\s\S]*valid_to = \$5::date/u,
+  );
+});

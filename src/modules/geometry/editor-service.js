@@ -11,6 +11,7 @@ import {
   normalizeGeometryRevision,
   normalizeGeometrySyncRequest,
   validateGeometryLineState,
+  validateGeometryDisplayWindow,
 } from './editor-policy.js';
 import {
   normalizeGeometryCutPreviewRequest,
@@ -186,6 +187,30 @@ function nextGeometryValue(
     pointTypeId,
   );
 
+  const minZoom =
+    own(changes, 'minZoom')
+      ? changes.minZoom
+      : (previous.minZoom ?? null);
+  const maxZoom =
+    own(changes, 'maxZoom')
+      ? changes.maxZoom
+      : (previous.maxZoom ?? null);
+  const validFrom =
+    own(changes, 'validFrom')
+      ? changes.validFrom
+      : (previous.validFrom ?? null);
+  const validTo =
+    own(changes, 'validTo')
+      ? changes.validTo
+      : (previous.validTo ?? null);
+
+  validateGeometryDisplayWindow(
+    minZoom,
+    maxZoom,
+    validFrom,
+    validTo,
+  );
+
   return {
     geometry,
     family,
@@ -220,6 +245,10 @@ function nextGeometryValue(
     lineTypeId,
     pointTypeId,
     lanes,
+    minZoom,
+    maxZoom,
+    validFrom,
+    validTo,
   };
 }
 

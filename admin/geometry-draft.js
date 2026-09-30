@@ -44,6 +44,10 @@ export function geometryDraftChanges(
     'lineTypeId',
     'pointTypeId',
     'lanes',
+    'minZoom',
+    'maxZoom',
+    'validFrom',
+    'validTo',
   ];
 
   for (const field of fields) {

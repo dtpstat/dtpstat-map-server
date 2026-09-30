@@ -361,6 +361,93 @@ function normalizedPointTypeId(
   );
 }
 
+function optionalZoom(
+  value,
+  label,
+) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return null;
+  }
+
+  const zoom = Number(value);
+  if (
+    !Number.isFinite(zoom) ||
+    zoom < 0 ||
+    zoom > 24
+  ) {
+    throw new GeometryEditorValidationError(
+      `${label} must be a number between 0 and 24 or null`,
+    );
+  }
+  return zoom;
+}
+
+function optionalDate(
+  value,
+  label,
+) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return null;
+  }
+
+  if (
+    typeof value !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/u.test(value)
+  ) {
+    throw new GeometryEditorValidationError(
+      `${label} must be YYYY-MM-DD or null`,
+    );
+  }
+
+  const date =
+    new Date(
+      value + 'T00:00:00.000Z',
+    );
+  if (
+    Number.isNaN(date.valueOf()) ||
+    date.toISOString().slice(0, 10) !== value
+  ) {
+    throw new GeometryEditorValidationError(
+      `${label} must be a valid calendar date`,
+    );
+  }
+  return value;
+}
+
+export function validateGeometryDisplayWindow(
+  minZoom,
+  maxZoom,
+  validFrom,
+  validTo,
+) {
+  if (
+    minZoom !== null &&
+    maxZoom !== null &&
+    minZoom > maxZoom
+  ) {
+    throw new GeometryEditorValidationError(
+      'minZoom must not be greater than maxZoom',
+    );
+  }
+  if (
+    validFrom !== null &&
+    validTo !== null &&
+    validFrom > validTo
+  ) {
+    throw new GeometryEditorValidationError(
+      'validFrom must not be later than validTo',
+    );
+  }
+}
+
 function normalizedLanes(value) {
   if (
     value === null ||
@@ -467,6 +554,10 @@ export function normalizeGeometryChanges(
       'lineTypeId',
       'pointTypeId',
       'lanes',
+      'minZoom',
+      'maxZoom',
+      'validFrom',
+      'validTo',
     ]);
 
   const unknown =
@@ -543,6 +634,34 @@ export function normalizeGeometryChanges(
         source.lanes,
       );
   }
+  if ('minZoom' in source) {
+    result.minZoom =
+      optionalZoom(
+        source.minZoom,
+        'minZoom',
+      );
+  }
+  if ('maxZoom' in source) {
+    result.maxZoom =
+      optionalZoom(
+        source.maxZoom,
+        'maxZoom',
+      );
+  }
+  if ('validFrom' in source) {
+    result.validFrom =
+      optionalDate(
+        source.validFrom,
+        'validFrom',
+      );
+  }
+  if ('validTo' in source) {
+    result.validTo =
+      optionalDate(
+        source.validTo,
+        'validTo',
+      );
+  }
 
   if (
     Object.keys(result).length === 0
@@ -575,6 +694,10 @@ export function normalizeGeometryCreatePayload(
       'lineTypeId',
       'pointTypeId',
       'lanes',
+      'minZoom',
+      'maxZoom',
+      'validFrom',
+      'validTo',
     ]);
 
   const unknown =
@@ -641,7 +764,26 @@ export function normalizeGeometryCreatePayload(
     lanes:
       changes.lanes ??
       null,
+    minZoom:
+      changes.minZoom ??
+      null,
+    maxZoom:
+      changes.maxZoom ??
+      null,
+    validFrom:
+      changes.validFrom ??
+      null,
+    validTo:
+      changes.validTo ??
+      null,
   };
+
+  validateGeometryDisplayWindow(
+    value.minZoom,
+    value.maxZoom,
+    value.validFrom,
+    value.validTo,
+  );
 
   value.family =
     validateGeometryLineState(

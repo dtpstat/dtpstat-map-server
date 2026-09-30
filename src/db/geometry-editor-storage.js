@@ -27,6 +27,10 @@ const DETAIL_COLUMNS_SQL = `
   geometry.tags,
   geometry.source_tags AS "sourceTags",
   geometry.is_visible AS "isVisible",
+  geometry.min_zoom::double precision AS "minZoom",
+  geometry.max_zoom::double precision AS "maxZoom",
+  geometry.valid_from::text AS "validFrom",
+  geometry.valid_to::text AS "validTo",
   geometry.was_edited AS "wasEdited",
   geometry.line_type_id::integer AS "lineTypeId",
   geometry.point_type_id::integer AS "pointTypeId",
@@ -170,6 +174,10 @@ const GEOMETRY_SUMMARIES_SQL = `
     GeometryType(geometry.geom) AS "geometryType",
     geometry.display_name AS "displayName",
     geometry.is_visible AS "isVisible",
+    geometry.min_zoom::double precision AS "minZoom",
+    geometry.max_zoom::double precision AS "maxZoom",
+    geometry.valid_from::text AS "validFrom",
+    geometry.valid_to::text AS "validTo",
     geometry.updated_at AS "updatedAt",
     geometry.line_type_id::integer AS "lineTypeId",
     geometry.point_type_id::integer AS "pointTypeId",
@@ -210,6 +218,10 @@ const UNLINKED_GEOMETRY_SUMMARIES_SQL = `
     GeometryType(geometry.geom) AS "geometryType",
     geometry.display_name AS "displayName",
     geometry.is_visible AS "isVisible",
+    geometry.min_zoom::double precision AS "minZoom",
+    geometry.max_zoom::double precision AS "maxZoom",
+    geometry.valid_from::text AS "validFrom",
+    geometry.valid_to::text AS "validTo",
     geometry.updated_at AS "updatedAt",
     geometry.line_type_id::integer AS "lineTypeId",
     geometry.point_type_id::integer AS "pointTypeId",
@@ -421,6 +433,17 @@ const UPDATE_GEOMETRY_SQL = `
     AND NOT ST_IsEmpty(prepared.geom)
     AND ST_IsValid(prepared.geom)
   RETURNING geometry.id::integer AS id
+`;
+
+
+const UPDATE_GEOMETRY_DISPLAY_WINDOW_SQL = `
+  UPDATE city_geometries
+  SET
+    min_zoom = $2::double precision,
+    max_zoom = $3::double precision,
+    valid_from = $4::date,
+    valid_to = $5::date
+  WHERE id = $1::bigint
 `;
 
 const UNION_GEOMETRY_PREVIEW_SQL = `
@@ -873,6 +896,19 @@ export function createGeometryEditorStorage(
 
       const id =
         result.rows[0]?.id;
+      if (id) {
+        await client.query(
+          UPDATE_GEOMETRY_DISPLAY_WINDOW_SQL,
+          [
+            id,
+            payload.minZoom,
+            payload.maxZoom,
+            payload.validFrom,
+            payload.validTo,
+          ],
+        );
+      }
+
       return id
         ? one(client, id)
         : null;
@@ -903,6 +939,19 @@ export function createGeometryEditorStorage(
 
       const id =
         result.rows[0]?.id;
+      if (id) {
+        await client.query(
+          UPDATE_GEOMETRY_DISPLAY_WINDOW_SQL,
+          [
+            id,
+            payload.minZoom,
+            payload.maxZoom,
+            payload.validFrom,
+            payload.validTo,
+          ],
+        );
+      }
+
       return id
         ? one(
           client,
@@ -933,6 +982,19 @@ export function createGeometryEditorStorage(
             payload.isVisible,
           ],
         );
+
+      if (result.rows[0]) {
+        await client.query(
+          UPDATE_GEOMETRY_DISPLAY_WINDOW_SQL,
+          [
+            geometryId,
+            payload.minZoom,
+            payload.maxZoom,
+            payload.validFrom,
+            payload.validTo,
+          ],
+        );
+      }
 
       return result.rows[0]
         ? one(

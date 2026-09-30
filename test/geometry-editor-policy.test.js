@@ -531,3 +531,52 @@ test('geometry topology preview requests validate complete local GeoJSON inputs'
     /source must be a line or polygon/u,
   );
 });
+
+
+test('geometry display zoom and validity dates are optional and ordered', () => {
+  const base = {
+    geometry: {
+      type: 'Point',
+      coordinates: [37.6, 55.7],
+    },
+    minZoom: 10.5,
+    maxZoom: 18,
+    validFrom: '2026-01-01',
+    validTo: '2026-12-31',
+  };
+
+  const created =
+    normalizeGeometryCreatePayload(
+      base,
+    );
+  assert.equal(created.minZoom, 10.5);
+  assert.equal(created.maxZoom, 18);
+  assert.equal(created.validFrom, '2026-01-01');
+  assert.equal(created.validTo, '2026-12-31');
+
+  assert.throws(
+    () =>
+      normalizeGeometryCreatePayload({
+        ...base,
+        minZoom: 19,
+        maxZoom: 18,
+      }),
+    /minZoom must not be greater/u,
+  );
+  assert.throws(
+    () =>
+      normalizeGeometryCreatePayload({
+        ...base,
+        validFrom: '2027-01-01',
+        validTo: '2026-12-31',
+      }),
+    /validFrom must not be later/u,
+  );
+  assert.throws(
+    () =>
+      normalizeGeometryChanges({
+        validFrom: '2026-02-30',
+      }),
+    /valid calendar date/u,
+  );
+});
