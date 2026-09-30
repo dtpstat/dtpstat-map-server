@@ -151,6 +151,8 @@ function publishChange(
  *     listCityGeometries: Function,
  *     listUnlinkedGeometries: Function,
  *     listEditLeases: Function,
+ *     listDiscussion: Function,
+ *     postDiscussionMessage: Function,
  *     beginEdit: Function,
  *     heartbeatEdit: Function,
  *     validateEditTokens: Function,
@@ -363,6 +365,199 @@ export function createGeometryEditorRouter({
           )
           .json({
             geometry,
+          });
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.get(
+    '/admin/geometry-editor/users/:userId/avatar',
+    adminAuth
+      .requireGeometryEditor,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const userId =
+          normalizeGeometryId(
+            request.params.userId,
+            'userId',
+          );
+        const avatar =
+          await securityService
+            .getAvatar(
+              userId,
+            );
+
+        if (!avatar?.data) {
+          response
+            .status(404)
+            .end();
+          return;
+        }
+
+        response
+          .set(
+            'Cache-Control',
+            'private, max-age=60',
+          )
+          .type(
+            avatar.mime,
+          )
+          .send(
+            avatar.data,
+          );
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.get(
+    '/admin/geometry-editor/geometries/:geometryId/discussion',
+    adminAuth
+      .requireGeometryEditor,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const discussion =
+          await geometryEditorService
+            .listDiscussion(
+              request.params
+                .geometryId,
+            );
+
+        if (!discussion) {
+          response
+            .status(404)
+            .json({
+              error:
+                'Geometry not found',
+            });
+          return;
+        }
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json(
+            discussion,
+          );
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/geometry-editor/geometries/:geometryId/discussion',
+    adminAuth
+      .requireGeometryEditor,
+    audit(
+      'geometry.discussion.message',
+    ),
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const discussionMessage =
+          await geometryEditorService
+            .postDiscussionMessage(
+              request.params
+                .geometryId,
+              request.adminUser,
+              request.body,
+            );
+
+        if (!discussionMessage) {
+          response
+            .status(404)
+            .json({
+              error:
+                'Geometry not found',
+            });
+          return;
+        }
+
+        recordAdminOperationDetails(
+          response,
+          {
+            geometryId:
+              discussionMessage
+                .geometryId,
+            messageId:
+              discussionMessage.id,
+          },
+        );
+
+        realtimeEvents?.publish({
+          resource:
+            'geometry-discussions',
+          permission:
+            'geometry-editor',
+          originClientId:
+            realtimeClientId(
+              request,
+            ),
+          action:
+            'message-created',
+          entityIds: [
+            discussionMessage
+              .geometryId,
+          ],
+          geometryId:
+            discussionMessage
+              .geometryId,
+          discussionMessage,
+          message:
+            'Новое сообщение в обсуждении геометрии.',
+        });
+
+        response
+          .status(201)
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            message:
+              discussionMessage,
           });
       } catch (error) {
         if (
