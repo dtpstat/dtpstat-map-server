@@ -439,6 +439,27 @@ test('saved local server draft remains revertible outside active edit mode', asy
 });
 
 
+test('local split topology drafts expose revert and restore the original local geometry', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /const localTopologyDraft =[\s\S]*localDraft[\s\S]*topologyGroupId/u,
+  );
+  assert.match(
+    editor,
+    /revertButton\.hidden =[\s\S]*localItem[\s\S]*!localTopologyDraft/u,
+  );
+  assert.match(
+    editor,
+    /local\?\.topologyGroupId[\s\S]*undoTopologyGroup\([\s\S]*Исходная локальная геометрия восстановлена/u,
+  );
+});
+
+
 test('geometry editor resolves staged import conflicts visually without dropping local drafts', async () => {
   const [
     editor,

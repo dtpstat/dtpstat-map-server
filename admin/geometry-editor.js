@@ -2904,10 +2904,16 @@ if (section) {
     }
 
     form.querySelector('button[type="submit"]').disabled = !enabled;
+    const localTopologyDraft =
+      Boolean(
+        localItem &&
+        localDraft
+          ?.topologyGroupId,
+      );
     revertButton.hidden =
-      localItem;
+      localItem &&
+      !localTopologyDraft;
     revertButton.disabled =
-      localItem ||
       !item?.id ||
       !localDraft ||
       Boolean(
@@ -6356,26 +6362,35 @@ if (section) {
     const item = state.current;
     if (!item?.id) return;
 
+    const local =
+      draftFor(
+        item.id,
+      );
+
+    if (
+      local?.topologyGroupId
+    ) {
+      const localItem =
+        isLocalGeometryId(
+          item.id,
+        );
+      await undoTopologyGroup(
+        local,
+      );
+      setMessage(
+        localItem
+          ? 'Локальная topology-операция отменена. Исходная локальная геометрия восстановлена.'
+          : 'Локальная topology-операция отменена. Показана версия из БД.',
+        'success',
+      );
+      return;
+    }
+
     if (
       isLocalGeometryId(
         item.id,
       )
     ) {
-      return;
-    }
-
-    const local = draftFor(item.id);
-
-    if (
-      local?.topologyGroupId
-    ) {
-      await undoTopologyGroup(
-        local,
-      );
-      setMessage(
-        'Локальная topology-операция отменена. Показана версия из БД.',
-        'success',
-      );
       return;
     }
 

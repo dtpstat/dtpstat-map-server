@@ -316,42 +316,6 @@ test('geometry bulk conflict rolls back before the first write', async () => {
   );
 });
 
-function polygonGeometry(
-  id,
-  updatedAt,
-) {
-  return {
-    id,
-    cityId: 1,
-    boundaryId: 10,
-    family:
-      'polygon',
-    geometryType:
-      'POLYGON',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[
-        [30, 60],
-        [32, 60],
-        [32, 62],
-        [30, 60],
-      ]],
-    },
-    displayName:
-      `Polygon ${id}`,
-    tooltip: null,
-    tags: [],
-    sourceTags: {
-      source:
-        'integration',
-    },
-    isVisible: true,
-    lineTypeId: null,
-    lanes: null,
-    updatedAt,
-  };
-}
-
 function operationFixture(
   rows,
   leaseOverrides = {},
