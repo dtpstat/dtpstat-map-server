@@ -7,6 +7,7 @@ import {
   normalizeGeometryEditTokenValidation,
   normalizeGeometryEditorClientId,
   normalizeGeometryCreatePayload,
+  normalizeGeometryDiscussionMessage,
   normalizeGeometryId,
   normalizeGeometryRevision,
   normalizeGeometrySyncRequest,
@@ -322,6 +323,7 @@ function conflictDetails(
  * @param {{
  *   storage: any,
  *   leaseStorage: any,
+ *   discussionStorage: any,
  *   acquireLock: (client: any, pool: any) => Promise<void>,
  *   randomUUID: () => string,
  *   leaseSeconds?: number
@@ -337,6 +339,8 @@ export function createGeometryEditorService(
     dependencies?.acquireLock;
   const leaseStorage =
     dependencies?.leaseStorage;
+  const discussionStorage =
+    dependencies?.discussionStorage;
   const randomUUID =
     dependencies?.randomUUID;
   const leaseSeconds =
@@ -353,6 +357,11 @@ export function createGeometryEditorService(
   if (!leaseStorage) {
     throw new TypeError(
       'Geometry edit lease storage dependency is required',
+    );
+  }
+  if (!discussionStorage) {
+    throw new TypeError(
+      'Geometry discussion storage dependency is required',
     );
   }
   if (
@@ -534,6 +543,17 @@ export function createGeometryEditorService(
         lease.userId,
       username:
         lease.username,
+      displayName:
+        lease.displayName ??
+        lease.username ??
+        null,
+      avatarUrl:
+        lease.hasAvatar &&
+        lease.userId
+          ? '/api/admin/geometry-editor/users/' +
+            lease.userId +
+            '/avatar'
+          : null,
       clientId:
         lease.clientId,
       generation:
@@ -550,6 +570,44 @@ export function createGeometryEditorService(
             lease.token,
         }
         : {}),
+    };
+  }
+
+  function publicDiscussionMessage(
+    message,
+  ) {
+    if (!message) return null;
+
+    return {
+      id:
+        message.id,
+      geometryId:
+        message.geometryId,
+      geometryRevision:
+        message.geometryRevision,
+      message:
+        message.message,
+      createdAt:
+        message.createdAt,
+      editedAt:
+        message.editedAt,
+      author: {
+        userId:
+          message.authorUserId,
+        username:
+          message.authorUsername,
+        displayName:
+          message.authorDisplayName ??
+          message.authorUsername ??
+          'Удалённый пользователь',
+        avatarUrl:
+          message.authorHasAvatar &&
+          message.authorUserId
+            ? '/api/admin/geometry-editor/users/' +
+              message.authorUserId +
+              '/avatar'
+            : null,
+      },
     };
   }
 
@@ -1528,6 +1586,68 @@ export function createGeometryEditorService(
             deleted,
           };
         },
+      );
+    },
+
+    async listDiscussion(
+      geometryId,
+    ) {
+      const id =
+        normalizeGeometryId(
+          geometryId,
+        );
+
+      if (
+        !await discussionStorage
+          .geometryExists(id)
+      ) {
+        return null;
+      }
+
+      return {
+        geometryId: id,
+        messages:
+          (
+            await discussionStorage
+              .listMessages(id)
+          ).map(
+            publicDiscussionMessage,
+          ),
+      };
+    },
+
+    async postDiscussionMessage(
+      geometryId,
+      actor,
+      payload,
+    ) {
+      const id =
+        normalizeGeometryId(
+          geometryId,
+        );
+      const userId =
+        actorId(actor);
+      const normalized =
+        normalizeGeometryDiscussionMessage(
+          payload,
+        );
+
+      return leaseTransaction(
+        async (client) =>
+          publicDiscussionMessage(
+            await discussionStorage
+              .createMessage(
+                client,
+                {
+                  geometryId:
+                    id,
+                  authorUserId:
+                    userId,
+                  message:
+                    normalized.message,
+                },
+              ),
+          ),
       );
     },
 
