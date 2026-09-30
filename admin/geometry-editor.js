@@ -615,7 +615,7 @@ if (section) {
   function editingModeText(item) {
     if (!item) return 'Выберите геометрию';
     return state.editing
-      ? `Редактирование: ${displayName(item)} · клик по средней точке — добавить узел · перетащите линию — переместить геометрию · Ctrl+клик по узлу — удалить`
+      ? `Редактирование: ${displayName(item)} · клик по средней точке — добавить узел · перетащите линию — переместить геометрию · Ctrl+клик по узлу — удалить · двойной клик — закончить`
       : `Просмотр: ${displayName(item)} · нажмите «Начать редактирование» для изменений`;
   }
 
@@ -1697,15 +1697,26 @@ if (section) {
         (event) => {
           const drawing =
             state.drawing;
+          const finishEditing =
+            !drawing &&
+            state.editing &&
+            Boolean(
+              state.draft,
+            ) &&
+            !state.dragPath &&
+            !state.geometryDrag;
 
           if (
-            !drawing ||
-            ![
-              'line',
-              'polygon',
-              'cut',
-            ].includes(
-              drawing.mode,
+            !finishEditing &&
+            (
+              !drawing ||
+              ![
+                'line',
+                'polygon',
+                'cut',
+              ].includes(
+                drawing.mode,
+              )
             )
           ) {
             return;
@@ -1716,6 +1727,11 @@ if (section) {
             ?.preventDefault?.();
           event.originalEvent
             ?.stopPropagation?.();
+
+          if (finishEditing) {
+            void saveCurrent();
+            return;
+          }
 
           const coordinates =
             drawing.coordinates;
@@ -2879,7 +2895,6 @@ if (section) {
 
     beginEditButton.hidden =
       !item?.id ||
-      localItem ||
       state.editing;
     beginEditButton.disabled =
       Boolean(state.importSession) ||
@@ -2899,7 +2914,11 @@ if (section) {
     if (editLockStatus) {
       editLockStatus.textContent =
         localItem
-          ? 'Новая геометрия · localStorage'
+          ? (
+              state.editing
+                ? 'Новая геометрия · редактирование localStorage'
+                : 'Новая геометрия · localStorage'
+            )
           : state.editing
             ? 'Редактирование заблокировано за вами'
             : blockedByOther
@@ -3394,7 +3413,7 @@ if (section) {
     state.selectedId = item.id;
     state.current = item;
     state.draft = clone(item.geometry);
-    state.editing = true;
+    state.editing = false;
     state.editLease = null;
     state.blockedLease = null;
     state.history = [];
@@ -3524,10 +3543,84 @@ if (section) {
     const item = state.current;
     if (
       !item?.id ||
-      isLocalGeometryId(item.id) ||
       state.editing ||
       state.beginEditPendingId !== null
     ) {
+      return;
+    }
+
+    if (
+      isLocalGeometryId(
+        item.id,
+      )
+    ) {
+      try {
+        if (
+          item.family ===
+          'line'
+        ) {
+          await ensureLineTypes();
+        }
+        if (
+          item.family ===
+          'point'
+        ) {
+          await ensurePointTypes();
+        }
+
+        const local =
+          draftFor(
+            item.id,
+          );
+
+        if (
+          local?.kind !==
+          'create'
+        ) {
+          setMessage(
+            'Локальная геометрия больше не существует. Обновите список.',
+            'error',
+          );
+          return;
+        }
+
+        const editable =
+          localCreateSummary(
+            local,
+          );
+        state.current =
+          editable;
+        state.draft =
+          clone(
+            editable.geometry,
+          );
+        state.editing =
+          true;
+        state.editLease =
+          null;
+        state.blockedLease =
+          null;
+        state.history = [];
+        state.future = [];
+        applyForm(
+          editable,
+        );
+        updateMapSources();
+        renderHistoryControls();
+        modeLabel.textContent =
+          editingModeText(
+            editable,
+          );
+        setMessage(
+          'Редактирование локальной геометрии начато.',
+          'success',
+        );
+      } catch (error) {
+        setMessage(
+          error.message,
+          'error',
+        );
+      }
       return;
     }
 
@@ -5580,19 +5673,56 @@ if (section) {
       return;
     }
 
-    if (!isLocalGeometryId(state.current?.id)) {
-      state.editing = false;
-      state.history = [];
-      state.future = [];
-      rebuildDraftOverlay();
-      updateMapSources();
-      renderHistoryControls();
+    const localItem =
+      isLocalGeometryId(
+        state.current?.id,
+      );
+    const selectedId =
+      state.current?.id;
+
+    state.editing = false;
+    state.history = [];
+    state.future = [];
+    rebuildDraftOverlay();
+
+    if (localItem) {
+      const persisted =
+        draftFor(
+          selectedId,
+        );
+      if (
+        persisted?.kind ===
+        'create'
+      ) {
+        state.current =
+          localCreateSummary(
+            persisted,
+          );
+        state.draft =
+          clone(
+            state.current
+              .geometry,
+          );
+        applyForm(
+          state.current,
+        );
+      } else {
+        renderFormState();
+      }
+    } else {
       renderFormState();
     }
 
+    updateMapSources();
+    renderHistoryControls();
+    modeLabel.textContent =
+      editingModeText(
+        state.current,
+      );
+
     setMessage(
-      isLocalGeometryId(state.current?.id)
-        ? 'Изменения сохранены в localStorage. Для записи в БД используйте «Синхронизировать».'
+      localItem
+        ? 'Изменения сохранены в localStorage. Активное редактирование завершено. Для записи в БД используйте «Синхронизировать».'
         : 'Изменения сохранены в localStorage. Активное редактирование завершено, блокировка остаётся за вами.',
       'success',
     );

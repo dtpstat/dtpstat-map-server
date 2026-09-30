@@ -1161,6 +1161,39 @@ test('geometry editor keeps creation and edit activation explicit and selects lo
 });
 
 
+test('local geometry selection stays passive and double click finishes explicit editing', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /function adoptLocalGeometry[\s\S]*state\.editing = false;/u,
+  );
+  assert.match(
+    editor,
+    /beginEditButton\.hidden =[\s\S]*!item\?\.id[\s\S]*state\.editing/u,
+  );
+  assert.match(
+    editor,
+    /async function beginEditing\(\)[\s\S]*isLocalGeometryId\([\s\S]*item\.id[\s\S]*state\.editing =[\s\S]*true[\s\S]*Редактирование локальной геометрии начато/u,
+  );
+  assert.match(
+    editor,
+    /async function saveCurrent\(\)[\s\S]*const localItem =[\s\S]*state\.editing = false;[\s\S]*Активное редактирование завершено/u,
+  );
+  assert.match(
+    editor,
+    /map\.on\([\s\S]*'dblclick'[\s\S]*const finishEditing =[\s\S]*state\.editing[\s\S]*void saveCurrent\(\)/u,
+  );
+  assert.match(
+    editor,
+    /двойной клик — закончить/u,
+  );
+});
+
+
 test('geometry drawing can finish naturally with a map double click', async () => {
   const editor =
     await read(
