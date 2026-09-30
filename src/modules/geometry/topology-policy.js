@@ -43,8 +43,6 @@ function unsupportedFields(
 
 function normalizeGeometrySplitBladeRequest(
   payload,
-) {export function normalizeGeometrySplitRequest(
-  payload,
 ) {
   const source =
     requestObject(
