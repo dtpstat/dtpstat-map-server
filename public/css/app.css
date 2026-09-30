@@ -365,6 +365,83 @@ th button:focus-visible {
   background: #dce6e4;
 }
 
+.geometry-timeline {
+  position: absolute;
+  z-index: 3;
+  right: 50%;
+  bottom: 18px;
+  width: min(720px, calc(100% - 32px));
+  min-height: 78px;
+  transform: translateX(50%);
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 11px;
+  align-items: center;
+  border: 1px solid rgb(11 72 80 / 15%);
+  border-radius: 12px;
+  color: #23383b;
+  background: rgb(255 255 255 / 95%);
+  box-shadow: 0 8px 26px rgb(22 55 59 / 18%);
+  backdrop-filter: blur(5px);
+}
+.geometry-timeline[hidden] {
+  display: none;
+}
+.geometry-timeline-play {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid #b8ccca;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--accent);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+.geometry-timeline-play:hover {
+  background: var(--accent-dark);
+}
+.geometry-timeline-play:focus-visible,
+.geometry-timeline input[type="range"]:focus-visible {
+  outline: 3px solid #84d6dd;
+  outline-offset: 2px;
+}
+.geometry-timeline-main {
+  min-width: 0;
+}
+.geometry-timeline-heading,
+.geometry-timeline-bounds {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.geometry-timeline-heading {
+  margin-bottom: 4px;
+  align-items: baseline;
+  font-size: .78rem;
+}
+.geometry-timeline-heading output {
+  color: var(--accent-dark);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.geometry-timeline input[type="range"] {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.geometry-timeline-bounds {
+  margin-top: 2px;
+  color: var(--ink-muted);
+  font-size: .68rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .map-message {
   position: absolute;
   z-index: 1;
@@ -540,5 +617,29 @@ th button:focus-visible {
   *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+
+@media (max-width: 760px) {
+  .geometry-timeline {
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    width: auto;
+    transform: none;
+    min-height: 72px;
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px 9px;
+  }
+
+  .geometry-timeline-play {
+    width: 38px;
+    height: 38px;
+  }
+
+  .geometry-timeline-heading {
+    font-size: .72rem;
   }
 }

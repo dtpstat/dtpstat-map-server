@@ -1,5 +1,6 @@
 import {
   loadCities,
+  loadGeometryTimeline,
   loadLineTypes,
   loadPointTypes,
   loadMapConfig,
@@ -23,6 +24,30 @@ document.head.append(legendStylesheet);
 
 const mapMessage = document.querySelector('#map-message');
 const mapPanel = document.querySelector('.map-panel');
+const timeline =
+  document.querySelector(
+    '#geometry-timeline',
+  );
+const timelinePlay =
+  document.querySelector(
+    '#geometry-timeline-play',
+  );
+const timelineRange =
+  document.querySelector(
+    '#geometry-timeline-range',
+  );
+const timelineDate =
+  document.querySelector(
+    '#geometry-timeline-date',
+  );
+const timelineStart =
+  document.querySelector(
+    '#geometry-timeline-start',
+  );
+const timelineEnd =
+  document.querySelector(
+    '#geometry-timeline-end',
+  );
 const cityTable = document.querySelector('.city-table');
 const cityTableHead = cityTable?.querySelector('thead');
 
@@ -83,6 +108,422 @@ let lineDisplayRefresh = null;
 let openMapRefresh = null;
 let derivedDataRefresh = null;
 let derivedDataPending = false;
+let timelineEnabled = false;
+let timelinePlayback = null;
+let timelineMinDay = null;
+let timelineMaxDay = null;
+
+const DAY_MS =
+  24 * 60 * 60 * 1000;
+
+function localIsoDate() {
+  const now =
+    new Date();
+  const year =
+    now.getFullYear();
+  const month =
+    String(
+      now.getMonth() + 1,
+    ).padStart(2, '0');
+  const day =
+    String(
+      now.getDate(),
+    ).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function dateToDay(value) {
+  if (
+    typeof value !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/u
+      .test(value)
+  ) {
+    return null;
+  }
+
+  const timestamp =
+    Date.parse(
+      value +
+      'T00:00:00.000Z',
+    );
+  return Number.isFinite(timestamp)
+    ? Math.floor(
+        timestamp /
+        DAY_MS,
+      )
+    : null;
+}
+
+function dayToDate(day) {
+  return new Date(
+    Number(day) *
+    DAY_MS,
+  ).toISOString()
+    .slice(0, 10);
+}
+
+function formatTimelineDate(value) {
+  const day =
+    dateToDay(value);
+  if (day === null) {
+    return '—';
+  }
+
+  return new Intl.DateTimeFormat(
+    'ru-RU',
+    {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      timeZone: 'UTC',
+    },
+  ).format(
+    new Date(
+      day *
+      DAY_MS,
+    ),
+  );
+}
+
+function stopTimelinePlayback() {
+  if (timelinePlayback) {
+    clearInterval(
+      timelinePlayback,
+    );
+    timelinePlayback =
+      null;
+  }
+
+  if (timelinePlay) {
+    timelinePlay.textContent =
+      '▶';
+    timelinePlay
+      .setAttribute(
+        'aria-pressed',
+        'false',
+      );
+    timelinePlay
+      .setAttribute(
+        'aria-label',
+        'Запустить воспроизведение истории',
+      );
+    timelinePlay.title =
+      'Воспроизвести историю';
+  }
+}
+
+function applyTimelineDay(day) {
+  if (
+    !mapController ||
+    !timelineRange ||
+    timelineMinDay === null ||
+    timelineMaxDay === null
+  ) {
+    return;
+  }
+
+  const normalized =
+    Math.max(
+      timelineMinDay,
+      Math.min(
+        timelineMaxDay,
+        Math.round(
+          Number(day),
+        ),
+      ),
+    );
+  const date =
+    dayToDate(
+      normalized,
+    );
+
+  timelineRange.value =
+    String(normalized);
+  if (timelineDate) {
+    timelineDate.value =
+      formatTimelineDate(
+        date,
+      );
+  }
+
+  mapController
+    .setTimelineDate(
+      date,
+    );
+}
+
+async function refreshGeometryTimelineBounds() {
+  if (
+    !timelineEnabled ||
+    !timeline ||
+    !timelineRange
+  ) {
+    return;
+  }
+
+  const bounds =
+    await loadGeometryTimeline();
+  const today =
+    dateToDay(
+      localIsoDate(),
+    );
+  const sourceMin =
+    dateToDay(
+      bounds.minDate,
+    );
+  const sourceMax =
+    dateToDay(
+      bounds.maxDate,
+    );
+
+  if (
+    today === null ||
+    (
+      sourceMin === null &&
+      sourceMax === null
+    )
+  ) {
+    timeline.hidden =
+      true;
+    mapPanel.classList
+      .remove(
+        'has-geometry-timeline',
+      );
+    return;
+  }
+
+  timelineMinDay =
+    Math.min(
+      sourceMin ??
+        sourceMax ??
+        today,
+      today,
+    );
+  timelineMaxDay =
+    Math.max(
+      sourceMax ??
+        sourceMin ??
+        today,
+      today,
+    );
+
+  timelineRange.min =
+    String(
+      timelineMinDay,
+    );
+  timelineRange.max =
+    String(
+      timelineMaxDay,
+    );
+
+  if (timelineStart) {
+    timelineStart.textContent =
+      formatTimelineDate(
+        dayToDate(
+          timelineMinDay,
+        ),
+      );
+  }
+  if (timelineEnd) {
+    timelineEnd.textContent =
+      formatTimelineDate(
+        dayToDate(
+          timelineMaxDay,
+        ),
+      );
+  }
+
+  const current =
+    Number(
+      timelineRange.value,
+    );
+  const initial =
+    Number.isFinite(current) &&
+    current >= timelineMinDay &&
+    current <= timelineMaxDay &&
+    timelineRange.dataset
+      .initialized === 'true'
+      ? current
+      : today;
+
+  timelineRange.dataset
+    .initialized =
+    'true';
+  timeline.hidden =
+    false;
+  mapPanel.classList
+    .add(
+      'has-geometry-timeline',
+    );
+  applyTimelineDay(
+    initial,
+  );
+}
+
+async function configureGeometryTimeline(
+  enabled,
+) {
+  const nextEnabled =
+    Boolean(enabled);
+  if (
+    timelineEnabled ===
+      nextEnabled &&
+    (
+      !nextEnabled ||
+      timelineRange?.dataset
+        .initialized === 'true'
+    )
+  ) {
+    return;
+  }
+
+  timelineEnabled =
+    nextEnabled;
+  stopTimelinePlayback();
+
+  if (!timelineEnabled) {
+    timelineMinDay =
+      null;
+    timelineMaxDay =
+      null;
+    if (timelineRange) {
+      delete timelineRange
+        .dataset.initialized;
+    }
+    if (timeline) {
+      timeline.hidden =
+        true;
+    }
+    mapPanel.classList
+      .remove(
+        'has-geometry-timeline',
+      );
+    mapController
+      ?.setTimelineDate(
+        localIsoDate(),
+      );
+    return;
+  }
+
+  try {
+    await refreshGeometryTimelineBounds();
+  } catch (error) {
+    timelineEnabled =
+      false;
+    timeline.hidden =
+      true;
+    mapPanel.classList
+      .remove(
+        'has-geometry-timeline',
+      );
+    console.error(
+      'Не удалось загрузить временную шкалу геометрий',
+      error,
+    );
+  }
+}
+
+timelineRange
+  ?.addEventListener(
+    'input',
+    () => {
+      stopTimelinePlayback();
+      applyTimelineDay(
+        Number(
+          timelineRange.value,
+        ),
+      );
+    },
+  );
+
+timelinePlay
+  ?.addEventListener(
+    'click',
+    () => {
+      if (
+        timelinePlayback
+      ) {
+        stopTimelinePlayback();
+        return;
+      }
+      if (
+        timelineMinDay === null ||
+        timelineMaxDay === null
+      ) {
+        return;
+      }
+
+      let current =
+        Number(
+          timelineRange.value,
+        );
+      if (
+        !Number.isFinite(current) ||
+        current >=
+          timelineMaxDay
+      ) {
+        current =
+          timelineMinDay;
+        applyTimelineDay(
+          current,
+        );
+      }
+
+      const span =
+        Math.max(
+          1,
+          timelineMaxDay -
+          timelineMinDay,
+        );
+      const step =
+        Math.max(
+          1,
+          Math.ceil(
+            span /
+            240,
+          ),
+        );
+
+      timelinePlay.textContent =
+        '⏸';
+      timelinePlay
+        .setAttribute(
+          'aria-pressed',
+          'true',
+        );
+      timelinePlay
+        .setAttribute(
+          'aria-label',
+          'Приостановить воспроизведение истории',
+        );
+      timelinePlay.title =
+        'Пауза';
+
+      timelinePlayback =
+        setInterval(
+          () => {
+            current =
+              Math.min(
+                timelineMaxDay,
+                current +
+                step,
+              );
+            applyTimelineDay(
+              current,
+            );
+
+            if (
+              current >=
+              timelineMaxDay
+            ) {
+              stopTimelinePlayback();
+            }
+          },
+          120,
+        );
+    },
+  );
 
 function setMapMessage(message, isError = false) {
   mapMessage.hidden = !message;
@@ -408,6 +849,10 @@ async function refreshLineDisplayOptions() {
         showLineLabels: Boolean(projectSettings.showLineLabels),
         showLinePopups: projectSettings.showLinePopups !== false,
       });
+      await configureGeometryTimeline(
+        projectSettings
+          .showGeometryTimeline,
+      );
     } catch (error) {
       console.error('Не удалось обновить настройки отображения линий', error);
     } finally {
@@ -465,6 +910,17 @@ async function refreshDerivedData() {
       await applyPointTypes(
         pointTypes,
       );
+      if (timelineEnabled) {
+        await refreshGeometryTimelineBounds()
+          .catch(
+            (error) => {
+              console.error(
+                'Не удалось обновить диапазон временной шкалы',
+                error,
+              );
+            },
+          );
+      }
       if (focusedCityId !== null && !citiesById.has(focusedCityId)) {
         focusedCityId = null;
         cityList.select(null);
@@ -557,6 +1013,10 @@ async function start() {
       showLineLabels: Boolean(projectSettings.showLineLabels),
       showLinePopups: projectSettings.showLinePopups !== false,
     });
+    await configureGeometryTimeline(
+      projectSettings
+        .showGeometryTimeline,
+    );
     if (!lineTypes.length) throw new Error('Справочник типов линий пуст');
 
     applyLineTypes(lineTypes);

@@ -108,6 +108,45 @@
       <main class="map-panel" aria-label="Карта проекта {{PROJECT_NAME}}">
         <div id="map"></div>
         <div id="map-message" class="map-message">Подготавливаем карту…</div>
+
+        <section
+          class="geometry-timeline"
+          id="geometry-timeline"
+          aria-label="История геометрий"
+          hidden
+        >
+          <button
+            class="geometry-timeline-play"
+            id="geometry-timeline-play"
+            type="button"
+            aria-label="Запустить воспроизведение истории"
+            aria-pressed="false"
+            title="Воспроизвести историю"
+          >▶</button>
+
+          <div class="geometry-timeline-main">
+            <div class="geometry-timeline-heading">
+              <strong>История геометрий</strong>
+              <output
+                id="geometry-timeline-date"
+                for="geometry-timeline-range"
+              >—</output>
+            </div>
+            <input
+              id="geometry-timeline-range"
+              type="range"
+              min="0"
+              max="0"
+              step="1"
+              value="0"
+              aria-label="Дата отображения геометрий"
+            >
+            <div class="geometry-timeline-bounds" aria-hidden="true">
+              <time id="geometry-timeline-start">—</time>
+              <time id="geometry-timeline-end">—</time>
+            </div>
+          </div>
+        </section>
       </main>
     </div>
 

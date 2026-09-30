@@ -146,3 +146,58 @@ test('public map exposes independent POI type toggles and polygon layers', async
     /\.point-legend/u,
   );
 });
+
+
+test('public map timeline is setting-controlled and exposes horizontal playback controls', async () => {
+  const [
+    html,
+    app,
+    api,
+    styles,
+    legendStyles,
+  ] =
+    await Promise.all([
+      read('index.html'),
+      read('public/js/app.js'),
+      read('public/js/api.js'),
+      read('public/css/app.css'),
+      read('public/css/line-types.css'),
+    ]);
+
+  assert.match(
+    html,
+    /id="geometry-timeline"[\s\S]*id="geometry-timeline-play"[\s\S]*id="geometry-timeline-range"/u,
+  );
+  assert.match(
+    api,
+    /export function loadGeometryTimeline/u,
+  );
+  assert.match(
+    app,
+    /showGeometryTimeline/u,
+  );
+  assert.match(
+    app,
+    /function configureGeometryTimeline/u,
+  );
+  assert.match(
+    app,
+    /setTimelineDate/u,
+  );
+  assert.match(
+    app,
+    /setInterval\([\s\S]*120/u,
+  );
+  assert.match(
+    app,
+    /span[\s\S]*240/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-timeline \{[\s\S]*position: absolute[\s\S]*input\[type="range"\]/u,
+  );
+  assert.match(
+    legendStyles,
+    /has-geometry-timeline[\s\S]*\.line-legend[\s\S]*\.point-legend/u,
+  );
+});

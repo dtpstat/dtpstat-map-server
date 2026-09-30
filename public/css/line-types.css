@@ -150,3 +150,16 @@
     max-width: min(240px, calc(100% - 16px));
   }
 }
+
+
+.map-panel.has-geometry-timeline .line-legend,
+.map-panel.has-geometry-timeline .point-legend {
+  bottom: 112px;
+}
+
+@media (max-width: 760px) {
+  .map-panel.has-geometry-timeline .line-legend,
+  .map-panel.has-geometry-timeline .point-legend {
+    bottom: 96px;
+  }
+}
