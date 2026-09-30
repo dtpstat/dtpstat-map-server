@@ -3,6 +3,8 @@ const LEASE_COLUMNS_SQL = `
   lease.token,
   lease.user_id::integer AS "userId",
   user_account.username,
+  user_account.display_name AS "displayName",
+  (user_account.avatar_data IS NOT NULL) AS "hasAvatar",
   lease.client_id AS "clientId",
   lease.generation::integer AS generation,
   lease.acquired_at AS "acquiredAt",
