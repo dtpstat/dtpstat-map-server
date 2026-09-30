@@ -783,91 +783,7 @@ export function normalizeGeometryBulkUpdates(
 }
 
 
-export function normalizeGeometryMergeRequest(
-  payload,
-) {
-  const source =
-    object(
-      payload,
-      'Request body',
-    );
-
-  const unknown =
-    Object.keys(source)
-      .filter(
-        (key) =>
-          key !== 'items',
-      );
-
-  if (unknown.length > 0) {
-    throw new GeometryEditorValidationError(
-      'Unsupported merge fields: ' +
-        unknown.join(', '),
-    );
-  }
-
-  if (
-    !Array.isArray(source.items) ||
-    source.items.length < 2 ||
-    source.items.length > 200
-  ) {
-    throw new GeometryEditorValidationError(
-      'items must contain 2-200 geometries',
-    );
-  }
-
-  const seen = new Set();
-
-  return source.items.map(
-    (entry, index) => {
-      object(
-        entry,
-        `items[${index}]`,
-      );
-
-      const entryUnknown =
-        Object.keys(entry)
-          .filter(
-            (key) =>
-              ![
-                'id',
-                'baseUpdatedAt',
-              ].includes(key),
-          );
-
-      if (
-        entryUnknown.length > 0
-      ) {
-        throw new GeometryEditorValidationError(
-          `items[${index}] contains unsupported fields: ` +
-            entryUnknown.join(', '),
-        );
-      }
-
-      const id =
-        normalizeGeometryId(
-          entry.id,
-        );
-
-      if (seen.has(id)) {
-        throw new GeometryEditorValidationError(
-          `Duplicate geometry id in merge: ${id}`,
-        );
-      }
-      seen.add(id);
-
-      return {
-        id,
-        baseUpdatedAt:
-          normalizeGeometryRevision(
-            entry.baseUpdatedAt,
-          ),
-      };
-    },
-  );
-}
-
-export function normalizeGeometryEditToken(
+export function normalizeGeometryEditToken(export function normalizeGeometryEditToken(
   value,
   label = 'editToken',
 ) {
@@ -1082,8 +998,63 @@ export function normalizeGeometrySyncRequest(
         };
       }
 
+      if (
+        entry.kind ===
+        'delete'
+      ) {
+        const entryUnknown =
+          Object.keys(entry)
+            .filter(
+              (key) =>
+                ![
+                  'kind',
+                  'id',
+                  'baseUpdatedAt',
+                  'editToken',
+                ].includes(key),
+            );
+
+        if (
+          entryUnknown.length > 0
+        ) {
+          throw new GeometryEditorValidationError(
+            `items[${index}] contains unsupported fields: ` +
+              entryUnknown.join(', '),
+          );
+        }
+
+        const id =
+          normalizeGeometryId(
+            entry.id,
+          );
+
+        if (
+          geometryIds.has(id)
+        ) {
+          throw new GeometryEditorValidationError(
+            `Duplicate geometry id in sync: ${id}`,
+          );
+        }
+        geometryIds.add(id);
+
+        return {
+          kind:
+            'delete',
+          id,
+          baseUpdatedAt:
+            normalizeGeometryRevision(
+              entry.baseUpdatedAt,
+            ),
+          editToken:
+            normalizeGeometryEditToken(
+              entry.editToken,
+              `items[${index}].editToken`,
+            ),
+        };
+      }
+
       throw new GeometryEditorValidationError(
-        `items[${index}].kind must be create or update`,
+        `items[${index}].kind must be create, update or delete`,
       );
     },
   );

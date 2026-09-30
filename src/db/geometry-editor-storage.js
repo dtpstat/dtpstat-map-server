@@ -423,15 +423,22 @@ const UPDATE_GEOMETRY_SQL = `
   RETURNING geometry.id::integer AS id
 `;
 
-const MERGE_GEOMETRIES_SQL = `
-  WITH selected AS (
-    SELECT geom
-    FROM city_geometries
-    WHERE id = ANY($2::bigint[])
+const UNION_GEOMETRY_PREVIEW_SQL = `
+  WITH input AS (
+    SELECT
+      ST_SetSRID(
+        ST_GeomFromGeoJSON(
+          item.value::text
+        ),
+        4326
+      ) AS geom
+    FROM jsonb_array_elements(
+      $1::jsonb
+    ) AS item(value)
   ),
   merged AS (
     SELECT CASE
-      WHEN $3::text = 'line' THEN
+      WHEN $2::text = 'line' THEN
         ST_RemoveRepeatedPoints(
           ST_LineMerge(
             ST_CollectionExtract(
@@ -455,45 +462,22 @@ const MERGE_GEOMETRIES_SQL = `
           )
         )
     END AS geom
-    FROM selected
+    FROM input
   )
-  UPDATE city_geometries AS target
-  SET
-    geom = merged.geom,
-    length_m = CASE
-      WHEN $3::text = 'line'
-        THEN ST_Length(
-          merged.geom::geography
-        )
-      ELSE NULL
-    END,
-    lane_length_m = CASE
-      WHEN $3::text = 'line'
-        THEN ST_Length(
-          merged.geom::geography
-        ) * target.lanes
-      ELSE NULL
-    END,
-    source_tags = CASE
-      WHEN $4::boolean
-        THEN target.source_tags
-      ELSE '{}'::jsonb
-    END,
-    was_edited = TRUE,
-    updated_at = NOW()
+  SELECT
+    ST_AsGeoJSON(
+      merged.geom
+    )::json AS geometry
   FROM merged
-  WHERE target.id = $1::bigint
-    AND NOT ST_IsEmpty(
+  WHERE NOT ST_IsEmpty(
       merged.geom
     )
     AND ST_IsValid(
       merged.geom
     )
-  RETURNING
-    target.id::integer AS id
 `;
 
-const CUT_GEOMETRY_PREVIEW_SQL = `
+const CUT_GEOMETRY_PREVIEW_SQL = `const CUT_GEOMETRY_PREVIEW_SQL = `
   WITH source AS (
     SELECT
       ST_SetSRID(
@@ -896,47 +880,28 @@ export function createGeometryEditorStorage(
       );
     },
 
-    async mergeGeometries(
-      client,
-      ids,
+    async previewUnion(
+      queryable,
+      geometries,
       family,
-      preserveSourceTags,
     ) {
-      const targetId =
-        ids[0];
-
       const result =
-        await client.query(
-          MERGE_GEOMETRIES_SQL,
+        await queryable.query(
+          UNION_GEOMETRY_PREVIEW_SQL,
           [
-            targetId,
-            ids,
+            JSON.stringify(
+              geometries,
+            ),
             family,
-            preserveSourceTags,
           ],
         );
 
-      if (!result.rows[0]) {
-        return null;
-      }
-
-      await client.query(
-        `DELETE FROM city_geometries
-         WHERE id = ANY($1::bigint[])
-           AND id <> $2::bigint`,
-        [
-          ids,
-          targetId,
-        ],
-      );
-
-      return one(
-        client,
-        targetId,
-      );
+      return result.rows[0]
+        ?.geometry ??
+        null;
     },
 
-    async previewCut(
+    async previewCut(    async previewCut(
       queryable,
       sourceGeometry,
       cutterGeometry,

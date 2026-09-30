@@ -676,11 +676,14 @@ export const API_REQUEST_CONTRACTS =
     ),
     c(
       'POST',
-      '/admin/geometry-editor/merge',
+      '/admin/geometry-editor/topology/union-preview',
       {
         body: 'json-object',
         bodyKeys: [
-          'items',
+          'geometries',
+        ],
+        headers: [
+          ...COMMON_MUTATION_HEADERS,
         ],
       },
     ),

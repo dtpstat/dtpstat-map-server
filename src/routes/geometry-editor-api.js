@@ -712,6 +712,8 @@ export function createGeometryEditorRouter({
               result.createdCount,
             updatedCount:
               result.updatedCount,
+            deletedCount:
+              result.deletedCount,
             geometryIds:
               result.entityIds,
           },
@@ -1057,11 +1059,11 @@ export function createGeometryEditorRouter({
   );
 
   router.post(
-    '/admin/geometry-editor/merge',
+    '/admin/geometry-editor/topology/union-preview',
     adminAuth
       .requireGeometryEditor,
     audit(
-      'geometry.merge',
+      'geometry.union.preview',
     ),
     jsonBody,
     async (
@@ -1070,46 +1072,17 @@ export function createGeometryEditorRouter({
       next,
     ) => {
       try {
-        const result =
+        const geometry =
           await geometryEditorService
-            .merge(
+            .previewUnion(
               request.body,
-              request.adminUser,
-              realtimeClientId(
-                request,
-              ),
             );
 
         recordAdminOperationDetails(
           response,
           {
-            sourceGeometryIds:
-              result
-                .sourceGeometryIds,
-            resultGeometryId:
-              result
-                .geometry
-                .id,
-            cityId:
-              result
-                .geometry
-                .cityId,
-            family:
-              result
-                .geometry
-                .family,
-          },
-        );
-
-        publishChange(
-          realtimeEvents,
-          request,
-          {
-            action:
-              'merge',
-            entityIds:
-              result
-                .sourceGeometryIds,
+            resultType:
+              geometry.type,
           },
         );
 
@@ -1118,7 +1091,9 @@ export function createGeometryEditorRouter({
             'Cache-Control',
             'no-store',
           )
-          .json(result);
+          .json({
+            geometry,
+          });
       } catch (error) {
         if (
           validationError(
@@ -1134,6 +1109,7 @@ export function createGeometryEditorRouter({
   );
 
   router.post(
+    '/admin/geometry-editor/topology/cut-preview',  router.post(
     '/admin/geometry-editor/topology/cut-preview',
     adminAuth
       .requireGeometryEditor,

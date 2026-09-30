@@ -103,6 +103,78 @@ function normalizeGeometrySplitBladeRequest(
 }
 
 
+export function normalizeGeometryUnionPreviewRequest(
+  payload,
+) {
+  const source =
+    requestObject(
+      payload,
+      'Request body',
+    );
+
+  unsupportedFields(
+    source,
+    ['geometries'],
+    'Union preview request',
+  );
+
+  if (
+    !Array.isArray(
+      source.geometries,
+    ) ||
+    source.geometries.length < 2 ||
+    source.geometries.length > 200
+  ) {
+    throw new GeometryEditorValidationError(
+      'Union preview requires 2-200 geometries',
+    );
+  }
+
+  const geometries =
+    source.geometries.map(
+      (geometry) =>
+        validateEditorGeometry(
+          geometry,
+        ),
+    );
+  const family =
+    geometryFamily(
+      geometries[0],
+    );
+
+  if (
+    ![
+      'line',
+      'polygon',
+    ].includes(
+      family,
+    )
+  ) {
+    throw new GeometryEditorValidationError(
+      'Union preview supports only line or polygon geometries',
+    );
+  }
+
+  if (
+    geometries.some(
+      (geometry) =>
+        geometryFamily(
+          geometry,
+        ) !== family,
+    )
+  ) {
+    throw new GeometryEditorValidationError(
+      'Union preview geometries must have the same family',
+    );
+  }
+
+  return {
+    geometries,
+    family,
+  };
+}
+
+
 export function normalizeGeometryCutPreviewRequest(
   payload,
 ) {

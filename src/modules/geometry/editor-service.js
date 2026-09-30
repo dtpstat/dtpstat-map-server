@@ -8,7 +8,6 @@ import {
   normalizeGeometryEditorClientId,
   normalizeGeometryCreatePayload,
   normalizeGeometryId,
-  normalizeGeometryMergeRequest,
   normalizeGeometryRevision,
   normalizeGeometrySyncRequest,
   validateGeometryLineState,
@@ -16,6 +15,7 @@ import {
 import {
   normalizeGeometryCutPreviewRequest,
   normalizeGeometrySplitPreviewRequest,
+  normalizeGeometryUnionPreviewRequest,
 } from './topology-policy.js';
 
 function own(
@@ -1014,240 +1014,34 @@ export function createGeometryEditorService(
       );
     },
 
-    async merge(
+    async previewUnion(
       payload,
-      actor,
-      clientIdValue,
     ) {
-      const items =
-        normalizeGeometryMergeRequest(
+      const {
+        geometries,
+        family,
+      } =
+        normalizeGeometryUnionPreviewRequest(
           payload,
         );
-      const userId =
-        actorId(actor);
-      const clientId =
-        normalizeGeometryEditorClientId(
-          clientIdValue,
+
+      const geometry =
+        await preview(
+          (client) =>
+            storage.previewUnion(
+              client,
+              geometries,
+              family,
+            ),
         );
 
-      return write(
-        async (client) => {
-          const ids =
-            items.map(
-              (item) =>
-                item.id,
-            );
+      if (!geometry) {
+        throw new GeometryEditorValidationError(
+          'Union must produce a valid non-empty geometry',
+        );
+      }
 
-          const locked =
-            await storage
-              .lockGeometries(
-                client,
-                [...ids].sort(
-                  (
-                    left,
-                    right,
-                  ) =>
-                    left - right,
-                ),
-              );
-
-          const conflicts =
-            conflictDetails(
-              items,
-              locked,
-            );
-
-          if (
-            conflicts.length > 0
-          ) {
-            throw new GeometryEditorValidationError(
-              'One or more geometries changed before merge',
-              409,
-              {
-                conflicts,
-              },
-            );
-          }
-
-          const mergeLeaseTokens =
-            new Map();
-
-          for (const id of ids) {
-            const token =
-              randomUUID();
-            const lease =
-              await leaseStorage
-                .acquire(
-                  client,
-                  {
-                    geometryId:
-                      id,
-                    token,
-                    userId,
-                    clientId,
-                    leaseSeconds,
-                  },
-                );
-
-            if (
-              !lease ||
-              lease.token !== token
-            ) {
-              throw new GeometryEditorValidationError(
-                'One or more geometries are already being edited',
-                409,
-                {
-                  conflicts: [{
-                    id,
-                    reason:
-                      'edit-lock',
-                    lease:
-                      publicLease(
-                        lease,
-                      ),
-                  }],
-                },
-              );
-            }
-
-            mergeLeaseTokens.set(
-              id,
-              token,
-            );
-          }
-
-          const byId =
-            new Map(
-              locked.map(
-                (item) => [
-                  item.id,
-                  item,
-                ],
-              ),
-            );
-
-          const ordered =
-            ids.map(
-              (id) =>
-                byId.get(id),
-            );
-
-          const first =
-            ordered[0];
-
-          if (
-            first.family ===
-            'point'
-          ) {
-            throw new GeometryEditorValidationError(
-              'Point geometries cannot be merged',
-            );
-          }
-
-          if (
-            ordered.some(
-              (item) =>
-                item.family !==
-                  first.family,
-            )
-          ) {
-            throw new GeometryEditorValidationError(
-              'Merged geometries must have the same geometry family',
-            );
-          }
-
-          if (
-            ordered.some(
-              (item) =>
-                item.isVisible !==
-                first.isVisible,
-            )
-          ) {
-            throw new GeometryEditorValidationError(
-              'Merged geometries must have the same visibility',
-            );
-          }
-
-          if (
-            first.family ===
-              'line' &&
-            ordered.some(
-              (item) =>
-                item.lineTypeId !==
-                  first.lineTypeId ||
-                item.lanes !==
-                  first.lanes,
-            )
-          ) {
-            throw new GeometryEditorValidationError(
-              'Merged lines must have the same line type and lanes',
-            );
-          }
-
-          const sourceTags =
-            JSON.stringify(
-              first.sourceTags ??
-              {},
-            );
-          const preserveSourceTags =
-            ordered.every(
-              (item) =>
-                JSON.stringify(
-                  item.sourceTags ??
-                  {},
-                ) === sourceTags,
-            );
-
-          const geometry =
-            await storage
-              .mergeGeometries(
-                client,
-                ids,
-                first.family,
-                preserveSourceTags,
-              );
-
-          if (!geometry) {
-            throw new GeometryEditorValidationError(
-              'Merged geometry is empty or invalid',
-            );
-          }
-
-          await storage
-            .relinkGeometry(
-              client,
-              geometry.id,
-            );
-
-          for (
-            const [
-              geometryId,
-              token,
-            ] of mergeLeaseTokens
-          ) {
-            await leaseStorage
-              .release(
-                client,
-                {
-                  geometryId,
-                  token,
-                  userId,
-                },
-              );
-          }
-
-          return {
-            geometry:
-              await storage
-                .getGeometry(
-                  client,
-                  geometry.id,
-                ),
-            sourceGeometryIds:
-              ids,
-          };
-        },
-      );
+      return geometry;
     },
 
     async previewCut(
@@ -1431,8 +1225,19 @@ export function createGeometryEditorService(
                 item.kind ===
                 'update',
             );
-          const updateIds =
-            updates
+          const deletes =
+            items.filter(
+              (item) =>
+                item.kind ===
+                'delete',
+            );
+          const persisted =
+            [
+              ...updates,
+              ...deletes,
+            ];
+          const persistedIds =
+            persisted
               .map(
                 (item) =>
                   item.id,
@@ -1446,17 +1251,17 @@ export function createGeometryEditorService(
               );
 
           const locked =
-            updateIds.length > 0
+            persistedIds.length > 0
               ? await storage
                 .lockGeometries(
                   client,
-                  updateIds,
+                  persistedIds,
                 )
               : [];
 
           const conflicts =
             conflictDetails(
-              updates,
+              persisted,
               locked,
             );
 
@@ -1473,7 +1278,7 @@ export function createGeometryEditorService(
           }
 
           for (
-            const update of updates
+            const item of persisted
           ) {
             const ownsLease =
               await leaseStorage
@@ -1481,9 +1286,9 @@ export function createGeometryEditorService(
                   client,
                   {
                     geometryId:
-                      update.id,
+                      item.id,
                     token:
-                      update.editToken,
+                      item.editToken,
                     userId,
                   },
                 );
@@ -1495,7 +1300,7 @@ export function createGeometryEditorService(
                 {
                   conflicts: [{
                     id:
-                      update.id,
+                      item.id,
                     reason:
                       'edit-lock',
                     lease:
@@ -1503,7 +1308,7 @@ export function createGeometryEditorService(
                         await leaseStorage
                           .active(
                             client,
-                            update.id,
+                            item.id,
                           ),
                       ),
                   }],
@@ -1523,7 +1328,10 @@ export function createGeometryEditorService(
             );
           const updateIdSet =
             new Set(
-              updateIds,
+              updates.map(
+                (item) =>
+                  item.id,
+              ),
             );
           const creates =
             items.filter(
@@ -1640,12 +1448,37 @@ export function createGeometryEditorService(
             });
           }
 
+          const deleted = [];
+
+          for (
+            const item of deletes
+          ) {
+            const previous =
+              byId.get(
+                item.id,
+              );
+
+            await storage
+              .deleteGeometry(
+                client,
+                item.id,
+              );
+
+            deleted.push(
+              previous,
+            );
+          }
+
           const entityIds = [
             ...created.map(
               (item) =>
                 item.geometry.id,
             ),
             ...updated.map(
+              (item) =>
+                item.id,
+            ),
+            ...deleted.map(
               (item) =>
                 item.id,
             ),
@@ -1656,11 +1489,14 @@ export function createGeometryEditorService(
               created.length,
             updatedCount:
               updated.length,
+            deletedCount:
+              deleted.length,
             changedCount:
               entityIds.length,
             entityIds,
             created,
             updated,
+            deleted,
           };
         },
       );
