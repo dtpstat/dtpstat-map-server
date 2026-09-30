@@ -1266,3 +1266,55 @@ export function normalizeGeometryEditTokenValidation(
     },
   );
 }
+
+
+export function normalizeGeometryDiscussionMessage(
+  payload,
+) {
+  const source =
+    object(
+      payload,
+      'Request body',
+    );
+
+  const unknown =
+    Object.keys(source)
+      .filter(
+        (key) =>
+          key !== 'message',
+      );
+
+  if (unknown.length > 0) {
+    throw new GeometryEditorValidationError(
+      'Unsupported discussion fields: ' +
+        unknown.join(', '),
+    );
+  }
+
+  if (
+    typeof source.message !==
+      'string'
+  ) {
+    throw new GeometryEditorValidationError(
+      'message must be a string',
+    );
+  }
+
+  const message =
+    source.message
+      .trim()
+      .normalize('NFC');
+
+  if (
+    message.length < 1 ||
+    message.length > 4000
+  ) {
+    throw new GeometryEditorValidationError(
+      'message must contain 1-4000 characters',
+    );
+  }
+
+  return {
+    message,
+  };
+}
