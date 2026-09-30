@@ -1,8 +1,6 @@
 import {
   GeometryEditorValidationError,
   geometryFamily,
-  normalizeGeometryId,
-  normalizeGeometryRevision,
   validateEditorGeometry,
 } from './editor-policy.js';
 
@@ -43,107 +41,9 @@ function unsupportedFields(
   }
 }
 
-export function normalizeGeometryCutRequest(
+function normalizeGeometrySplitBladeRequest(
   payload,
-) {
-  const source =
-    requestObject(
-      payload,
-      'Request body',
-    );
-
-  unsupportedFields(
-    source,
-    [
-      'geometry',
-      'cutterGeometryId',
-      'cutterUpdatedAt',
-    ],
-    'Cut request',
-  );
-
-  const hasInline =
-    Object.hasOwn(
-      source,
-      'geometry',
-    );
-
-  const hasReferenced =
-    Object.hasOwn(
-      source,
-      'cutterGeometryId',
-    ) ||
-    Object.hasOwn(
-      source,
-      'cutterUpdatedAt',
-    );
-
-  if (
-    hasInline ===
-    hasReferenced
-  ) {
-    throw new GeometryEditorValidationError(
-      'Cut request must contain exactly one cutter source',
-    );
-  }
-
-  if (hasInline) {
-    const geometry =
-      validateEditorGeometry(
-        source.geometry,
-      );
-
-    if (
-      geometryFamily(
-        geometry,
-      ) !==
-      'polygon'
-    ) {
-      throw new GeometryEditorValidationError(
-        'Cut geometry must be Polygon or MultiPolygon',
-      );
-    }
-
-    return {
-      kind:
-        'inline',
-      geometry,
-    };
-  }
-
-  if (
-    !Object.hasOwn(
-      source,
-      'cutterGeometryId',
-    ) ||
-    !Object.hasOwn(
-      source,
-      'cutterUpdatedAt',
-    )
-  ) {
-    throw new GeometryEditorValidationError(
-      'Referenced cutter requires cutterGeometryId and cutterUpdatedAt',
-    );
-  }
-
-  return {
-    kind:
-      'geometry',
-    geometryId:
-      normalizeGeometryId(
-        source
-          .cutterGeometryId,
-        'cutterGeometryId',
-      ),
-    baseUpdatedAt:
-      normalizeGeometryRevision(
-        source
-          .cutterUpdatedAt,
-      ),
-  };
-}
-
-export function normalizeGeometrySplitRequest(
+) {export function normalizeGeometrySplitRequest(
   payload,
 ) {
   const source =
@@ -331,7 +231,7 @@ export function normalizeGeometrySplitPreviewRequest(
   }
 
   const blade =
-    normalizeGeometrySplitRequest({
+    normalizeGeometrySplitBladeRequest({
       blade:
         source.blade,
     });
