@@ -436,7 +436,59 @@ test('cut preview on a new local polygon keeps an original snapshot for revert',
 });
 
 
-test('split preview creates one update draft and one linked local create until atomic sync', async () => {
+test('topology menu closes as soon as cut or split mode is selected', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /cutButton\.addEventListener[\s\S]*topologyActions\.open =[\s\S]*false[\s\S]*startPolygonCut/u,
+  );
+  assert.match(
+    editor,
+    /splitButton\.addEventListener[\s\S]*topologyActions\.open =[\s\S]*false[\s\S]*startDrawing\([\s\S]*'split'/u,
+  );
+});
+
+
+test('drawn topology operations accept local targets without a server revision', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+  const start =
+    editor.indexOf(
+      'async function finishDrawing()',
+    );
+  const end =
+    editor.indexOf(
+      'function payloadFromForm()',
+      start,
+    );
+  const source =
+    editor.slice(
+      start,
+      end,
+    );
+
+  assert.doesNotMatch(
+    source,
+    /!target\.updatedAt/u,
+  );
+  assert.match(
+    source,
+    /await splitTarget/u,
+  );
+  assert.match(
+    source,
+    /await cutTarget/u,
+  );
+});
+
+
+test('split preview stages one source draft and every returned companion until atomic sync', async () => {
   const editor =
     await read(
       'admin/geometry-editor.js',
@@ -449,6 +501,14 @@ test('split preview creates one update draft and one linked local create until a
   assert.match(
     editor,
     /topologyGroupId/u,
+  );
+  assert.match(
+    editor,
+    /const companionIds =[\s\S]*parts[\s\S]*\.slice\(1\)[\s\S]*crypto\.randomUUID/u,
+  );
+  assert.match(
+    editor,
+    /for \([\s\S]*companionIds[\s\S]*\.entries\(\)[\s\S]*drafts\.upsert/u,
   );
   assert.match(
     editor,
@@ -472,7 +532,7 @@ test('split preview creates one update draft and one linked local create until a
   );
   assert.match(
     editor,
-    /Геометрия разделена только в локальных черновиках/u,
+    /атомарно запишет все части/u,
   );
 });
 
