@@ -1449,6 +1449,44 @@ async function verifyGeometryEditorInfrastructure(
     'Line split preview must return exactly two geometry parts',
   );
 
+  const multiSplitPreview =
+    await service.previewSplit({
+      sourceGeometry: {
+        type:
+          'MultiLineString',
+        coordinates: [
+          [
+            [
+              30.02,
+              50.012,
+            ],
+            [
+              30.04,
+              50.012,
+            ],
+          ],
+          [
+            [
+              30.02,
+              50.018,
+            ],
+            [
+              30.025,
+              50.018,
+            ],
+          ],
+        ],
+      },
+      blade:
+        splitBlade,
+    });
+
+  assert.equal(
+    multiSplitPreview.length,
+    3,
+    'MultiLineString split must return all resulting parts when one source component is divided',
+  );
+
   const countAfterSplitPreview =
     await pool.query(
       'SELECT COUNT(*)::integer AS count FROM city_geometries',

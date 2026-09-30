@@ -483,6 +483,39 @@ test('geometry sync can atomically clone immutable metadata for split-created dr
 });
 
 
+test('split preview detects a real split by source component-count growth', async () => {
+  const [
+    storage,
+    service,
+  ] =
+    await Promise.all([
+      read(
+        'src/db/geometry-editor-storage.js',
+      ),
+      read(
+        'src/modules/geometry/editor-service.js',
+      ),
+    ]);
+
+  assert.match(
+    storage,
+    /ST_NumGeometries[\s\S]*source_part_count[\s\S]*part_count >[\s\S]*source_part_count/u,
+  );
+  assert.doesNotMatch(
+    storage,
+    /part_count = 2/u,
+  );
+  assert.match(
+    service,
+    /geometries\.length < 2/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /exactly two valid parts/u,
+  );
+});
+
+
 test('geometry topology preview stays PostGIS-backed and mutation-free', async () => {
   const [
     policy,

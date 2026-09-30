@@ -1101,10 +1101,10 @@ export function createGeometryEditorService(
         !Array.isArray(
           geometries,
         ) ||
-        geometries.length !== 2
+        geometries.length < 2
       ) {
         throw new GeometryEditorValidationError(
-          'Split blade must divide the geometry into exactly two valid parts',
+          'Split blade must actually divide the geometry into valid parts',
         );
       }
 

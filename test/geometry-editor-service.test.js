@@ -466,12 +466,67 @@ function operationFixture(
           leaseOverrides,
         ),
       ),
+    storage,
     queries,
     unions,
     cuts,
     splits,
   };
 }
+
+test('split preview accepts every valid part produced from a multi geometry', async () => {
+  const fixture =
+    operationFixture([]);
+
+  fixture.storage.previewSplit =
+    async (
+      _client,
+      sourceGeometry,
+    ) => [
+      structuredClone(
+        sourceGeometry,
+      ),
+      structuredClone(
+        sourceGeometry,
+      ),
+      structuredClone(
+        sourceGeometry,
+      ),
+    ];
+
+  const parts =
+    await fixture.service
+      .previewSplit({
+        sourceGeometry: {
+          type:
+            'MultiLineString',
+          coordinates: [
+            [
+              [30, 60],
+              [31, 61],
+            ],
+            [
+              [32, 62],
+              [33, 63],
+            ],
+          ],
+        },
+        blade: {
+          type:
+            'LineString',
+          coordinates: [
+            [30.5, 59],
+            [30.5, 64],
+          ],
+        },
+      });
+
+  assert.equal(
+    parts.length,
+    3,
+  );
+});
+
 
 test('geometry topology previews are pure calculations without edit leases or persistence', async () => {
   const {
