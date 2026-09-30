@@ -1025,3 +1025,208 @@
   color: var(--muted);
   line-height: 1.4;
 }
+
+
+.geometry-edit-lock-status {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+.geometry-edit-actor {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  min-width: 0;
+}
+
+.geometry-edit-actor-avatar,
+.geometry-discussion-avatar {
+  width: 1.8rem;
+  height: 1.8rem;
+  flex: 0 0 1.8rem;
+  border: 1px solid #38515a;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #142329;
+}
+
+.geometry-edit-actor-fallback,
+.geometry-discussion-avatar-fallback {
+  display: inline-grid;
+  place-items: center;
+  font-size: .62rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.geometry-edit-actor-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-discussion {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 145;
+  width: min(25rem, calc(100vw - 2rem));
+  max-height: min(34rem, calc(100vh - 2rem));
+  display: grid;
+  grid-template-rows: auto minmax(7rem, 1fr) auto;
+  border: 1px solid #38515a;
+  border-radius: 11px;
+  background: #0b1417;
+  box-shadow: 0 1.4rem 4rem rgb(0 0 0 / 58%);
+  overflow: hidden;
+}
+
+.geometry-discussion[hidden] {
+  display: none;
+}
+
+.geometry-discussion.is-attention {
+  animation: geometry-discussion-attention .7s ease-out 1;
+}
+
+@keyframes geometry-discussion-attention {
+  0% { box-shadow: 0 0 0 0 rgb(53 198 180 / 70%), 0 1.4rem 4rem rgb(0 0 0 / 58%); }
+  100% { box-shadow: 0 0 0 .7rem rgb(53 198 180 / 0%), 0 1.4rem 4rem rgb(0 0 0 / 58%); }
+}
+
+.geometry-discussion-header {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  padding: .65rem .7rem;
+  border-bottom: 1px solid var(--line);
+  background: #101b1f;
+}
+
+.geometry-discussion-header > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.geometry-discussion-header strong,
+.geometry-discussion-header small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geometry-discussion-header small {
+  margin-top: .12rem;
+  color: var(--muted);
+  font-size: .63rem;
+}
+
+.geometry-discussion-close {
+  width: 2rem;
+  min-width: 2rem;
+  padding: .3rem;
+  font-size: 1rem;
+}
+
+.geometry-discussion-messages {
+  min-height: 7rem;
+  padding: .65rem;
+  display: flex;
+  flex-direction: column;
+  gap: .55rem;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.geometry-discussion-message {
+  display: grid;
+  grid-template-columns: 1.8rem minmax(0, 1fr);
+  gap: .45rem;
+  align-items: start;
+}
+
+.geometry-discussion-message.is-own {
+  padding-left: 1.2rem;
+}
+
+.geometry-discussion-message-body {
+  min-width: 0;
+  padding: .45rem .55rem;
+  border: 1px solid #243c44;
+  border-radius: 8px;
+  background: #101c20;
+}
+
+.geometry-discussion-message.is-own .geometry-discussion-message-body {
+  border-color: #37756f;
+  background: #102421;
+}
+
+.geometry-discussion-message-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .5rem;
+  margin-bottom: .2rem;
+}
+
+.geometry-discussion-message-meta strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: .68rem;
+}
+
+.geometry-discussion-message-meta time {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: .58rem;
+}
+
+.geometry-discussion-message-text {
+  margin: 0;
+  font-size: .7rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.geometry-discussion-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .45rem;
+  align-items: end;
+  padding: .6rem;
+  border-top: 1px solid var(--line);
+  background: #101b1f;
+}
+
+.geometry-discussion-form textarea {
+  min-height: 3.2rem;
+  max-height: 8rem;
+  resize: vertical;
+}
+
+.geometry-discussion-form button {
+  width: auto;
+}
+
+@media (max-width: 650px) {
+  .geometry-discussion {
+    right: .5rem;
+    bottom: .5rem;
+    width: calc(100vw - 1rem);
+    max-height: min(31rem, calc(100vh - 1rem));
+  }
+
+  .geometry-discussion-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .geometry-discussion-form button {
+    width: 100%;
+  }
+}
