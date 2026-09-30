@@ -11,7 +11,6 @@ import { createCityList } from './city-list.js';
 import { subscribeDerivedDataChanges } from '../../admin/derived-data-events.js';
 import {
   createMapController,
-  ROAD_DATA_MIN_ZOOM,
 } from './map-controller.js';
 import {
   hidePageStandby,
@@ -141,6 +140,150 @@ function renderLineLegend(lineTypes) {
   mapPanel.append(legend);
 }
 
+/** @param {any[]} pointTypes */
+function renderPointLegend(
+  pointTypes,
+) {
+  document
+    .querySelector(
+      '#point-legend',
+    )
+    ?.remove();
+
+  const visibleTypes =
+    pointTypes.filter(
+      (pointType) =>
+        pointType.isActive !==
+          false &&
+        Number(
+          pointType
+            .geometryCount ??
+          0,
+        ) > 0,
+    );
+
+  if (
+    visibleTypes.length === 0
+  ) {
+    return;
+  }
+
+  const legend =
+    document.createElement(
+      'section',
+    );
+  legend.id =
+    'point-legend';
+  legend.className =
+    'point-legend';
+  legend.setAttribute(
+    'aria-label',
+    'POI',
+  );
+
+  const title =
+    document.createElement(
+      'div',
+    );
+  title.className =
+    'point-legend-title';
+  title.textContent =
+    'POI';
+  legend.append(title);
+
+  for (
+    const pointType of
+    visibleTypes
+  ) {
+    const button =
+      document.createElement(
+        'button',
+      );
+    button.type =
+      'button';
+    button.className =
+      'point-legend-item';
+    button.setAttribute(
+      'aria-pressed',
+      'true',
+    );
+    button.dataset
+      .pointTypeId =
+      String(pointType.id);
+    button.title =
+      'Точек этого типа: ' +
+      Number(
+        pointType
+          .geometryCount ??
+        0,
+      );
+
+    const sample =
+      document.createElement(
+        'span',
+      );
+    sample.className =
+      'point-legend-sample';
+
+    if (pointType.iconUrl) {
+      const image =
+        document.createElement(
+          'img',
+        );
+      image.src =
+        pointType.iconUrl;
+      image.alt =
+        '';
+      image.loading =
+        'lazy';
+      sample.append(
+        image,
+      );
+    }
+
+    const name =
+      document.createElement(
+        'span',
+      );
+    name.textContent =
+      pointType.name;
+
+    button.append(
+      sample,
+      name,
+    );
+    button.addEventListener(
+      'click',
+      () => {
+        const enabled =
+          button.getAttribute(
+            'aria-pressed',
+          ) !== 'true';
+        button.setAttribute(
+          'aria-pressed',
+          String(enabled),
+        );
+        button.classList.toggle(
+          'is-disabled',
+          !enabled,
+        );
+        mapController
+          .setPointTypeVisibility(
+            pointType.id,
+            enabled,
+          );
+      },
+    );
+    legend.append(
+      button,
+    );
+  }
+
+  mapPanel.append(
+    legend,
+  );
+}
+
 /** @param {any[]} lineTypes */
 function applyLineTypes(lineTypes) {
   const signature = JSON.stringify(
@@ -176,6 +319,7 @@ async function applyPointTypes(
           anchorX,
           anchorY,
           iconUrl,
+          geometryCount,
         }) => ({
           id,
           name,
@@ -185,6 +329,7 @@ async function applyPointTypes(
           anchorX,
           anchorY,
           iconUrl,
+          geometryCount,
         }),
       ),
     );
@@ -202,6 +347,9 @@ async function applyPointTypes(
     .setPointTypes(
       pointTypes,
     );
+  renderPointLegend(
+    pointTypes,
+  );
   return true;
 }
 
@@ -352,14 +500,6 @@ function selectCity(city, { revealMap = false } = {}) {
 async function updateViewport(viewport) {
   activeRequest?.abort();
   activeRequest = null;
-
-  if (viewport.zoom < ROAD_DATA_MIN_ZOOM) {
-    focusedCityId = null;
-    mapController.clearViewportData();
-    setCityStatus('');
-    setMapMessage('');
-    return;
-  }
 
   const request = new AbortController();
   activeRequest = request;

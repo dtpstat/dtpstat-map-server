@@ -11,6 +11,10 @@ const LABEL_LAYER_PREFIX = 'bus-lanes-labels-';
 const POINT_LAYER_ID = 'project-point-geometries';
 const POINT_FALLBACK_LAYER_ID = 'project-point-geometries-fallback';
 const POINT_IMAGE_PREFIX = 'public-point-type';
+const POLYGON_FILL_LAYER_ID =
+  'project-polygon-geometries-fill';
+const POLYGON_LINE_LAYER_ID =
+  'project-polygon-geometries-line';
 const CITY_SOURCE_ID = 'ranked-cities';
 const CITY_LAYER_ID = 'ranked-cities-markers';
 const CITY_IMAGE_ID = 'ranked-city-bus';
@@ -28,6 +32,51 @@ const DEFAULT_LINE_TYPE = {
 };
 
 export const ROAD_DATA_MIN_ZOOM = 8;
+
+function localIsoDate() {
+  const now =
+    new Date();
+  const year =
+    now.getFullYear();
+  const month =
+    String(
+      now.getMonth() + 1,
+    ).padStart(2, '0');
+  const day =
+    String(
+      now.getDate(),
+    ).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function geometryFeatureActiveOnDate(
+  feature,
+  date,
+) {
+  if (!date) {
+    return true;
+  }
+
+  const validFrom =
+    feature?.properties
+      ?.validFrom ??
+    null;
+  const validTo =
+    feature?.properties
+      ?.validTo ??
+    null;
+
+  return !(
+    (
+      validFrom &&
+      validFrom > date
+    ) ||
+    (
+      validTo &&
+      validTo < date
+    )
+  );
+}
 
 function isApplicationLineLayer(layer) {
   return layer.id.startsWith(LAYER_PREFIX) || layer.id.startsWith(LABEL_LAYER_PREFIX);
@@ -196,6 +245,10 @@ export async function createMapController(config) {
   let showLineLabels = Boolean(config.showLineLabels);
   let showLinePopups = config.showLinePopups !== false;
   const disabledLineTypes = new Set();
+  const disabledPointTypes =
+    new Set();
+  let timelineDate =
+    localIsoDate();
   let lineLayerIds = new Map();
   let lineLabelLayerIds = new Map();
 
@@ -319,6 +372,60 @@ export async function createMapController(config) {
     };
   }
 
+  function rebuildCurrentGeoJson() {
+    const filtered = {
+      ...rawGeoJson,
+      features:
+        (
+          rawGeoJson.features ??
+          []
+        ).filter(
+          (feature) => {
+            if (
+              !geometryFeatureActiveOnDate(
+                feature,
+                timelineDate,
+              )
+            ) {
+              return false;
+            }
+
+            if (
+              feature?.geometry
+                ?.type ===
+                'Point' &&
+              disabledPointTypes.has(
+                Number(
+                  feature.properties
+                    ?.pointTypeId,
+                ),
+              )
+            ) {
+              return false;
+            }
+
+            return true;
+          },
+        ),
+    };
+
+    currentGeoJson =
+      decoratePointFeatures(
+        filtered,
+      );
+
+    return currentGeoJson;
+  }
+
+  function publishCurrentGeoJson() {
+    rebuildCurrentGeoJson();
+    map
+      .getSource(SOURCE_ID)
+      ?.setData(
+        currentGeoJson,
+      );
+  }
+
   function ensurePointLayers() {
     const labelLayerId =
       findTopLabelLayerId(
@@ -336,8 +443,7 @@ export async function createMapController(config) {
             POINT_FALLBACK_LAYER_ID,
           type: 'circle',
           source: SOURCE_ID,
-          minzoom:
-            ROAD_DATA_MIN_ZOOM,
+          minzoom: 0,
           filter: [
             'all',
             [
@@ -385,8 +491,7 @@ export async function createMapController(config) {
             POINT_LAYER_ID,
           type: 'symbol',
           source: SOURCE_ID,
-          minzoom:
-            ROAD_DATA_MIN_ZOOM,
+          minzoom: 0,
           filter: [
             'all',
             [
@@ -428,6 +533,83 @@ export async function createMapController(config) {
     }
   }
 
+  function ensurePolygonLayers() {
+    const labelLayerId =
+      findTopLabelLayerId(
+        map.getStyle().layers,
+      );
+
+    if (
+      !map.getLayer(
+        POLYGON_FILL_LAYER_ID,
+      )
+    ) {
+      map.addLayer(
+        {
+          id:
+            POLYGON_FILL_LAYER_ID,
+          type:
+            'fill',
+          source:
+            SOURCE_ID,
+          minzoom:
+            0,
+          filter: [
+            '==',
+            ['geometry-type'],
+            'Polygon',
+          ],
+          paint: {
+            'fill-color':
+              '#2f9d71',
+            'fill-opacity':
+              0.16,
+          },
+        },
+        labelLayerId,
+      );
+    }
+
+    if (
+      !map.getLayer(
+        POLYGON_LINE_LAYER_ID,
+      )
+    ) {
+      map.addLayer(
+        {
+          id:
+            POLYGON_LINE_LAYER_ID,
+          type:
+            'line',
+          source:
+            SOURCE_ID,
+          minzoom:
+            0,
+          filter: [
+            '==',
+            ['geometry-type'],
+            'Polygon',
+          ],
+          layout: {
+            'line-cap':
+              'round',
+            'line-join':
+              'round',
+          },
+          paint: {
+            'line-color':
+              '#167a64',
+            'line-width':
+              2,
+            'line-opacity':
+              0.9,
+          },
+        },
+        labelLayerId,
+      );
+    }
+  }
+
   async function syncMapPointTypes() {
     pointImageIds =
       await syncPointTypeImages(
@@ -445,10 +627,7 @@ export async function createMapController(config) {
         },
       );
 
-    currentGeoJson =
-      decoratePointFeatures(
-        rawGeoJson,
-      );
+    rebuildCurrentGeoJson();
 
     ensurePointLayers();
     map
@@ -487,7 +666,7 @@ export async function createMapController(config) {
           id: layerId,
           type: 'line',
           source: SOURCE_ID,
-          minzoom: ROAD_DATA_MIN_ZOOM,
+          minzoom: 0,
           filter: ['==', ['get', 'businessTypeCode'], lineType.code],
           layout: {
             'line-cap': 'round',
@@ -506,7 +685,7 @@ export async function createMapController(config) {
             id: labelId,
             type: 'symbol',
             source: SOURCE_ID,
-            minzoom: ROAD_DATA_MIN_ZOOM,
+            minzoom: 0,
             filter: [
               'all',
               ['==', ['get', 'businessTypeCode'], lineType.code],
@@ -537,6 +716,7 @@ export async function createMapController(config) {
   async function ensureMapLayers() {
     await ensureCityMarkerLayer();
     ensureBusLaneLayers();
+    ensurePolygonLayers();
     ensurePointLayers();
     await syncMapPointTypes();
   }
@@ -617,6 +797,34 @@ export async function createMapController(config) {
         ensureBusLaneLayers();
       }
     },
+    setPointTypeVisibility(
+      pointTypeId,
+      enabled,
+    ) {
+      const id =
+        Number(pointTypeId);
+      if (!Number.isSafeInteger(id)) {
+        return;
+      }
+
+      if (enabled) {
+        disabledPointTypes.delete(
+          id,
+        );
+      } else {
+        disabledPointTypes.add(
+          id,
+        );
+      }
+
+      publishCurrentGeoJson();
+    },
+    setTimelineDate(date) {
+      timelineDate =
+        date ||
+        null;
+      publishCurrentGeoJson();
+    },
     setLineTypeVisibility(code, enabled) {
       if (enabled) disabledLineTypes.delete(code);
       else disabledLineTypes.add(code);
@@ -640,11 +848,9 @@ export async function createMapController(config) {
     setViewportData(geojson) {
       lineNamePopup.remove();
       rawGeoJson = geojson;
-      currentGeoJson =
-        decoratePointFeatures(
-          geojson,
-        );
+      rebuildCurrentGeoJson();
       ensureBusLaneLayers();
+      ensurePolygonLayers();
       ensurePointLayers();
       map
         .getSource(SOURCE_ID)

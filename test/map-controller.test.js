@@ -4,6 +4,7 @@ import {
   citiesToMarkerGeoJson,
   createMapController,
   findTopLabelLayerId,
+  geometryFeatureActiveOnDate,
   lineFeatureName,
   ROAD_DATA_MIN_ZOOM,
 } from '../public/js/map-controller.js';
@@ -216,7 +217,23 @@ test('typed bus-lane layers stay below labels, show names on hover and can be to
       'addLayer', 'bus-lanes-lines-0', 'road-label',
     ]);
     assert.equal(map.getLayer('ranked-cities-markers').maxzoom, ROAD_DATA_MIN_ZOOM);
-    assert.equal(map.getLayer('bus-lanes-lines-0').minzoom, ROAD_DATA_MIN_ZOOM);
+    assert.equal(map.getLayer('bus-lanes-lines-0').minzoom, 0);
+    assert.equal(
+      map.getLayer(
+        'project-point-geometries',
+      ).minzoom,
+      0,
+    );
+    assert.ok(
+      map.getLayer(
+        'project-polygon-geometries-fill',
+      ),
+    );
+    assert.ok(
+      map.getLayer(
+        'project-polygon-geometries-line',
+      ),
+    );
 
     controller.setLineTypes([
       {
@@ -335,4 +352,50 @@ test('typed bus-lane layers stay below labels, show names on hover and can be to
     if (previousWindow === undefined) delete globalThis.window;
     else globalThis.window = previousWindow;
   }
+});
+
+
+test('geometry validity dates are inclusive and open-ended', () => {
+  const feature = {
+    properties: {
+      validFrom: '2020-01-01',
+      validTo: '2020-12-31',
+    },
+  };
+
+  assert.equal(
+    geometryFeatureActiveOnDate(
+      feature,
+      '2019-12-31',
+    ),
+    false,
+  );
+  assert.equal(
+    geometryFeatureActiveOnDate(
+      feature,
+      '2020-01-01',
+    ),
+    true,
+  );
+  assert.equal(
+    geometryFeatureActiveOnDate(
+      feature,
+      '2020-12-31',
+    ),
+    true,
+  );
+  assert.equal(
+    geometryFeatureActiveOnDate(
+      feature,
+      '2021-01-01',
+    ),
+    false,
+  );
+  assert.equal(
+    geometryFeatureActiveOnDate(
+      { properties: {} },
+      '2026-01-01',
+    ),
+    true,
+  );
 });

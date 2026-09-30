@@ -103,3 +103,46 @@ test('public map loads point types and renders only loaded versioned icons', asy
     /map\.removeImage/u,
   );
 });
+
+
+test('public map exposes independent POI type toggles and polygon layers', async () => {
+  const [
+    app,
+    controller,
+    styles,
+  ] =
+    await Promise.all([
+      read('public/js/app.js'),
+      read('public/js/map-controller.js'),
+      read('public/css/line-types.css'),
+    ]);
+
+  assert.match(
+    app,
+    /function renderPointLegend/u,
+  );
+  assert.match(
+    app,
+    /point-legend-item/u,
+  );
+  assert.match(
+    app,
+    /setPointTypeVisibility/u,
+  );
+  assert.match(
+    controller,
+    /setPointTypeVisibility/u,
+  );
+  assert.match(
+    controller,
+    /project-polygon-geometries-fill/u,
+  );
+  assert.match(
+    controller,
+    /project-polygon-geometries-line/u,
+  );
+  assert.match(
+    styles,
+    /\.point-legend/u,
+  );
+});
