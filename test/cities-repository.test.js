@@ -124,7 +124,7 @@ test('viewport query uses padded selector and returns public lines plus active t
   );
   assert.match(
     sql,
-    /GeometryType\(geometry\.geom\) = 'POINT'[\s\S]*point_type\.is_active/u,
+    /GeometryType\([\s\S]*geometry\.geom[\s\S]*\)[\s\S]*=[\s\S]*'POINT'[\s\S]*point_type\.is_active/u,
   );
   assert.match(
     sql,
