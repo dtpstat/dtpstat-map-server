@@ -707,3 +707,89 @@ test('geometry storage persists zoom and validity windows as typed parameters', 
     /UPDATE_GEOMETRY_DISPLAY_WINDOW_SQL[\s\S]*min_zoom = \$2::double precision[\s\S]*valid_to = \$5::date/u,
   );
 });
+
+
+test('geometry discussions are persistent, permission-protected and realtime after persistence', async () => {
+  const [
+    migration,
+    storage,
+    leaseStorage,
+    policy,
+    service,
+    runtime,
+    route,
+    contracts,
+  ] =
+    await Promise.all([
+      read('db/migrations/V058__geometry_discussions.sql'),
+      read('src/db/geometry-discussion-storage.js'),
+      read('src/db/geometry-edit-lease-storage.js'),
+      read('src/modules/geometry/editor-policy.js'),
+      read('src/modules/geometry/editor-service.js'),
+      read('src/application/geometry-editor-runtime.js'),
+      read('src/routes/geometry-editor-api.js'),
+      read('src/http/api-request-contract.js'),
+    ]);
+
+  assert.match(
+    migration,
+    /CREATE TABLE IF NOT EXISTS BUSLANES\.GEOMETRY_DISCUSSION_MESSAGES/u,
+  );
+  assert.match(
+    migration,
+    /GEOMETRY_ID[\s\S]*REFERENCES BUSLANES\.CITY_GEOMETRIES[\s\S]*ON DELETE CASCADE/u,
+  );
+  assert.match(
+    migration,
+    /AUTHOR_USER_ID[\s\S]*REFERENCES BUSLANES\.ADMIN_USERS[\s\S]*ON DELETE SET NULL/u,
+  );
+  assert.match(
+    migration,
+    /GEOMETRY_REVISION TIMESTAMPTZ/u,
+  );
+
+  assert.match(
+    storage,
+    /INSERT INTO geometry_discussion_messages[\s\S]*geometry\.updated_at[\s\S]*RETURNING id::integer AS id/u,
+  );
+  assert.match(
+    storage,
+    /ORDER BY message\.id DESC[\s\S]*LIMIT \$2::integer/u,
+  );
+  assert.match(
+    leaseStorage,
+    /user_account\.display_name AS "displayName"/u,
+  );
+  assert.match(
+    leaseStorage,
+    /avatar_data IS NOT NULL/u,
+  );
+  assert.match(
+    policy,
+    /normalizeGeometryDiscussionMessage/u,
+  );
+  assert.match(
+    service,
+    /async postDiscussionMessage\(/u,
+  );
+  assert.match(
+    service,
+    /async listDiscussion\(/u,
+  );
+  assert.match(
+    runtime,
+    /createGeometryDiscussionStorage/u,
+  );
+  assert.match(
+    route,
+    /\/geometries\/:geometryId\/discussion/u,
+  );
+  assert.match(
+    route,
+    /resource:\s*'geometry-discussions'[\s\S]*discussionMessage/u,
+  );
+  assert.match(
+    contracts,
+    /'\/admin\/geometry-editor\/geometries\/:geometryId\/discussion'[\s\S]*bodyKeys:[\s\S]*'message'/u,
+  );
+});
