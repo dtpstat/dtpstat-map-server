@@ -1114,7 +1114,7 @@ test('geometry editor marks leases and exposes coherent map editing modes', asyn
   );
   assert.match(
     editor,
-    /geometry-editor-draw-fill[\s\S]*filter: \['==', \['geometry-type'\], 'Polygon'\]/u,
+    /geometry-editor-draw-fill[\s\S]*\['!=', \['get', 'mode'\], 'cut'\]/u,
   );
   assert.match(editor, /Добавление точки · кликните по карте/u);
   assert.match(editor, /Добавление линии · точек:/u);
@@ -1146,6 +1146,31 @@ test('saving locally leaves the lease but exits active edit and can resume it', 
   assert.match(
     editor,
     /leasedByThisClient[\s\S]*Локально сохранено · блокировка остаётся за вами/u,
+  );
+});
+
+
+test('cut polygon uses the same blade styling as line split and has no geometry fill', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /geometry-editor-cut-blade[\s\S]*\['==', \['get', 'mode'\], 'cut'\][\s\S]*'line-color': '#ff5d67'[\s\S]*'line-width': 3[\s\S]*'line-dasharray': \[1\.5, 1\]/u,
+  );
+  assert.match(
+    editor,
+    /geometry-editor-cut-point[\s\S]*'circle-color': '#ff5d67'/u,
+  );
+  assert.match(
+    editor,
+    /geometry-editor-draw-line[\s\S]*\['literal', \['split', 'cut'\]\]/u,
+  );
+  assert.match(
+    editor,
+    /geometry-editor-draw-fill[\s\S]*\['!=', \['get', 'mode'\], 'cut'\]/u,
   );
 });
 

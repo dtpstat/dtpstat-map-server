@@ -1299,9 +1299,12 @@ if (section) {
             ['literal', ['LineString', 'Polygon']],
           ],
           [
-            '!=',
-            ['get', 'mode'],
-            'split',
+            '!',
+            [
+              'in',
+              ['get', 'mode'],
+              ['literal', ['split', 'cut']],
+            ],
           ],
         ],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
@@ -1344,10 +1347,54 @@ if (section) {
         },
       });
       addLayerSafe(map, {
+        id: 'geometry-editor-cut-blade',
+        type: 'line',
+        source: DRAW_SOURCE,
+        filter: [
+          'all',
+          [
+            'in',
+            ['geometry-type'],
+            ['literal', ['LineString', 'Polygon']],
+          ],
+          ['==', ['get', 'mode'], 'cut'],
+        ],
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': '#ff5d67',
+          'line-width': 3,
+          'line-opacity': 0.95,
+          'line-dasharray': [1.5, 1],
+        },
+      });
+      addLayerSafe(map, {
+        id: 'geometry-editor-cut-point',
+        type: 'circle',
+        source: DRAW_SOURCE,
+        filter: [
+          'all',
+          ['==', ['geometry-type'], 'Point'],
+          ['==', ['get', 'mode'], 'cut'],
+        ],
+        paint: {
+          'circle-radius': 5,
+          'circle-color': '#ff5d67',
+          'circle-stroke-color': '#fff',
+          'circle-stroke-width': 1.5,
+        },
+      });
+      addLayerSafe(map, {
         id: 'geometry-editor-draw-fill',
         type: 'fill',
         source: DRAW_SOURCE,
-        filter: ['==', ['geometry-type'], 'Polygon'],
+        filter: [
+          'all',
+          ['==', ['geometry-type'], 'Polygon'],
+          ['!=', ['get', 'mode'], 'cut'],
+        ],
         paint: { 'fill-color': '#f3b74e', 'fill-opacity': 0.18 },
       });
       addLayerSafe(map, {
