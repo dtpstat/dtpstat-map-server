@@ -1701,42 +1701,97 @@ async function verifyGeometryEditorInfrastructure(
       ),
   );
 
-  const splitLeaseReleased =
-    await service.releaseEdit(
-      geometry.id,
-      takeover.lease.token,
-      {
-        id:
-          editUserId,
-        username:
-          'geometry-integration',
-        isSuperuser:
-          true,
-      },
+  const unionCountBeforePreview =
+    await pool.query(
+      'SELECT COUNT(*)::integer AS count FROM city_geometries',
     );
 
+  const unionPreview =
+    await service.previewUnion({
+      geometries:
+        splitResult
+          .geometries
+          .map(
+            (item) =>
+              item.geometry,
+          ),
+    });
+
   assert.equal(
-    splitLeaseReleased,
-    true,
-    'Split source edit lease must be released before merge acquires both parts',
+    unionPreview.type,
+    'LineString',
+    'Union of contiguous split parts must normalize to LineString',
   );
 
-  const mergedSplitLine =
-    await service.merge(
+  const unionCountAfterPreview =
+    await pool.query(
+      'SELECT COUNT(*)::integer AS count FROM city_geometries',
+    );
+
+  assert.equal(
+    unionCountAfterPreview
+      .rows[0]
+      .count,
+    unionCountBeforePreview
+      .rows[0]
+      .count,
+    'Union preview mutated persisted rows',
+  );
+
+  const companion =
+    splitResult
+      .geometries[1];
+  const companionLease =
+    await service.beginEdit(
+      companion.id,
       {
-        items:
-          splitResult
-            .geometries
-            .map(
-              (item) => ({
-                id:
-                  item.id,
-                baseUpdatedAt:
-                  new Date(
-                    item.updatedAt,
-                  ).toISOString(),
-              }),
-            ),
+        id:
+          editUserId,
+        username:
+          'geometry-integration',
+        isSuperuser:
+          true,
+      },
+      'integration-union-companion',
+    );
+
+  const unionSync =
+    await service.sync(
+      {
+        items: [
+          {
+            kind:
+              'update',
+            id:
+              splitResult
+                .geometries[0]
+                .id,
+            baseUpdatedAt:
+              new Date(
+                splitResult
+                  .geometries[0]
+                  .updatedAt,
+              ).toISOString(),
+            editToken:
+              takeover.lease.token,
+            changes: {
+              geometry:
+                unionPreview,
+            },
+          },
+          {
+            kind:
+              'delete',
+            id:
+              companion.id,
+            baseUpdatedAt:
+              new Date(
+                companion.updatedAt,
+              ).toISOString(),
+            editToken:
+              companionLease.token,
+          },
+        ],
       },
       {
         id:
@@ -1746,23 +1801,19 @@ async function verifyGeometryEditorInfrastructure(
         isSuperuser:
           true,
       },
-      'integration-split-merge-client',
     );
 
   assert.equal(
-    mergedSplitLine
-      .geometry
+    unionSync.updated[0]
       .geometry
       .type,
     'LineString',
-    'Merging the two contiguous parts of one split line must restore a LineString',
+    'Persisted union result must remain LineString',
   );
   assert.equal(
-    mergedSplitLine
-      .geometry
-      .geometryType,
-    'LINESTRING',
-    'Persisted merged split line must not remain a MultiLineString',
+    unionSync.deleted.length,
+    1,
+    'Union sync must delete exactly one absorbed server geometry',
   );
 
   const mergedLinePointNormalization =
@@ -1782,8 +1833,8 @@ async function verifyGeometryEditorInfrastructure(
         WHERE id = $1::bigint
       `,
       [
-        mergedSplitLine
-          .geometry
+        splitResult
+          .geometries[0]
           .id,
       ],
     );
@@ -1795,25 +1846,40 @@ async function verifyGeometryEditorInfrastructure(
     mergedLinePointNormalization
       .rows[0]
       .normalizedPointCount,
-    'Merged line must not retain consecutive duplicate points',
+    'Unioned line must not retain consecutive duplicate points',
   );
 
-  const countAfterSplitMerge =
+  const countAfterUnionSync =
     await pool.query(
       'SELECT COUNT(*)::integer AS count FROM city_geometries',
     );
 
   assert.equal(
-    countAfterSplitMerge
+    countAfterUnionSync
       .rows[0]
       .count,
     countBeforeSplitPreview
       .rows[0]
       .count,
-    'Merging the split parts must remove the companion geometry',
+    'Union sync must remove the companion split geometry',
   );
 
-  const unlinked =
+  await service.releaseEdit(
+    splitResult
+      .geometries[0]
+      .id,
+    takeover.lease.token,
+    {
+      id:
+        editUserId,
+      username:
+        'geometry-integration',
+      isSuperuser:
+        true,
+    },
+  );
+
+  const unlinked =  const unlinked =
     await service.sync(
       {
         items: [{

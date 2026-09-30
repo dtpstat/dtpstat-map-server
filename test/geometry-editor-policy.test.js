@@ -5,7 +5,6 @@ import {
   geometryFamily,
   normalizeGeometryBulkUpdates,
   normalizeGeometryCreatePayload,
-  normalizeGeometryMergeRequest,
   normalizeGeometrySyncRequest,
   normalizeGeometryTags,
   validateEditorGeometry,
@@ -13,6 +12,7 @@ import {
 import {
   normalizeGeometryCutPreviewRequest,
   normalizeGeometrySplitPreviewRequest,
+  normalizeGeometryUnionPreviewRequest,
 } from '../src/modules/geometry/topology-policy.js';
 
 test('geometry editor accepts supported geometry families', () => {
@@ -281,59 +281,6 @@ test('geometry bulk updates require unique ids revisions and non-empty changes',
 });
 
 
-test('geometry merge request requires distinct optimistic revisions', () => {
-  const items =
-    normalizeGeometryMergeRequest({
-      items: [
-        {
-          id: 9,
-          baseUpdatedAt:
-            '2026-09-25T12:00:00Z',
-        },
-        {
-          id: 4,
-          baseUpdatedAt:
-            '2026-09-25T12:05:00Z',
-        },
-      ],
-    });
-
-  assert.deepEqual(
-    items,
-    [
-      {
-        id: 9,
-        baseUpdatedAt:
-          '2026-09-25T12:00:00.000Z',
-      },
-      {
-        id: 4,
-        baseUpdatedAt:
-          '2026-09-25T12:05:00.000Z',
-      },
-    ],
-  );
-
-  assert.throws(
-    () =>
-      normalizeGeometryMergeRequest({
-        items: [
-          {
-            id: 9,
-            baseUpdatedAt:
-              '2026-09-25T12:00:00Z',
-          },
-          {
-            id: 9,
-            baseUpdatedAt:
-              '2026-09-25T12:05:00Z',
-          },
-        ],
-      }),
-    /Duplicate geometry id in merge/u,
-  );
-});
-
 test('geometry sync create can clone immutable metadata only from an explicit source id', () => {
   const request =
     normalizeGeometrySyncRequest({
@@ -396,7 +343,89 @@ test('geometry sync create can clone immutable metadata only from an explicit so
 });
 
 
+test('geometry sync accepts optimistic delete operations', () => {
+  assert.deepEqual(
+    normalizeGeometrySyncRequest({
+      items: [{
+        kind:
+          'delete',
+        id:
+          17,
+        baseUpdatedAt:
+          '2026-09-25T12:00:00Z',
+        editToken:
+          '0123456789abcdef',
+      }],
+    }),
+    [{
+      kind:
+        'delete',
+      id:
+        17,
+      baseUpdatedAt:
+        '2026-09-25T12:00:00.000Z',
+      editToken:
+        '0123456789abcdef',
+    }],
+  );
+});
+
+
 test('geometry topology preview requests validate complete local GeoJSON inputs', () => {
+  const sourceLine = {
+    type:
+      'LineString',
+    coordinates: [
+      [30, 60],
+      [31, 61],
+    ],
+  };
+  const secondLine = {
+    type:
+      'LineString',
+    coordinates: [
+      [31, 61],
+      [32, 62],
+    ],
+  };
+
+  assert.deepEqual(
+    normalizeGeometryUnionPreviewRequest({
+      geometries: [
+        sourceLine,
+        secondLine,
+      ],
+    }),
+    {
+      geometries: [
+        sourceLine,
+        secondLine,
+      ],
+      family:
+        'line',
+    },
+  );
+
+  assert.throws(
+    () =>
+      normalizeGeometryUnionPreviewRequest({
+        geometries: [
+          sourceLine,
+          {
+            type:
+              'Polygon',
+            coordinates: [[
+              [30, 60],
+              [31, 60],
+              [31, 61],
+              [30, 60],
+            ]],
+          },
+        ],
+      }),
+    /same family/u,
+  );
+
   const sourcePolygon = {
     type: 'Polygon',
     coordinates: [[

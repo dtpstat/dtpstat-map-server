@@ -91,7 +91,7 @@ test('geometry editor backend follows current policy storage service runtime rou
   );
   assert.match(
     route,
-    /'\/admin\/geometry-editor\/merge'/u,
+    /'\/admin\/geometry-editor\/topology\/union-preview'/u,
   );
   assert.match(
     route,
@@ -111,11 +111,11 @@ test('geometry editor backend follows current policy storage service runtime rou
   );
   assert.match(
     storage,
-    /WHEN \$3::text = 'line'[\s\S]*ST_RemoveRepeatedPoints\([\s\S]*ST_LineMerge\([\s\S]*ST_UnaryUnion[\s\S]*0\.0/u,
+    /WHEN \$2::text = 'line'[\s\S]*ST_RemoveRepeatedPoints\([\s\S]*ST_LineMerge\([\s\S]*ST_UnaryUnion[\s\S]*0\.0/u,
   );
   assert.doesNotMatch(
     storage,
-    /WHEN \$3::text = 'line' THEN[\s\S]{0,80}ST_Multi/u,
+    /WHEN \$2::text = 'line' THEN[\s\S]{0,80}ST_Multi/u,
   );
   assert.match(
     storage,
@@ -421,11 +421,11 @@ test('geometry editor backend exposes atomic create-update sync and edit leases'
   );
   assert.match(
     route,
-    /\.merge\([\s\S]*request\.adminUser[\s\S]*realtimeClientId/u,
+    /\.previewUnion\([\s\S]*request\.body/u,
   );
   assert.match(
     service,
-    /async merge\([\s\S]*leaseStorage[\s\S]*\.acquire[\s\S]*mergeLeaseTokens[\s\S]*\.release/u,
+    /async previewUnion\([\s\S]*storage\.previewUnion/u,
   );
   assert.match(
     service,
@@ -437,7 +437,7 @@ test('geometry editor backend exposes atomic create-update sync and edit leases'
   );
   assert.doesNotMatch(
     service,
-    /async (?:cut|split)\(/u,
+    /async (?:merge|cut|split)\(/u,
   );
   assert.match(
     service,
@@ -511,11 +511,19 @@ test('geometry topology preview stays PostGIS-backed and mutation-free', async (
 
   assert.match(
     policy,
+    /normalizeGeometryUnionPreviewRequest/u,
+  );
+  assert.match(
+    policy,
     /normalizeGeometryCutPreviewRequest/u,
   );
   assert.match(
     policy,
     /normalizeGeometrySplitPreviewRequest/u,
+  );
+  assert.match(
+    service,
+    /async previewUnion\(/u,
   );
   assert.match(
     service,
@@ -527,11 +535,19 @@ test('geometry topology preview stays PostGIS-backed and mutation-free', async (
   );
   assert.match(
     storage,
+    /UNION_GEOMETRY_PREVIEW_SQL[\s\S]*ST_UnaryUnion/u,
+  );
+  assert.match(
+    storage,
     /CUT_GEOMETRY_PREVIEW_SQL[\s\S]*ST_Difference/u,
   );
   assert.match(
     storage,
     /SPLIT_GEOMETRY_PREVIEW_SQL[\s\S]*ST_Split/u,
+  );
+  assert.match(
+    route,
+    /\/topology\/union-preview/u,
   );
   assert.match(
     route,
@@ -543,10 +559,51 @@ test('geometry topology preview stays PostGIS-backed and mutation-free', async (
   );
   assert.match(
     contracts,
+    /geometries/u,
+  );
+  assert.match(
+    contracts,
     /sourceGeometry[\s\S]*cutterGeometry/u,
   );
   assert.match(
     contracts,
     /sourceGeometry[\s\S]*blade/u,
+  );
+});
+
+
+test('geometry sync owns deletion persistence while topology transforms stay pure', async () => {
+  const [
+    policy,
+    service,
+    storage,
+  ] =
+    await Promise.all([
+      read(
+        'src/modules/geometry/editor-policy.js',
+      ),
+      read(
+        'src/modules/geometry/editor-service.js',
+      ),
+      read(
+        'src/db/geometry-editor-storage.js',
+      ),
+    ]);
+
+  assert.match(
+    policy,
+    /entry\.kind ===[\s\S]*'delete'[\s\S]*baseUpdatedAt[\s\S]*editToken/u,
+  );
+  assert.match(
+    service,
+    /const deletes =[\s\S]*item\.kind ===[\s\S]*'delete'/u,
+  );
+  assert.match(
+    service,
+    /const item of deletes[\s\S]*deleteGeometry/u,
+  );
+  assert.doesNotMatch(
+    storage,
+    /MERGE_GEOMETRIES_SQL/u,
   );
 });

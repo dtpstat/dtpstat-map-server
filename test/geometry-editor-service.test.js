@@ -321,7 +321,7 @@ function operationFixture(
   leaseOverrides = {},
 ) {
   const queries = [];
-  const merges = [];
+  const unions = [];
   const cuts = [];
   const splits = [];
   const current =
@@ -380,44 +380,23 @@ function operationFixture(
             ),
         );
     },
-    async mergeGeometries(
+    async previewUnion(
       _client,
-      ids,
+      geometries,
       family,
-      preserveSourceTags,
     ) {
-      merges.push({
-        ids:
-          [...ids],
+      unions.push({
+        geometries:
+          structuredClone(
+            geometries,
+          ),
         family,
-        preserveSourceTags,
+        preview:
+          true,
       });
 
-      const merged = {
-        ...structuredClone(
-          rows.find(
-            (item) =>
-              item.id ===
-              ids[0],
-          ),
-        ),
-        updatedAt:
-          '2026-09-25T13:00:00.000Z',
-      };
-      current.set(
-        ids[0],
-        merged,
-      );
-      for (
-        const sourceId of
-        ids.slice(1)
-      ) {
-        current.delete(
-          sourceId,
-        );
-      }
       return structuredClone(
-        merged,
+        geometries[0],
       );
     },
     async previewCut(
@@ -488,263 +467,17 @@ function operationFixture(
         ),
       ),
     queries,
-    merges,
+    unions,
     cuts,
     splits,
   };
 }
 
-test('geometry merge validates every source revision before one transactional merge', async () => {
-  const first = {
-    ...geometry(
-      2,
-      '2026-09-25T12:00:00.000Z',
-    ),
-    sourceTags: {
-      source: 'same',
-    },
-  };
-  const second = {
-    ...geometry(
-      5,
-      '2026-09-25T12:05:00.000Z',
-    ),
-    sourceTags: {
-      source: 'same',
-    },
-  };
-
-  const {
-    service,
-    queries,
-    merges,
-  } =
-    operationFixture([
-      first,
-      second,
-    ]);
-
-  const result =
-    await service.merge({
-      items: [
-        {
-          id: 5,
-          baseUpdatedAt:
-            second.updatedAt,
-        },
-        {
-          id: 2,
-          baseUpdatedAt:
-            first.updatedAt,
-        },
-      ],
-    }, {
-      id: 77,
-    }, 'test-client');
-
-  assert.deepEqual(
-    result
-      .sourceGeometryIds,
-    [5, 2],
-  );
-  assert.equal(
-    result.geometry.id,
-    5,
-  );
-  assert.deepEqual(
-    merges,
-    [{
-      ids: [5, 2],
-      family: 'line',
-      preserveSourceTags:
-        true,
-    }],
-  );
-  assert.ok(
-    queries.includes(
-      'COMMIT',
-    ),
-  );
-});
-
-test('geometry merge conflict rolls back before spatial merge', async () => {
-  const current =
-    geometry(
-      2,
-      '2026-09-25T12:10:00.000Z',
-    );
-  const second =
-    geometry(
-      5,
-      '2026-09-25T12:05:00.000Z',
-    );
-
-  const {
-    service,
-    queries,
-    merges,
-  } =
-    operationFixture([
-      current,
-      second,
-    ]);
-
-  await assert.rejects(
-    service.merge({
-      items: [
-        {
-          id: 2,
-          baseUpdatedAt:
-            '2026-09-25T12:00:00.000Z',
-        },
-        {
-          id: 5,
-          baseUpdatedAt:
-            second.updatedAt,
-        },
-      ],
-    }, {
-      id: 77,
-    }, 'test-client'),
-    (error) => {
-      assert.equal(
-        error.statusCode,
-        409,
-      );
-      assert.equal(
-        error.details
-          .conflicts[0]
-          .id,
-        2,
-      );
-      return true;
-    },
-  );
-
-  assert.equal(
-    merges.length,
-    0,
-  );
-  assert.ok(
-    queries.includes(
-      'ROLLBACK',
-    ),
-  );
-});
-
-test('geometry merge rolls back when any source has an active edit lease', async () => {
-  const first =
-    geometry(
-      2,
-      '2026-09-25T12:00:00.000Z',
-    );
-  const second =
-    geometry(
-      5,
-      '2026-09-25T12:05:00.000Z',
-    );
-
-  const blocked =
-    operationFixture(
-      [
-        first,
-        second,
-      ],
-      {
-        async acquire(
-          _client,
-          {
-            geometryId,
-            token,
-            userId,
-            clientId,
-          },
-        ) {
-          return {
-            geometryId,
-            token:
-              geometryId === 5
-                ? 'foreign-edit-token'
-                : token,
-            userId,
-            username:
-              geometryId === 5
-                ? 'other-editor'
-                : 'tester',
-            clientId:
-              geometryId === 5
-                ? 'other-client'
-                : clientId,
-            generation: 1,
-            acquiredAt:
-              '2026-09-25T12:00:00.000Z',
-            lastSeenAt:
-              '2026-09-25T12:00:00.000Z',
-            expiresAt:
-              '2026-09-25T12:01:30.000Z',
-          };
-        },
-      },
-    );
-
-  await assert.rejects(
-    blocked.service.merge(
-      {
-        items: [
-          {
-            id: 2,
-            baseUpdatedAt:
-              first.updatedAt,
-          },
-          {
-            id: 5,
-            baseUpdatedAt:
-              second.updatedAt,
-          },
-        ],
-      },
-      {
-        id: 77,
-      },
-      'test-client',
-    ),
-    (error) => {
-      assert.equal(
-        error.statusCode,
-        409,
-      );
-      assert.equal(
-        error.details
-          .conflicts[0]
-          .id,
-        5,
-      );
-      assert.equal(
-        error.details
-          .conflicts[0]
-          .reason,
-        'edit-lock',
-      );
-      return true;
-    },
-  );
-
-  assert.equal(
-    blocked.merges.length,
-    0,
-  );
-  assert.ok(
-    blocked.queries.includes(
-      'ROLLBACK',
-    ),
-  );
-});
-
-
 test('geometry topology previews are pure calculations without edit leases or persistence', async () => {
   const {
     service,
     queries,
+    unions,
     cuts,
     splits,
   } =
@@ -793,6 +526,39 @@ test('geometry topology previews are pure calculations without edit leases or pe
       [32, 62],
     ],
   };
+  const secondLine = {
+    type: 'LineString',
+    coordinates: [
+      [32, 62],
+      [33, 63],
+    ],
+  };
+
+  const union =
+    await service.previewUnion({
+      geometries: [
+        sourceLine,
+        secondLine,
+      ],
+    });
+
+  assert.equal(
+    union.type,
+    'LineString',
+  );
+  assert.deepEqual(
+    unions[0],
+    {
+      geometries: [
+        sourceLine,
+        secondLine,
+      ],
+      family:
+        'line',
+      preview:
+        true,
+    },
+  );
   const blade = {
     type: 'LineString',
     coordinates: [

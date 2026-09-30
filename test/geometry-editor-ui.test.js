@@ -141,7 +141,7 @@ test('geometry editor uses local drafts optimistic revisions atomic bulk save an
   );
   assert.match(
     editor,
-    /'\/api\/admin\/geometry-editor\/merge'/u,
+    /'\/api\/admin\/geometry-editor\/topology\/union-preview'/u,
   );
   assert.match(
     editor,
@@ -234,7 +234,7 @@ test('geometry editor keeps direct vertex editing and progressive loading', asyn
 });
 
 
-test('geometry merge and cut stay revision-safe around local drafts', async () => {
+test('geometry union and cut operate on effective local geometry while persistence stays in sync', async () => {
   const [
     editor,
     html,
@@ -252,45 +252,51 @@ test('geometry merge and cut stay revision-safe around local drafts', async () =
   );
   assert.match(
     html,
-    /id="geometry-merge-selected"[^>]*hidden/u,
-  );
-  assert.match(
-    html,
     /id="geometry-cut-area"/u,
   );
-
   assert.match(
     editor,
-    /check\.disabled = Boolean\([\s\S]*state\.importSession[\s\S]*item\._draft[\s\S]*item\._conflict[\s\S]*\);/u,
+    /check\.disabled = Boolean\([\s\S]*state\.importSession[\s\S]*item\._conflict[\s\S]*\);/u,
+  );
+  assert.doesNotMatch(
+    editor,
+    /check\.disabled = Boolean\([\s\S]{0,180}item\._local/u,
   );
   assert.match(
     editor,
-    /function mergeProblem\(items\)/u,
+    /topology\/union-preview/u,
   );
   assert.match(
     editor,
-    /Сначала сохраните или сбросьте локальные черновики выбранных геометрий/u,
+    /geometries:[\s\S]*items\.map[\s\S]*item\.geometry/u,
   );
   assert.match(
     editor,
-    /sourceGeometryIds/u,
+    /kind:[\s\S]*'delete'[\s\S]*topologyKind:[\s\S]*'union'/u,
   );
   assert.match(
     editor,
-    /topologyTargetReady\(\[[\s\S]*'polygon'[\s\S]*\]\)/u,
+    /topologyOriginalEntries/u,
   );
   assert.match(
     editor,
-    /const local = captureCurrentDraft\(\)/u,
+    /originalEntries\.length[\s\S]*drafts\.upsert/u,
   );
-
+  assert.match(
+    editor,
+    /entry\.kind === 'delete'[\s\S]*baseUpdatedAt[\s\S]*editToken/u,
+  );
+  assert.match(
+    editor,
+    /cutter\.family !== 'polygon'[\s\S]*!cutter\.geometry[\s\S]*cutter\._conflict/u,
+  );
+  assert.doesNotMatch(
+    editor,
+    /cutter\._draft|!cutter\.updatedAt/u,
+  );
   assert.match(
     styles,
     /\.geometry-editor-row-select/u,
-  );
-  assert.match(
-    styles,
-    /\.geometry-editor-row-main/u,
   );
 });
 
@@ -1465,5 +1471,30 @@ test('geometry drawing can finish naturally with a map double click', async () =
   assert.match(
     editor,
     /двойной клик — вырезать/u,
+  );
+});
+
+
+test('union preview never persists directly and supports local plus server drafts', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /items\.find\([\s\S]*!isLocalGeometryId/u,
+  );
+  assert.match(
+    editor,
+    /isLocalGeometryId\([\s\S]*drafts\.remove/u,
+  );
+  assert.match(
+    editor,
+    /Геометрии объединены только локально/u,
+  );
+  assert.doesNotMatch(
+    editor,
+    /\/api\/admin\/geometry-editor\/merge/u,
   );
 });
