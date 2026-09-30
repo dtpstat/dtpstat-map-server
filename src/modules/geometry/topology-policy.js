@@ -203,3 +203,142 @@ export function normalizeGeometrySplitRequest(
 
   return blade;
 }
+
+
+export function normalizeGeometryCutPreviewRequest(
+  payload,
+) {
+  const source =
+    requestObject(
+      payload,
+      'Request body',
+    );
+
+  unsupportedFields(
+    source,
+    [
+      'sourceGeometry',
+      'cutterGeometry',
+    ],
+    'Cut preview request',
+  );
+
+  if (
+    !Object.hasOwn(
+      source,
+      'sourceGeometry',
+    ) ||
+    !Object.hasOwn(
+      source,
+      'cutterGeometry',
+    )
+  ) {
+    throw new GeometryEditorValidationError(
+      'Cut preview requires sourceGeometry and cutterGeometry',
+    );
+  }
+
+  const sourceGeometry =
+    validateEditorGeometry(
+      source.sourceGeometry,
+    );
+  const cutterGeometry =
+    validateEditorGeometry(
+      source.cutterGeometry,
+    );
+
+  if (
+    geometryFamily(
+      sourceGeometry,
+    ) !==
+    'polygon'
+  ) {
+    throw new GeometryEditorValidationError(
+      'Cut preview source must be Polygon or MultiPolygon',
+    );
+  }
+
+  if (
+    geometryFamily(
+      cutterGeometry,
+    ) !==
+    'polygon'
+  ) {
+    throw new GeometryEditorValidationError(
+      'Cut preview cutter must be Polygon or MultiPolygon',
+    );
+  }
+
+  return {
+    sourceGeometry,
+    cutterGeometry,
+  };
+}
+
+export function normalizeGeometrySplitPreviewRequest(
+  payload,
+) {
+  const source =
+    requestObject(
+      payload,
+      'Request body',
+    );
+
+  unsupportedFields(
+    source,
+    [
+      'sourceGeometry',
+      'blade',
+    ],
+    'Split preview request',
+  );
+
+  if (
+    !Object.hasOwn(
+      source,
+      'sourceGeometry',
+    ) ||
+    !Object.hasOwn(
+      source,
+      'blade',
+    )
+  ) {
+    throw new GeometryEditorValidationError(
+      'Split preview requires sourceGeometry and blade',
+    );
+  }
+
+  const sourceGeometry =
+    validateEditorGeometry(
+      source.sourceGeometry,
+    );
+  const family =
+    geometryFamily(
+      sourceGeometry,
+    );
+
+  if (
+    ![
+      'line',
+      'polygon',
+    ].includes(
+      family,
+    )
+  ) {
+    throw new GeometryEditorValidationError(
+      'Split preview source must be a line or polygon geometry',
+    );
+  }
+
+  const blade =
+    normalizeGeometrySplitRequest({
+      blade:
+        source.blade,
+    });
+
+  return {
+    sourceGeometry,
+    blade,
+    family,
+  };
+}

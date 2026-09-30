@@ -418,6 +418,75 @@ test('geometry editor backend exposes atomic create-update sync and edit leases'
 });
 
 
+test('geometry topology preview stays PostGIS-backed and mutation-free', async () => {
+  const [
+    policy,
+    service,
+    storage,
+    route,
+    contracts,
+  ] =
+    await Promise.all([
+      read(
+        'src/modules/geometry/topology-policy.js',
+      ),
+      read(
+        'src/modules/geometry/editor-service.js',
+      ),
+      read(
+        'src/db/geometry-editor-storage.js',
+      ),
+      read(
+        'src/routes/geometry-editor-api.js',
+      ),
+      read(
+        'src/http/api-request-contract.js',
+      ),
+    ]);
+
+  assert.match(
+    policy,
+    /normalizeGeometryCutPreviewRequest/u,
+  );
+  assert.match(
+    policy,
+    /normalizeGeometrySplitPreviewRequest/u,
+  );
+  assert.match(
+    service,
+    /async previewCut\(/u,
+  );
+  assert.match(
+    service,
+    /async previewSplit\(/u,
+  );
+  assert.match(
+    storage,
+    /CUT_GEOMETRY_PREVIEW_SQL[\s\S]*ST_Difference/u,
+  );
+  assert.match(
+    storage,
+    /SPLIT_GEOMETRY_PREVIEW_SQL[\s\S]*ST_Split/u,
+  );
+  assert.match(
+    route,
+    /\/topology\/cut-preview/u,
+  );
+  assert.match(
+    route,
+    /\/topology\/split-preview/u,
+  );
+  assert.match(
+    contracts,
+    /sourceGeometry[\s\S]*cutterGeometry/u,
+  );
+  assert.match(
+    contracts,
+    /sourceGeometry[\s\S]*blade/u,
+  );
+});
+
+
 test('geometry topology operations stay domain validated revision safe and transactional', async () => {
   const [
     policy,

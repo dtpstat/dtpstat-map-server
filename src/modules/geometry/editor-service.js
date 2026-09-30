@@ -14,7 +14,9 @@ import {
   validateGeometryLineState,
 } from './editor-policy.js';
 import {
+  normalizeGeometryCutPreviewRequest,
   normalizeGeometryCutRequest,
+  normalizeGeometrySplitPreviewRequest,
   normalizeGeometrySplitRequest,
 } from './topology-policy.js';
 
@@ -406,6 +408,40 @@ export function createGeometryEditorService(
           error.message,
           409,
         );
+      }
+
+      if (
+        databaseGeometryError(
+          error,
+        )
+      ) {
+        throw new GeometryEditorValidationError(
+          `Invalid geometry: ${error.message}`,
+        );
+      }
+
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async function preview(
+    operation,
+  ) {
+    const client =
+      await pool.connect();
+
+    try {
+      return await operation(
+        client,
+      );
+    } catch (error) {
+      if (
+        error instanceof
+        GeometryEditorValidationError
+      ) {
+        throw error;
       }
 
       if (
@@ -1427,6 +1463,73 @@ export function createGeometryEditorService(
             );
         },
       );
+    },
+
+    async previewCut(
+      payload,
+    ) {
+      const {
+        sourceGeometry,
+        cutterGeometry,
+      } =
+        normalizeGeometryCutPreviewRequest(
+          payload,
+        );
+
+      const geometry =
+        await preview(
+          (client) =>
+            storage.previewCut(
+              client,
+              sourceGeometry,
+              cutterGeometry,
+            ),
+        );
+
+      if (!geometry) {
+        throw new GeometryEditorValidationError(
+          'Cut must overlap only part of the polygon and produce a valid non-empty result',
+        );
+      }
+
+      return geometry;
+    },
+
+    async previewSplit(
+      payload,
+    ) {
+      const {
+        sourceGeometry,
+        blade,
+        family,
+      } =
+        normalizeGeometrySplitPreviewRequest(
+          payload,
+        );
+
+      const geometries =
+        await preview(
+          (client) =>
+            storage.previewSplit(
+              client,
+              sourceGeometry,
+              blade,
+              family,
+            ),
+        );
+
+      if (
+        !Array.isArray(
+          geometries,
+        ) ||
+        geometries.length !== 2
+      ) {
+        throw new GeometryEditorValidationError(
+          'Split blade must divide the geometry into exactly two valid parts',
+        );
+      }
+
+      return geometries;
     },
 
     async split(

@@ -630,6 +630,137 @@ const SPLIT_GEOMETRY_SQL = `
   )
 `;
 
+
+const CUT_GEOMETRY_PREVIEW_SQL = `
+  WITH source AS (
+    SELECT
+      ST_SetSRID(
+        ST_GeomFromGeoJSON(
+          $1::text
+        ),
+        4326
+      ) AS geom
+  ),
+  cutter AS (
+    SELECT
+      ST_SetSRID(
+        ST_GeomFromGeoJSON(
+          $2::text
+        ),
+        4326
+      ) AS geom
+  ),
+  difference AS (
+    SELECT
+      ST_Multi(
+        ST_CollectionExtract(
+          ST_MakeValid(
+            ST_Difference(
+              source.geom,
+              cutter.geom
+            )
+          ),
+          3
+        )
+      ) AS geom,
+      source.geom AS source_geom
+    FROM source
+    CROSS JOIN cutter
+  )
+  SELECT
+    ST_AsGeoJSON(
+      difference.geom
+    )::json AS geometry
+  FROM difference
+  WHERE NOT ST_IsEmpty(
+      difference.geom
+    )
+    AND ST_IsValid(
+      difference.geom
+    )
+    AND NOT ST_Equals(
+      difference.geom,
+      difference.source_geom
+    )
+`;
+
+const SPLIT_GEOMETRY_PREVIEW_SQL = `
+  WITH source AS (
+    SELECT
+      ST_SetSRID(
+        ST_GeomFromGeoJSON(
+          $1::text
+        ),
+        4326
+      ) AS geom
+  ),
+  parsed_blade AS (
+    SELECT
+      ST_SetSRID(
+        ST_GeomFromGeoJSON(
+          $2::text
+        ),
+        4326
+      ) AS blade
+  ),
+  prepared AS (
+    SELECT
+      ST_LineExtend(
+        parsed_blade.blade,
+        360.0,
+        360.0
+      ) AS blade
+    FROM parsed_blade
+  ),
+  split_result AS (
+    SELECT
+      ST_Split(
+        source.geom,
+        prepared.blade
+      ) AS pieces
+    FROM source
+    CROSS JOIN prepared
+  ),
+  dumped AS MATERIALIZED (
+    SELECT
+      dump.path,
+      dump.geom
+    FROM split_result
+    CROSS JOIN LATERAL ST_Dump(
+      ST_CollectionExtract(
+        split_result.pieces,
+        CASE
+          WHEN $3::text = 'line'
+            THEN 2
+          ELSE 3
+        END
+      )
+    ) AS dump
+    WHERE NOT ST_IsEmpty(
+      dump.geom
+    )
+      AND ST_IsValid(
+        dump.geom
+      )
+  ),
+  numbered AS (
+    SELECT
+      geom,
+      ROW_NUMBER() OVER (
+        ORDER BY path
+      ) AS part_no,
+      COUNT(*) OVER () AS part_count
+    FROM dumped
+  )
+  SELECT
+    ST_AsGeoJSON(
+      geom
+    )::json AS geometry
+  FROM numbered
+  WHERE part_count = 2
+  ORDER BY part_no
+`;
+
 export function createGeometryEditorStorage(
   database,
 ) {
@@ -908,6 +1039,57 @@ export function createGeometryEditorStorage(
         client,
         targetId,
       );
+    },
+
+    async previewCut(
+      queryable,
+      sourceGeometry,
+      cutterGeometry,
+    ) {
+      const result =
+        await queryable.query(
+          CUT_GEOMETRY_PREVIEW_SQL,
+          [
+            JSON.stringify(
+              sourceGeometry,
+            ),
+            JSON.stringify(
+              cutterGeometry,
+            ),
+          ],
+        );
+
+      return result.rows[0]
+        ?.geometry ??
+        null;
+    },
+
+    async previewSplit(
+      queryable,
+      sourceGeometry,
+      blade,
+      family,
+    ) {
+      const result =
+        await queryable.query(
+          SPLIT_GEOMETRY_PREVIEW_SQL,
+          [
+            JSON.stringify(
+              sourceGeometry,
+            ),
+            JSON.stringify(
+              blade,
+            ),
+            family,
+          ],
+        );
+
+      return result.rows.length === 2
+        ? result.rows.map(
+          (row) =>
+            row.geometry,
+        )
+        : null;
     },
 
     async cutGeometry(

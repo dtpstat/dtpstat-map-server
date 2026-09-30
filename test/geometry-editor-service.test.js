@@ -456,6 +456,61 @@ function operationFixture(
         merged,
       );
     },
+    async previewCut(
+      _client,
+      sourceGeometry,
+      cutterGeometry,
+    ) {
+      cuts.push({
+        sourceGeometry:
+          structuredClone(
+            sourceGeometry,
+          ),
+        cutter:
+          structuredClone(
+            cutterGeometry,
+          ),
+        preview:
+          true,
+      });
+
+      return {
+        type: 'MultiPolygon',
+        coordinates: [
+          sourceGeometry
+            .coordinates,
+        ],
+      };
+    },
+    async previewSplit(
+      _client,
+      sourceGeometry,
+      blade,
+      family,
+    ) {
+      splits.push({
+        sourceGeometry:
+          structuredClone(
+            sourceGeometry,
+          ),
+        blade:
+          structuredClone(
+            blade,
+          ),
+        family,
+        preview:
+          true,
+      });
+
+      return [
+        structuredClone(
+          sourceGeometry,
+        ),
+        structuredClone(
+          sourceGeometry,
+        ),
+      ];
+    },
     async cutGeometry(
       _client,
       id,
@@ -794,6 +849,104 @@ test('geometry merge rolls back when any source has an active edit lease', async
     blocked.queries.includes(
       'ROLLBACK',
     ),
+  );
+});
+
+
+test('geometry topology previews are pure calculations without edit leases or persistence', async () => {
+  const {
+    service,
+    queries,
+    cuts,
+    splits,
+  } =
+    operationFixture([]);
+
+  const sourcePolygon = {
+    type: 'Polygon',
+    coordinates: [[
+      [30, 60],
+      [32, 60],
+      [32, 62],
+      [30, 60],
+    ]],
+  };
+  const cutterPolygon = {
+    type: 'Polygon',
+    coordinates: [[
+      [30.5, 60.2],
+      [31, 60.2],
+      [31, 60.8],
+      [30.5, 60.2],
+    ]],
+  };
+
+  const cut =
+    await service.previewCut({
+      sourceGeometry:
+        sourcePolygon,
+      cutterGeometry:
+        cutterPolygon,
+    });
+
+  assert.equal(
+    cut.type,
+    'MultiPolygon',
+  );
+  assert.equal(
+    cuts.length,
+    1,
+  );
+
+  const sourceLine = {
+    type: 'LineString',
+    coordinates: [
+      [30, 60],
+      [32, 62],
+    ],
+  };
+  const blade = {
+    type: 'LineString',
+    coordinates: [
+      [31, 59],
+      [31, 63],
+    ],
+  };
+
+  const split =
+    await service.previewSplit({
+      sourceGeometry:
+        sourceLine,
+      blade,
+    });
+
+  assert.equal(
+    split.length,
+    2,
+  );
+  assert.deepEqual(
+    splits[0],
+    {
+      sourceGeometry:
+        sourceLine,
+      blade,
+      family:
+        'line',
+      preview:
+        true,
+    },
+  );
+  assert.equal(
+    queries.includes(
+      'BEGIN',
+    ),
+    false,
+  );
+  assert.equal(
+    queries.includes(
+      'COMMIT',
+    ),
+    false,
   );
 });
 

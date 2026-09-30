@@ -686,6 +686,34 @@ export const API_REQUEST_CONTRACTS =
     ),
     c(
       'POST',
+      '/admin/geometry-editor/topology/cut-preview',
+      {
+        body: 'json-object',
+        bodyKeys: [
+          'sourceGeometry',
+          'cutterGeometry',
+        ],
+        headers: [
+          ...COMMON_MUTATION_HEADERS,
+        ],
+      },
+    ),
+    c(
+      'POST',
+      '/admin/geometry-editor/topology/split-preview',
+      {
+        body: 'json-object',
+        bodyKeys: [
+          'sourceGeometry',
+          'blade',
+        ],
+        headers: [
+          ...COMMON_MUTATION_HEADERS,
+        ],
+      },
+    ),
+    c(
+      'POST',
       '/admin/geometry-editor/geometries/:geometryId/cut',
       {
         body: 'json-object',

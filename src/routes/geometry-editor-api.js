@@ -129,6 +129,8 @@ function publishChange(
  *     create: Function,
  *     update: Function,
  *     updateMany: Function,
+ *     previewCut: Function,
+ *     previewSplit: Function,
  *     delete: Function
  *   },
  *   adminAuth: any,
@@ -1117,6 +1119,106 @@ export function createGeometryEditorRouter({
             'no-store',
           )
           .json(result);
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/geometry-editor/topology/cut-preview',
+    adminAuth
+      .requireGeometryEditor,
+    audit(
+      'geometry.cut.preview',
+    ),
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const geometry =
+          await geometryEditorService
+            .previewCut(
+              request.body,
+            );
+
+        recordAdminOperationDetails(
+          response,
+          {
+            resultType:
+              geometry.type,
+          },
+        );
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            geometry,
+          });
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/geometry-editor/topology/split-preview',
+    adminAuth
+      .requireGeometryEditor,
+    audit(
+      'geometry.split.preview',
+    ),
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const geometries =
+          await geometryEditorService
+            .previewSplit(
+              request.body,
+            );
+
+        recordAdminOperationDetails(
+          response,
+          {
+            resultCount:
+              geometries.length,
+          },
+        );
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            geometries,
+          });
       } catch (error) {
         if (
           validationError(

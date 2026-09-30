@@ -10,7 +10,9 @@ import {
   validateEditorGeometry,
 } from '../src/modules/geometry/editor-policy.js';
 import {
+  normalizeGeometryCutPreviewRequest,
   normalizeGeometryCutRequest,
+  normalizeGeometrySplitPreviewRequest,
   normalizeGeometrySplitRequest,
 } from '../src/modules/geometry/topology-policy.js';
 
@@ -332,6 +334,114 @@ test('geometry merge request requires distinct optimistic revisions', () => {
     /Duplicate geometry id in merge/u,
   );
 });
+
+test('geometry topology preview requests validate complete local GeoJSON inputs', () => {
+  const sourcePolygon = {
+    type: 'Polygon',
+    coordinates: [[
+      [30, 60],
+      [32, 60],
+      [32, 62],
+      [30, 60],
+    ]],
+  };
+  const cutterPolygon = {
+    type: 'Polygon',
+    coordinates: [[
+      [30.5, 60.2],
+      [31, 60.2],
+      [31, 60.8],
+      [30.5, 60.2],
+    ]],
+  };
+
+  assert.deepEqual(
+    normalizeGeometryCutPreviewRequest({
+      sourceGeometry:
+        sourcePolygon,
+      cutterGeometry:
+        cutterPolygon,
+    }),
+    {
+      sourceGeometry:
+        sourcePolygon,
+      cutterGeometry:
+        cutterPolygon,
+    },
+  );
+
+  assert.deepEqual(
+    normalizeGeometrySplitPreviewRequest({
+      sourceGeometry: {
+        type: 'LineString',
+        coordinates: [
+          [30, 60],
+          [32, 62],
+        ],
+      },
+      blade: {
+        type: 'LineString',
+        coordinates: [
+          [31, 59],
+          [31, 63],
+        ],
+      },
+    }),
+    {
+      sourceGeometry: {
+        type: 'LineString',
+        coordinates: [
+          [30, 60],
+          [32, 62],
+        ],
+      },
+      blade: {
+        type: 'LineString',
+        coordinates: [
+          [31, 59],
+          [31, 63],
+        ],
+      },
+      family: 'line',
+    },
+  );
+
+  assert.throws(
+    () =>
+      normalizeGeometryCutPreviewRequest({
+        sourceGeometry: {
+          type: 'LineString',
+          coordinates: [
+            [30, 60],
+            [31, 61],
+          ],
+        },
+        cutterGeometry:
+          cutterPolygon,
+      }),
+    /source must be Polygon or MultiPolygon/u,
+  );
+
+  assert.throws(
+    () =>
+      normalizeGeometrySplitPreviewRequest({
+        sourceGeometry: {
+          type: 'Point',
+          coordinates:
+            [30, 60],
+        },
+        blade: {
+          type: 'LineString',
+          coordinates: [
+            [29, 60],
+            [31, 60],
+          ],
+        },
+      }),
+    /source must be a line or polygon/u,
+  );
+});
+
 
 test('geometry cut request accepts inline or optimistic referenced polygon cutters', () => {
   assert.deepEqual(
