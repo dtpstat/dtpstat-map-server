@@ -477,8 +477,6 @@ function operationFixture(
     },
   };
 
-  return {  };
-
   return {
     service:
       createGeometryEditorService(

@@ -95,7 +95,15 @@ test('geometry editor backend follows current policy storage service runtime rou
   );
   assert.match(
     route,
-    /'\/admin\/geometry-editor\/geometries\/:geometryId\/cut'/u,
+    /'\/admin\/geometry-editor\/topology\/cut-preview'/u,
+  );
+  assert.match(
+    route,
+    /'\/admin\/geometry-editor\/topology\/split-preview'/u,
+  );
+  assert.doesNotMatch(
+    route,
+    /'\/admin\/geometry-editor\/geometries\/:geometryId\/(?:cut|split)'/u,
   );
   assert.match(
     storage,
@@ -397,7 +405,11 @@ test('geometry editor backend exposes atomic create-update sync and edit leases'
   );
   assert.match(
     route,
-    /\.cut\([\s\S]*editToken:[\s\S]*editToken\([\s\S]*request\.adminUser/u,
+    /\.previewCut\([\s\S]*request\.body/u,
+  );
+  assert.match(
+    route,
+    /\.previewSplit\([\s\S]*request\.body/u,
   );
   assert.match(
     route,
@@ -409,7 +421,15 @@ test('geometry editor backend exposes atomic create-update sync and edit leases'
   );
   assert.match(
     service,
-    /async cut\([\s\S]*normalizeGeometryEditToken[\s\S]*requireOwnedEditLease/u,
+    /async previewCut\([\s\S]*storage\.previewCut/u,
+  );
+  assert.match(
+    service,
+    /async previewSplit\([\s\S]*storage\.previewSplit/u,
+  );
+  assert.doesNotMatch(
+    service,
+    /async (?:cut|split)\(/u,
   );
   assert.match(
     service,
