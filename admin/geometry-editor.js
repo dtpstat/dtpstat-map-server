@@ -3912,7 +3912,9 @@ if (section) {
         item._conflict ? 'конфликт' : null,
         rowLease
           ? 'редактирует: ' +
-            (rowLease.username ?? 'другой пользователь')
+            identityName(
+              rowLease,
+            )
           : null,
         !item.boundaryId ? 'без привязки' : null,
         item.isVisible === false ? 'скрыта' : null,
@@ -4574,9 +4576,12 @@ if (section) {
     }
 
     const owner =
-      state.blockedLease?.username ??
-      state.editLeases.get(Number(item.id))?.username ??
-      'другой пользователь';
+      identityName(
+        state.blockedLease ??
+        state.editLeases.get(
+          Number(item.id),
+        ),
+      );
 
     const confirmed = await adminConfirm({
       title: 'Перехватить редактирование?',
