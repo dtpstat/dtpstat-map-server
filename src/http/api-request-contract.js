@@ -583,6 +583,24 @@ export const API_REQUEST_CONTRACTS =
       '/admin/geometry-editor/geometries/:geometryId',
     ),
     c(
+      'GET',
+      '/admin/geometry-editor/users/:userId/avatar',
+    ),
+    c(
+      'GET',
+      '/admin/geometry-editor/geometries/:geometryId/discussion',
+    ),
+    c(
+      'POST',
+      '/admin/geometry-editor/geometries/:geometryId/discussion',
+      {
+        body: 'json-object',
+        bodyKeys: [
+          'message',
+        ],
+      },
+    ),
+    c(
       'POST',
       '/admin/geometry-editor/geometries/:geometryId/edit-lock',
     ),
