@@ -116,6 +116,22 @@ test('interface settings expose point type CRUD and safe icon controls', async (
   );
   assert.match(
     editor,
+    /const refreshPreview =[\s\S]*anchorX\.value[\s\S]*anchorY\.value[\s\S]*preview\(\{[\s\S]*anchorX:[\s\S]*nextAnchorX[\s\S]*anchorY:[\s\S]*nextAnchorY/u,
+  );
+  assert.match(
+    editor,
+    /anchorX\.addEventListener\([\s\S]*'input'[\s\S]*refreshPreview/u,
+  );
+  assert.match(
+    editor,
+    /anchorY\.addEventListener\([\s\S]*'input'[\s\S]*refreshPreview/u,
+  );
+  assert.match(
+    editor,
+    /width\.addEventListener\([\s\S]*syncAnchorBounds[\s\S]*height\.addEventListener/u,
+  );
+  assert.match(
+    editor,
     /trackDirtyForm/u,
   );
   assert.match(

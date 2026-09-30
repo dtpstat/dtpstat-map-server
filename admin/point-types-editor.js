@@ -324,8 +324,12 @@ if (
         );
       previewColumn.className =
         'point-type-preview-column';
+      const previewFrame =
+        preview(
+          pointType,
+        );
       previewColumn.append(
-        preview(pointType),
+        previewFrame,
       );
 
       const stats =
@@ -422,6 +426,60 @@ if (
           },
         );
 
+      const refreshPreview =
+        () => {
+          const displayWidth =
+            Number(
+              width.value,
+            );
+          const displayHeight =
+            Number(
+              height.value,
+            );
+          const nextAnchorX =
+            Number(
+              anchorX.value,
+            );
+          const nextAnchorY =
+            Number(
+              anchorY.value,
+            );
+
+          if (
+            ![
+              displayWidth,
+              displayHeight,
+              nextAnchorX,
+              nextAnchorY,
+            ].every(
+              Number.isFinite,
+            ) ||
+            displayWidth <= 0 ||
+            displayHeight <= 0
+          ) {
+            return;
+          }
+
+          const nextPreview =
+            preview({
+              ...pointType,
+              displayWidth,
+              displayHeight,
+              anchorX:
+                nextAnchorX,
+              anchorY:
+                nextAnchorY,
+            });
+
+          previewColumn
+            .querySelector(
+              '.point-type-preview-frame',
+            )
+            ?.replaceWith(
+              nextPreview,
+            );
+        };
+
       const syncAnchorBounds =
         () => {
           anchorX.max =
@@ -443,6 +501,8 @@ if (
             anchorY.value =
               height.value;
           }
+
+          refreshPreview();
         };
 
       width.addEventListener(
@@ -452,6 +512,14 @@ if (
       height.addEventListener(
         'input',
         syncAnchorBounds,
+      );
+      anchorX.addEventListener(
+        'input',
+        refreshPreview,
+      );
+      anchorY.addEventListener(
+        'input',
+        refreshPreview,
       );
 
       const icon =
