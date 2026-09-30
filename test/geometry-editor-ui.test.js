@@ -1093,6 +1093,35 @@ test('geometry editor exposes normal unlinked geometry and persistent explicit e
 
 
 
+test('locally changing a line type immediately drives the selected map style', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /const selectedGeometry =[\s\S]*\.\.\.\(selectedSummary \?\? state\.current \?\? \{\}\)/u,
+  );
+  assert.match(
+    editor,
+    /geometry-editor-selected-line-halo[\s\S]*lineWidth[\s\S]*\+?[\s\S]*4/u,
+  );
+  assert.match(
+    editor,
+    /id: 'geometry-editor-selected-line'[\s\S]*\['get', 'lineColor'\][\s\S]*\['get', 'lineWidth'\]/u,
+  );
+  assert.doesNotMatch(
+    editor,
+    /id: 'geometry-editor-selected-line'[\s\S]{0,500}'line-width': 5/u,
+  );
+  assert.match(
+    editor,
+    /form\.elements\.lineTypeId[\s\S]*addEventListener\('change'[\s\S]*captureCurrentDraft/u,
+  );
+});
+
+
 test('geometry editor marks leases and exposes coherent map editing modes', async () => {
   const [
     editor,

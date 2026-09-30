@@ -1225,10 +1225,10 @@ if (section) {
         },
       });
       addLayerSafe(map, {
-        id: 'geometry-editor-selected-line',
+        id: 'geometry-editor-selected-polygon-line',
         type: 'line',
         source: SELECTED_SOURCE,
-        filter: ['in', ['geometry-type'], ['literal', ['LineString', 'Polygon']]],
+        filter: ['==', ['geometry-type'], 'Polygon'],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
           'line-color': [
@@ -1240,6 +1240,54 @@ if (section) {
             '#f3b74e',
           ],
           'line-width': 5,
+        },
+      });
+      addLayerSafe(map, {
+        id: 'geometry-editor-selected-line-halo',
+        type: 'line',
+        source: SELECTED_SOURCE,
+        filter: ['==', ['geometry-type'], 'LineString'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': [
+            'case',
+            ['get', 'isActiveEdit'],
+            '#f3b74e',
+            ['get', 'isEditLocked'],
+            '#737d82',
+            '#f3b74e',
+          ],
+          'line-width': [
+            '+',
+            ['coalesce', ['get', 'lineWidth'], 4],
+            4,
+          ],
+          'line-opacity': 0.72,
+        },
+      });
+      addLayerSafe(map, {
+        id: 'geometry-editor-selected-line',
+        type: 'line',
+        source: SELECTED_SOURCE,
+        filter: ['==', ['geometry-type'], 'LineString'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': [
+            'coalesce',
+            ['get', 'lineColor'],
+            '#35c6b4',
+          ],
+          'line-width': [
+            'coalesce',
+            ['get', 'lineWidth'],
+            4,
+          ],
+          'line-opacity': [
+            'case',
+            ['get', 'isVisible'],
+            1,
+            0.35,
+          ],
         },
       });
       addLayerSafe(map, {
@@ -2143,7 +2191,7 @@ if (section) {
     const selectedGeometry =
       showEditable
         ? {
-            ...(state.current ?? selectedSummary ?? {}),
+            ...(selectedSummary ?? state.current ?? {}),
             id:
               state.current?.id ??
               selectedSummary?.id ??
