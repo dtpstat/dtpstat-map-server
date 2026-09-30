@@ -146,6 +146,12 @@ function createTestRepository() {
     async getCityGeometries(cityId) {
       return cityId === 1 ? geojson : null;
     },
+    async getGeometryTimelineBounds() {
+      return {
+        minDate: '2001-01-01',
+        maxDate: '2026-12-31',
+      };
+    },
     async getViewportGeometries(viewport) {
       return {
         ...geojson,
@@ -1212,4 +1218,27 @@ test('admin cancellation aborts the active task and keeps its log', async () => 
     );
     assert.equal(repeated.status, 409);
   }, { osmCityUpdateService });
+});
+
+
+test('public geometry timeline endpoint returns global date bounds', async () => {
+  await withServer(
+    async (baseUrl) => {
+      const response =
+        await versionedFetch(
+          `${baseUrl}/api/geometry-timeline`,
+        );
+      assert.equal(
+        response.status,
+        200,
+      );
+      assert.deepEqual(
+        await response.json(),
+        {
+          minDate: '2001-01-01',
+          maxDate: '2026-12-31',
+        },
+      );
+    },
+  );
 });

@@ -47,6 +47,37 @@ export function registerMapRoutes(router, {
     }
   });
 
+  router.get(
+    '/geometry-timeline',
+    async (
+      _request,
+      response,
+      next,
+    ) => {
+      try {
+        const timeline =
+          typeof repository
+            .getGeometryTimelineBounds ===
+          'function'
+            ? await repository
+              .getGeometryTimelineBounds()
+            : {
+                minDate: null,
+                maxDate: null,
+              };
+
+        response
+          .set(
+            'Cache-Control',
+            'no-cache',
+          )
+          .json(timeline);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   router.get('/geometries', async (request, response, next) => {
     const zoom =
       request.query.zoom ===

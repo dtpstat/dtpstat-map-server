@@ -51,6 +51,54 @@ const LIST_CITIES_SQL = `
   ORDER BY city.is_large DESC NULLS LAST, report.rank NULLS LAST, city.name ASC
 `;
 
+const GEOMETRY_TIMELINE_BOUNDS_SQL = `
+  SELECT
+    MIN(
+      COALESCE(
+        geometry.valid_from,
+        geometry.valid_to
+      )
+    )::text AS "minDate",
+    MAX(
+      COALESCE(
+        geometry.valid_to,
+        geometry.valid_from
+      )
+    )::text AS "maxDate"
+  FROM city_geometries AS geometry
+  JOIN city_boundaries AS active_boundary
+    ON active_boundary.id =
+       geometry.boundary_id
+   AND active_boundary.is_active
+  LEFT JOIN line_types AS line_type
+    ON line_type.id =
+       geometry.line_type_id
+  LEFT JOIN point_types AS point_type
+    ON point_type.id =
+       geometry.point_type_id
+  WHERE geometry.is_visible
+    AND (
+      geometry.valid_from IS NOT NULL
+      OR geometry.valid_to IS NOT NULL
+    )
+    AND (
+      line_type.id IS NOT NULL
+      OR GeometryType(
+        geometry.geom
+      ) IN (
+        'POLYGON',
+        'MULTIPOLYGON'
+      )
+      OR (
+        GeometryType(
+          geometry.geom
+        ) = 'POINT'
+        AND point_type.id IS NOT NULL
+        AND point_type.is_active
+      )
+    )
+`;
+
 const CITY_GEOMETRIES_SQL = `
   SELECT json_build_object(
     'type', 'FeatureCollection',
@@ -110,6 +158,21 @@ export function createCitiesRepository(database) {
     async listCities() {
       const result = await database.query(LIST_CITIES_SQL);
       return result.rows;
+    },
+
+    async getGeometryTimelineBounds() {
+      const result =
+        await database.query(
+          GEOMETRY_TIMELINE_BOUNDS_SQL,
+        );
+      return {
+        minDate:
+          result.rows[0]?.minDate ??
+          null,
+        maxDate:
+          result.rows[0]?.maxDate ??
+          null,
+      };
     },
 
     /** @param {number} cityId */

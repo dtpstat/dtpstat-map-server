@@ -199,6 +199,7 @@ export const API_REQUEST_CONTRACTS =
     c('GET', '/config'),
     c('GET', '/health'),
     c('GET', '/cities'),
+    c('GET', '/geometry-timeline'),
     c(
       'GET',
       '/cities/:cityId/geometries',

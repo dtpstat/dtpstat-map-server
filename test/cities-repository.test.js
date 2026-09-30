@@ -207,3 +207,52 @@ test('viewport profiler and repository can share the exact parameterized SQL con
     ) < 1e-9,
   );
 });
+
+
+test('geometry timeline bounds use public visible temporal geometries', async () => {
+  let sql = '';
+  const repository =
+    createCitiesRepository({
+      async query(text) {
+        sql = text;
+        return {
+          rows: [{
+            minDate: '1999-01-01',
+            maxDate: '2026-12-31',
+          }],
+        };
+      },
+    });
+
+  const bounds =
+    await repository
+      .getGeometryTimelineBounds();
+
+  assert.deepEqual(
+    bounds,
+    {
+      minDate: '1999-01-01',
+      maxDate: '2026-12-31',
+    },
+  );
+  assert.match(
+    sql,
+    /MIN\([\s\S]*COALESCE\([\s\S]*valid_from[\s\S]*valid_to/u,
+  );
+  assert.match(
+    sql,
+    /MAX\([\s\S]*COALESCE\([\s\S]*valid_to[\s\S]*valid_from/u,
+  );
+  assert.match(
+    sql,
+    /geometry\.is_visible/u,
+  );
+  assert.match(
+    sql,
+    /point_type\.is_active/u,
+  );
+  assert.match(
+    sql,
+    /'POLYGON'[\s\S]*'MULTIPOLYGON'/u,
+  );
+});

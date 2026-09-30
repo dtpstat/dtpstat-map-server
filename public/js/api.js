@@ -50,6 +50,12 @@ export function loadCityGeometries(cityId, signal) {
   return getJson(`/api/cities/${cityId}/geometries`, { signal });
 }
 
+export function loadGeometryTimeline() {
+  return getJson(
+    '/api/geometry-timeline',
+  );
+}
+
 /**
  * @param {{ bbox: [number, number, number, number], center: [number, number] }} viewport
  * @param {AbortSignal} signal
