@@ -5611,7 +5611,7 @@ if (section) {
   }
 
 
-  async function cutWithSelectedGeometry() {  async function cutWithSelectedGeometry() {
+  async function cutWithSelectedGeometry() {
     const target =
       state.current;
     const cutter =
