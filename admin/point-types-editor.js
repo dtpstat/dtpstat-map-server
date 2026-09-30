@@ -487,16 +487,6 @@ if (
       save.textContent =
         'Сохранить';
 
-      const upload =
-        document.createElement(
-          'button',
-        );
-      upload.type = 'button';
-      upload.className =
-        'secondary';
-      upload.textContent =
-        'Загрузить иконку';
-
       const reset =
         document.createElement(
           'button',
@@ -522,7 +512,6 @@ if (
 
       actions.append(
         save,
-        upload,
         reset,
         remove,
       );
@@ -589,23 +578,49 @@ if (
         'submit',
         async (event) => {
           event.preventDefault();
+
           if (
             !row.reportValidity()
           ) {
             return;
           }
 
+          const file =
+            icon.files?.[0] ??
+            null;
+
+          if (
+            file &&
+            file.size >
+              MAX_ICON_BYTES
+          ) {
+            setMessage(
+              'Файл не должен превышать ' +
+                MAX_ICON_BYTES +
+                ' байт.',
+              'error',
+            );
+            return;
+          }
+
           save.disabled = true;
+          reset.disabled = true;
           setMessage(
-            'Сохраняем тип точки…',
+            file
+              ? 'Сохраняем тип точки и иконку…'
+              : 'Сохраняем тип точки…',
           );
+
+          let typeSaved =
+            false;
 
           try {
             await requestJson(
               '/api/admin/point-types/' +
-              pointType.id,
+                pointType.id,
               {
-                method: 'PATCH',
+                method:
+                  'PATCH',
                 headers: {
                   'Content-Type':
                     'application/json',
@@ -616,9 +631,35 @@ if (
                   ),
               },
             );
+            typeSaved =
+              true;
+
+            if (file) {
+              await requestJson(
+                '/api/admin/point-types/' +
+                  pointType.id +
+                  '/icon',
+                {
+                  method:
+                    'PUT',
+                  headers: {
+                    'Content-Type':
+                      file.type ||
+                      'application/octet-stream',
+                  },
+                  body:
+                    file,
+                },
+              );
+              icon.value =
+                '';
+            }
+
             dirtyState?.markClean();
             setMessage(
-              'Тип точки сохранён.',
+              file
+                ? 'Тип точки и иконка сохранены.'
+                : 'Тип точки сохранён.',
               'success',
             );
             window.dispatchEvent(
@@ -628,81 +669,21 @@ if (
             );
           } catch (error) {
             setMessage(
-              error.message,
+              typeSaved &&
+              file
+                ? (
+                    'Тип точки сохранён, но иконка не сохранена: ' +
+                    error.message
+                  )
+                : error.message,
               'error',
             );
           } finally {
             save.disabled =
               false;
-          }
-        },
-      );
-
-      upload.addEventListener(
-        'click',
-        async () => {
-          const file =
-            icon.files?.[0];
-          if (!file) {
-            setMessage(
-              'Сначала выберите PNG, GIF или SVG.',
-              'error',
-            );
-            return;
-          }
-
-          if (
-            file.size >
-            MAX_ICON_BYTES
-          ) {
-            setMessage(
-              'Файл не должен превышать ' +
-              MAX_ICON_BYTES +
-              ' байт.',
-              'error',
-            );
-            return;
-          }
-
-          upload.disabled = true;
-          reset.disabled = true;
-          setMessage(
-            'Проверяем и сохраняем иконку…',
-          );
-
-          try {
-            await requestJson(
-              '/api/admin/point-types/' +
-              pointType.id +
-              '/icon',
-              {
-                method: 'PUT',
-                headers: {
-                  'Content-Type':
-                    file.type ||
-                    'application/octet-stream',
-                },
-                body: file,
-              },
-            );
-            icon.value = '';
-            setMessage(
-              'Иконка сохранена.',
-              'success',
-            );
-            window.dispatchEvent(
-              new CustomEvent(
-                'dtpstat:point-types-changed',
-              ),
-            );
-          } catch (error) {
-            setMessage(
-              error.message,
-              'error',
-            );
-          } finally {
-            upload.disabled =
-              false;
+            reset.disabled =
+              !pointType
+                .iconConfigured;
           }
         },
       );

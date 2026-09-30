@@ -122,6 +122,26 @@ test('interface settings expose point type CRUD and safe icon controls', async (
     editor,
     /adminConfirm/u,
   );
+  assert.doesNotMatch(
+    editor,
+    /Загрузить иконку/u,
+  );
+  assert.match(
+    editor,
+    /row\.addEventListener\([\s\S]*'submit'[\s\S]*const file =[\s\S]*icon\.files/u,
+  );
+  assert.match(
+    editor,
+    /method:[\s\S]*'PATCH'[\s\S]*if \(file\)[\s\S]*method:[\s\S]*'PUT'/u,
+  );
+  assert.match(
+    editor,
+    /Тип точки и иконка сохранены/u,
+  );
+  assert.match(
+    editor,
+    /icon\.value =[\s\S]*''[\s\S]*dtpstat:point-types-changed/u,
+  );
 
   assert.match(
     styles,
