@@ -35,6 +35,55 @@ test('geometry editor accepts supported geometry families', () => {
   }
 });
 
+test('geometry editor keeps longitude inclusive and latitude strictly inside the poles', () => {
+  assert.deepEqual(
+    validateEditorGeometry({
+      type: 'Point',
+      coordinates: [
+        180,
+        89.999999,
+      ],
+    }),
+    {
+      type: 'Point',
+      coordinates: [
+        180,
+        89.999999,
+      ],
+    },
+  );
+
+  for (const latitude of [
+    -90,
+    90,
+  ]) {
+    assert.throws(
+      () =>
+        validateEditorGeometry({
+          type: 'Point',
+          coordinates: [
+            0,
+            latitude,
+          ],
+        }),
+      /outside supported longitude\/latitude bounds/u,
+    );
+  }
+
+  assert.throws(
+    () =>
+      validateEditorGeometry({
+        type: 'Point',
+        coordinates: [
+          180.000001,
+          0,
+        ],
+      }),
+    /outside supported longitude\/latitude bounds/u,
+  );
+});
+
+
 test('geometry create payload validates line state and normalizes tags', () => {
   const value =
     normalizeGeometryCreatePayload({

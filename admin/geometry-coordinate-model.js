@@ -41,9 +41,32 @@ function coordinateNumber(
     label,
     minimum,
     maximum,
+    minimumInclusive = true,
+    maximumInclusive = true,
+    rangeLabel = null,
     code,
   },
 ) {
+  const outOfRange =
+    (number) =>
+      (
+        minimumInclusive
+          ? number < minimum
+          : number <= minimum
+      ) ||
+      (
+        maximumInclusive
+          ? number > maximum
+          : number >= maximum
+      );
+  const displayedRange =
+    rangeLabel ??
+    (
+      minimum +
+      '…' +
+      maximum
+    );
+
   if (
     typeof value ===
       'number'
@@ -60,15 +83,14 @@ function coordinateNumber(
     }
 
     if (
-      value < minimum ||
-      value > maximum
+      outOfRange(
+        value,
+      )
     ) {
       throw new GeometryCoordinateError(
         label +
           ' должна быть в диапазоне ' +
-          minimum +
-          '…' +
-          maximum +
+          displayedRange +
           '.',
         code,
       );
@@ -111,15 +133,14 @@ function coordinateNumber(
   }
 
   if (
-    number < minimum ||
-    number > maximum
+    outOfRange(
+      number,
+    )
   ) {
     throw new GeometryCoordinateError(
       label +
         ' должна быть в диапазоне ' +
-        minimum +
-        '…' +
-        maximum +
+        displayedRange +
         '.',
       code,
     );
@@ -199,6 +220,12 @@ export function normalizeCoordinate(
           -90,
         maximum:
           90,
+        minimumInclusive:
+          false,
+        maximumInclusive:
+          false,
+        rangeLabel:
+          '(-90; 90)',
         code:
           'latitude-out-of-range',
       },

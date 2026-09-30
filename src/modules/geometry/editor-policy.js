@@ -103,11 +103,11 @@ function position(value, label) {
   if (
     value[0] < -180 ||
     value[0] > 180 ||
-    value[1] < -90 ||
-    value[1] > 90
+    value[1] <= -90 ||
+    value[1] >= 90
   ) {
     throw new GeometryEditorValidationError(
-      `${label} is outside WGS84 longitude/latitude bounds`,
+      `${label} is outside supported longitude/latitude bounds`,
     );
   }
 }

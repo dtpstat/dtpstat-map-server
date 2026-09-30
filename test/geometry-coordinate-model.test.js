@@ -11,7 +11,7 @@ import {
   translateGeometry,
 } from '../admin/geometry-coordinate-model.js';
 
-test('coordinate text parser accepts bounded WGS84 rows and common separators', () => {
+test('coordinate text parser accepts supported bounded rows and common separators', () => {
   assert.deepEqual(
     parseCoordinateText(
       '37.61 55.75\n37.62;55.76\n37.63,55.77\n37.64\t55.78',
@@ -27,9 +27,9 @@ test('coordinate text parser accepts bounded WGS84 rows and common separators', 
   assert.deepEqual(
     normalizeCoordinate(
       '-180',
-      '90',
+      '89.999999',
     ),
-    [-180, 90],
+    [-180, 89.999999],
   );
 });
 
@@ -76,13 +76,20 @@ test('coordinate text parser normalizes decimal commas and rejects malformed ove
     /-180…180/u,
   );
 
-  assert.throws(
-    () =>
-      parseCoordinateText(
-        '0 91',
-      ),
-    /-90…90/u,
-  );
+  for (const latitude of [
+    '-90',
+    '90',
+    '91',
+  ]) {
+    assert.throws(
+      () =>
+        normalizeCoordinate(
+          '0',
+          latitude,
+        ),
+      /\(-90; 90\)/u,
+    );
+  }
 
   assert.throws(
     () =>
