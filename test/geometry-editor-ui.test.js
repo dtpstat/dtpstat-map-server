@@ -1644,3 +1644,54 @@ test('union preview never persists directly and supports local plus server draft
     /\/api\/admin\/geometry-editor\/merge/u,
   );
 });
+
+
+test('geometry editor shows explicit editing notice and edits zoom/date visibility metadata locally', async () => {
+  const [
+    html,
+    editor,
+    styles,
+  ] =
+    await Promise.all([
+      read('admin/index.html'),
+      read('admin/geometry-editor.js'),
+      read('admin/geometry-editor.css'),
+    ]);
+
+  assert.match(
+    html,
+    /id="geometry-editing-notice"/u,
+  );
+  assert.match(
+    html,
+    /name="minZoom"[\s\S]*name="maxZoom"[\s\S]*name="validFrom"[\s\S]*name="validTo"/u,
+  );
+  assert.match(
+    editor,
+    /editingNotice\.hidden =[\s\S]*!state\.editing/u,
+  );
+  assert.match(
+    editor,
+    /Вы редактируете/u,
+  );
+  assert.match(
+    editor,
+    /minZoom:[\s\S]*form\.elements\.minZoom/u,
+  );
+  assert.match(
+    editor,
+    /validFrom:[\s\S]*form\.elements\.validFrom/u,
+  );
+  assert.match(
+    editor,
+    /function syncDisplayWindowValidity\([\s\S]*minZoom > maxZoom[\s\S]*validFrom > validTo/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-editor-editing-notice/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-display-window-grid/u,
+  );
+});

@@ -46,6 +46,7 @@ if (section) {
   const beginEditButton = document.querySelector('#geometry-begin-edit');
   const takeoverEditButton = document.querySelector('#geometry-takeover-edit');
   const editLockStatus = document.querySelector('#geometry-edit-lock-status');
+  const editingNotice = document.querySelector('#geometry-editing-notice');
   const saveAll = document.querySelector('#geometry-editor-save-all');
   const discardAll = document.querySelector('#geometry-editor-discard-all');
   const form = document.querySelector('#geometry-editor-form');
@@ -3014,7 +3015,16 @@ if (section) {
 
     for (const control of form.elements) {
       if (control.name === 'lineTypeId' || control.name === 'lanes') continue;
-      if (['displayName', 'tooltip', 'tags', 'isVisible'].includes(control.name)) {
+      if ([
+        'displayName',
+        'tooltip',
+        'tags',
+        'isVisible',
+        'minZoom',
+        'maxZoom',
+        'validFrom',
+        'validTo',
+      ].includes(control.name)) {
         control.disabled = !enabled;
       }
     }
@@ -3070,6 +3080,19 @@ if (section) {
         !state.editing &&
         blockedByOther
       );
+
+    if (editingNotice) {
+      editingNotice.hidden =
+        !state.editing;
+      editingNotice.textContent =
+        state.editing
+          ? (
+              'Вы редактируете «' +
+              displayName(item) +
+              '». Изменения пока локальные; на сервер они попадут только после «Синхронизировать».'
+            )
+          : '';
+    }
 
     if (editLockStatus) {
       editLockStatus.textContent =
@@ -3169,6 +3192,16 @@ if (section) {
     form.elements.tooltip.value = item?.tooltip ?? '';
     form.elements.tags.value = (item?.tags ?? []).join(', ');
     form.elements.isVisible.checked = item?.isVisible !== false;
+    form.elements.minZoom.value =
+      item?.minZoom ?? '';
+    form.elements.maxZoom.value =
+      item?.maxZoom ?? '';
+    form.elements.validFrom.value =
+      item?.validFrom ?? '';
+    form.elements.validTo.value =
+      item?.validTo ?? '';
+    form.elements.maxZoom.setCustomValidity('');
+    form.elements.validTo.setCustomValidity('');
     if (item?.lineTypeId) form.elements.lineTypeId.value = String(item.lineTypeId);
     else if (state.lineTypes[0]) form.elements.lineTypeId.value = String(state.lineTypes[0].id);
     form.elements.lanes.value = String(item?.lanes ?? 1);
@@ -5138,6 +5171,10 @@ if (section) {
       tags: [],
       sourceTags: {},
       isVisible: true,
+      minZoom: null,
+      maxZoom: null,
+      validFrom: null,
+      validTo: null,
       wasEdited: true,
       lineTypeId: type === 'LineString' ? state.lineTypes[0]?.id ?? null : null,
       lanes: type === 'LineString' ? 1 : null,
@@ -6192,6 +6229,24 @@ if (section) {
       tooltip: form.elements.tooltip.value.trim() || null,
       tags,
       isVisible: form.elements.isVisible.checked,
+      minZoom:
+        form.elements.minZoom.value === ''
+          ? null
+          : Number(
+              form.elements.minZoom.value,
+            ),
+      maxZoom:
+        form.elements.maxZoom.value === ''
+          ? null
+          : Number(
+              form.elements.maxZoom.value,
+            ),
+      validFrom:
+        form.elements.validFrom.value ||
+        null,
+      validTo:
+        form.elements.validTo.value ||
+        null,
       ...(family === 'line'
         ? {
             lineTypeId: Number(form.elements.lineTypeId.value),
@@ -6529,17 +6584,69 @@ if (section) {
     void saveCurrent();
   });
 
+  function syncDisplayWindowValidity() {
+    const minZoom =
+      form.elements.minZoom.value === ''
+        ? null
+        : Number(
+            form.elements.minZoom.value,
+          );
+    const maxZoom =
+      form.elements.maxZoom.value === ''
+        ? null
+        : Number(
+            form.elements.maxZoom.value,
+          );
+    const validFrom =
+      form.elements.validFrom.value ||
+      null;
+    const validTo =
+      form.elements.validTo.value ||
+      null;
+
+    form.elements.maxZoom.setCustomValidity(
+      minZoom !== null &&
+      maxZoom !== null &&
+      minZoom > maxZoom
+        ? 'Zoom «до» должен быть не меньше zoom «от».'
+        : '',
+    );
+    form.elements.validTo.setCustomValidity(
+      validFrom &&
+      validTo &&
+      validFrom > validTo
+        ? 'Дата «по» должна быть не раньше даты «с».'
+        : '',
+    );
+  }
+
   for (const control of [
     form.elements.displayName,
     form.elements.tooltip,
     form.elements.tags,
     form.elements.isVisible,
+    form.elements.minZoom,
+    form.elements.maxZoom,
+    form.elements.validFrom,
+    form.elements.validTo,
     form.elements.lineTypeId,
     form.elements.lanes,
     form.elements.pointTypeId,
   ]) {
-    control?.addEventListener('input', () => captureCurrentDraft());
-    control?.addEventListener('change', () => captureCurrentDraft());
+    control?.addEventListener(
+      'input',
+      () => {
+        syncDisplayWindowValidity();
+        captureCurrentDraft();
+      },
+    );
+    control?.addEventListener(
+      'change',
+      () => {
+        syncDisplayWindowValidity();
+        captureCurrentDraft();
+      },
+    );
   }
 
 

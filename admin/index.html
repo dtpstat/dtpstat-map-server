@@ -702,6 +702,9 @@
                           class="geometry-edit-lock-status"></span>
                   </div>
 
+                  <p class="geometry-editor-editing-notice"
+                     id="geometry-editing-notice" hidden></p>
+
                   <label>Имя
                     <input name="displayName" type="text"
                            maxlength="240" disabled
@@ -724,6 +727,34 @@
                     <input name="isVisible" type="checkbox" disabled>
                     Показывать на публичной карте
                   </label>
+
+                  <fieldset class="geometry-display-window">
+                    <legend>Отображение на карте</legend>
+                    <div class="geometry-display-window-grid">
+                      <label>Zoom от
+                        <input name="minZoom" type="number"
+                               min="0" max="24" step="0.1"
+                               inputmode="decimal" disabled
+                               placeholder="по умолчанию">
+                      </label>
+                      <label>Zoom до
+                        <input name="maxZoom" type="number"
+                               min="0" max="24" step="0.1"
+                               inputmode="decimal" disabled
+                               placeholder="без ограничения">
+                      </label>
+                      <label>С
+                        <input name="validFrom" type="date" disabled>
+                      </label>
+                      <label>По
+                        <input name="validTo" type="date" disabled>
+                      </label>
+                    </div>
+                    <small>
+                      Все четыре значения необязательны. Если обе границы
+                      заполнены, начало должно быть не больше окончания.
+                    </small>
+                  </fieldset>
 
                   <fieldset id="geometry-line-fields"
                             class="geometry-line-fields" hidden>

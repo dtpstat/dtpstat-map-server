@@ -987,3 +987,41 @@
 .geometry-coordinate-row-actions button {
   width: auto;
 }
+
+
+.geometry-editor-editing-notice {
+  margin: 0;
+  padding: .7rem .8rem;
+  border: 1px solid rgb(243 183 78 / 45%);
+  border-radius: 10px;
+  color: #ffe0a3;
+  background: rgb(243 183 78 / 10%);
+  font-size: .78rem;
+  line-height: 1.45;
+}
+.geometry-editor-editing-notice[hidden] {
+  display: none;
+}
+.geometry-display-window {
+  margin: 0;
+  padding: .75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.geometry-display-window legend {
+  padding: 0 .35rem;
+  color: var(--muted);
+  font-size: .72rem;
+  font-weight: 750;
+}
+.geometry-display-window-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .65rem;
+}
+.geometry-display-window > small {
+  display: block;
+  margin-top: .55rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
