@@ -40,6 +40,40 @@ function serviceDependencies(
 ) {
   return {
     storage,
+    discussionStorage: {
+      async geometryExists() {
+        return true;
+      },
+      async listMessages() {
+        return [];
+      },
+      async createMessage(
+        _client,
+        {
+          geometryId,
+          authorUserId,
+          message,
+        },
+      ) {
+        return {
+          id: 1,
+          geometryId,
+          authorUserId,
+          authorDisplayName:
+            'Test User',
+          authorUsername:
+            'tester',
+          authorHasAvatar:
+            true,
+          geometryRevision:
+            '2026-09-25T12:00:00.000Z',
+          message,
+          createdAt:
+            '2026-09-25T12:01:00.000Z',
+          editedAt: null,
+        };
+      },
+    },
     leaseStorage: {
       async owns() {
         return true;
@@ -656,5 +690,51 @@ test('geometry topology previews are pure calculations without edit leases or pe
       'COMMIT',
     ),
     false,
+  );
+});
+
+
+test('geometry discussions persist normalized messages and expose public author identity', async () => {
+  const {
+    service,
+  } =
+    fixture([
+      geometry(
+        9,
+        '2026-09-25T12:00:00.000Z',
+      ),
+    ]);
+
+  const created =
+    await service
+      .postDiscussionMessage(
+        9,
+        {
+          id: 77,
+        },
+        {
+          message:
+            '  Проверить эту линию  ',
+        },
+      );
+
+  assert.equal(
+    created.geometryId,
+    9,
+  );
+  assert.equal(
+    created.message,
+    'Проверить эту линию',
+  );
+  assert.deepEqual(
+    created.author,
+    {
+      userId: 77,
+      username: 'tester',
+      displayName:
+        'Test User',
+      avatarUrl:
+        '/api/admin/geometry-editor/users/77/avatar',
+    },
   );
 });
