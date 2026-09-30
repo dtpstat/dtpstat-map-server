@@ -549,14 +549,93 @@ const SPLIT_GEOMETRY_PREVIEW_SQL = `
         4326
       ) AS blade
   ),
+  blade_points AS (
+    SELECT
+      ST_StartPoint(
+        parsed_blade.blade
+      ) AS start_point,
+      ST_EndPoint(
+        parsed_blade.blade
+      ) AS end_point
+    FROM parsed_blade
+  ),
+  blade_vector AS (
+    SELECT
+      start_point,
+      end_point,
+      ST_X(
+        end_point
+      ) -
+      ST_X(
+        start_point
+      ) AS dx,
+      ST_Y(
+        end_point
+      ) -
+      ST_Y(
+        start_point
+      ) AS dy,
+      SQRT(
+        POWER(
+          ST_X(
+            end_point
+          ) -
+          ST_X(
+            start_point
+          ),
+          2
+        ) +
+        POWER(
+          ST_Y(
+            end_point
+          ) -
+          ST_Y(
+            start_point
+          ),
+          2
+        )
+      ) AS vector_length
+    FROM blade_points
+  ),
   prepared AS (
     SELECT
-      ST_LineExtend(
-        parsed_blade.blade,
-        360.0,
-        360.0
+      ST_SetSRID(
+        ST_MakeLine(
+          ST_MakePoint(
+            ST_X(
+              start_point
+            ) -
+            dx /
+            vector_length *
+            1000.0,
+            ST_Y(
+              start_point
+            ) -
+            dy /
+            vector_length *
+            1000.0
+          ),
+          ST_MakePoint(
+            ST_X(
+              end_point
+            ) +
+            dx /
+            vector_length *
+            1000.0,
+            ST_Y(
+              end_point
+            ) +
+            dy /
+            vector_length *
+            1000.0
+          )
+        ),
+        4326
       ) AS blade
-    FROM parsed_blade
+    FROM blade_vector
+    WHERE
+      vector_length >
+        0.0
   ),
   split_result AS (
     SELECT

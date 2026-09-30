@@ -483,6 +483,23 @@ test('geometry sync can atomically clone immutable metadata for split-created dr
 });
 
 
+test('split blade extension is compatible with PostGIS installations without ST_LineExtend', async () => {
+  const storage =
+    await read(
+      'src/db/geometry-editor-storage.js',
+    );
+
+  assert.doesNotMatch(
+    storage,
+    /ST_LineExtend/u,
+  );
+  assert.match(
+    storage,
+    /ST_StartPoint[\s\S]*ST_EndPoint[\s\S]*ST_MakeLine[\s\S]*1000\.0/u,
+  );
+});
+
+
 test('split preview detects a real split by source component-count growth', async () => {
   const [
     storage,

@@ -72,11 +72,11 @@ test('interface settings expose point type CRUD and safe icon controls', async (
   );
   assert.match(
     editor,
-    /method: 'PATCH'/u,
+    /method:\s*'PATCH'/u,
   );
   assert.match(
     editor,
-    /method: 'DELETE'/u,
+    /method:\s*'DELETE'/u,
   );
   assert.match(
     editor,
@@ -84,7 +84,7 @@ test('interface settings expose point type CRUD and safe icon controls', async (
   );
   assert.match(
     editor,
-    /method: 'PUT'/u,
+    /method:\s*'PUT'/u,
   );
   assert.match(
     editor,

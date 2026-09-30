@@ -113,9 +113,9 @@ Geometry drafts хранятся в versioned `localStorage` workspace.
 - cross-tab изменения синхронизируются через storage events и realtime refresh;
 - незавершённый drag/cut не перезаписывается внешним tab update посреди gesture.
 
-Atomic bulk sync сохраняет create/update набор одной DB transaction. При
-ошибке выполняется rollback, а local workspace остаётся. После success
-удаляются только drafts, которые действительно были сохранены.
+Atomic bulk sync сохраняет `create`/`update`/`delete` набор одной DB
+transaction. При ошибке выполняется rollback, а local workspace остаётся.
+После success удаляются только drafts, которые действительно были сохранены.
 
 **Очистить локальные изменения** — явная destructive operation: editor
 release-ит принадлежащие ему leases и очищает workspace.
@@ -128,7 +128,10 @@ Existing geometry mutation также передаёт base revision (`UPDATED_A
 `baseUpdatedAt`). Если server revision уже изменилась, operation завершается
 conflict вместо blind overwrite.
 
-Merge/cut/delete используют тот же lease/revision contract.
+Topology preview (`union`/`cut`/`split`) не требует lease/revision и не
+изменяет БД: это чистое преобразование GeoJSON → GeoJSON. Lease и
+`baseUpdatedAt` проверяются только при последующем `sync` для persisted
+`update`/`delete` drafts.
 
 ## Import conflicts
 
@@ -171,6 +174,8 @@ V050 point types and Point category metadata
   cursor;
 - [x] line drawing не должен получать polygon fill; preview line должен совпадать
   со стилем рабочей editable line;
+- [x] локальное изменение business line type сразу меняет цвет/толщину
+  выбранной линии на карте до сохранения;
 - [x] «Сохранить локально» завершает активный EDIT, но сохраняет lease/token за
   client до явного release/sync/discard;
 - [x] перенос всей geometry отдельным drag-mode, не конфликтующим с vertex drag;
@@ -187,24 +192,33 @@ V050 point types and Point category metadata
 
 Реализовано:
 
-- [x] существующий режим «Вырезать нарисованную область…» сохраняет polygon
-  cutter;
-- [x] сохранённый polygon можно использовать как cutter для текущего polygon;
-  target требует owned edit lease + current revision, cutter передаётся как
-  `cutterGeometryId + cutterUpdatedAt` и проверяется optimistic read-lock-ом;
-- [x] line и polygon разделяются одной нарисованной режущей `LineString`;
-- [x] split принимается только если PostGIS возвращает ровно две валидные части;
-  исходный ID остаётся у первой части, вторая создаётся новой записью с теми же
-  editable metadata/source tags;
-- [x] обе split-части spatial-relink-ятся внутри той же transaction;
-- [x] cut/split требуют owned lease и `X-DTPStat-Base-Revision`; stale target
-  или stale referenced cutter дают conflict и полный rollback.
+- [x] `union`, `cut` и `split` являются отдельными pure preview
+  operations: принимают GeoJSON и возвращают GeoJSON без записи в БД;
+- [x] `union` работает для server+server, server+local и local+local
+  geometries; результат и поглощение source geometries сначала отражаются
+  только в local workspace;
+- [x] polygon cut работает как с нарисованным cutter, так и с выбранным
+  polygon-cutter, включая local/new geometry; cutter сам не изменяется;
+- [x] line/polygon split использует ровно две точки blade и выполняется сразу
+  после второй точки;
+- [x] split поддерживает MultiLineString/MultiPolygon и возвращает все
+  результирующие части, если число компонентов действительно увеличилось;
+- [x] split blade расширяется собственной совместимой геометрической
+  конструкцией на базовых PostGIS primitives и не зависит от `ST_LineExtend`;
+- [x] первая split-часть остаётся source draft, остальные создаются linked
+  local create drafts; запись выполняется только через общий `sync`;
+- [x] topology undo восстанавливает исходные drafts/geometries и освобождает
+  leases всей topology group;
+- [x] line union нормализует connected result через `ST_UnaryUnion` +
+  `ST_LineMerge` и удаляет последовательные точные дубликаты точек;
+- [x] внутренние SQL/PostGIS ошибки topology не раскрываются в UI:
+  пользователь получает сообщение «Запрошенная операция не выполнена», а
+  исходная причина остаётся в server log.
 
-UI deliberately использует один mental model: **cut** вычитает polygon, а
-**split** рисует линию-разделитель. Для cut существующим polygon пользователь
-отмечает ровно один сохранённый polygon в списке; cutter не изменяется.
+UI использует единый mental model: geometry operation сначала изменяет только
+local workspace; persistence является отдельной операцией `Синхронизировать`.
 
-### Notification / realtime infrastructure
+### Notification / realtime infrastructure### Notification / realtime infrastructure
 
 Реализовано:
 
@@ -278,7 +292,9 @@ Startup reconciliation дополнительно удаляет server-owned or
 UI-этап также закрыт:
 
 - CRUD типов точек находится в **Настройках интерфейса → Типы точек**;
-- там же доступны preview, upload/reset icon, display width/height и anchor X/Y;
+- там же доступны preview, единая кнопка «Сохранить» для metadata + optional
+  icon upload, reset icon, display width/height и anchor X/Y;
+- изменение width/height/anchor X/Y сразу обновляет preview без записи в БД;
 - Point geometry выбирает `pointTypeId` в обычном local draft/lease/revision flow;
 - admin map показывает icon поверх fallback Point marker;
 - public viewport отдаёт только видимые линии и видимые Point с активным типом;
