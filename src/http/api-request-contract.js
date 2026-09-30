@@ -128,6 +128,10 @@ const GEOMETRY_VALUE_KEYS = [
   'lineTypeId',
   'pointTypeId',
   'lanes',
+  'minZoom',
+  'maxZoom',
+  'validFrom',
+  'validTo',
 ];
 
 const OSM_BOUNDARY_CHANGE_KEYS = [
@@ -206,6 +210,7 @@ export const API_REQUEST_CONTRACTS =
         query: [
           'bbox',
           'center',
+          'zoom',
         ],
       },
     ),
@@ -656,6 +661,10 @@ export const API_REQUEST_CONTRACTS =
           'lineTypeId',
           'pointTypeId',
           'lanes',
+          'minZoom',
+          'maxZoom',
+          'validFrom',
+          'validTo',
         ],
         headers: [
           ...COMMON_MUTATION_HEADERS,

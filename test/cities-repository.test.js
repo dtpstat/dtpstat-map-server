@@ -107,7 +107,10 @@ test('viewport query uses padded selector and returns public lines plus active t
     [37.62, 55.75, 11],
   );
   assert.match(sql, /geometry\.geom && viewport\.geom/);
-  assert.match(sql, /ST_Intersects\(geometry\.geom, viewport\.geom\)/);
+  assert.match(
+    sql,
+    /ST_Intersects\([\s\S]*geometry\.geom,[\s\S]*viewport\.geom[\s\S]*\)/u,
+  );
   assert.match(sql, /geometry\.geom\s+FROM viewport/);
   assert.doesNotMatch(sql, /ST_Intersection\(geometry\.geom, viewport\.geom\)/);
   assert.match(sql, /line_type\.code AS business_type_code/);

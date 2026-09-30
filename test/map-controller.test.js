@@ -311,7 +311,10 @@ test('typed bus-lane layers stay below labels, show names on hover and can be to
 
     const geojson = { type: 'FeatureCollection', features: [] };
     controller.setViewportData(geojson);
-    assert.equal(map.getSource('bus-lanes').data, geojson);
+    assert.deepEqual(
+      map.getSource('bus-lanes').data,
+      geojson,
+    );
     assert.deepEqual(calls.at(-1), ['setData', 'bus-lanes']);
 
     let viewport;
@@ -345,7 +348,10 @@ test('typed bus-lane layers stay below labels, show names on hover and can be to
     map.handlers.get('style.load')();
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(map.getSource('ranked-cities').data.features[0].id, 1);
-    assert.equal(map.getSource('bus-lanes').data, geojson);
+    assert.deepEqual(
+      map.getSource('bus-lanes').data,
+      geojson,
+    );
     assert.equal(map.getLayer('bus-lanes-lines-7').paint['line-color'], '#aabbcc');
     assert.deepEqual(calls.at(-1), ['setData', 'bus-lanes']);
   } finally {
