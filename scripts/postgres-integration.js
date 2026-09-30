@@ -34,6 +34,9 @@ import {
   createGeometryEditLeaseStorage,
 } from '../src/db/geometry-edit-lease-storage.js';
 import {
+  createGeometryDiscussionStorage,
+} from '../src/db/geometry-discussion-storage.js';
+import {
   createGeometryEditorService,
 } from '../src/modules/geometry/editor-service.js';
 import {
@@ -520,6 +523,10 @@ async function verifyGeometryEditorInfrastructure(
     createGeometryEditLeaseStorage(
       pool,
     );
+  const discussionStorage =
+    createGeometryDiscussionStorage(
+      pool,
+    );
 
   const client =
     await pool.connect();
@@ -702,6 +709,7 @@ async function verifyGeometryEditorInfrastructure(
       {
         storage,
         leaseStorage,
+        discussionStorage,
         acquireLock:
           async () => {},
         randomUUID:
