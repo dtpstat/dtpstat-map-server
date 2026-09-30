@@ -783,7 +783,7 @@ export function normalizeGeometryBulkUpdates(
 }
 
 
-export function normalizeGeometryEditToken(export function normalizeGeometryEditToken(
+export function normalizeGeometryEditToken(
   value,
   label = 'editToken',
 ) {

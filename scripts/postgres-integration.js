@@ -1879,7 +1879,7 @@ async function verifyGeometryEditorInfrastructure(
     },
   );
 
-  const unlinked =  const unlinked =
+  const unlinked =
     await service.sync(
       {
         items: [{

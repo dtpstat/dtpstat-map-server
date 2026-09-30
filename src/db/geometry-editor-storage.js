@@ -477,7 +477,7 @@ const UNION_GEOMETRY_PREVIEW_SQL = `
     )
 `;
 
-const CUT_GEOMETRY_PREVIEW_SQL = `const CUT_GEOMETRY_PREVIEW_SQL = `
+const CUT_GEOMETRY_PREVIEW_SQL = `
   WITH source AS (
     SELECT
       ST_SetSRID(

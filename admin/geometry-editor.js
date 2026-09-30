@@ -7230,7 +7230,7 @@ if (section) {
   );
 
 
-  async function recalculateDerived() {  async function recalculateDerived() {
+  async function recalculateDerived() {
     if (state.importSession) {
       setMessage(
         'Сначала разрешите конфликты подготовленного импорта.',

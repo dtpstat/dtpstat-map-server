@@ -1109,7 +1109,6 @@ export function createGeometryEditorRouter({
   );
 
   router.post(
-    '/admin/geometry-editor/topology/cut-preview',  router.post(
     '/admin/geometry-editor/topology/cut-preview',
     adminAuth
       .requireGeometryEditor,
