@@ -8,6 +8,9 @@ import {
   createGeometryEditLeaseStorage,
 } from '../db/geometry-edit-lease-storage.js';
 import {
+  createGeometryDiscussionStorage,
+} from '../db/geometry-discussion-storage.js';
+import {
   acquireDataImportLock,
 } from '../db/database-locks.js';
 import {
@@ -29,6 +32,11 @@ export function createGeometryEditorRuntime(
       leaseStorage:
         dependencies.leaseStorage ??
         createGeometryEditLeaseStorage(
+          pool,
+        ),
+      discussionStorage:
+        dependencies.discussionStorage ??
+        createGeometryDiscussionStorage(
           pool,
         ),
       acquireLock:
