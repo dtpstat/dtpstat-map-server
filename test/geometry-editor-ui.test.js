@@ -626,19 +626,43 @@ test('geometry workspace validates exact persisted tokens and scopes takeover to
 });
 
 
-test('geometry destructive actions preserve the explicit lease contract', async () => {
-  const editor =
-    await read(
-      'admin/geometry-editor.js',
-    );
+test('geometry destructive actions keep one delete action with server confirmation and lease safety', async () => {
+  const [
+    editor,
+    page,
+  ] =
+    await Promise.all([
+      read(
+        'admin/geometry-editor.js',
+      ),
+      read(
+        'admin/index.html',
+      ),
+    ]);
 
   assert.match(
-    editor,
-    /Для удаления сначала начните редактирование геометрии/u,
+    page,
+    /id="geometry-delete"[\s\S]*>\s*Удалить\s*<\/button>/u,
   );
   assert.match(
     editor,
-    /method: 'DELETE'[\s\S]*X-DTPStat-Edit-Token/u,
+    /deleteButton\.disabled =[\s\S]*!item\?\.id[\s\S]*state\.beginEditPendingId !== null/u,
+  );
+  assert.match(
+    editor,
+    /deleteButton\.addEventListener\('click'[\s\S]*isLocalGeometryId\([\s\S]*drafts\.remove\([\s\S]*Геометрия удалена\./u,
+  );
+  assert.match(
+    editor,
+    /Вы уверены, что хотите удалить геометрию с сервера\?/u,
+  );
+  assert.match(
+    editor,
+    /if \(!state\.editing\)[\s\S]*await beginEditing\(\)[\s\S]*method: 'DELETE'[\s\S]*X-DTPStat-Edit-Token/u,
+  );
+  assert.match(
+    editor,
+    /revertButton\.hidden =[\s\S]*localItem/u,
   );
   assert.match(
     editor,

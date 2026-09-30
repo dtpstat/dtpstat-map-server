@@ -2874,13 +2874,16 @@ if (section) {
     }
 
     form.querySelector('button[type="submit"]').disabled = !enabled;
-    revertButton.disabled = !enabled;
+    revertButton.hidden =
+      localItem;
+    revertButton.disabled =
+      localItem ||
+      !enabled;
     deleteButton.disabled =
       !item?.id ||
-      localItem ||
-      !state.editing ||
       Boolean(state.drawing) ||
-      Boolean(state.importSession);
+      Boolean(state.importSession) ||
+      state.beginEditPendingId !== null;
 
     const blockedByOther =
       Boolean(
@@ -5882,12 +5885,11 @@ if (section) {
     const item = state.current;
     if (!item?.id) return;
 
-    if (isLocalGeometryId(item.id)) {
-      drafts.remove(item.id);
-      rebuildDraftOverlay();
-      refreshDraftControls();
-      clearSelection();
-      setMessage('Новая локальная геометрия удалена.');
+    if (
+      isLocalGeometryId(
+        item.id,
+      )
+    ) {
       return;
     }
 
@@ -5917,43 +5919,115 @@ if (section) {
   });
 
   deleteButton.addEventListener('click', async () => {
-    const item = state.current;
+    const item =
+      state.current;
     if (!item?.id) return;
-    const confirmed = await adminConfirm({
-      title: 'Удалить геометрию?',
-      message: '«' + displayName(item) + '» будет удалена. Это действие необратимо.',
-      confirmLabel: 'Удалить геометрию',
-      cancelLabel: 'Отмена',
-      destructive: true,
-    });
+
+    if (
+      isLocalGeometryId(
+        item.id,
+      )
+    ) {
+      drafts.remove(
+        item.id,
+      );
+      state.selectedSet.delete(
+        item.id,
+      );
+      rebuildDraftOverlay();
+      clearSelection();
+      refreshDraftControls();
+      setMessage(
+        'Геометрия удалена.',
+        'success',
+      );
+      return;
+    }
+
+    const confirmed =
+      await adminConfirm({
+        title:
+          'Удалить геометрию?',
+        message:
+          'Вы уверены, что хотите удалить геометрию с сервера?',
+        confirmLabel:
+          'Удалить',
+        cancelLabel:
+          'Отмена',
+        destructive:
+          true,
+      });
     if (!confirmed) return;
 
-    const local = draftFor(item.id);
+    if (
+      String(
+        state.current?.id,
+      ) !==
+      String(
+        item.id,
+      )
+    ) {
+      return;
+    }
+
+    if (!state.editing) {
+      await beginEditing();
+    }
+
+    if (
+      !state.editing ||
+      String(
+        state.current?.id,
+      ) !==
+      String(
+        item.id,
+      )
+    ) {
+      return;
+    }
+
+    const local =
+      draftFor(
+        item.id,
+      );
     if (!local?.editToken) {
       setMessage(
-        'Для удаления сначала начните редактирование геометрии.',
+        'Не удалось получить блокировку для удаления геометрии.',
         'error',
       );
       return;
     }
 
     try {
-      await api('/api/admin/geometry-editor/geometries/' + item.id, {
-        method: 'DELETE',
-        headers: {
-          'X-DTPStat-Base-Revision': local.baseUpdatedAt ?? item.updatedAt,
-          'X-DTPStat-Edit-Token':
-            local.editToken,
+      await api(
+        '/api/admin/geometry-editor/geometries/' +
+          item.id,
+        {
+          method: 'DELETE',
+          headers: {
+            'X-DTPStat-Base-Revision':
+              local.baseUpdatedAt ??
+              item.updatedAt,
+            'X-DTPStat-Edit-Token':
+              local.editToken,
+          },
         },
-      });
-      drafts.remove(item.id);
+      );
+      drafts.remove(
+        item.id,
+      );
       state.validatedEditTokens.delete(
         String(item.id),
       );
-      state.selectedSet.delete(item.id);
-      state.serverGeometries = state.serverGeometries.filter(
-        (candidate) => candidate.id !== item.id,
+      state.selectedSet.delete(
+        item.id,
       );
+      state.serverGeometries =
+        state.serverGeometries.filter(
+          (candidate) =>
+            candidate.id !==
+            item.id,
+        );
       rebuildDraftOverlay();
       clearSelection();
       refreshDraftControls();
@@ -5962,14 +6036,23 @@ if (section) {
         'success',
       );
     } catch (error) {
-      if (error.status === 409 && local) {
-        drafts.markConflict(item.id, true);
+      if (
+        error.status === 409 &&
+        local
+      ) {
+        drafts.markConflict(
+          item.id,
+          true,
+        );
         rebuildDraftOverlay();
         renderList();
         renderFormState();
         refreshDraftControls();
       }
-      setMessage(error.message, 'error');
+      setMessage(
+        error.message,
+        'error',
+      );
     }
   });
 
