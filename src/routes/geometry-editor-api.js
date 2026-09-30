@@ -44,6 +44,37 @@ function validationError(
   return true;
 }
 
+function topologyError(
+  response,
+  error,
+  operation,
+) {
+  if (
+    validationError(
+      response,
+      error,
+    )
+  ) {
+    return;
+  }
+
+  console.error(
+    'Geometry topology operation failed',
+    {
+      operation,
+      error,
+    },
+  );
+
+  response
+    .status(500)
+    .json({
+      error:
+        'Запрошенная операция не выполнена',
+    });
+}
+
+
 function realtimeClientId(
   request,
 ) {
@@ -1095,16 +1126,11 @@ export function createGeometryEditorRouter({
             geometry,
           });
       } catch (error) {
-        if (
-          validationError(
-            response,
-            error,
-          )
-        ) {
-          return;
-        }
-        next(error);
-      }
+        topologyError(
+          response,
+          error,
+          'union-preview',
+        );
     },
   );
 
@@ -1145,16 +1171,11 @@ export function createGeometryEditorRouter({
             geometry,
           });
       } catch (error) {
-        if (
-          validationError(
-            response,
-            error,
-          )
-        ) {
-          return;
-        }
-        next(error);
-      }
+        topologyError(
+          response,
+          error,
+          'cut-preview',
+        );
     },
   );
 
@@ -1195,16 +1216,11 @@ export function createGeometryEditorRouter({
             geometries,
           });
       } catch (error) {
-        if (
-          validationError(
-            response,
-            error,
-          )
-        ) {
-          return;
-        }
-        next(error);
-      }
+        topologyError(
+          response,
+          error,
+          'split-preview',
+        );
     },
   );
 

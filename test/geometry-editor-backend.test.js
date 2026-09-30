@@ -516,6 +516,35 @@ test('split preview detects a real split by source component-count growth', asyn
 });
 
 
+test('topology API hides internal PostGIS errors from the admin UI', async () => {
+  const route =
+    await read(
+      'src/routes/geometry-editor-api.js',
+    );
+
+  assert.match(
+    route,
+    /function topologyError\([\s\S]*Запрошенная операция не выполнена/u,
+  );
+  assert.match(
+    route,
+    /console\.error\([\s\S]*Geometry topology operation failed/u,
+  );
+  assert.match(
+    route,
+    /topologyError\([\s\S]*'union-preview'/u,
+  );
+  assert.match(
+    route,
+    /topologyError\([\s\S]*'cut-preview'/u,
+  );
+  assert.match(
+    route,
+    /topologyError\([\s\S]*'split-preview'/u,
+  );
+});
+
+
 test('geometry topology preview stays PostGIS-backed and mutation-free', async () => {
   const [
     policy,
