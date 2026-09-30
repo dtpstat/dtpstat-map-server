@@ -779,29 +779,80 @@ async function verifyGeometryEditorInfrastructure(
       'integration-polygon-client',
     );
 
-  const cutPolygon =
-    await service.cut(
-      polygon.id,
-      {
-        geometry: {
-          type:
-            'Polygon',
-          coordinates: [[
-            [30.027, 50.027],
-            [30.033, 50.027],
-            [30.033, 50.033],
-            [30.027, 50.033],
-            [30.027, 50.027],
-          ]],
-        },
+  const cutPreview =
+    await service.previewCut({
+      sourceGeometry:
+        polygon.geometry,
+      cutterGeometry: {
+        type:
+          'Polygon',
+        coordinates: [[
+          [30.027, 50.027],
+          [30.033, 50.027],
+          [30.033, 50.033],
+          [30.027, 50.033],
+          [30.027, 50.027],
+        ]],
       },
+    });
+
+  const ringsBeforeCutSync =
+    await pool.query(
+      `
+        SELECT
+          COALESCE(
+            SUM(
+              ST_NumInteriorRings(
+                part.geom
+              )
+            ),
+            0
+          )::integer AS "ringCount"
+        FROM city_geometries
+          AS geometry
+        CROSS JOIN LATERAL ST_Dump(
+          ST_CollectionExtract(
+            geometry.geom,
+            3
+          )
+        ) AS part
+        WHERE geometry.id =
+              $1::bigint
+      `,
+      [
+        polygon.id,
+      ],
+    );
+
+  assert.equal(
+    Number(
+      ringsBeforeCutSync
+        .rows[0]
+        ?.ringCount,
+    ),
+    0,
+    'Cut preview mutated the persisted polygon before sync',
+  );
+
+  const cutSync =
+    await service.sync(
       {
-        expectedUpdatedAt:
-          new Date(
-            polygon.updatedAt,
-          ).toISOString(),
-        editToken:
-          polygonLease.token,
+        items: [{
+          kind:
+            'update',
+          id:
+            polygon.id,
+          baseUpdatedAt:
+            new Date(
+              polygon.updatedAt,
+            ).toISOString(),
+          editToken:
+            polygonLease.token,
+          changes: {
+            geometry:
+              cutPreview,
+          },
+        }],
       },
       {
         id:
@@ -812,6 +863,9 @@ async function verifyGeometryEditorInfrastructure(
           false,
       },
     );
+
+  const cutPolygon =
+    cutSync.updated[0];
 
   assert.equal(
     cutPolygon.id,
@@ -857,7 +911,7 @@ async function verifyGeometryEditorInfrastructure(
         ?.ringCount,
     ),
     1,
-    'Interior polygon cut must persist exactly one polygon hole',
+    'Interior polygon cut must persist exactly one polygon hole after sync',
   );
 
   const created =
@@ -1360,46 +1414,151 @@ async function verifyGeometryEditorInfrastructure(
       childLinkedAgain
         .updatedAt,
     ).toISOString();
+  const splitBlade = {
+    type:
+      'LineString',
+    coordinates: [
+      [
+        30.029,
+        50.01,
+      ],
+      [
+        30.029,
+        50.02,
+      ],
+    ],
+  };
 
-  const splitResult =
-    await service.split(
+  const countBeforeSplitPreview =
+    await pool.query(
+      'SELECT COUNT(*)::integer AS count FROM city_geometries',
+    );
+
+  const splitPreview =
+    await service.previewSplit({
+      sourceGeometry:
+        childLinkedAgain
+          .geometry,
+      blade:
+        splitBlade,
+    });
+
+  assert.equal(
+    splitPreview.length,
+    2,
+    'Line split preview must return exactly two geometry parts',
+  );
+
+  const countAfterSplitPreview =
+    await pool.query(
+      'SELECT COUNT(*)::integer AS count FROM city_geometries',
+    );
+
+  assert.equal(
+    countAfterSplitPreview
+      .rows[0]
+      .count,
+    countBeforeSplitPreview
+      .rows[0]
+      .count,
+    'Split preview inserted a geometry before sync',
+  );
+
+  const persistedBeforeSplitSync =
+    await storage.getGeometry(
+      pool,
       geometry.id,
+    );
+
+  assert.deepEqual(
+    persistedBeforeSplitSync
+      .geometry,
+    childLinkedAgain
+      .geometry,
+    'Split preview changed the persisted source geometry before sync',
+  );
+
+  const splitSync =
+    await service.sync(
       {
-        blade: {
-          type:
-            'LineString',
-          coordinates: [
-            [
-              30.029,
-              50.01,
-            ],
-            [
-              30.029,
-              50.02,
-            ],
-          ],
-        },
+        items: [
+          {
+            kind:
+              'update',
+            id:
+              geometry.id,
+            baseUpdatedAt:
+              splitRevision,
+            editToken:
+              takeover.lease.token,
+            changes: {
+              geometry:
+                splitPreview[0],
+            },
+          },
+          {
+            kind:
+              'create',
+            localId:
+              'integration-split-part-2',
+            sourceGeometryId:
+              geometry.id,
+            value: {
+              geometry:
+                splitPreview[1],
+              displayName:
+                childLinkedAgain
+                  .displayName,
+              tooltip:
+                childLinkedAgain
+                  .tooltip,
+              tags:
+                childLinkedAgain
+                  .tags,
+              isVisible:
+                childLinkedAgain
+                  .isVisible,
+              lineTypeId:
+                childLinkedAgain
+                  .lineTypeId,
+              lanes:
+                childLinkedAgain
+                  .lanes,
+            },
+          },
+        ],
       },
       {
-        expectedUpdatedAt:
-          splitRevision,
-        editToken:
-          takeover.lease.token,
-      },
-      {
-        id: editUserId,
+        id:
+          editUserId,
         username:
           'geometry-integration',
-        isSuperuser: true,
+        isSuperuser:
+          true,
       },
     );
+
+  const splitResult = {
+    sourceGeometryId:
+      geometry.id,
+    geometries: [
+      splitSync.updated
+        .find(
+          (item) =>
+            item.id ===
+            geometry.id,
+        ),
+      splitSync.created[0]
+        .geometry,
+    ],
+  };
 
   assert.equal(
     splitResult
       .geometries
       .length,
     2,
-    'Line split must create exactly two geometry records',
+    'Atomic split sync must persist exactly two geometry records',
   );
   assert.equal(
     splitResult
@@ -1414,6 +1573,22 @@ async function verifyGeometryEditorInfrastructure(
       .geometries[1]
       .id,
   );
+
+  const countAfterSplitSync =
+    await pool.query(
+      'SELECT COUNT(*)::integer AS count FROM city_geometries',
+    );
+
+  assert.equal(
+    countAfterSplitSync
+      .rows[0]
+      .count,
+    countBeforeSplitPreview
+      .rows[0]
+      .count + 1,
+    'Atomic split sync did not create exactly one companion geometry',
+  );
+
   const splitRelinkDiagnostics =
     await pool.query(
       `

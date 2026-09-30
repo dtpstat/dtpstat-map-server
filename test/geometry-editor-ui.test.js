@@ -1014,7 +1014,7 @@ test('saving locally leaves the lease but exits active edit and can resume it', 
 });
 
 
-test('geometry editor exposes optimistic polygon cutter and line-blade split operations', async () => {
+test('geometry editor exposes local-preview polygon cutter and line-blade split operations', async () => {
   const [
     page,
     editor,
@@ -1050,15 +1050,15 @@ test('geometry editor exposes optimistic polygon cutter and line-blade split ope
 
   assert.match(
     editor,
-    /cutterGeometryId:[\s\S]*cutter\.id[\s\S]*cutterUpdatedAt:[\s\S]*cutter\.updatedAt/u,
+    /cutTarget\([\s\S]*cutter\.geometry/u,
   );
   assert.match(
     editor,
-    /\/geometries\/\$\{encodeURIComponent\(target\.id\)\}\/split/u,
+    /\/topology\/split-preview/u,
   );
   assert.match(
     editor,
-    /body:[\s\S]*JSON\.stringify\(\{[\s\S]*blade/u,
+    /sourceGeometry[\s\S]*blade/u,
   );
   assert.match(
     editor,
@@ -1086,7 +1086,11 @@ test('geometry editor exposes optimistic polygon cutter and line-blade split ope
   );
   assert.match(
     editor,
-    /releaseDraftLease\([\s\S]*target\.id/u,
+    /Геометрия разделена только в локальных черновиках/u,
+  );
+  assert.doesNotMatch(
+    editor,
+    /\/geometries\/\$\{encodeURIComponent\(target\.id\)\}\/split/u,
   );
 });
 
