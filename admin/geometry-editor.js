@@ -5129,17 +5129,24 @@ if (section) {
         [],
       );
 
-    if (
-      root?.editToken
-    ) {
-      await Promise.allSettled([
-        releaseDraftLease({
-          ...root,
-          id:
-            rootId,
-        }),
-      ]);
-    }
+    await Promise.allSettled(
+      group
+        .filter(
+          (candidate) =>
+            Boolean(
+              candidate
+                ?.editToken,
+            ),
+        )
+        .map(
+          (candidate) =>
+            releaseDraftLease({
+              ...candidate,
+              id:
+                candidate.id,
+            }),
+        ),
+    );
 
     for (
       const candidate of

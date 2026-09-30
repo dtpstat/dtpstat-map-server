@@ -301,6 +301,38 @@ test('geometry union and cut operate on effective local geometry while persisten
 });
 
 
+test('undoing a topology group releases every server lease in the group', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  const start =
+    editor.indexOf(
+      'async function undoTopologyGroup',
+    );
+  const end =
+    editor.indexOf(
+      'async function topologyFailure',
+      start,
+    );
+  const source =
+    editor.slice(
+      start,
+      end,
+    );
+
+  assert.match(
+    source,
+    /group[\s\S]*\.filter\([\s\S]*editToken[\s\S]*\.map\([\s\S]*releaseDraftLease/u,
+  );
+  assert.doesNotMatch(
+    source,
+    /root\?\.editToken[\s\S]*releaseDraftLease/u,
+  );
+});
+
+
 test('geometry list highlights manually edited geometries and hides bulk checkboxes until requested', async () => {
   const [
     editor,
@@ -321,7 +353,7 @@ test('geometry list highlights manually edited geometries and hides bulk checkbo
 
   assert.match(
     editor,
-    /summaryFromDetail[\s\S]*wasEdited: item\.wasEdited/u,
+    /function effectiveSummary\(item\)[\s\S]*\.\.\.effective[\s\S]*family:/u,
   );
   assert.match(
     editor,
