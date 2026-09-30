@@ -439,7 +439,7 @@ test('saved local server draft remains revertible outside active edit mode', asy
 });
 
 
-test('geometry editor resolves staged import conflicts visually without dropping local drafts', async () => {test('geometry editor resolves staged import conflicts visually without dropping local drafts', async () => {
+test('geometry editor resolves staged import conflicts visually without dropping local drafts', async () => {
   const [
     editor,
     html,
