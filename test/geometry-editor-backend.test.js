@@ -418,6 +418,43 @@ test('geometry editor backend exposes atomic create-update sync and edit leases'
 });
 
 
+test('geometry sync can atomically clone immutable metadata for split-created drafts', async () => {
+  const [
+    policy,
+    service,
+    storage,
+  ] =
+    await Promise.all([
+      read(
+        'src/modules/geometry/editor-policy.js',
+      ),
+      read(
+        'src/modules/geometry/editor-service.js',
+      ),
+      read(
+        'src/db/geometry-editor-storage.js',
+      ),
+    ]);
+
+  assert.match(
+    policy,
+    /sourceGeometryId/u,
+  );
+  assert.match(
+    service,
+    /sourceGeometryId must reference an update in the same sync request/u,
+  );
+  assert.match(
+    service,
+    /createGeometryFromSource/u,
+  );
+  assert.match(
+    storage,
+    /CREATE_GEOMETRY_FROM_SOURCE_SQL[\s\S]*source\.properties[\s\S]*source\.source_tags/u,
+  );
+});
+
+
 test('geometry topology preview stays PostGIS-backed and mutation-free', async () => {
   const [
     policy,

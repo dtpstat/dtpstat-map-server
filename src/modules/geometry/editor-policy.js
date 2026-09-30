@@ -970,6 +970,7 @@ export function normalizeGeometrySyncRequest(
                 ![
                   'kind',
                   'localId',
+                  'sourceGeometryId',
                   'value',
                 ].includes(key),
             );
@@ -1004,6 +1005,16 @@ export function normalizeGeometrySyncRequest(
           kind:
             'create',
           localId,
+          sourceGeometryId:
+            entry.sourceGeometryId ===
+              undefined ||
+            entry.sourceGeometryId ===
+              null
+              ? null
+              : normalizeGeometryId(
+                entry.sourceGeometryId,
+                `items[${index}].sourceGeometryId`,
+              ),
           value:
             normalizeGeometryCreatePayload(
               entry.value,

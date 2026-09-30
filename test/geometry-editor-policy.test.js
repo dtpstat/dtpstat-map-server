@@ -6,6 +6,7 @@ import {
   normalizeGeometryBulkUpdates,
   normalizeGeometryCreatePayload,
   normalizeGeometryMergeRequest,
+  normalizeGeometrySyncRequest,
   normalizeGeometryTags,
   validateEditorGeometry,
 } from '../src/modules/geometry/editor-policy.js';
@@ -334,6 +335,68 @@ test('geometry merge request requires distinct optimistic revisions', () => {
     /Duplicate geometry id in merge/u,
   );
 });
+
+test('geometry sync create can clone immutable metadata only from an explicit source id', () => {
+  const request =
+    normalizeGeometrySyncRequest({
+      items: [{
+        kind: 'create',
+        localId:
+          'local:part-2',
+        sourceGeometryId:
+          17,
+        value: {
+          geometry: {
+            type:
+              'LineString',
+            coordinates: [
+              [30, 60],
+              [31, 61],
+            ],
+          },
+          lineTypeId:
+            7,
+          lanes:
+            1,
+        },
+      }],
+    });
+
+  assert.equal(
+    request[0]
+      .sourceGeometryId,
+    17,
+  );
+
+  assert.throws(
+    () =>
+      normalizeGeometrySyncRequest({
+        items: [{
+          kind: 'create',
+          localId:
+            'local:part-2',
+          sourceGeometryId:
+            'not-an-id',
+          value: {
+            geometry: {
+              type:
+                'LineString',
+              coordinates: [
+                [30, 60],
+                [31, 61],
+              ],
+            },
+            lineTypeId:
+              7,
+            lanes:
+              1,
+          },
+        }],
+      }),
+    /sourceGeometryId/u,
+  );
+});
+
 
 test('geometry topology preview requests validate complete local GeoJSON inputs', () => {
   const sourcePolygon = {

@@ -317,6 +317,75 @@ const CREATE_GEOMETRY_SQL = `
   RETURNING id::integer AS id
 `;
 
+const CREATE_GEOMETRY_FROM_SOURCE_SQL = `
+  WITH prepared AS (
+    SELECT
+      ST_SetSRID(
+        ST_GeomFromGeoJSON(
+          $2::text
+        ),
+        4326
+      ) AS geom
+  )
+  INSERT INTO city_geometries (
+    city_id,
+    boundary_id,
+    line_type_id,
+    point_type_id,
+    lanes,
+    length_m,
+    lane_length_m,
+    properties,
+    geom,
+    display_name,
+    tooltip,
+    tags,
+    source_tags,
+    is_visible,
+    was_edited,
+    updated_at
+  )
+  SELECT
+    source.city_id,
+    source.boundary_id,
+    $3::bigint,
+    $4::bigint,
+    $5::smallint,
+    CASE
+      WHEN GeometryType(prepared.geom) IN ('LINESTRING', 'MULTILINESTRING')
+        THEN ST_Length(
+          prepared.geom::geography
+        )
+      ELSE NULL
+    END,
+    CASE
+      WHEN GeometryType(prepared.geom) IN ('LINESTRING', 'MULTILINESTRING')
+        THEN ST_Length(
+          prepared.geom::geography
+        ) * $5::smallint
+      ELSE NULL
+    END,
+    source.properties,
+    prepared.geom,
+    $6::text,
+    $7::text,
+    $8::text[],
+    source.source_tags,
+    $9::boolean,
+    TRUE,
+    NOW()
+  FROM city_geometries AS source
+  CROSS JOIN prepared
+  WHERE source.id = $1::bigint
+    AND NOT ST_IsEmpty(
+      prepared.geom
+    )
+    AND ST_IsValid(
+      prepared.geom
+    )
+  RETURNING id::integer AS id
+`;
+
 const UPDATE_GEOMETRY_SQL = `
   WITH prepared AS (
     SELECT
@@ -939,6 +1008,39 @@ export function createGeometryEditorStorage(
         result.rows[0]?.id;
       return id
         ? one(client, id)
+        : null;
+    },
+
+    async createGeometryFromSource(
+      client,
+      sourceGeometryId,
+      payload,
+    ) {
+      const result =
+        await client.query(
+          CREATE_GEOMETRY_FROM_SOURCE_SQL,
+          [
+            sourceGeometryId,
+            JSON.stringify(
+              payload.geometry,
+            ),
+            payload.lineTypeId,
+            payload.pointTypeId,
+            payload.lanes,
+            payload.displayName,
+            payload.tooltip,
+            payload.tags,
+            payload.isVisible,
+          ],
+        );
+
+      const id =
+        result.rows[0]?.id;
+      return id
+        ? one(
+          client,
+          id,
+        )
         : null;
     },
 

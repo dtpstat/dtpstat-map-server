@@ -1877,53 +1877,38 @@ export function createGeometryEditorService(
                 ],
               ),
             );
-          const created = [];
+          const updateIdSet =
+            new Set(
+              updateIds,
+            );
+          const creates =
+            items.filter(
+              (item) =>
+                item.kind ===
+                'create',
+            );
+
+          for (
+            const item of creates
+          ) {
+            if (
+              item.sourceGeometryId !==
+                null &&
+              !updateIdSet.has(
+                item.sourceGeometryId,
+              )
+            ) {
+              throw new GeometryEditorValidationError(
+                'sourceGeometryId must reference an update in the same sync request',
+              );
+            }
+          }
+
           const updated = [];
 
           for (
-            const item of items
+            const item of updates
           ) {
-            if (
-              item.kind ===
-              'create'
-            ) {
-              await assertGeometryTypes(
-                client,
-                item.value,
-              );
-
-              const geometry =
-                await storage
-                  .createGeometry(
-                    client,
-                    item.value,
-                  );
-
-              if (!geometry) {
-                throw new GeometryEditorValidationError(
-                  'Geometry must be non-empty and valid',
-                );
-              }
-
-              await storage
-                .relinkGeometry(
-                  client,
-                  geometry.id,
-                );
-
-              created.push({
-                localId:
-                  item.localId,
-                geometry:
-                  await storage
-                    .getGeometry(
-                      client,
-                      geometry.id,
-                    ),
-              });
-              continue;
-            }
-
             updated.push(
               await updateLocked(
                 client,
@@ -1933,6 +1918,82 @@ export function createGeometryEditorService(
                 item.changes,
               ),
             );
+          }
+
+          const updatedById =
+            new Map(
+              updated.map(
+                (item) => [
+                  item.id,
+                  item,
+                ],
+              ),
+            );
+          const created = [];
+
+          for (
+            const item of creates
+          ) {
+            await assertGeometryTypes(
+              client,
+              item.value,
+            );
+
+            const source =
+              item.sourceGeometryId ===
+                null
+                ? null
+                : updatedById.get(
+                  item.sourceGeometryId,
+                );
+
+            if (
+              source &&
+              source.family !==
+                item.value.family
+            ) {
+              throw new GeometryEditorValidationError(
+                'Cloned geometry must keep the source geometry family',
+              );
+            }
+
+            const geometry =
+              item.sourceGeometryId ===
+                null
+                ? await storage
+                  .createGeometry(
+                    client,
+                    item.value,
+                  )
+                : await storage
+                  .createGeometryFromSource(
+                    client,
+                    item.sourceGeometryId,
+                    item.value,
+                  );
+
+            if (!geometry) {
+              throw new GeometryEditorValidationError(
+                'Geometry must be non-empty and valid',
+              );
+            }
+
+            await storage
+              .relinkGeometry(
+                client,
+                geometry.id,
+              );
+
+            created.push({
+              localId:
+                item.localId,
+              geometry:
+                await storage
+                  .getGeometry(
+                    client,
+                    geometry.id,
+                  ),
+            });
           }
 
           const entityIds = [
