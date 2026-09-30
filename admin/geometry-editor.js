@@ -47,6 +47,14 @@ if (section) {
   const takeoverEditButton = document.querySelector('#geometry-takeover-edit');
   const editLockStatus = document.querySelector('#geometry-edit-lock-status');
   const editingNotice = document.querySelector('#geometry-editing-notice');
+  const discussionOpenButton = document.querySelector('#geometry-discussion-open');
+  const discussionPanel = document.querySelector('#geometry-discussion');
+  const discussionCloseButton = document.querySelector('#geometry-discussion-close');
+  const discussionTitle = document.querySelector('#geometry-discussion-title');
+  const discussionSubtitle = document.querySelector('#geometry-discussion-subtitle');
+  const discussionMessages = document.querySelector('#geometry-discussion-messages');
+  const discussionForm = document.querySelector('#geometry-discussion-form');
+  const discussionInput = document.querySelector('#geometry-discussion-input');
   const saveAll = document.querySelector('#geometry-editor-save-all');
   const discardAll = document.querySelector('#geometry-editor-discard-all');
   const form = document.querySelector('#geometry-editor-form');
@@ -152,6 +160,11 @@ if (section) {
     editLeases: new Map(),
     validatedEditTokens: new Map(),
     beginEditPendingId: null,
+    discussionGeometryId: null,
+    discussionMessages: [],
+    discussionLoading: false,
+    discussionSending: false,
+    discussionRequestSequence: 0,
   };
 
   const REMOTE_SYNC_DELAY_MS = 75;
@@ -617,6 +630,543 @@ if (section) {
   function setMessage(text, tone = '') {
     message.textContent = text ?? '';
     message.className = `notice${tone ? ` notice-${tone}` : ''}`;
+  }
+
+  function identityName(identity) {
+    return (
+      identity?.displayName?.trim?.() ||
+      identity?.username?.trim?.() ||
+      'Пользователь'
+    );
+  }
+
+  function identityInitials(identity) {
+    const name =
+      identityName(identity);
+    const parts =
+      name
+        .split(/\s+/u)
+        .filter(Boolean)
+        .slice(0, 2);
+
+    return (
+      parts
+        .map(
+          (part) =>
+            part[0]?.toLocaleUpperCase('ru-RU') ??
+            '',
+        )
+        .join('') ||
+      '?'
+    );
+  }
+
+  function identityAvatar(
+    identity,
+    className,
+  ) {
+    const avatarUrl =
+      identity?.avatarUrl ??
+      null;
+
+    if (avatarUrl) {
+      const image =
+        document.createElement('img');
+      image.className =
+        className;
+      image.alt =
+        '';
+      image.loading =
+        'lazy';
+      image.src =
+        avatarUrl;
+      image.addEventListener(
+        'error',
+        () => {
+          const fallback =
+            document.createElement('span');
+          fallback.className =
+            className +
+            ' ' +
+            (
+              className ===
+                'geometry-edit-actor-avatar'
+                ? 'geometry-edit-actor-fallback'
+                : 'geometry-discussion-avatar-fallback'
+            );
+          fallback.textContent =
+            identityInitials(
+              identity,
+            );
+          image.replaceWith(
+            fallback,
+          );
+        },
+        {
+          once: true,
+        },
+      );
+      return image;
+    }
+
+    const fallback =
+      document.createElement('span');
+    fallback.className =
+      className +
+      ' ' +
+      (
+        className ===
+          'geometry-edit-actor-avatar'
+          ? 'geometry-edit-actor-fallback'
+          : 'geometry-discussion-avatar-fallback'
+      );
+    fallback.textContent =
+      identityInitials(
+        identity,
+      );
+    return fallback;
+  }
+
+  function renderEditLockIdentity(
+    prefix,
+    identity,
+  ) {
+    if (!editLockStatus) return;
+
+    editLockStatus.replaceChildren();
+
+    if (!identity) {
+      editLockStatus.textContent =
+        prefix ?? '';
+      return;
+    }
+
+    const actor =
+      document.createElement('span');
+    actor.className =
+      'geometry-edit-actor';
+
+    const label =
+      document.createElement('span');
+    label.className =
+      'geometry-edit-actor-name';
+    label.textContent =
+      (prefix ? prefix + ' ' : '') +
+      identityName(identity);
+
+    actor.append(
+      identityAvatar(
+        identity,
+        'geometry-edit-actor-avatar',
+      ),
+      label,
+    );
+    editLockStatus.append(
+      actor,
+    );
+  }
+
+  function discussionGeometryLabel(
+    geometryId,
+  ) {
+    const candidate =
+      (
+        String(
+          state.current?.id,
+        ) ===
+        String(geometryId)
+          ? state.current
+          : null
+      ) ??
+      state.geometries.find(
+        (item) =>
+          String(item.id) ===
+          String(geometryId),
+      );
+
+    return candidate
+      ? displayName(candidate)
+      : 'Геометрия #' +
+        geometryId;
+  }
+
+  function discussionTime(
+    value,
+  ) {
+    const date =
+      new Date(value);
+
+    if (
+      Number.isNaN(
+        date.valueOf(),
+      )
+    ) {
+      return '';
+    }
+
+    return date.toLocaleString(
+      'ru-RU',
+      {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      },
+    );
+  }
+
+  function renderDiscussion() {
+    if (
+      !discussionPanel ||
+      !discussionMessages
+    ) {
+      return;
+    }
+
+    const geometryId =
+      state.discussionGeometryId;
+
+    discussionTitle.textContent =
+      geometryId
+        ? 'Обсуждение · ' +
+          discussionGeometryLabel(
+            geometryId,
+          )
+        : 'Обсуждение';
+
+    discussionSubtitle.textContent =
+      geometryId
+        ? (
+            state.discussionLoading
+              ? 'Загрузка истории…'
+              : 'Сообщения сохраняются для этой геометрии'
+          )
+        : '';
+
+    if (
+      state.discussionLoading
+    ) {
+      const loading =
+        document.createElement('p');
+      loading.className =
+        'empty-state';
+      loading.textContent =
+        'Загрузка сообщений…';
+      discussionMessages.replaceChildren(
+        loading,
+      );
+      return;
+    }
+
+    if (
+      state.discussionMessages.length ===
+      0
+    ) {
+      const empty =
+        document.createElement('p');
+      empty.className =
+        'empty-state';
+      empty.textContent =
+        'Сообщений пока нет.';
+      discussionMessages.replaceChildren(
+        empty,
+      );
+      return;
+    }
+
+    const elements =
+      state.discussionMessages.map(
+        (entry) => {
+          const article =
+            document.createElement('article');
+          article.className =
+            'geometry-discussion-message';
+          if (
+            Number(
+              entry.author?.userId,
+            ) ===
+            Number(
+              currentUser?.id,
+            )
+          ) {
+            article.classList.add(
+              'is-own',
+            );
+          }
+
+          const body =
+            document.createElement('div');
+          body.className =
+            'geometry-discussion-message-body';
+
+          const meta =
+            document.createElement('div');
+          meta.className =
+            'geometry-discussion-message-meta';
+
+          const author =
+            document.createElement('strong');
+          author.textContent =
+            identityName(
+              entry.author,
+            );
+
+          const time =
+            document.createElement('time');
+          time.dateTime =
+            entry.createdAt ??
+            '';
+          time.textContent =
+            discussionTime(
+              entry.createdAt,
+            );
+
+          const text =
+            document.createElement('p');
+          text.className =
+            'geometry-discussion-message-text';
+          text.textContent =
+            entry.message;
+
+          meta.append(
+            author,
+            time,
+          );
+          body.append(
+            meta,
+            text,
+          );
+          article.append(
+            identityAvatar(
+              entry.author,
+              'geometry-discussion-avatar',
+            ),
+            body,
+          );
+          return article;
+        },
+      );
+
+    discussionMessages.replaceChildren(
+      ...elements,
+    );
+
+    discussionMessages.scrollTop =
+      discussionMessages.scrollHeight;
+  }
+
+  function revealDiscussion({
+    attention = false,
+    focusInput = false,
+  } = {}) {
+    if (!discussionPanel) return;
+
+    discussionPanel.hidden =
+      false;
+
+    if (attention) {
+      discussionPanel.classList.remove(
+        'is-attention',
+      );
+      void discussionPanel.offsetWidth;
+      discussionPanel.classList.add(
+        'is-attention',
+      );
+    }
+
+    renderDiscussion();
+
+    if (focusInput) {
+      discussionInput?.focus();
+    }
+  }
+
+  function appendDiscussionMessage(
+    entry,
+  ) {
+    if (!entry?.id) return;
+
+    if (
+      state.discussionMessages.some(
+        (current) =>
+          current.id ===
+          entry.id,
+      )
+    ) {
+      return;
+    }
+
+    state.discussionMessages.push(
+      entry,
+    );
+    state.discussionMessages.sort(
+      (left, right) =>
+        Number(left.id) -
+        Number(right.id),
+    );
+  }
+
+  async function loadDiscussion(
+    geometryId,
+    {
+      attention = false,
+      focusInput = false,
+    } = {},
+  ) {
+    const id =
+      Number(geometryId);
+
+    if (
+      !Number.isSafeInteger(id) ||
+      id <= 0
+    ) {
+      return;
+    }
+
+    const requestSequence =
+      ++state.discussionRequestSequence;
+    state.discussionGeometryId =
+      id;
+    state.discussionMessages =
+      [];
+    state.discussionLoading =
+      true;
+    revealDiscussion({
+      attention,
+    });
+
+    try {
+      const payload =
+        await api(
+          '/api/admin/geometry-editor/geometries/' +
+          encodeURIComponent(id) +
+          '/discussion',
+        );
+
+      if (
+        requestSequence !==
+          state.discussionRequestSequence
+      ) {
+        return;
+      }
+
+      state.discussionMessages =
+        payload.messages ??
+        [];
+      state.discussionLoading =
+        false;
+      revealDiscussion({
+        attention,
+        focusInput,
+      });
+    } catch (error) {
+      if (
+        requestSequence !==
+          state.discussionRequestSequence
+      ) {
+        return;
+      }
+      state.discussionLoading =
+        false;
+      renderDiscussion();
+      setMessage(
+        error.message,
+        'error',
+      );
+    }
+  }
+
+  async function sendDiscussionMessage() {
+    const geometryId =
+      state.discussionGeometryId;
+    const value =
+      discussionInput?.value
+        ?.trim();
+
+    if (
+      !geometryId ||
+      !value ||
+      state.discussionSending
+    ) {
+      return;
+    }
+
+    state.discussionSending =
+      true;
+    const submit =
+      discussionForm
+        ?.querySelector(
+          'button[type="submit"]',
+        );
+    if (submit) {
+      submit.disabled =
+        true;
+    }
+
+    revealDiscussion();
+
+    try {
+      const payload =
+        await api(
+          '/api/admin/geometry-editor/geometries/' +
+          encodeURIComponent(
+            geometryId,
+          ) +
+          '/discussion',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body:
+              JSON.stringify({
+                message:
+                  value,
+              }),
+          },
+        );
+
+      if (
+        Number(
+          payload.message
+            ?.geometryId,
+        ) ===
+        Number(
+          state.discussionGeometryId,
+        )
+      ) {
+        appendDiscussionMessage(
+          payload.message,
+        );
+      }
+
+      if (discussionInput) {
+        discussionInput.value =
+          '';
+      }
+
+      revealDiscussion({
+        attention: true,
+        focusInput: true,
+      });
+    } catch (error) {
+      setMessage(
+        error.message,
+        'error',
+      );
+      revealDiscussion({
+        attention: true,
+        focusInput: true,
+      });
+    } finally {
+      state.discussionSending =
+        false;
+      if (submit) {
+        submit.disabled =
+          false;
+      }
+    }
   }
 
   function typeLabel(item) {
@@ -3063,6 +3613,13 @@ if (section) {
         activeLease.clientId === realtimeClientId(),
       );
 
+    discussionOpenButton.disabled =
+      !item?.id ||
+      localItem ||
+      Boolean(
+        state.importSession,
+      );
+
     beginEditButton.hidden =
       !item?.id ||
       state.editing;
@@ -3095,23 +3652,48 @@ if (section) {
     }
 
     if (editLockStatus) {
-      editLockStatus.textContent =
-        localItem
-          ? (
-              state.editing
-                ? 'Новая геометрия · редактирование localStorage'
-                : 'Новая геометрия · localStorage'
-            )
-          : state.editing
-            ? 'Редактирование заблокировано за вами'
-            : blockedByOther
-              ? 'Редактирует: ' +
-                (activeLease.username ?? 'другой пользователь')
-              : leasedByThisClient
-                ? 'Локально сохранено · блокировка остаётся за вами'
-                : item?.id
-                  ? 'Режим просмотра'
-                  : '';
+      if (localItem) {
+        renderEditLockIdentity(
+          state.editing
+            ? 'Новая геометрия · редактирование localStorage'
+            : 'Новая геометрия · localStorage',
+          null,
+        );
+      } else if (state.editing) {
+        renderEditLockIdentity(
+          'Редактирует:',
+          state.editLease ??
+          activeLease ?? {
+            userId:
+              currentUser?.id,
+            username:
+              currentUser?.username,
+            displayName:
+              currentUser?.displayName,
+            avatarUrl:
+              currentUser?.hasAvatar
+                ? '/api/admin/profile/avatar'
+                : null,
+          },
+        );
+      } else if (blockedByOther) {
+        renderEditLockIdentity(
+          'Редактирует:',
+          activeLease,
+        );
+      } else if (leasedByThisClient) {
+        renderEditLockIdentity(
+          'Блокировка остаётся за:',
+          activeLease,
+        );
+      } else {
+        renderEditLockIdentity(
+          item?.id
+            ? 'Режим просмотра'
+            : '',
+          null,
+        );
+      }
     }
 
     if (conflictMessage) {
@@ -3829,7 +4411,9 @@ if (section) {
       renderFormState();
       setMessage(
         'Эта геометрия уже редактируется пользователем «' +
-          (knownLease.username ?? 'другой пользователь') +
+          identityName(
+            knownLease,
+          ) +
           '».',
         'error',
       );
@@ -7797,6 +8381,60 @@ if (section) {
     }
 
     if (
+      change?.resource ===
+        'geometry-discussions'
+    ) {
+      if (
+        change.originClientId ===
+          realtimeClientId()
+      ) {
+        return;
+      }
+
+      const geometryId =
+        Number(
+          change.geometryId ??
+          change.entityIds?.[0],
+        );
+
+      if (
+        !Number.isSafeInteger(
+          geometryId,
+        ) ||
+        geometryId <= 0
+      ) {
+        return;
+      }
+
+      const incoming =
+        change.discussionMessage ??
+        null;
+
+      if (
+        Number(
+          state.discussionGeometryId,
+        ) ===
+          geometryId &&
+        incoming
+      ) {
+        appendDiscussionMessage(
+          incoming,
+        );
+        revealDiscussion({
+          attention: true,
+        });
+      } else {
+        void loadDiscussion(
+          geometryId,
+          {
+            attention: true,
+          },
+        );
+      }
+      return;
+    }
+
+    if (
       change?.resource !==
         'city-geometries' ||
       change.originClientId ===
@@ -7809,6 +8447,62 @@ if (section) {
       'realtime',
     );
   });
+
+  discussionOpenButton?.addEventListener(
+    'click',
+    () => {
+      const geometryId =
+        Number(
+          state.current?.id,
+        );
+      if (
+        Number.isSafeInteger(
+          geometryId,
+        ) &&
+        geometryId > 0
+      ) {
+        void loadDiscussion(
+          geometryId,
+          {
+            focusInput: true,
+          },
+        );
+      }
+    },
+  );
+
+  discussionCloseButton?.addEventListener(
+    'click',
+    () => {
+      discussionPanel.hidden =
+        true;
+      discussionPanel.classList.remove(
+        'is-attention',
+      );
+    },
+  );
+
+  discussionForm?.addEventListener(
+    'submit',
+    (event) => {
+      event.preventDefault();
+      void sendDiscussionMessage();
+    },
+  );
+
+  discussionInput?.addEventListener(
+    'keydown',
+    (event) => {
+      if (
+        event.key === 'Enter' &&
+        (event.ctrlKey || event.metaKey)
+      ) {
+        event.preventDefault();
+        discussionForm
+          ?.requestSubmit();
+      }
+    },
+  );
 
   beginEditButton.addEventListener(
     'click',
