@@ -3683,7 +3683,7 @@ if (section) {
         );
       } else if (leasedByThisClient) {
         renderEditLockIdentity(
-          'Блокировка остаётся за:',
+          'Локально сохранено · блокировка остаётся за вами ·',
           activeLease,
         );
       } else {
