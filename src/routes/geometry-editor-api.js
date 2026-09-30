@@ -1234,7 +1234,6 @@ export function createGeometryEditorRouter({
   );
 
   router.post(
-    '/admin/geometry-editor/recalculate',  router.post(
     '/admin/geometry-editor/recalculate',
     adminAuth
       .requireGeometryEditor,

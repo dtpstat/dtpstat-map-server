@@ -488,7 +488,7 @@ const MERGE_GEOMETRIES_SQL = `
     target.id::integer AS id
 `;
 
-const CUT_GEOMETRY_PREVIEW_SQL = `const CUT_GEOMETRY_PREVIEW_SQL = `
+const CUT_GEOMETRY_PREVIEW_SQL = `
   WITH source AS (
     SELECT
       ST_SetSRID(
@@ -983,8 +983,6 @@ export function createGeometryEditorStorage(
     },
 
     assertNoPendingImport(
-      client,
-    ) {    assertNoPendingImport(
       client,
     ) {
       return client.query(

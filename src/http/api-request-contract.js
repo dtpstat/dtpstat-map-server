@@ -714,8 +714,6 @@ export const API_REQUEST_CONTRACTS =
     ),
     c(
       'POST',
-      '/admin/geometry-editor/recalculate',    c(
-      'POST',
       '/admin/geometry-editor/recalculate',
     ),
 

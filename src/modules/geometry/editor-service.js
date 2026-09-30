@@ -1252,8 +1252,6 @@ export function createGeometryEditorService(
 
     async previewCut(
       payload,
-    ) {    async previewCut(
-      payload,
     ) {
       const {
         sourceGeometry,
@@ -1320,7 +1318,6 @@ export function createGeometryEditorService(
     },
 
     async delete(
-      geometryId,    async delete(
       geometryId,
       options = {},
       actor,
