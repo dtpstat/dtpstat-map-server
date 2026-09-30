@@ -901,7 +901,7 @@ export function createGeometryEditorStorage(
         null;
     },
 
-    async previewCut(    async previewCut(
+    async previewCut(
       queryable,
       sourceGeometry,
       cutterGeometry,

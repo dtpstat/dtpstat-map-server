@@ -3470,49 +3470,6 @@ if (section) {
     state.map.fitBounds(bounds, { padding: 70, maxZoom: 17, duration: 250 });
   }
 
-  function summaryFromDetail(item) {
-    return {
-      id: item.id,
-      cityId: item.cityId,
-      boundaryId: item.boundaryId,
-      family: item.family,
-      geometryType: item.geometryType,
-      displayName: item.displayName,
-      isVisible: item.isVisible,
-      wasEdited: item.wasEdited,
-      updatedAt: item.updatedAt,
-      lineTypeId: item.lineTypeId,
-      lanes: item.lanes,
-      lineTypeName: item.lineTypeName,
-      lineTypeColor: item.lineTypeColor,
-      lineTypeWidth: item.lineTypeWidth,
-      geometry: clone(item.geometry),
-    };
-  }
-
-  function sortGeometrySummaries() {
-    state.serverGeometries.sort((left, right) => {
-      const byName = displayName(left).localeCompare(
-        displayName(right),
-        'ru-RU',
-        { sensitivity: 'base' },
-      );
-      return byName || left.id - right.id;
-    });
-  }
-
-  function upsertGeometrySummary(item) {
-    const summary = summaryFromDetail(item);
-    const index = state.serverGeometries.findIndex(
-      (candidate) => candidate.id === item.id,
-    );
-    if (index >= 0) state.serverGeometries[index] = summary;
-    else state.serverGeometries.push(summary);
-    sortGeometrySummaries();
-    rebuildDraftOverlay();
-  }
-
-
   function adoptLocalGeometry(entry, { focus = false } = {}) {
     const item = localCreateSummary(entry);
     state.selectedId = item.id;
