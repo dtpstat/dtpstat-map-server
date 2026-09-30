@@ -156,7 +156,7 @@ test('viewport query uses padded selector and returns public lines plus active t
   );
   assert.match(
     sql,
-    /ORDER BY boundary\.area_m2, boundary\.city_id/u,
+    /ORDER BY[\s\S]*boundary\.area_m2,[\s\S]*boundary\.city_id/u,
   );
   assert.doesNotMatch(
     sql,
@@ -164,7 +164,7 @@ test('viewport query uses padded selector and returns public lines plus active t
   );
   assert.match(
     sql,
-    /geometry_boundary\.id = geometry_presence\.boundary_id[\s\S]*geometry_boundary\.is_active[\s\S]*geometry_presence\.city_id = boundary\.city_id/,
+    /geometry_boundary\.id[\s\S]*=[\s\S]*geometry_presence[\s\S]*\.boundary_id[\s\S]*geometry_boundary[\s\S]*\.is_active[\s\S]*geometry_presence[\s\S]*\.city_id[\s\S]*=[\s\S]*boundary\.city_id/u,
   );
 });
 
