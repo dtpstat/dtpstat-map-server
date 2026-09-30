@@ -153,11 +153,11 @@ test('geometry editor uses local drafts optimistic revisions atomic bulk save an
   );
   assert.match(
     editor,
-    /\/geometry-editor\/geometries\/\$\{encodeURIComponent\(target\.id\)\}\/cut/u,
+    /\/geometry-editor\/topology\/cut-preview/u,
   );
   assert.match(
     editor,
-    /'X-DTPStat-Base-Revision':\s*target\.updatedAt/u,
+    /sourceGeometry:[\s\S]*state\.draft[\s\S]*cutterGeometry/u,
   );
 });
 
@@ -348,7 +348,7 @@ test('geometry list highlights manually edited geometries and hides bulk checkbo
 });
 
 
-test('selected polygon exposes a direct cutout action that acquires editing before drawing', async () => {
+test('selected polygon exposes a direct local cutout action without forced server sync', async () => {
   const [
     editor,
     page,
@@ -368,24 +368,78 @@ test('selected polygon exposes a direct cutout action that acquires editing befo
   );
   assert.match(
     editor,
-    /cutDirectButton\.hidden =[\s\S]*family !== 'polygon'/u,
-  );
-  assert.match(
-    editor,
-    /async function startPolygonCut\(\)[\s\S]*isLocalGeometryId\([\s\S]*Сохранить полигон перед вырезанием\?[\s\S]*saveDraftEntries\(\[[\s\S]*local[\s\S]*\]\)[\s\S]*adoptGeometryDetail\([\s\S]*created/u,
-  );
-  assert.match(
-    editor,
     /async function startPolygonCut\(\)[\s\S]*if \(!state\.editing\)[\s\S]*await beginEditing\(\)[\s\S]*startDrawing\([\s\S]*'cut'/u,
   );
+  assert.doesNotMatch(
+    editor,
+    /Сохранить полигон перед вырезанием/u,
+  );
   assert.match(
     editor,
-    /cutDirectButton\.addEventListener[\s\S]*startPolygonCut/u,
+    /topology\/cut-preview/u,
   );
 });
 
 
-test('geometry editor resolves staged import conflicts visually without dropping local drafts', async () => {
+test('split preview creates one update draft and one linked local create until atomic sync', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /topology\/split-preview/u,
+  );
+  assert.match(
+    editor,
+    /topologyGroupId/u,
+  );
+  assert.match(
+    editor,
+    /topologyLocalIds/u,
+  );
+  assert.match(
+    editor,
+    /sourceGeometryId:[\s\S]*Number\([\s\S]*target\.id/u,
+  );
+  assert.match(
+    editor,
+    /expandDraftEntries\([\s\S]*topologyGroupId/u,
+  );
+  assert.match(
+    editor,
+    /entry\.sourceGeometryId[\s\S]*sourceGeometryId/u,
+  );
+  assert.match(
+    editor,
+    /undoTopologyGroup/u,
+  );
+  assert.match(
+    editor,
+    /Геометрия разделена только в локальных черновиках/u,
+  );
+});
+
+
+test('saved local server draft remains revertible outside active edit mode', async () => {
+  const editor =
+    await read(
+      'admin/geometry-editor.js',
+    );
+
+  assert.match(
+    editor,
+    /revertButton\.disabled =[\s\S]*!localDraft[\s\S]*state\.drawing/u,
+  );
+  assert.doesNotMatch(
+    editor,
+    /revertButton\.disabled =[\s\S]{0,120}!enabled/u,
+  );
+});
+
+
+test('geometry editor resolves staged import conflicts visually without dropping local drafts', async () => {test('geometry editor resolves staged import conflicts visually without dropping local drafts', async () => {
   const [
     editor,
     html,
@@ -604,7 +658,7 @@ test('geometry editor keeps existing geometry read-only until explicit edit star
   );
   assert.match(
     editor,
-    /function topologyTargetReady\([\s\S]*state\.editing[\s\S]*local\?\.editToken/u,
+    /function topologyTargetReady\([\s\S]*state\.editing[\s\S]*localItem[\s\S]*local\?\.editToken/u,
   );
 });
 
@@ -756,7 +810,11 @@ test('geometry destructive actions keep one delete action with server confirmati
   );
   assert.match(
     editor,
-    /\/cut[\s\S]*X-DTPStat-Edit-Token/u,
+    /\/topology\/cut-preview/u,
+  );
+  assert.doesNotMatch(
+    editor,
+    /topology\/cut-preview[\s\S]{0,500}X-DTPStat-Edit-Token/u,
   );
 });
 

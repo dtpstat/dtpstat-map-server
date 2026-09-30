@@ -2908,7 +2908,12 @@ if (section) {
       localItem;
     revertButton.disabled =
       localItem ||
-      !enabled;
+      !item?.id ||
+      !localDraft ||
+      Boolean(
+        state.drawing ||
+        state.importSession,
+      );
     deleteButton.disabled =
       !item?.id ||
       Boolean(state.drawing) ||
@@ -3303,29 +3308,31 @@ if (section) {
       state.current;
     const local =
       item?.id
-        ? draftFor(item.id)
+        ? draftFor(
+          item.id,
+        )
         : null;
     const family =
       familyOf(
         state.draft,
       );
+    const localItem =
+      isLocalGeometryId(
+        item?.id,
+      );
 
     return Boolean(
       item?.id &&
-      !isLocalGeometryId(
-        item.id,
-      ) &&
       state.editing &&
       !state.drawing &&
       !state.importSession &&
       families.includes(
         family,
       ) &&
-      item.updatedAt &&
-      local?.editToken &&
-      Object.keys(
-        local.changes ?? {},
-      ).length === 0
+      (
+        localItem ||
+        local?.editToken
+      )
     );
   }
 
@@ -3336,20 +3343,17 @@ if (section) {
       familyOf(
         state.draft,
       );
-    const saved =
-      Boolean(
-        item?.id &&
-        !isLocalGeometryId(
-          item.id,
-        ),
+    const topologyFamily =
+      [
+        'line',
+        'polygon',
+      ].includes(
+        family,
       );
 
     topologyActions.hidden =
-      !saved ||
-      ![
-        'line',
-        'polygon',
-      ].includes(family);
+      !item?.id ||
+      !topologyFamily;
 
     if (
       topologyActions.hidden
@@ -3359,26 +3363,16 @@ if (section) {
     }
 
     cutButton.hidden =
-      family !== 'polygon';
+      family !==
+      'polygon';
     cutDirectButton.hidden =
-      family !== 'polygon';
-    cutDirectButton.disabled =
-      Boolean(
-        state.drawing ||
-        state.importSession ||
-        state.beginEditPendingId !== null,
-      );
-    cutDirectButton.title =
-      state.editing
-        ? 'Нарисовать область, которая станет отверстием или будет вычтена из полигона'
-        : 'Начать редактирование и вырезать область из полигона';
+      family !==
+      'polygon';
     cutSelectedButton.hidden =
-      family !== 'polygon';
+      family !==
+      'polygon';
     splitButton.hidden =
-      ![
-        'line',
-        'polygon',
-      ].includes(family);
+      !topologyFamily;
 
     const polygonReady =
       topologyTargetReady([
@@ -3391,31 +3385,45 @@ if (section) {
       ]);
     const cutter =
       selectedCutterGeometry();
+    const busy =
+      Boolean(
+        state.drawing ||
+        state.importSession ||
+        state.beginEditPendingId !==
+          null,
+      );
+
+    cutDirectButton.disabled =
+      busy;
+    cutDirectButton.title =
+      state.editing
+        ? 'Нарисовать область, которая станет локальным вырезом полигона'
+        : 'Начать редактирование и вырезать область из полигона';
 
     cutButton.disabled =
       !polygonReady;
     cutButton.title =
       polygonReady
-        ? 'Нарисовать polygon, который будет вычтен из текущего'
-        : 'Сначала начните редактирование и синхронизируйте локальные изменения';
+        ? 'Нарисовать polygon, который будет локально вычтен из текущего'
+        : 'Сначала начните редактирование полигона';
 
     cutSelectedButton.disabled =
       !polygonReady ||
       !cutter;
     cutSelectedButton.title =
       cutter
-        ? 'Cutter: ' +
+        ? 'Использовать как cutter: ' +
           displayName(
             cutter,
           )
-        : 'Отметьте ровно один сохранённый polygon без черновика и блокировки';
+        : 'Отметьте ровно один polygon-cutter';
 
     splitButton.disabled =
       !splitReady;
     splitButton.title =
       splitReady
-        ? 'Нарисовать линию, которая разделит геометрию ровно на две части'
-        : 'Сначала начните редактирование и синхронизируйте локальные изменения';
+        ? 'Нарисовать линию и сохранить обе части только в локальных черновиках'
+        : 'Сначала начните редактирование линии или полигона';
   }
 
   function renderMergeState() {
@@ -5078,95 +5086,184 @@ if (section) {
     };
   }
 
-  async function finishTopologyMutation(
-    target,
-    geometries,
-    successMessage,
+  function topologyGroupEntries(
+    entry,
   ) {
-    const editDraft =
+    if (
+      !entry?.topologyGroupId
+    ) {
+      return entry
+        ? [entry]
+        : [];
+    }
+
+    return drafts.list()
+      .filter(
+        (candidate) =>
+          candidate
+            .topologyGroupId ===
+          entry.topologyGroupId,
+      );
+  }
+
+  function topologyPartValue(
+    target,
+    geometry,
+  ) {
+    return {
+      cityId:
+        target?.cityId ??
+        state.city?.id ??
+        null,
+      ...payloadFromForm(),
+      geometry:
+        clone(
+          geometry,
+        ),
+    };
+  }
+
+  function topologyGroupDefinition(
+    entry,
+    targetId,
+  ) {
+    return {
+      groupId:
+        entry
+          ?.topologyGroupId ??
+        crypto.randomUUID(),
+      rootId:
+        entry
+          ?.topologyRootId ??
+        targetId,
+    };
+  }
+
+  async function undoTopologyGroup(
+    entry,
+  ) {
+    if (
+      !entry?.topologyGroupId
+    ) {
+      return false;
+    }
+
+    const group =
+      topologyGroupEntries(
+        entry,
+      );
+    const rootId =
+      entry.topologyRootId ??
+      entry.id;
+    const root =
       draftFor(
-        target.id,
+        rootId,
       );
 
-    if (editDraft?.editToken) {
+    if (
+      root?.editToken
+    ) {
       await Promise.allSettled([
         releaseDraftLease({
-          ...editDraft,
+          ...root,
           id:
-            target.id,
+            rootId,
         }),
       ]);
     }
 
-    drafts.remove(
-      target.id,
-    );
-    state.editing = false;
-    state.editLease = null;
-    state.blockedLease = null;
-    state.selectedSet.clear();
-
     for (
-      const geometry of
-      geometries
+      const candidate of
+      group
     ) {
-      upsertGeometrySummary(
-        geometry,
+      drafts.remove(
+        candidate.id,
+      );
+      state.validatedEditTokens
+        .delete(
+          String(
+            candidate.id,
+          ),
+        );
+    }
+
+    if (
+      isLocalGeometryId(
+        rootId,
+      ) &&
+      root?.topologyOriginalValue
+    ) {
+      drafts.upsert(
+        rootId,
+        {
+          kind:
+            'create',
+          localId:
+            rootId,
+          workspaceKey:
+            root.workspaceKey ??
+            state.workspaceKey ??
+            'unlinked',
+          value:
+            clone(
+              root
+                .topologyOriginalValue,
+            ),
+          conflict:
+            false,
+        },
       );
     }
 
-    const primary =
-      geometries.find(
-        (geometry) =>
-          geometry.id ===
-          target.id,
-      ) ??
-      geometries[0];
-
-    if (primary) {
-      adoptGeometryDetail(
-        primary,
-      );
-    }
-
+    state.editing =
+      false;
+    state.editLease =
+      null;
+    state.blockedLease =
+      null;
+    state.history = [];
+    state.future = [];
+    rebuildDraftOverlay();
     refreshDraftControls();
-    setMessage(
-      successMessage,
-      'success',
-    );
+    renderList();
+    updateMapSources();
+    renderHistoryControls();
+
+    if (
+      draftFor(
+        rootId,
+      )?.kind ===
+      'create'
+    ) {
+      adoptLocalGeometry(
+        draftFor(
+          rootId,
+        ),
+      );
+    } else if (
+      !isLocalGeometryId(
+        rootId,
+      )
+    ) {
+      await selectGeometry(
+        Number(
+          rootId,
+        ),
+        {
+          focus:
+            false,
+        },
+      );
+    } else {
+      clearSelection();
+    }
+
+    return true;
   }
 
   async function topologyFailure(
     error,
   ) {
-    if (
-      error.status === 409
-    ) {
-      for (
-        const conflict of
-        error.payload
-          ?.details
-          ?.conflicts ??
-        []
-      ) {
-        if (
-          draftFor(
-            conflict.id,
-          )
-        ) {
-          drafts.markConflict(
-            conflict.id,
-            true,
-          );
-        }
-      }
-
-      await refresh({
-        keepSelection: true,
-        fit: false,
-      });
-    }
-
     setMessage(
       error.message,
       'error',
@@ -5175,42 +5272,43 @@ if (section) {
 
   async function cutTarget(
     target,
-    body,
+    cutterGeometry,
   ) {
     try {
       setMessage(
-        'Вырезаем область…',
+        'Вычисляем локальный вырез…',
       );
 
       const payload =
         await api(
-          `/api/admin/geometry-editor/geometries/${encodeURIComponent(target.id)}/cut`,
+          '/api/admin/geometry-editor/topology/cut-preview',
           {
-            method: 'POST',
+            method:
+              'POST',
             headers: {
               'Content-Type':
                 'application/json',
-              'X-DTPStat-Base-Revision':
-                target.updatedAt,
-              'X-DTPStat-Edit-Token':
-                draftFor(
-                  target.id,
-                )?.editToken ??
-                '',
             },
             body:
-              JSON.stringify(
-                body,
-              ),
+              JSON.stringify({
+                sourceGeometry:
+                  state.draft,
+                cutterGeometry,
+              }),
           },
         );
 
-      await finishTopologyMutation(
-        target,
-        [
+      pushHistory();
+      state.draft =
+        clone(
           payload.geometry,
-        ],
-        'Область вырезана. Для обновления основной карты и статистики нажмите «Пересчитать».',
+        );
+      captureCurrentDraft();
+      updateDraftMap();
+      renderFormState();
+      setMessage(
+        'Вырез сохранён локально. «Отменить правки» вернёт серверную версию; запись в БД произойдёт только после «Синхронизировать».',
+        'success',
       );
     } catch (error) {
       await topologyFailure(
@@ -5225,36 +5323,218 @@ if (section) {
   ) {
     try {
       setMessage(
-        'Разделяем геометрию…',
+        'Вычисляем локальное разделение…',
       );
 
+      const sourceGeometry =
+        clone(
+          state.draft,
+        );
       const payload =
         await api(
-          `/api/admin/geometry-editor/geometries/${encodeURIComponent(target.id)}/split`,
+          '/api/admin/geometry-editor/topology/split-preview',
           {
-            method: 'POST',
+            method:
+              'POST',
             headers: {
               'Content-Type':
                 'application/json',
-              'X-DTPStat-Base-Revision':
-                target.updatedAt,
-              'X-DTPStat-Edit-Token':
-                draftFor(
-                  target.id,
-                )?.editToken ??
-                '',
             },
             body:
               JSON.stringify({
+                sourceGeometry,
                 blade,
               }),
           },
         );
+      const parts =
+        payload.geometries ??
+        [];
 
-      await finishTopologyMutation(
-        target,
-        payload.geometries,
-        'Геометрия разделена на две части. Для обновления основной карты и статистики нажмите «Пересчитать».',
+      if (
+        parts.length !==
+        2
+      ) {
+        throw new Error(
+          'Сервер не вернул две части разделения.',
+        );
+      }
+
+      const existing =
+        draftFor(
+          target.id,
+        );
+      const {
+        groupId,
+        rootId,
+      } =
+        topologyGroupDefinition(
+          existing,
+          target.id,
+        );
+      const localId =
+        'local:' +
+        crypto.randomUUID();
+      const localTarget =
+        isLocalGeometryId(
+          target.id,
+        );
+      const companionValue =
+        topologyPartValue(
+          target,
+          parts[1],
+        );
+
+      state.draft =
+        clone(
+          parts[0],
+        );
+
+      if (localTarget) {
+        if (
+          existing?.kind !==
+          'create'
+        ) {
+          throw new Error(
+            'Локальный черновик разделяемой геометрии не найден.',
+          );
+        }
+
+        drafts.upsert(
+          target.id,
+          {
+            ...existing,
+            kind:
+              'create',
+            localId:
+              target.id,
+            value: {
+              ...existing.value,
+              geometry:
+                clone(
+                  parts[0],
+                ),
+            },
+            topologyKind:
+              'split',
+            topologyGroupId:
+              groupId,
+            topologyRootId:
+              rootId,
+            topologyOriginalValue:
+              existing
+                .topologyOriginalValue ??
+              clone(
+                existing.value,
+              ),
+          },
+        );
+      } else {
+        captureCurrentDraft();
+        const sourceDraft =
+          draftFor(
+            target.id,
+          );
+        const topologyLocalIds =
+          [
+            ...new Set([
+              ...(
+                sourceDraft
+                  ?.topologyLocalIds ??
+                []
+              ),
+              localId,
+            ]),
+          ];
+
+        drafts.upsert(
+          target.id,
+          {
+            ...sourceDraft,
+            topologyKind:
+              'split',
+            topologyGroupId:
+              groupId,
+            topologyRootId:
+              rootId,
+            topologyLocalIds,
+          },
+        );
+      }
+
+      drafts.upsert(
+        localId,
+        {
+          kind:
+            'create',
+          localId,
+          workspaceKey:
+            existing?.workspaceKey ??
+            state.workspaceKey ??
+            'unlinked',
+          value:
+            companionValue,
+          sourceGeometryId:
+            localTarget
+              ? (
+                  existing
+                    ?.sourceGeometryId ??
+                  null
+                )
+              : Number(
+                target.id,
+              ),
+          topologyKind:
+            'split',
+          topologyGroupId:
+            groupId,
+          topologyRootId:
+            rootId,
+          topologySourceId:
+            localTarget
+              ? (
+                  existing
+                    ?.topologySourceId ??
+                  null
+                )
+              : Number(
+                target.id,
+              ),
+          conflict:
+            false,
+        },
+      );
+
+      if (
+        localTarget
+      ) {
+        state.current =
+          localCreateSummary(
+            draftFor(
+              target.id,
+            ),
+          );
+        state.draft =
+          clone(
+            state.current
+              .geometry,
+          );
+        applyForm(
+          state.current,
+        );
+      }
+
+      state.history = [];
+      state.future = [];
+      rebuildDraftOverlay();
+      refreshDraftControls();
+      renderList();
+      updateMapSources();
+      renderHistoryControls();
+      renderFormState();
+      setMessage(
+        'Геометрия разделена только в локальных черновиках. «Отменить правки» вернёт исходную геометрию; «Синхронизировать» атомарно запишет обе части.',
+        'success',
       );
     } catch (error) {
       await topologyFailure(
@@ -5268,6 +5548,12 @@ if (section) {
       state.current;
     const cutter =
       selectedCutterGeometry();
+
+    if (
+      !state.editing
+    ) {
+      await beginEditing();
+    }
 
     if (
       !topologyTargetReady([
@@ -5306,17 +5592,12 @@ if (section) {
 
     await cutTarget(
       target,
-      {
-        cutterGeometryId:
-          cutter.id,
-        cutterUpdatedAt:
-          cutter.updatedAt,
-      },
+      cutter.geometry,
     );
   }
 
   async function startPolygonCut() {
-    let item =
+    const item =
       state.current;
 
     if (
@@ -5329,88 +5610,6 @@ if (section) {
       return;
     }
 
-    if (
-      isLocalGeometryId(
-        item.id,
-      )
-    ) {
-      const local =
-        draftFor(
-          item.id,
-        );
-
-      if (
-        local?.kind !==
-        'create'
-      ) {
-        setMessage(
-          'Локальный полигон больше не найден. Обновите список.',
-          'error',
-        );
-        return;
-      }
-
-      const confirmed =
-        await adminConfirm({
-          title:
-            'Сохранить полигон перед вырезанием?',
-          message:
-            'Для топологической операции этот полигон будет записан на сервер. Продолжить?',
-          confirmLabel:
-            'Сохранить и вырезать',
-          cancelLabel:
-            'Отмена',
-        });
-
-      if (!confirmed) {
-        return;
-      }
-
-      try {
-        const payload =
-          await saveDraftEntries([
-            local,
-          ]);
-        const created =
-          (
-            payload.created ??
-            []
-          ).find(
-            (entry) =>
-              String(
-                entry.localId,
-              ) ===
-              String(
-                item.id,
-              ),
-          )?.geometry ??
-          null;
-
-        if (!created) {
-          setMessage(
-            'Полигон сохранён, но сервер не вернул созданную геометрию. Обновите список.',
-            'error',
-          );
-          return;
-        }
-
-        item =
-          created;
-        upsertGeometrySummary(
-          created,
-        );
-        adoptGeometryDetail(
-          created,
-        );
-      } catch (error) {
-        setMessage(
-          error.message,
-          'error',
-        );
-        return;
-      }
-    }
-
     if (!state.editing) {
       await beginEditing();
     }
@@ -5421,7 +5620,7 @@ if (section) {
       ])
     ) {
       setMessage(
-        'Для вырезания сначала синхронизируйте несохранённые изменения полигона.',
+        'Не удалось начать локальное редактирование полигона.',
         'error',
       );
       return;
@@ -5479,33 +5678,26 @@ if (section) {
           ];
 
       if (
+        !state.editing
+      ) {
+        await beginEditing();
+      }
+
+      if (
         !topologyTargetReady(
           families,
         )
       ) {
         setMessage(
           mode === 'cut'
-            ? 'Для вырезания сначала начните редактирование сохранённого полигона и синхронизируйте локальные изменения.'
-            : 'Для разделения сначала начните редактирование сохранённой линии или полигона и синхронизируйте локальные изменения.',
+            ? 'Не удалось начать локальное редактирование полигона.'
+            : 'Не удалось начать локальное редактирование линии или полигона.',
           'error',
         );
         return;
       }
 
-      const local =
-        captureCurrentDraft();
-
-      if (
-        Object.keys(
-          local?.changes ?? {},
-        ).length > 0
-      ) {
-        setMessage(
-          'Перед topology-операцией синхронизируйте или отмените локальные изменения.',
-          'error',
-        );
-        return;
-      }
+      captureCurrentDraft();
 
       state.drawing = {
         mode,
@@ -5791,10 +5983,7 @@ if (section) {
 
         await cutTarget(
           target,
-          {
-            geometry:
-              polygon,
-          },
+          polygon,
         );
         return;
       }
@@ -5960,15 +6149,85 @@ if (section) {
     );
   }
 
+  function expandDraftEntries(
+    entries,
+  ) {
+    const expanded =
+      new Map(
+        entries.map(
+          (entry) => [
+            String(
+              entry.id,
+            ),
+            entry,
+          ],
+        ),
+      );
+    const groupIds =
+      new Set(
+        entries
+          .map(
+            (entry) =>
+              entry
+                .topologyGroupId,
+          )
+          .filter(
+            Boolean,
+          ),
+      );
+
+    if (
+      groupIds.size > 0
+    ) {
+      for (
+        const candidate of
+        drafts.list()
+      ) {
+        if (
+          groupIds.has(
+            candidate
+              .topologyGroupId,
+          )
+        ) {
+          expanded.set(
+            String(
+              candidate.id,
+            ),
+            candidate,
+          );
+        }
+      }
+    }
+
+    return [
+      ...expanded.values(),
+    ];
+  }
+
   async function saveDraftEntries(entries) {
+    const expandedEntries =
+      expandDraftEntries(
+        entries,
+      );
     const items =
-      entries.flatMap((entry) => {
+      expandedEntries.flatMap((entry) => {
         if (entry.kind === 'create') {
           return [{
             kind: 'create',
             localId:
               entry.localId ??
               entry.id,
+            ...(
+              entry.sourceGeometryId
+                ? {
+                  sourceGeometryId:
+                    Number(
+                      entry
+                        .sourceGeometryId,
+                    ),
+                }
+                : {}
+            ),
             value:
               entry.value,
           }];
@@ -6024,14 +6283,17 @@ if (section) {
       );
 
     const release =
-      entries.filter(
+      expandedEntries.filter(
         (entry) =>
           updatedIds.has(
             String(entry.id),
           ),
       );
 
-    for (const entry of entries) {
+    for (
+      const entry of
+      expandedEntries
+    ) {
       if (
         updatedIds.has(String(entry.id)) ||
         createdIds.has(String(entry.id))
@@ -6046,7 +6308,10 @@ if (section) {
       ),
     );
 
-    for (const entry of entries) {
+    for (
+      const entry of
+      expandedEntries
+    ) {
       if (
         updatedIds.has(String(entry.id)) ||
         createdIds.has(String(entry.id))
@@ -6100,6 +6365,20 @@ if (section) {
     }
 
     const local = draftFor(item.id);
+
+    if (
+      local?.topologyGroupId
+    ) {
+      await undoTopologyGroup(
+        local,
+      );
+      setMessage(
+        'Локальная topology-операция отменена. Показана версия из БД.',
+        'success',
+      );
+      return;
+    }
+
     if (local?.editToken) {
       await Promise.allSettled([
         releaseDraftLease({
@@ -6134,9 +6413,51 @@ if (section) {
         item.id,
       )
     ) {
-      drafts.remove(
-        item.id,
-      );
+      const local =
+        draftFor(
+          item.id,
+        );
+
+      if (
+        local
+          ?.topologyGroupId &&
+        String(
+          local.topologyRootId,
+        ) !==
+        String(
+          item.id,
+        )
+      ) {
+        await undoTopologyGroup(
+          local,
+        );
+        setMessage(
+          'Разделение отменено. Исходная геометрия восстановлена.',
+          'success',
+        );
+        return;
+      }
+
+      if (
+        local
+          ?.topologyGroupId
+      ) {
+        for (
+          const candidate of
+          topologyGroupEntries(
+            local,
+          )
+        ) {
+          drafts.remove(
+            candidate.id,
+          );
+        }
+      } else {
+        drafts.remove(
+          item.id,
+        );
+      }
+
       state.selectedSet.delete(
         item.id,
       );
