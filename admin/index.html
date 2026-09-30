@@ -16,6 +16,15 @@
   <script type="module" src="/admin/admin-shell.js"></script>
 </head>
 <body>
+  <div class="page-standby" id="page-standby" role="status" aria-live="polite" aria-busy="true">
+    <div class="page-standby-card">
+      <span class="page-standby-spinner" aria-hidden="true"></span>
+      <span data-page-standby-label>Загрузка админки…</span>
+    </div>
+  </div>
+  <noscript>
+    <style>.page-standby { display: none !important; }</style>
+  </noscript>
   <header class="topbar">
     <div>
       <p class="eyebrow">MAP SERVER</p>

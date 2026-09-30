@@ -9,6 +9,15 @@
   <script type="module" src="/admin/login.js"></script>
 </head>
 <body class="admin-login-page">
+  <div class="page-standby" id="page-standby" role="status" aria-live="polite" aria-busy="true">
+    <div class="page-standby-card">
+      <span class="page-standby-spinner" aria-hidden="true"></span>
+      <span data-page-standby-label>Проверяем сессию…</span>
+    </div>
+  </div>
+  <noscript>
+    <style>.page-standby { display: none !important; }</style>
+  </noscript>
   <main class="admin-login-card">
     <p class="eyebrow">MAP SERVER</p>
     <h1>Администрирование</h1>

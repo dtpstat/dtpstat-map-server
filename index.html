@@ -37,6 +37,15 @@
     {{PROJECT_THEME_STYLESHEET}}
   </head>
   <body>
+    <div class="page-standby" id="page-standby" role="status" aria-live="polite" aria-busy="true">
+      <div class="page-standby-card">
+        <span class="page-standby-spinner" aria-hidden="true"></span>
+        <span data-page-standby-label>Загрузка карты…</span>
+      </div>
+    </div>
+    <noscript>
+      <style>.page-standby { display: none !important; }</style>
+    </noscript>
     <div class="app-shell">
       <aside class="ranking-panel" aria-labelledby="page-title">
         <header class="ranking-header">
