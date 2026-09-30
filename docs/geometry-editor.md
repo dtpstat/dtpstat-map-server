@@ -157,6 +157,7 @@ V045 spatial-derived administrative links
 V046 edit leases
 V049 empty-descendant spatial resolver fix
 V050 point types and Point category metadata
+V057 zoom/date visibility metadata and public geometry timeline
 ```
 
 ## Future backlog
@@ -218,7 +219,7 @@ V050 point types and Point category metadata
 UI использует единый mental model: geometry operation сначала изменяет только
 local workspace; persistence является отдельной операцией `Синхронизировать`.
 
-### Notification / realtime infrastructure### Notification / realtime infrastructure
+### Notification / realtime infrastructure
 
 Реализовано:
 
@@ -300,6 +301,32 @@ UI-этап также закрыт:
 - public viewport отдаёт только видимые линии и видимые Point с активным типом;
 - public map загружает versioned icon assets, rasterizes PNG/GIF/SVG в настроенный
   display size и применяет anchor без отдельного небезопасного asset path.
+
+## Public map: zoom, POI и timeline
+
+Geometry metadata содержит четыре необязательных поля:
+
+- `minZoom` / `maxZoom` — диапазон zoom 0..24;
+- `validFrom` / `validTo` — календарный интервал активности.
+
+Пустая граница означает отсутствие ограничения. При заполнении обеих границ
+валидируются `minZoom <= maxZoom` и `validFrom <= validTo`.
+
+Public viewport теперь отдаёт видимые LineString/MultiLineString,
+Polygon/MultiPolygon и активные типизированные Point. Для Point на карте
+создаётся отдельная POI-легенда: каждый активный тип можно независимо
+включать/выключать без повторной загрузки данных.
+
+Настройка проекта `showGeometryTimeline` включает горизонтальную шкалу истории
+на основной карте. Шкала использует фактические минимальную/максимальную даты
+геометрий, позволяет выбрать дату вручную и имеет кнопку Play для
+последовательного воспроизведения развития. Фильтрация по дате выполняется
+поверх загруженного GeoJSON; zoom-фильтрация остаётся на server viewport query.
+
+Редактор явно показывает активное состояние редактирования:
+
+> Вы редактируете «…». Изменения пока локальные; на сервер они попадут только
+> после «Синхронизировать».
 
 ## Проверки
 

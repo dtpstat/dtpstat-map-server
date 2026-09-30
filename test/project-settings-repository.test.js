@@ -26,6 +26,7 @@ test('project settings repository reads and updates the singleton row', async ()
             themePreset: values[5],
             showLineLabels: values[6],
             showLinePopups: values[7] ?? true,
+            showGeometryTimeline: Boolean(values[11]),
             publicDownloadName: 'bus-lanes',
             mapboxAccessTokenConfigured: Boolean(values[8]),
             largeCityPopulationThreshold: values[9],
@@ -44,6 +45,7 @@ test('project settings repository reads and updates the singleton row', async ()
           themePreset: 'classic',
           showLineLabels: false,
           showLinePopups: true,
+          showGeometryTimeline: false,
           publicDownloadName: 'bus-lanes',
           mapboxAccessTokenConfigured: false,
           largeCityPopulationThreshold: 400000,
@@ -59,6 +61,7 @@ test('project settings repository reads and updates the singleton row', async ()
   assert.equal(initial.projectName, 'Выделенные полосы в России');
   assert.equal(initial.themePreset, 'classic');
   assert.equal(initial.showLinePopups, true);
+  assert.equal(initial.showGeometryTimeline, false);
   assert.equal(initial.publicDownloadName, 'bus-lanes');
   assert.match(calls[0].text, /theme_preset AS "themePreset"/i);
   assert.match(calls[0].text, /show_line_popups AS "showLinePopups"/i);
@@ -81,6 +84,7 @@ test('project settings repository reads and updates the singleton row', async ()
   assert.equal(saved.projectName, 'Трамвайные пути России');
   assert.equal(saved.themePreset, 'modern');
   assert.equal(saved.showLinePopups, false);
+  assert.equal(saved.showGeometryTimeline, false);
   assert.equal(saved.publicDownloadName, 'bus-lanes');
   const firstUpdate = calls.find((call) => /UPDATE project_settings/i.test(call.text));
   assert.deepEqual(firstUpdate.values, [
@@ -95,6 +99,7 @@ test('project settings repository reads and updates the singleton row', async ()
     'pk.test-public-token-value',
     400000,
     null,
+    false,
   ]);
   const firstRecalculationIndex = calls.findIndex((call) =>
     /WITH\s+geometry_statistics\s+AS/i.test(call.text) &&

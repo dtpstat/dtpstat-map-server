@@ -142,10 +142,13 @@ test('viewport query uses padded selector and returns public lines plus active t
     sql,
     /WHERE geometry\.is_visible/u,
   );
-  assert.match(sql, /'businessTypeCode', visible_geometries\.business_type_code/);
   assert.match(
     sql,
-    /'pointTypeId', visible_geometries\.point_type_id/u,
+    /'businessTypeCode'[\s\S]*visible_geometries[\s\S]*\.business_type_code/u,
+  );
+  assert.match(
+    sql,
+    /'pointTypeId'[\s\S]*visible_geometries[\s\S]*\.point_type_id/u,
   );
   assert.match(sql, /ST_Covers\(boundary\.geom, viewport\.center\)/);
   assert.match(
