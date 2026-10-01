@@ -1,6 +1,7 @@
 import { securityLog } from '../../service-log.js';
 import {
   AdminSecurityValidationError,
+  isLoopbackAdminIp,
   normalizeAdminIp,
   normalizeAdminUsername,
   publicAdminUser,
@@ -30,6 +31,13 @@ export function createSecurityAuthService(
   async function ipAccessState(ipAddress) {
     const ip = normalizeAdminIp(ipAddress);
     if (!ip) return { status: 'ok', ipAddress: null };
+    if (isLoopbackAdminIp(ip)) {
+      return {
+        status: 'ok',
+        ipAddress: ip,
+        loopback: true,
+      };
+    }
 
     const manualBlock = await repository.isIpBlocked(ip);
     if (manualBlock) {
@@ -87,7 +95,12 @@ export function createSecurityAuthService(
       ip,
     });
 
-    if (!ip) return null;
+    if (
+      !ip ||
+      isLoopbackAdminIp(ip)
+    ) {
+      return null;
+    }
 
     const state = await repository.recordFailedIp(
       ip,
@@ -131,10 +144,17 @@ export function createSecurityAuthService(
         ipAddress,
       );
 
-    if (!ip) {
+    if (
+      !ip ||
+      isLoopbackAdminIp(ip)
+    ) {
       return {
         locked: false,
         retryAfterSeconds: 0,
+        loopback: Boolean(
+          ip &&
+          isLoopbackAdminIp(ip),
+        ),
       };
     }
 
