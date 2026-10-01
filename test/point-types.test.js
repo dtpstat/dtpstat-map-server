@@ -22,6 +22,8 @@ test('point type policy normalizes size anchor activity and name', () => {
       displayHeight: 32,
       anchorX: 16,
       anchorY: 16,
+      minZoom: null,
+      maxZoom: null,
     },
   );
 
@@ -33,6 +35,8 @@ test('point type policy normalizes size anchor activity and name', () => {
         anchorX: 12,
         anchorY: 24,
         isActive: false,
+        minZoom: 10.5,
+        maxZoom: 17,
       },
       {
         name: 'Остановка',
@@ -41,6 +45,8 @@ test('point type policy normalizes size anchor activity and name', () => {
         displayHeight: 32,
         anchorX: 16,
         anchorY: 16,
+        minZoom: null,
+        maxZoom: null,
       },
     );
 
@@ -53,6 +59,8 @@ test('point type policy normalizes size anchor activity and name', () => {
       displayHeight: 24,
       anchorX: 12,
       anchorY: 24,
+      minZoom: 10.5,
+      maxZoom: 17,
     },
   );
 });
@@ -88,6 +96,23 @@ test('point type policy rejects invalid ids names sizes and anchors', () => {
   );
   assert.throws(
     () =>
+      normalizePointTypeCreate({
+        name: 'Тип',
+        minZoom: 18,
+        maxZoom: 12,
+      }),
+    /minZoom/u,
+  );
+  assert.throws(
+    () =>
+      normalizePointTypeCreate({
+        name: 'Тип',
+        minZoom: 25,
+      }),
+    /minZoom/u,
+  );
+  assert.throws(
+    () =>
       normalizePointTypeUpdate(
         {
           displayHeight: 12,
@@ -99,10 +124,29 @@ test('point type policy rejects invalid ids names sizes and anchors', () => {
           displayHeight: 32,
           anchorX: 16,
           anchorY: 16,
+          minZoom: null,
+          maxZoom: null,
         },
       ),
     /anchorY/u,
   );
+});
+
+test('V060 adds optional point type zoom limits', async () => {
+  const sql =
+    await readFile(
+      new URL(
+        '../db/migrations/V060__point_type_zoom_range.sql',
+        import.meta.url,
+      ),
+      'utf8',
+    );
+
+  assert.match(sql, /ALTER TABLE BUSLANES\.POINT_TYPES/u);
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS MIN_ZOOM DOUBLE PRECISION/u);
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS MAX_ZOOM DOUBLE PRECISION/u);
+  assert.match(sql, /POINT_TYPES_ZOOM_RANGE/u);
+  assert.match(sql, /MIN_ZOOM <= MAX_ZOOM/u);
 });
 
 test('V050 adds point types and keeps point category exclusive to points', async () => {
