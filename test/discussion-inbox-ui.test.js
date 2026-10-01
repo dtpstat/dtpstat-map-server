@@ -80,7 +80,11 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
   );
   assert.match(
     layoutSchema,
-    /id:[\s\S]*'messages'[\s\S]*hostId:[\s\S]*'discussion-inbox-host'/u,
+    /id:[\s\S]*'messages-list'[\s\S]*hostId:[\s\S]*'discussion-inbox-list-host'[\s\S]*wide:\s*4/u,
+  );
+  assert.match(
+    layoutSchema,
+    /id:[\s\S]*'messages-thread'[\s\S]*hostId:[\s\S]*'discussion-inbox-thread-host'[\s\S]*wide:\s*8/u,
   );
   assert.match(
     layoutSchema,
@@ -137,6 +141,14 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
   );
   assert.match(
     inbox,
+    /discussion-inbox-list-host/u,
+  );
+  assert.match(
+    inbox,
+    /discussion-inbox-thread-host/u,
+  );
+  assert.doesNotMatch(
+    inbox,
     /discussion-inbox-host/u,
   );
   assert.doesNotMatch(
@@ -191,7 +203,15 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
   );
   assert.match(
     styles,
-    /\.profile-discussions-layout[\s\S]*grid-template-columns:/u,
+    /\.admin-messages-card \.admin-layout-grid[\s\S]*grid-auto-rows:/u,
+  );
+  assert.match(
+    styles,
+    /\.discussion-inbox-thread-panel[\s\S]*grid-template-rows:/u,
+  );
+  assert.doesNotMatch(
+    styles,
+    /\.profile-discussions-layout/u,
   );
   assert.match(
     styles,
