@@ -68,8 +68,20 @@ test('project settings migrations create branding, metrics, theme, line popup an
 });
 
 test('admin interface loads editors and helpers explicitly without transitive side effects', async () => {
-  const [shell, editor, downloadEditor, notices, branding, css, downloadCss] = await Promise.all([
+  const [
+    shell,
+    layout,
+    layoutSchema,
+    editor,
+    downloadEditor,
+    notices,
+    branding,
+    css,
+    downloadCss,
+  ] = await Promise.all([
     source('admin/admin-shell.js'),
+    source('admin/admin-layout.js'),
+    source('admin/admin-layout-schema.js'),
     source('admin/project-settings-editor.js'),
     source('admin/public-download-name-editor.js'),
     source('admin/task-notices.js'),
@@ -149,12 +161,25 @@ test('admin interface loads editors and helpers explicitly without transitive si
   assert.match(css, /\.project-settings-page\[hidden\]/);
   assert.match(css, /\.project-history-speed-row/u);
   assert.match(css, /data-theme-preview/);
-  assert.match(shell, /classList\.remove\('transfer-mode'\)/);
-  assert.match(shell, /const mapTab = document\.querySelector\('\[data-interface-tab="map"\]'\)/u);
-  assert.match(shell, /const mapPanel = document\.querySelector\('\[data-interface-panel="map"\]'\)/u);
   assert.match(
     shell,
-    /projectTab,[\s\S]*mapTab,[\s\S]*reportTab,[\s\S]*lineTypesTab,[\s\S]*pointTypesTab/u,
+    /querySelector\([\s\S]*'\.report-config-editor'[\s\S]*classList\.remove\([\s\S]*'transfer-mode'/u,
+  );
+  assert.match(
+    shell,
+    /setupAdminTabs\([\s\S]*definitions:[\s\S]*adminInterfaceTabs/u,
+  );
+  assert.match(
+    layout,
+    /tabsHost\.append\([\s\S]*tab/u,
+  );
+  assert.match(
+    layout,
+    /panelsHost\.append\([\s\S]*panel/u,
+  );
+  assert.match(
+    layoutSchema,
+    /id:\s*'project'[\s\S]*id:\s*'map'[\s\S]*id:\s*'report'[\s\S]*id:\s*'line-types'[\s\S]*id:\s*'point-types'/u,
   );
 
   assert.match(downloadEditor, /name="publicDownloadName"/);
