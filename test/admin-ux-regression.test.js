@@ -68,6 +68,34 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
   assert.match(profile, /id="profile-avatar-delete" disabled/);
   assert.match(profileCss, /\.profile-avatar-actions[\s\S]*grid-template-columns:\s*repeat\(2/);
   assert.match(profileCss, /\.profile-avatar-action/);
+  assert.match(
+    profile,
+    /\[data-admin-section-panel="profile"\]/u,
+  );
+  for (
+    const hostId of [
+      'profile-account-host',
+      'profile-password-host',
+      'profile-mfa-host',
+      'profile-sessions-host',
+    ]
+  ) {
+    assert.match(
+      profile,
+      new RegExp(
+        `#${hostId}`,
+        'u',
+      ),
+    );
+  }
+  assert.doesNotMatch(
+    profile,
+    /profile-grid|profile-editor-host/u,
+  );
+  assert.doesNotMatch(
+    profileCss,
+    /profile-grid|#profile-editor-host/u,
+  );
 
   assert.match(security, /name="passwordMinLength"/);
   assert.match(security, /name="passwordMaxLength" type="hidden"/);
