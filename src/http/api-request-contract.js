@@ -443,6 +443,8 @@ export const API_REQUEST_CONTRACTS =
           'showLineLabels',
           'showLinePopups',
           'showGeometryTimeline',
+          'historyStartDate',
+          'historySpeeds',
           'showPointGeometries',
           'showLineGeometries',
           'showPolygonGeometries',
