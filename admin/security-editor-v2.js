@@ -1,3 +1,4 @@
+import { adminAvatarObjectUrl } from './admin-avatar.js';
 import { adminAlert, adminConfirm } from './admin-dialog.js';
 import { trackDirtyForm } from './admin-dirty-state.js';
 import { bindHumanUnits } from './admin-human-units.js';
@@ -286,26 +287,68 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   );
   bindHumanUnits(host);
   const userById = new Map();
-  const loadedAvatarUrls = new Set();
+  const avatarRequestByElement =
+    new WeakMap();
 
-  function applyAvatarBackground(avatar, fallback, url) {
-    avatar.style.backgroundImage = `url("${url}")`;
-    if (loadedAvatarUrls.has(url)) {
-      avatar.classList.add('is-image-loaded');
-      return;
-    }
-    const loader = new Image();
-    loader.decoding = 'async';
-    loader.addEventListener('load', () => {
-      loadedAvatarUrls.add(url);
-      avatar.classList.add('is-image-loaded');
-    }, { once: true });
-    loader.addEventListener('error', () => {
-      avatar.style.removeProperty('background-image');
-      avatar.classList.remove('is-image-loaded');
-      fallback.hidden = false;
-    }, { once: true });
-    loader.src = url;
+  function applyAvatarBackground(
+    avatar,
+    fallback,
+    url,
+  ) {
+    const requestKey =
+      Symbol('avatar-request');
+
+    avatarRequestByElement.set(
+      avatar,
+      requestKey,
+    );
+    avatar.style.removeProperty(
+      'background-image',
+    );
+    avatar.classList.remove(
+      'is-image-loaded',
+    );
+    fallback.hidden = false;
+
+    void adminAvatarObjectUrl(
+      url,
+    )
+      .then(
+        (objectUrl) => {
+          if (
+            avatarRequestByElement.get(
+              avatar,
+            ) !== requestKey
+          ) {
+            return;
+          }
+
+          avatar.style.backgroundImage =
+            `url("${objectUrl}")`;
+          avatar.classList.add(
+            'is-image-loaded',
+          );
+        },
+      )
+      .catch(
+        () => {
+          if (
+            avatarRequestByElement.get(
+              avatar,
+            ) !== requestKey
+          ) {
+            return;
+          }
+
+          avatar.style.removeProperty(
+            'background-image',
+          );
+          avatar.classList.remove(
+            'is-image-loaded',
+          );
+          fallback.hidden = false;
+        },
+      );
   }
 
   let selectedUserId = null;
