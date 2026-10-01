@@ -192,6 +192,22 @@ test('admin interface loads editors and helpers explicitly without transitive si
   assert.match(css, /\.project-settings-page\[hidden\]/);
   assert.match(css, /\.project-history-speed-row/u);
   assert.match(css, /data-theme-preview/);
+  assert.match(
+    css,
+    /@container admin-layout-block \(max-width: 64rem\)/u,
+  );
+  assert.match(
+    css,
+    /@container admin-layout-block \(max-width: 56rem\)/u,
+  );
+  assert.match(
+    css,
+    /@container admin-layout-block \(max-width: 44rem\)/u,
+  );
+  assert.doesNotMatch(
+    css,
+    /@media \(max-width:\s*(1050|900|700)px\)/u,
+  );
   assert.doesNotMatch(
     shell,
     /adaptLegacyReportEditorNode|data-task-tab="report"|data-task-panel="report"/u,
