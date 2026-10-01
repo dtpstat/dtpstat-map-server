@@ -1312,6 +1312,8 @@ async function verifyGeometryEditorInfrastructure(
           crypto
             .randomBytes(4)
             .toString('hex'),
+        minZoom: 10,
+        maxZoom: 14,
       });
 
   const typedPointResult =
@@ -1333,6 +1335,8 @@ async function verifyGeometryEditorInfrastructure(
               publicPointType.id,
             displayName:
               'Integration typed point',
+            tooltip:
+              'Integration POI hint',
           },
         }],
       },
@@ -1365,6 +1369,7 @@ async function verifyGeometryEditorInfrastructure(
     north: 50.04,
     centerLng: 30.03,
     centerLat: 50.03,
+    zoom: 12,
   };
 
   const activePointFeed =
@@ -1392,6 +1397,44 @@ async function verifyGeometryEditorInfrastructure(
         ?.pointTypeId,
     ),
     publicPointType.id,
+  );
+  assert.equal(
+    activePointFeature
+      ?.properties
+      ?.tooltip,
+    'Integration POI hint',
+  );
+
+  const belowTypeZoomFeed =
+    await publicCitiesRepository
+      .getViewportGeometries({
+        ...publicViewport,
+        zoom: 9,
+      });
+  assert.equal(
+    belowTypeZoomFeed.features.some(
+      (feature) =>
+        Number(feature.id) ===
+        Number(typedPoint.id),
+    ),
+    false,
+    'Point type minimum zoom was not applied',
+  );
+
+  const aboveTypeZoomFeed =
+    await publicCitiesRepository
+      .getViewportGeometries({
+        ...publicViewport,
+        zoom: 15,
+      });
+  assert.equal(
+    aboveTypeZoomFeed.features.some(
+      (feature) =>
+        Number(feature.id) ===
+        Number(typedPoint.id),
+    ),
+    false,
+    'Point type maximum zoom was not applied',
   );
 
   await pointTypesRepository
