@@ -1,6 +1,12 @@
 import { adminAvatarObjectUrl } from './admin-avatar.js';
-import { ensureAdminSections } from './admin-layout.js';
-import { adminDynamicSections } from './admin-layout-schema.js';
+import {
+  ensureAdminSections,
+  setupAdminTabs,
+} from './admin-layout.js';
+import {
+  adminDynamicSections,
+  adminInterfaceTabs,
+} from './admin-layout-schema.js';
 import { confirmDirtyNavigation, installDirtyTabGuard } from './admin-dirty-state.js';
 import { readTabState, writeTabState } from './admin-tab-state.js';
 import {
@@ -81,95 +87,82 @@ function ensureTopbarActions() {
   host.append(button);
 }
 
-function normalizeInterfaceEditorNodes() {
-  const reportTab = document.querySelector('[data-task-tab="report"]');
-  const reportPanel = document.querySelector('[data-task-panel="report"]');
+function adaptLegacyReportEditorNode() {
+  const reportTab =
+    document.querySelector(
+      '[data-task-tab="report"]',
+    );
+  const reportPanel =
+    document.querySelector(
+      '[data-task-panel="report"]',
+    );
+
   if (reportTab) {
-    delete reportTab.dataset.taskTab;
-    reportTab.dataset.interfaceTab = 'report';
-    reportTab.id = 'interface-tab-report';
-    reportTab.setAttribute('aria-controls', 'interface-panel-report');
+    delete reportTab.dataset
+      .taskTab;
+    reportTab.dataset
+      .interfaceTab =
+      'report';
+    reportTab.id =
+      'interface-tab-report';
+    reportTab.setAttribute(
+      'aria-controls',
+      'interface-panel-report',
+    );
+    document
+      .querySelector(
+        '#interface-tabs',
+      )
+      ?.append(
+        reportTab,
+      );
   }
+
   if (reportPanel) {
-    delete reportPanel.dataset.taskPanel;
-    reportPanel.dataset.interfacePanel = 'report';
-    reportPanel.id = 'interface-panel-report';
-    reportPanel.classList.add('interface-task-panel', 'report-interface-panel');
-    reportPanel.setAttribute('aria-labelledby', 'interface-tab-report');
-
-    // The report editor originated as a data-task panel. Once mounted under
-    // interface settings, remove the legacy form/scroll hooks so it is governed
-    // only by the interface role and by the outer interface panel scroller.
-    reportPanel.querySelector('#report-config-form')?.removeAttribute('data-task-form');
-    reportPanel.querySelector('.report-config-sections')?.classList.remove('form-fields');
-    reportPanel.querySelector('.report-config-editor')?.classList.remove('transfer-mode');
-    document.querySelector('#interface-panels')?.append(reportPanel);
+    delete reportPanel.dataset
+      .taskPanel;
+    reportPanel.dataset
+      .interfacePanel =
+      'report';
+    reportPanel.id =
+      'interface-panel-report';
+    reportPanel.classList.add(
+      'interface-task-panel',
+      'report-interface-panel',
+    );
+    reportPanel.setAttribute(
+      'aria-labelledby',
+      'interface-tab-report',
+    );
+    reportPanel
+      .querySelector(
+        '#report-config-form',
+      )
+      ?.removeAttribute(
+        'data-task-form',
+      );
+    reportPanel
+      .querySelector(
+        '.report-config-sections',
+      )
+      ?.classList.remove(
+        'form-fields',
+      );
+    reportPanel
+      .querySelector(
+        '.report-config-editor',
+      )
+      ?.classList.remove(
+        'transfer-mode',
+      );
+    document
+      .querySelector(
+        '#interface-panels',
+      )
+      ?.append(
+        reportPanel,
+      );
   }
-
-  const projectTab = document.querySelector('[data-interface-tab="project"]');
-  const projectPanel = document.querySelector('[data-interface-panel="project"]');
-  const mapTab = document.querySelector('[data-interface-tab="map"]');
-  const mapPanel = document.querySelector('[data-interface-panel="map"]');
-  const lineTypesTab = document.querySelector('[data-interface-tab="line-types"]');
-  const lineTypesPanel = document.querySelector('[data-interface-panel="line-types"]');
-  const pointTypesTab = document.querySelector('[data-interface-tab="point-types"]');
-  const pointTypesPanel = document.querySelector('[data-interface-panel="point-types"]');
-  const transferTab = document.querySelector('[data-interface-tab="project-transfer"]');
-  const transferPanel = document.querySelector('[data-interface-panel="project-transfer"]');
-  const tabs = document.querySelector('#interface-tabs');
-  const panels = document.querySelector('#interface-panels');
-
-  for (const node of [
-    projectTab,
-    mapTab,
-    reportTab,
-    lineTypesTab,
-    pointTypesTab,
-    transferTab,
-  ]) {
-    if (node) tabs?.append(node);
-  }
-  for (const node of [
-    projectPanel,
-    mapPanel,
-    reportPanel,
-    lineTypesPanel,
-    pointTypesPanel,
-    transferPanel,
-  ]) {
-    if (node) panels?.append(node);
-  }
-}
-
-function setupInterfaceTabs() {
-  const tabs = [...document.querySelectorAll('[data-interface-tab]')];
-  const panels = [...document.querySelectorAll('[data-interface-panel]')];
-  if (tabs.length === 0) return;
-
-  const select = (key) => {
-    writeTabState('interface', key);
-    for (const tab of tabs) {
-      const active = tab.dataset.interfaceTab === key;
-      tab.setAttribute('aria-selected', String(active));
-      tab.tabIndex = active ? 0 : -1;
-    }
-    for (const panel of panels) panel.hidden = panel.dataset.interfacePanel !== key;
-    if (key === 'line-types') {
-      window.dispatchEvent(new CustomEvent('dtpstat:line-types-changed'));
-    }
-    if (key === 'point-types') {
-      window.dispatchEvent(new CustomEvent('dtpstat:point-types-changed'));
-    }
-  };
-
-  for (const tab of tabs) tab.addEventListener('click', () => select(tab.dataset.interfaceTab));
-  const available = tabs.map((tab) => tab.dataset.interfaceTab);
-  select(readTabState(
-    'interface',
-    available,
-    tabs.find((tab) => tab.dataset.interfaceTab === 'project')?.dataset.interfaceTab
-      ?? tabs[0].dataset.interfaceTab,
-  ));
 }
 
 async function loadInterfaceEditors(user) {
@@ -192,9 +185,35 @@ async function loadInterfaceEditors(user) {
     interfaceTabs?.classList.remove('task-tabs');
     interfaceCard?.classList.remove('control-card');
   }
-  if (user.isSuperuser) await import('./project-transfer-editor.js');
-  normalizeInterfaceEditorNodes();
-  setupInterfaceTabs();
+  if (user.isSuperuser) {
+    await import(
+      './project-transfer-editor.js'
+    );
+  }
+
+  adaptLegacyReportEditorNode();
+
+  setupAdminTabs({
+    tabsHost:
+      document.querySelector(
+        '#interface-tabs',
+      ),
+    panelsHost:
+      document.querySelector(
+        '#interface-panels',
+      ),
+    definitions:
+      adminInterfaceTabs,
+    user,
+    readState:
+      readTabState,
+    writeState:
+      writeTabState,
+    stateKey:
+      'interface',
+    defaultId:
+      'project',
+  });
 }
 
 function setupDataSectionLockExtensions() {
