@@ -405,17 +405,21 @@ npm run admin:unblock -- --ip 203.0.113.10
 - [project-settings-transfer.md](project-settings-transfer.md)
 - [geometry-editor.md](geometry-editor.md)
 
-Последняя security migration — `V048__admin_request_incident_lockout.sql`; общая последовательность schema уже включает `V049__empty_descendant_spatial_relink.sql`, поэтому следующее изменение DB schema должно использовать **V050+**.
+Последняя специализированная security migration — `V056__admin_mfa_policy.sql`. Общая последовательность schema уже включает `V063__admin_discussion_subjects.sql`; следующий новый DB schema change должен использовать следующий свободный номер после текущего migration tail.
 
 
 ## Future security backlog
 
-Отложено намеренно:
+Уже реализовано:
 
-- MFA/passkeys/TOTP для admin/superuser;
-- dependency/CodeQL/Dependabot policy в CI/CD;
-- optional external audit/security collectors (например Zabbix/SIEM);
-- отдельный расширенный regression suite для всех production security headers.
+- TOTP MFA, recovery codes, guarded superuser reset и optional mandatory-MFA policy;
+- pinned GitHub Actions, dependency audit/secret scan, CodeQL и Dependabot policy;
+- regression coverage для production security headers, HSTS/proxy semantics и admin no-store policy.
+
+Остаётся optional deployment integration с внешними audit/security collectors
+(например Zabbix/SIEM). Приложение сохраняет transport-neutral journald/service
+events и Prometheus metrics; конкретный внешний collector не встраивается в
+application runtime.
 
 
 ## Prometheus access
