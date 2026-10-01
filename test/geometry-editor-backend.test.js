@@ -721,7 +721,10 @@ test('geometry discussions are persistent, permission-protected and realtime aft
     contracts,
   ] =
     await Promise.all([
-      read('db/migrations/V058__geometry_discussions.sql'),
+      Promise.all([
+        read('db/migrations/V058__geometry_discussions.sql'),
+        read('db/migrations/V062__geometry_discussion_read_state.sql'),
+      ]),
       read('src/db/geometry-discussion-storage.js'),
       read('src/db/geometry-edit-lease-storage.js'),
       read('src/modules/geometry/editor-policy.js'),
@@ -731,20 +734,29 @@ test('geometry discussions are persistent, permission-protected and realtime aft
       read('src/http/api-request-contract.js'),
     ]);
 
+  const [
+    messageMigration,
+    readMigration,
+  ] = migration;
+
   assert.match(
-    migration,
+    messageMigration,
     /CREATE TABLE IF NOT EXISTS BUSLANES\.GEOMETRY_DISCUSSION_MESSAGES/u,
   );
   assert.match(
-    migration,
+    readMigration,
+    /CREATE TABLE IF NOT EXISTS BUSLANES\.GEOMETRY_DISCUSSION_READ_STATE/u,
+  );
+  assert.match(
+    messageMigration,
     /GEOMETRY_ID[\s\S]*REFERENCES BUSLANES\.CITY_GEOMETRIES[\s\S]*ON DELETE CASCADE/u,
   );
   assert.match(
-    migration,
+    messageMigration,
     /AUTHOR_USER_ID[\s\S]*REFERENCES BUSLANES\.ADMIN_USERS[\s\S]*ON DELETE SET NULL/u,
   );
   assert.match(
-    migration,
+    messageMigration,
     /GEOMETRY_REVISION TIMESTAMPTZ/u,
   );
 
@@ -789,7 +801,39 @@ test('geometry discussions are persistent, permission-protected and realtime aft
     /resource:\s*'geometry-discussions'[\s\S]*discussionMessage/u,
   );
   assert.match(
+    route,
+    /\/admin\/geometry-editor\/discussions\/unread/u,
+  );
+  assert.match(
+    route,
+    /\/geometries\/:geometryId\/discussion\/read[\s\S]*action:[\s\S]*'read'/u,
+  );
+  assert.match(
+    storage,
+    /async unreadCounts\([\s\S]*author_user_id IS DISTINCT FROM \$1::bigint/u,
+  );
+  assert.match(
+    storage,
+    /async markRead\([\s\S]*ON CONFLICT \(geometry_id, user_id\)/u,
+  );
+  assert.match(
+    service,
+    /async listDiscussionUnread\(/u,
+  );
+  assert.match(
+    service,
+    /async markDiscussionRead\(/u,
+  );
+  assert.match(
     contracts,
     /'\/admin\/geometry-editor\/geometries\/:geometryId\/discussion'[\s\S]*bodyKeys:[\s\S]*'message'/u,
+  );
+  assert.match(
+    contracts,
+    /'\/admin\/geometry-editor\/discussions\/unread'/u,
+  );
+  assert.match(
+    contracts,
+    /'\/admin\/geometry-editor\/geometries\/:geometryId\/discussion\/read'[\s\S]*'messageId'/u,
   );
 });
