@@ -15,6 +15,19 @@ test('project settings repository reads and updates the singleton row', async ()
           }],
         };
       }
+      if (/FROM geometry_history_speeds/i.test(text)) {
+        return {
+          rows: [{
+            id: 1,
+            name: '1x',
+            stepUnit: 'month',
+            intervalSeconds: 1,
+            sortOrder: 10,
+            isActive: true,
+            isDefault: true,
+          }],
+        };
+      }
       if (/UPDATE project_settings/i.test(text)) {
         return {
           rows: [{
@@ -30,6 +43,7 @@ test('project settings repository reads and updates the singleton row', async ()
             showPointGeometries: values[12] ?? true,
             showLineGeometries: values[13] ?? true,
             showPolygonGeometries: values[14] ?? true,
+            historyStartDate: values[15] ?? null,
             publicDownloadName: 'bus-lanes',
             mapboxAccessTokenConfigured: Boolean(values[8]),
             largeCityPopulationThreshold: values[9],
@@ -52,6 +66,7 @@ test('project settings repository reads and updates the singleton row', async ()
           showPointGeometries: true,
           showLineGeometries: true,
           showPolygonGeometries: true,
+          historyStartDate: null,
           publicDownloadName: 'bus-lanes',
           mapboxAccessTokenConfigured: false,
           largeCityPopulationThreshold: 400000,
@@ -68,6 +83,8 @@ test('project settings repository reads and updates the singleton row', async ()
   assert.equal(initial.themePreset, 'classic');
   assert.equal(initial.showLinePopups, true);
   assert.equal(initial.showGeometryTimeline, false);
+  assert.equal(initial.historyStartDate, null);
+  assert.equal(initial.historySpeeds[0].name, '1x');
   assert.equal(initial.publicDownloadName, 'bus-lanes');
   assert.match(calls[0].text, /theme_preset AS "themePreset"/i);
   assert.match(calls[0].text, /show_line_popups AS "showLinePopups"/i);
@@ -109,6 +126,7 @@ test('project settings repository reads and updates the singleton row', async ()
     true,
     true,
     true,
+    null,
   ]);
   const firstRecalculationIndex = calls.findIndex((call) =>
     /WITH\s+geometry_statistics\s+AS/i.test(call.text) &&
@@ -210,6 +228,7 @@ test('project settings save commits thresholds and city classification atomicall
             showPointGeometries: values[12] ?? true,
             showLineGeometries: values[13] ?? true,
             showPolygonGeometries: values[14] ?? true,
+            historyStartDate: values[15] ?? null,
             publicDownloadName: 'bus-lanes',
             mapboxAccessTokenConfigured: false,
             largeCityPopulationThreshold: values[9],
