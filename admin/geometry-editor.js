@@ -50,6 +50,7 @@ if (section) {
   const discussionOpenButton = document.querySelector('#geometry-discussion-open');
   const discussionUnread = document.querySelector('#geometry-discussion-unread');
   const discussionPanel = document.querySelector('#geometry-discussion');
+  const discussionResizeGrip = document.querySelector('#geometry-discussion-resize-grip');
   const discussionCloseButton = document.querySelector('#geometry-discussion-close');
   const discussionTitle = document.querySelector('#geometry-discussion-title');
   const discussionSubtitle = document.querySelector('#geometry-discussion-subtitle');
@@ -9187,6 +9188,116 @@ if (section) {
       void sendDiscussionMessage();
     },
   );
+
+  function beginDiscussionResize(
+    event,
+  ) {
+    if (
+      !discussionPanel ||
+      !discussionResizeGrip ||
+      event.button !== 0
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const rect =
+      discussionPanel
+        .getBoundingClientRect();
+    const startX =
+      event.clientX;
+    const startY =
+      event.clientY;
+    const startWidth =
+      rect.width;
+    const startHeight =
+      rect.height;
+
+    const minWidth = 320;
+    const minHeight = 256;
+    const maxWidth =
+      Math.max(
+        minWidth,
+        globalThis.innerWidth - 16,
+      );
+    const maxHeight =
+      Math.max(
+        minHeight,
+        globalThis.innerHeight - 16,
+      );
+
+    const move =
+      (moveEvent) => {
+        const width =
+          Math.min(
+            maxWidth,
+            Math.max(
+              minWidth,
+              startWidth +
+                startX -
+                moveEvent.clientX,
+            ),
+          );
+        const height =
+          Math.min(
+            maxHeight,
+            Math.max(
+              minHeight,
+              startHeight +
+                startY -
+                moveEvent.clientY,
+            ),
+          );
+
+        discussionPanel
+          .style.width =
+          width + 'px';
+        discussionPanel
+          .style.height =
+          height + 'px';
+      };
+
+    const finish = () => {
+      globalThis.removeEventListener(
+        'pointermove',
+        move,
+      );
+      globalThis.removeEventListener(
+        'pointerup',
+        finish,
+      );
+      globalThis.removeEventListener(
+        'pointercancel',
+        finish,
+      );
+    };
+
+    globalThis.addEventListener(
+      'pointermove',
+      move,
+    );
+    globalThis.addEventListener(
+      'pointerup',
+      finish,
+      {
+        once: true,
+      },
+    );
+    globalThis.addEventListener(
+      'pointercancel',
+      finish,
+      {
+        once: true,
+      },
+    );
+  }
+
+  discussionResizeGrip
+    ?.addEventListener(
+      'pointerdown',
+      beginDiscussionResize,
+    );
 
   function resizeDiscussionInput() {
     if (!discussionInput) {
