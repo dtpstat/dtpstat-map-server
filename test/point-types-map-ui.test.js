@@ -164,7 +164,7 @@ test('public map exposes independent POI type toggles and polygon layers', async
 });
 
 
-test('public map timeline is setting-controlled and exposes horizontal playback controls', async () => {
+test('public map timeline is setting-controlled and exposes collapsible one-line playback controls', async () => {
   const [
     html,
     app,
@@ -182,7 +182,7 @@ test('public map timeline is setting-controlled and exposes horizontal playback 
 
   assert.match(
     html,
-    /id="geometry-timeline"[\s\S]*id="geometry-timeline-play"[\s\S]*id="geometry-timeline-speed"[\s\S]*id="geometry-timeline-range"/u,
+    /id="geometry-timeline"[\s\S]*data-collapsed="true"[\s\S]*id="geometry-timeline-toggle"[\s\S]*id="geometry-timeline-play"[\s\S]*id="geometry-timeline-speed"[\s\S]*id="geometry-timeline-date"[\s\S]*id="geometry-timeline-range"[\s\S]*id="geometry-timeline-collapse"/u,
   );
   assert.match(
     api,
@@ -225,8 +225,32 @@ test('public map timeline is setting-controlled and exposes horizontal playback 
     /Math\.round\([\s\S]*intervalSeconds[\s\S]*\* 1000/u,
   );
   assert.match(
+    app,
+    /function setTimelineCollapsed/u,
+  );
+  assert.match(
+    app,
+    /timelineToggle[\s\S]*setTimelineCollapsed\([\s\S]*false/u,
+  );
+  assert.match(
+    app,
+    /timelineCollapse[\s\S]*stopTimelinePlayback\(\)[\s\S]*setTimelineCollapsed\([\s\S]*true/u,
+  );
+  assert.match(
     styles,
-    /\.geometry-timeline \{[\s\S]*position: absolute[\s\S]*input\[type="range"\]/u,
+    /\.geometry-timeline \{[\s\S]*left: 14px[\s\S]*bottom: 14px/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-timeline\[data-collapsed="true"\] \.geometry-timeline-bar/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-timeline-bar \{[\s\S]*grid-template-columns:[\s\S]*minmax\(180px, 1fr\)/u,
+  );
+  assert.match(
+    styles,
+    /background: rgb\(255 255 255 \/ 78%\)/u,
   );
   assert.match(
     legendStyles,
