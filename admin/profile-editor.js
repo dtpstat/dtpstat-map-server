@@ -1,4 +1,5 @@
 import { adminConfirm } from './admin-dialog.js';
+import { adminAvatarObjectUrl } from './admin-avatar.js';
 import { trackDirtyForm } from './admin-dirty-state.js';
 
 const host = document.querySelector('#profile-editor-host');
@@ -266,32 +267,69 @@ if (host) {
     renderPasswordPolicy(payload.policy);
   }
 
+  let avatarRequestSequence = 0;
+
   function updateAvatar(user) {
     const image = host.querySelector('#profile-avatar');
     const fallback = host.querySelector('#profile-avatar-fallback');
     const fallbackText = (user.displayName || user.username || '?').trim().slice(0, 1).toUpperCase();
-    fallback.textContent = fallbackText;
-    image.onload = null;
-    image.onerror = null;
+    const requestSequence =
+      ++avatarRequestSequence;
 
-    if (user.hasAvatar) {
-      image.hidden = true;
-      fallback.hidden = false;
-      image.onload = () => {
-        image.hidden = false;
-        fallback.hidden = true;
-      };
-      image.onerror = () => {
-        image.hidden = true;
-        fallback.hidden = false;
-      };
-      const avatarVersion = encodeURIComponent(user.updatedAt ?? '1');
-      image.src = `/api/admin/profile/avatar?v=${avatarVersion}`;
-    } else {
+    fallback.textContent = fallbackText;
+    image.hidden = true;
+    fallback.hidden = false;
+
+    if (!user.hasAvatar) {
       image.removeAttribute('src');
-      image.hidden = true;
-      fallback.hidden = false;
+      return;
     }
+
+    const avatarVersion =
+      encodeURIComponent(
+        user.updatedAt ?? '1',
+      );
+    const avatarUrl =
+      `/api/admin/profile/avatar?v=${avatarVersion}`;
+
+    void adminAvatarObjectUrl(
+      avatarUrl,
+    )
+      .then(
+        (objectUrl) => {
+          if (
+            requestSequence !==
+            avatarRequestSequence
+          ) {
+            return;
+          }
+
+          image.src =
+            objectUrl;
+          image.hidden =
+            false;
+          fallback.hidden =
+            true;
+        },
+      )
+      .catch(
+        () => {
+          if (
+            requestSequence !==
+            avatarRequestSequence
+          ) {
+            return;
+          }
+
+          image.removeAttribute(
+            'src',
+          );
+          image.hidden =
+            true;
+          fallback.hidden =
+            false;
+        },
+      );
   }
 
   function renderUser(user) {
