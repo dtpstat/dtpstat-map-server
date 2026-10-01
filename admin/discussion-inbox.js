@@ -715,6 +715,9 @@ if (profileHost && currentUser) {
                 detail: {
                   id:
                     item.subjectId,
+                  cityId:
+                    item.subjectCityId ??
+                    null,
                 },
               },
             ),
