@@ -658,13 +658,25 @@ if (
           'Anchor Y',
           anchorY,
         ),
-        label(
-          'Zoom от',
-          minZoom,
+        Object.assign(
+          label(
+            'Zoom от',
+            minZoom,
+          ),
+          {
+            className:
+              'point-type-zoom-from',
+          },
         ),
-        label(
-          'Zoom до',
-          maxZoom,
+        Object.assign(
+          label(
+            'Zoom до',
+            maxZoom,
+          ),
+          {
+            className:
+              'point-type-zoom-to',
+          },
         ),
       );
 
