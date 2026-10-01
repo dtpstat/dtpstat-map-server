@@ -146,6 +146,7 @@ export function createDiscussionStorage(
              ) AS "latestAuthorDisplayName",
              author.username AS "latestAuthorUsername",
              (author.avatar_data IS NOT NULL) AS "latestAuthorHasAvatar",
+             author.updated_at AS "latestAuthorUpdatedAt",
              CASE
                WHEN latest.subject_type = 'geometry'
                  THEN COALESCE(
