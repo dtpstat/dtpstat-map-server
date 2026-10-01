@@ -2093,15 +2093,20 @@ if (section) {
         source: SELECTED_SOURCE,
         filter: ['==', ['geometry-type'], 'Polygon'],
         paint: {
-          'fill-color': [
-            'case',
-            ['get', 'isActiveEdit'],
-            '#f3b74e',
-            ['get', 'isEditLocked'],
-            '#737d82',
-            '#f3b74e',
-          ],
-          'fill-opacity': 0.24,
+          'fill-color': '#66fff0',
+          'fill-opacity': 0.28,
+        },
+      });
+      addLayerSafe(map, {
+        id: 'geometry-editor-selected-polygon-outline',
+        type: 'line',
+        source: SELECTED_SOURCE,
+        filter: ['==', ['geometry-type'], 'Polygon'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': '#07191d',
+          'line-width': 9,
+          'line-opacity': 0.92,
         },
       });
       addLayerSafe(map, {
@@ -2111,15 +2116,9 @@ if (section) {
         filter: ['==', ['geometry-type'], 'Polygon'],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
-          'line-color': [
-            'case',
-            ['get', 'isActiveEdit'],
-            '#f3b74e',
-            ['get', 'isEditLocked'],
-            '#737d82',
-            '#f3b74e',
-          ],
+          'line-color': '#66fff0',
           'line-width': 5,
+          'line-opacity': 1,
         },
       });
       addLayerSafe(map, {
@@ -2129,20 +2128,29 @@ if (section) {
         filter: ['==', ['geometry-type'], 'LineString'],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
-          'line-color': [
-            'case',
-            ['get', 'isActiveEdit'],
-            '#f3b74e',
-            ['get', 'isEditLocked'],
-            '#737d82',
-            '#f3b74e',
-          ],
+          'line-color': '#07191d',
           'line-width': [
             '+',
             ['coalesce', ['get', 'lineWidth'], 4],
-            4,
+            10,
           ],
-          'line-opacity': 0.72,
+          'line-opacity': 0.92,
+        },
+      });
+      addLayerSafe(map, {
+        id: 'geometry-editor-selected-line-accent',
+        type: 'line',
+        source: SELECTED_SOURCE,
+        filter: ['==', ['geometry-type'], 'LineString'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': '#66fff0',
+          'line-width': [
+            '+',
+            ['coalesce', ['get', 'lineWidth'], 4],
+            5,
+          ],
+          'line-opacity': 1,
         },
       });
       addLayerSafe(map, {
@@ -2166,8 +2174,19 @@ if (section) {
             'case',
             ['get', 'isVisible'],
             1,
-            0.35,
+            0.55,
           ],
+        },
+      });
+      addLayerSafe(map, {
+        id: 'geometry-editor-selected-point-outline',
+        type: 'circle',
+        source: SELECTED_SOURCE,
+        filter: ['==', ['geometry-type'], 'Point'],
+        paint: {
+          'circle-radius': 13,
+          'circle-color': '#07191d',
+          'circle-opacity': 0.92,
         },
       });
       addLayerSafe(map, {
@@ -2176,15 +2195,8 @@ if (section) {
         source: SELECTED_SOURCE,
         filter: ['==', ['geometry-type'], 'Point'],
         paint: {
-          'circle-radius': 9,
-          'circle-color': [
-            'case',
-            ['get', 'isActiveEdit'],
-            '#f3b74e',
-            ['get', 'isEditLocked'],
-            '#737d82',
-            '#f3b74e',
-          ],
+          'circle-radius': 10,
+          'circle-color': '#66fff0',
           'circle-stroke-color': '#fff',
           'circle-stroke-width': 2,
         },
