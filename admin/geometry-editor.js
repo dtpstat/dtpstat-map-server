@@ -9678,6 +9678,19 @@ if (section) {
                 focus: true,
               },
             );
+
+            if (
+              event.detail
+                ?.openDiscussion
+            ) {
+              await loadDiscussion(
+                id,
+                {
+                  focusInput:
+                    true,
+                },
+              );
+            }
           } catch (error) {
             setMessage(
               'Не удалось открыть геометрию из обсуждения: ' +
