@@ -59,15 +59,40 @@ export const adminDynamicSections = [
       'АКТИВНАЯ УЧЁТНАЯ ЗАПИСЬ',
     blocks: [
       {
-        id: 'profile-editor',
+        id: 'profile-account',
         hostId:
-          'profile-editor-host',
+          'profile-account-host',
+        span: {
+          base: 12,
+          wide: 5,
+        },
+      },
+      {
+        id: 'profile-password',
+        hostId:
+          'profile-password-host',
+        span: {
+          base: 12,
+          wide: 7,
+        },
+      },
+      {
+        id: 'profile-mfa',
+        hostId:
+          'profile-mfa-host',
         span: {
           base: 12,
           wide: 12,
         },
-        placeholder:
-          'Загружаем профиль…',
+      },
+      {
+        id: 'profile-sessions',
+        hostId:
+          'profile-sessions-host',
+        span: {
+          base: 12,
+          wide: 12,
+        },
       },
     ],
   },
