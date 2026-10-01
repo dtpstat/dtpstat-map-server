@@ -190,6 +190,9 @@ test('project settings transfer repository owns line-type staging and settings S
     themePreset: 'modern',
     showLineLabels: false,
     showLinePopups: true,
+    showPointGeometries: true,
+    showLineGeometries: false,
+    showPolygonGeometries: true,
     hasPublicDownloadName: false,
     publicDownloadName: null,
     hasMapboxAccessToken: false,
@@ -210,6 +213,14 @@ test('project settings transfer repository owns line-type staging and settings S
   assert.match(
     client.queries.at(-1).text,
     /^UPDATE project_settings SET/u,
+  );
+  assert.deepEqual(
+    client.queries.at(-1).values.slice(-3),
+    [true, false, true],
+  );
+  assert.match(
+    client.queries.at(-1).text,
+    /show_point_geometries=\$15::boolean/u,
   );
 });
 
