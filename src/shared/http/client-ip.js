@@ -26,3 +26,27 @@ export function requestClientIp(request) {
       : value
   ).slice(0, 128);
 }
+
+
+export function isLoopbackClientIp(value) {
+  const normalized =
+    typeof value === 'string'
+      ? value.trim().toLowerCase()
+      : '';
+
+  if (!normalized) {
+    return false;
+  }
+
+  if (normalized === '::1') {
+    return true;
+  }
+
+  const ipv4 =
+    normalized.startsWith('::ffff:')
+      ? normalized.slice(7)
+      : normalized;
+
+  return /^127(?:\.\d{1,3}){3}$/u
+    .test(ipv4);
+}
