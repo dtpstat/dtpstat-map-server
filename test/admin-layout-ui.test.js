@@ -175,4 +175,16 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
     styles,
     /--admin-block-span/u,
   );
+  assert.match(
+    styles,
+    /@container admin-layout-grid \(max-width: 63\.999rem\)/u,
+  );
+  assert.match(
+    styles,
+    /grid-column:\s*1 \/ -1/u,
+  );
+  assert.doesNotMatch(
+    styles,
+    /@media \(max-width:\s*1050px\)[\s\S]*admin-layout-grid/u,
+  );
 });
