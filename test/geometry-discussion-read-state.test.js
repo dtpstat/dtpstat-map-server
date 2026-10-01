@@ -54,7 +54,8 @@ test('geometry discussion storage excludes own messages from unread and exposes 
       ) {
         return {
           rows: [{
-            geometryId: 9,
+            subjectType: 'geometry',
+            subjectId: 9,
             unreadCount: 2,
           }],
         };
@@ -68,12 +69,13 @@ test('geometry discussion storage excludes own messages from unread and exposes 
         return {
           rows: [{
             id: 5,
-            geometryId: 9,
+            subjectType: 'geometry',
+            subjectId: 9,
             authorUserId: 10,
             authorDisplayName: 'User',
             authorUsername: 'user',
             authorHasAvatar: false,
-            geometryRevision: null,
+            subjectRevision: null,
             message: 'Hello',
             createdAt:
               '2026-10-01T10:00:00.000Z',
@@ -138,7 +140,8 @@ test('geometry discussion read marker advances atomically to a message from the 
       });
       return {
         rows: [{
-          geometryId: 9,
+          subjectType: 'geometry',
+          subjectId: 9,
           userId: 77,
           lastReadMessageId: 15,
           updatedAt:
