@@ -738,6 +738,31 @@ async function verifyGeometryEditorInfrastructure(
         .id,
     );
 
+  const readUser =
+    await pool.query(
+      `
+        INSERT INTO admin_users (
+          username,
+          password_hash,
+          can_edit_geometries
+        )
+        VALUES (
+          $1,
+          'integration-hash',
+          TRUE
+        )
+        RETURNING id::bigint AS id
+      `,
+      [
+        `geometry-reader-${process.pid}`,
+      ],
+    );
+  const readUserId =
+    Number(
+      readUser.rows[0]
+        .id,
+    );
+
   const service =
     createGeometryEditorService(
       pool,
@@ -860,6 +885,86 @@ async function verifyGeometryEditorInfrastructure(
     [
       discussionMessage.id,
     ],
+  );
+  assert.equal(
+    discussion.messages[0]
+      .readByOthersCount,
+    0,
+  );
+
+  const readerUnread =
+    await service
+      .listDiscussionUnread({
+        id:
+          readUserId,
+      });
+
+  assert.deepEqual(
+    readerUnread.items,
+    [{
+      geometryId:
+        polygon.id,
+      unreadCount: 1,
+    }],
+    'Offline geometry discussion message was not restored as unread for another user',
+  );
+
+  const authorUnread =
+    await service
+      .listDiscussionUnread({
+        id:
+          editUserId,
+      });
+
+  assert.deepEqual(
+    authorUnread.items,
+    [],
+    'Author own geometry discussion message was counted as unread',
+  );
+
+  const readState =
+    await service
+      .markDiscussionRead(
+        polygon.id,
+        {
+          id:
+            readUserId,
+        },
+        {
+          messageId:
+            discussionMessage.id,
+        },
+      );
+
+  assert.equal(
+    readState
+      .lastReadMessageId,
+    discussionMessage.id,
+  );
+
+  assert.deepEqual(
+    (
+      await service
+        .listDiscussionUnread({
+          id:
+            readUserId,
+        })
+    ).items,
+    [],
+    'Unread geometry discussion count remained after marking the message read',
+  );
+
+  const readDiscussion =
+    await service
+      .listDiscussion(
+        polygon.id,
+      );
+
+  assert.equal(
+    readDiscussion.messages[0]
+      .readByOthersCount,
+    1,
+    'Author receipt did not become read after another user advanced the read position',
   );
 
   const polygonLease =
