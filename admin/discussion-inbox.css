@@ -1,15 +1,42 @@
-.profile-discussions-panel {
-  grid-column: 1 / -1;
+.admin-messages-section {
+  min-height: 0;
 }
 
-.profile-discussions-heading {
+.admin-messages-layout,
+.admin-messages-card,
+#discussion-inbox-host,
+.discussion-inbox-panel {
+  min-height: 0;
+  height: 100%;
+}
+
+.admin-messages-card {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.admin-messages-heading {
   align-items: start;
+  margin-bottom: .9rem;
+}
+
+.admin-messages-subtitle {
+  margin: .35rem 0 0;
+  color: var(--muted, #8ca2a7);
+  font-size: .82rem;
+}
+
+.discussion-inbox-panel {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 
 .profile-discussions-layout {
-  min-height: 28rem;
+  min-height: 0;
+  height: 100%;
   display: grid;
-  grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
+  grid-template-columns: minmax(19rem, 24rem) minmax(0, 1fr);
   gap: 1rem;
 }
 
@@ -86,7 +113,7 @@
 }
 
 .profile-discussion-row-unread,
-.admin-profile-unread {
+.admin-messages-unread {
   min-width: 1.35rem;
   height: 1.35rem;
   display: inline-grid;
@@ -100,12 +127,12 @@
   line-height: 1;
 }
 
-.admin-profile-unread {
+.admin-messages-unread {
   margin-left: .38rem;
   vertical-align: middle;
 }
 
-.admin-profile-unread[hidden] {
+.admin-messages-unread[hidden] {
   display: none;
 }
 
@@ -261,5 +288,29 @@
 
   .profile-discussion-thread {
     min-height: 28rem;
+  }
+}
+
+
+#admin-messages-total {
+  white-space: nowrap;
+  color: #d9f7f3;
+  font-size: .82rem;
+}
+
+.admin-messages-section .settings-card {
+  height: calc(100vh - 15rem);
+  min-height: 34rem;
+}
+
+.admin-messages-section .profile-message {
+  min-height: 1.2rem;
+  margin: .45rem .15rem 0;
+}
+
+@media (max-width: 900px) {
+  .admin-messages-section .settings-card {
+    height: auto;
+    min-height: 0;
   }
 }
