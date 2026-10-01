@@ -8,9 +8,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relativePath) => fs.readFile(path.join(root, relativePath), 'utf8');
 
 test('admin data and project settings are split into meaningful visual groups', async () => {
-  const [html, project, adminCss, reportCss] = await Promise.all([
+  const [html, project, layoutSchema, adminCss, reportCss] = await Promise.all([
     read('admin/index.html'),
     read('admin/project-settings-editor.js'),
+    read('admin/admin-layout-schema.js'),
     read('admin/admin.css'),
     read('admin/report-config.css'),
   ]);
@@ -27,8 +28,18 @@ test('admin data and project settings are split into meaningful visual groups', 
   assert.match(project, /data-project-settings-tab="metadata"/);
   assert.match(project, /data-project-settings-tab="footer"/);
   assert.match(project, /readTabState\([\s\S]*'project-settings'/);
-  assert.match(project, /mapTab\.dataset\.interfaceTab =\s*'map'/u);
-  assert.match(project, /mapPanel\.dataset\.interfacePanel =\s*'map'/u);
+  assert.match(
+    layoutSchema,
+    /id:\s*'project'[\s\S]*hostId:[\s\S]*'project-settings-editor-host'/u,
+  );
+  assert.match(
+    layoutSchema,
+    /id:\s*'map'[\s\S]*hostId:[\s\S]*'map-settings-editor-host'/u,
+  );
+  assert.doesNotMatch(
+    project,
+    /mapTab\.dataset\.interfaceTab|mapPanel\.dataset\.interfacePanel/u,
+  );
   assert.match(project, /Сохранить настройки карты/u);
   assert.match(project, /trackDirtyForm\([\s\S]*Настройки проекта \/ карты/u);
 
