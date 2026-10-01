@@ -248,7 +248,7 @@ test('geometry union and cut operate on effective local geometry while persisten
 
   assert.match(
     html,
-    /id="geometry-merge-selected" type="button"\s+disabled/u,
+    /id="geometry-merge-selected"[\s\S]*type="button"[\s\S]*disabled/u,
   );
   assert.match(
     html,
@@ -333,7 +333,7 @@ test('undoing a topology group releases every server lease in the group', async 
 });
 
 
-test('geometry list highlights manually edited geometries and hides bulk checkboxes until requested', async () => {
+test('geometry list highlights manually edited geometries and exposes checkboxes only inside merge mode', async () => {
   const [
     editor,
     page,
@@ -367,13 +367,17 @@ test('geometry list highlights manually edited geometries and hides bulk checkbo
     editor,
     /state\.bulkSelecting[\s\S]*row\.append\([\s\S]*check[\s\S]*open/u,
   );
-  assert.match(
+  assert.doesNotMatch(
     page,
-    /id="geometry-bulk-select"[\s\S]*Выбрать несколько/u,
+    /id="geometry-bulk-select"|>\s*Выбрать несколько\s*</u,
   );
   assert.match(
     page,
-    /id="geometry-merge-selected"[\s\S]*hidden/u,
+    /id="geometry-merge-start"[\s\S]*Объединить геометрии/u,
+  );
+  assert.match(
+    page,
+    /id="geometry-merge-mode"[\s\S]*hidden/u,
   );
   assert.match(
     styles,
@@ -1048,7 +1052,11 @@ test('geometry editor filters empty cities and highlights the active geometry on
   );
   assert.match(
     editor,
-    /getSource\(SELECTED_SOURCE\)[\s\S]*selectedGeometry[\s\S]*featureCollection/u,
+    /const highlightedGeometries =[\s\S]*state\.bulkSelecting[\s\S]*selectedMergeItems\(\)[\s\S]*selectedGeometry/u,
+  );
+  assert.match(
+    editor,
+    /getSource\(SELECTED_SOURCE\)[\s\S]*highlightedGeometries[\s\S]*featureCollection/u,
   );
   assert.match(
     styles,
@@ -1117,7 +1125,7 @@ test('locally changing a line type immediately drives the selected map style', a
   );
   assert.match(
     editor,
-    /form\.elements\.lineTypeId[\s\S]*addEventListener\('change'[\s\S]*captureCurrentDraft/u,
+    /for \(const control of \[[\s\S]*form\.elements\.lineTypeId[\s\S]*\][\s\S]*control\?\.addEventListener\([\s\S]*'change'[\s\S]*captureCurrentDraft/u,
   );
 });
 
