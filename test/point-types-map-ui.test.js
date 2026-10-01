@@ -262,7 +262,7 @@ test('public map timeline is setting-controlled and exposes collapsible one-line
   );
   assert.match(
     styles,
-    /\.geometry-timeline-toggle::before[\s\S]*border-left: 11px solid #fff[\s\S]*translateX\(1px\)/u,
+    /\.geometry-timeline-toggle-icon::before[\s\S]*border-left: 11px solid #fff[\s\S]*translateX\(1px\)/u,
   );
   assert.match(
     styles,
