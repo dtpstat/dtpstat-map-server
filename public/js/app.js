@@ -112,6 +112,11 @@ let timelineEnabled = false;
 let timelinePlayback = null;
 let timelineMinDay = null;
 let timelineMaxDay = null;
+let geometryTypeVisibility = {
+  showPointGeometries: true,
+  showLineGeometries: true,
+  showPolygonGeometries: true,
+};
 
 const DAY_MS =
   24 * 60 * 60 * 1000;
@@ -539,6 +544,7 @@ function setCityStatus(message, isError = false) {
 /** @param {any[]} lineTypes */
 function renderLineLegend(lineTypes) {
   document.querySelector('#line-legend')?.remove();
+  if (!geometryTypeVisibility.showLineGeometries) return;
   const legendLineTypes = lineTypes.filter((lineType) => lineType.geometryCount > 0);
   if (legendLineTypes.length <= 1) return;
 
@@ -590,6 +596,10 @@ function renderPointLegend(
       '#point-legend',
     )
     ?.remove();
+
+  if (!geometryTypeVisibility.showPointGeometries) {
+    return;
+  }
 
   const visibleTypes =
     pointTypes.filter(
@@ -845,6 +855,28 @@ async function refreshLineDisplayOptions() {
   lineDisplayRefresh = (async () => {
     try {
       const projectSettings = await loadProjectSettings();
+      const nextGeometryTypeVisibility = {
+        showPointGeometries:
+          projectSettings.showPointGeometries !== false,
+        showLineGeometries:
+          projectSettings.showLineGeometries !== false,
+        showPolygonGeometries:
+          projectSettings.showPolygonGeometries !== false,
+      };
+      const visibilityChanged =
+        JSON.stringify(nextGeometryTypeVisibility) !==
+        JSON.stringify(geometryTypeVisibility);
+      geometryTypeVisibility =
+        nextGeometryTypeVisibility;
+      mapController.setGeometryTypeVisibility(
+        geometryTypeVisibility,
+      );
+      if (visibilityChanged) {
+        lineTypesSignature = '';
+        pointTypesSignature = '';
+        document.querySelector('#line-legend')?.remove();
+        document.querySelector('#point-legend')?.remove();
+      }
       mapController.setLineDisplayOptions({
         showLineLabels: Boolean(projectSettings.showLineLabels),
         showLinePopups: projectSettings.showLinePopups !== false,
@@ -1008,10 +1040,19 @@ async function start() {
       loadLineTypes(),
       loadPointTypes(),
     ]);
+    geometryTypeVisibility = {
+      showPointGeometries:
+        projectSettings.showPointGeometries !== false,
+      showLineGeometries:
+        projectSettings.showLineGeometries !== false,
+      showPolygonGeometries:
+        projectSettings.showPolygonGeometries !== false,
+    };
     mapController = await createMapController({
       ...mapConfig,
       showLineLabels: Boolean(projectSettings.showLineLabels),
       showLinePopups: projectSettings.showLinePopups !== false,
+      ...geometryTypeVisibility,
     });
     await configureGeometryTimeline(
       projectSettings
