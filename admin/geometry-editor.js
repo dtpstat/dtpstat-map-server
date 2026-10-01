@@ -1,3 +1,4 @@
+import { adminAvatarObjectUrl } from './admin-avatar.js';
 import { adminConfirm } from './admin-dialog.js';
 import { createDraftStore } from './draft-store.js';
 import {
@@ -678,43 +679,68 @@ if (section) {
       null;
 
     if (avatarUrl) {
+      const wrapper =
+        document.createElement(
+          'span',
+        );
+      wrapper.className =
+        className;
+
+      const fallback =
+        document.createElement(
+          'span',
+        );
+      fallback.className =
+        className +
+        ' ' +
+        (
+          className ===
+            'geometry-edit-actor-avatar'
+            ? 'geometry-edit-actor-fallback'
+            : 'geometry-discussion-avatar-fallback'
+        );
+      fallback.textContent =
+        identityInitials(
+          identity,
+        );
+
       const image =
-        document.createElement('img');
+        document.createElement(
+          'img',
+        );
       image.className =
         className;
-      image.alt =
-        '';
-      image.loading =
-        'lazy';
-      image.src =
-        avatarUrl;
-      image.addEventListener(
-        'error',
-        () => {
-          const fallback =
-            document.createElement('span');
-          fallback.className =
-            className +
-            ' ' +
-            (
-              className ===
-                'geometry-edit-actor-avatar'
-                ? 'geometry-edit-actor-fallback'
-                : 'geometry-discussion-avatar-fallback'
-            );
-          fallback.textContent =
-            identityInitials(
-              identity,
-            );
-          image.replaceWith(
-            fallback,
-          );
-        },
-        {
-          once: true,
-        },
+      image.alt = '';
+      image.hidden = true;
+
+      wrapper.append(
+        fallback,
+        image,
       );
-      return image;
+
+      void adminAvatarObjectUrl(
+        avatarUrl,
+      )
+        .then(
+          (objectUrl) => {
+            image.src =
+              objectUrl;
+            image.hidden =
+              false;
+            fallback.hidden =
+              true;
+          },
+        )
+        .catch(
+          () => {
+            image.hidden =
+              true;
+            fallback.hidden =
+              false;
+          },
+        );
+
+      return wrapper;
     }
 
     const fallback =
