@@ -3,10 +3,6 @@
 }
 
 .admin-messages-card,
-.admin-messages-list-block,
-.admin-messages-thread-block,
-#discussion-inbox-list-host,
-#discussion-inbox-thread-host,
 .discussion-inbox-thread-panel {
   min-height: 0;
   height: 100%;
