@@ -3,6 +3,7 @@ import {
   adminPasswordPolicy,
   AdminSecurityValidationError,
   integerField,
+  isLoopbackAdminIp,
   normalizeAdminDurationSeconds,
   normalizeAdminIp,
   normalizeAdminReason,
@@ -79,6 +80,16 @@ export function createSecurityAdministrationService(
     if (!ipAddress) {
       throw new AdminSecurityValidationError(
         'ipAddress is required',
+      );
+    }
+
+    if (
+      isLoopbackAdminIp(
+        ipAddress,
+      )
+    ) {
+      throw new AdminSecurityValidationError(
+        'Loopback IP addresses cannot be blocked',
       );
     }
 
