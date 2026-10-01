@@ -134,9 +134,43 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
     /id:\s*'messages-thread'[\s\S]*wide:\s*8/u,
   );
   assert.match(
+    schema,
+    /id:\s*'messages-list'[\s\S]*capabilities:[\s\S]*fill:\s*true/u,
+  );
+  assert.match(
+    schema,
+    /id:\s*'messages-thread'[\s\S]*capabilities:[\s\S]*fill:\s*true/u,
+  );
+  assert.match(
     engine,
     /definition\.elementId[\s\S]*block\.id[\s\S]*definition\.elementId/u,
   );
+  assert.match(
+    engine,
+    /applyBlockCapabilities\([\s\S]*definition\.capabilities/u,
+  );
+  for (
+    const capability of [
+      'fill',
+      'scroll',
+      'sticky',
+    ]
+  ) {
+    assert.match(
+      engine,
+      new RegExp(
+        `capabilities\\.${capability}[\\s\\S]*admin-layout-${capability}`,
+        'u',
+      ),
+    );
+    assert.match(
+      styles,
+      new RegExp(
+        `\\.admin-layout-${capability}`,
+        'u',
+      ),
+    );
+  }
   assert.match(
     engine,
     /appendClassNames\([\s\S]*panel,[\s\S]*definition\.panelClass/u,
