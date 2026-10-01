@@ -1088,10 +1088,16 @@ if (profileHost && currentUser) {
     function scheduleRefresh(
       event,
     ) {
+      const change =
+        event?.type ===
+        'data-change'
+          ? event.change
+          : event;
+
       const relevant =
-        event?.resource ===
+        change?.resource ===
           'geometry-discussions' ||
-        event?.resource ===
+        change?.resource ===
           'osm-boundary-discussions';
 
       if (!relevant) return;
