@@ -172,18 +172,72 @@ test('geometry discussion read marker advances atomically to a message from the 
   );
   assert.deepEqual(
     calls[0].values,
-    [9, 77, 15],
+    [
+      'geometry',
+      9,
+      77,
+      15,
+    ],
   );
   assert.match(
     calls[0].text,
-    /message\.geometry_id = \$1::bigint/u,
+    /message\.subject_type = \$1::text/u,
   );
   assert.match(
     calls[0].text,
-    /ON CONFLICT \(geometry_id, user_id\)/u,
+    /message\.subject_id = \$2::bigint/u,
+  );
+  assert.match(
+    calls[0].text,
+    /ON CONFLICT \(subject_type, subject_id, user_id\)/u,
   );
   assert.match(
     calls[0].text,
     /GREATEST\(/u,
+  );
+});
+
+
+test('V063 generalizes geometry discussions in place for geometry and OSM subjects', async () => {
+  const sql =
+    await readFile(
+      new URL(
+        '../db/migrations/V063__admin_discussion_subjects.sql',
+        import.meta.url,
+      ),
+      'utf8',
+    );
+
+  assert.match(
+    sql,
+    /RENAME TO ADMIN_DISCUSSION_MESSAGES/u,
+  );
+  assert.match(
+    sql,
+    /RENAME COLUMN GEOMETRY_ID TO SUBJECT_ID/u,
+  );
+  assert.match(
+    sql,
+    /ADD COLUMN SUBJECT_TYPE TEXT NOT NULL DEFAULT 'geometry'/u,
+  );
+  assert.match(
+    sql,
+    /SUBJECT_TYPE IN \('geometry', 'osm-boundary'\)/u,
+  );
+  assert.match(
+    sql,
+    /RENAME TO ADMIN_DISCUSSION_READ_STATE/u,
+  );
+  assert.match(
+    sql,
+    /PRIMARY KEY \(SUBJECT_TYPE, SUBJECT_ID, USER_ID\)/u,
+  );
+  assert.match(
+    sql,
+    /UNIQUE \(ID, SUBJECT_TYPE, SUBJECT_ID\)/u,
+  );
+  assert.match(
+    sql,
+    /FOREIGN KEY \(LAST_READ_MESSAGE_ID, SUBJECT_TYPE, SUBJECT_ID\)/u,
   );
 });
