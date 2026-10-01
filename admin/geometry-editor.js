@@ -8688,11 +8688,18 @@ if (section) {
     }
     discussionInput.style.height =
       'auto';
-    discussionInput.style.height =
+    const nextHeight =
       Math.min(
         discussionInput.scrollHeight,
         112,
-      ) + 'px';
+      );
+    discussionInput.style.height =
+      nextHeight + 'px';
+    discussionInput.style.overflowY =
+      discussionInput.scrollHeight >
+        112
+        ? 'auto'
+        : 'hidden';
   }
 
   discussionInput?.addEventListener(
