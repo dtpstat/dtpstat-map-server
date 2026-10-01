@@ -94,12 +94,17 @@ test('admin interface loads editors and helpers explicitly without transitive si
 
   assert.match(editor, /dataset\.interfaceTab = 'project'/);
   assert.match(editor, /dataset\.interfacePanel = 'project'/);
+  assert.match(editor, /mapTab\.dataset\.interfaceTab =\s*'map'/u);
+  assert.match(editor, /mapPanel\.dataset\.interfacePanel =\s*'map'/u);
+  assert.match(editor, /mapTab\.textContent =\s*'Карта'/u);
+  assert.match(editor, /form="project-settings-form"/u);
+  assert.match(editor, /Сохранить настройки карты/u);
   assert.match(editor, /data-project-settings-tab="general"/);
-  assert.match(editor, /data-project-settings-tab="map"/);
+  assert.doesNotMatch(editor, /data-project-settings-tab="map"/);
   assert.match(editor, /data-project-settings-tab="metadata"/);
   assert.match(editor, /data-project-settings-tab="footer"/);
   assert.match(editor, /data-project-settings-panel="general"/);
-  assert.match(editor, /data-project-settings-panel="map"/);
+  assert.doesNotMatch(editor, /data-project-settings-panel="map"/);
   assert.match(editor, /data-project-settings-panel="metadata"/);
   assert.match(editor, /data-project-settings-panel="footer"/);
   assert.match(editor, /name="projectName"/);
@@ -144,6 +149,12 @@ test('admin interface loads editors and helpers explicitly without transitive si
   assert.match(css, /\.project-history-speed-row/u);
   assert.match(css, /data-theme-preview/);
   assert.match(shell, /classList\.remove\('transfer-mode'\)/);
+  assert.match(shell, /const mapTab = document\.querySelector\('\[data-interface-tab="map"\]'\)/u);
+  assert.match(shell, /const mapPanel = document\.querySelector\('\[data-interface-panel="map"\]'\)/u);
+  assert.match(
+    shell,
+    /projectTab,[\s\S]*mapTab,[\s\S]*reportTab,[\s\S]*lineTypesTab,[\s\S]*pointTypesTab/u,
+  );
 
   assert.match(downloadEditor, /name="publicDownloadName"/);
   assert.match(downloadEditor, /публичных URL и для файлов на диске/);
