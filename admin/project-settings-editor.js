@@ -132,6 +132,29 @@ if (typeof document !== 'undefined') {
                 </div>
               </section>
 
+              <section class="project-settings-section"
+                       aria-labelledby="project-geometry-types-title">
+                <div>
+                  <h5 id="project-geometry-types-title">Типы геометрий на публичной карте</h5>
+                  <p>Отключённый тип не показывается на основной карте и не предлагается пользователю в быстрых переключателях слоёв. Маркеры городов управляются отдельно.</p>
+                </div>
+
+                <label class="check project-setting-check">
+                  <input name="showPointGeometries" type="checkbox" checked>
+                  Показывать POI / точки
+                </label>
+
+                <label class="check project-setting-check">
+                  <input name="showLineGeometries" type="checkbox" checked>
+                  Показывать линии
+                </label>
+
+                <label class="check project-setting-check">
+                  <input name="showPolygonGeometries" type="checkbox" checked>
+                  Показывать полигоны
+                </label>
+              </section>
+
               <label class="check project-setting-check">
                 <input name="showLineLabels" type="checkbox">
                 Постоянно отображать наименования линий
@@ -280,6 +303,9 @@ if (typeof document !== 'undefined') {
       const showLineLabels = form.elements.namedItem('showLineLabels');
       const showLinePopups = form.elements.namedItem('showLinePopups');
       const showGeometryTimeline = form.elements.namedItem('showGeometryTimeline');
+      const showPointGeometries = form.elements.namedItem('showPointGeometries');
+      const showLineGeometries = form.elements.namedItem('showLineGeometries');
+      const showPolygonGeometries = form.elements.namedItem('showPolygonGeometries');
       const largeCityPopulationThreshold = form.elements.namedItem('largeCityPopulationThreshold');
       const largeCityAreaKm2Threshold = form.elements.namedItem('largeCityAreaKm2Threshold');
       const cityMarkerIcon = form.elements.namedItem('cityMarkerIcon');
@@ -406,6 +432,9 @@ if (typeof document !== 'undefined') {
         showLineLabels.checked = Boolean(settings.showLineLabels);
         showLinePopups.checked = settings.showLinePopups !== false;
         showGeometryTimeline.checked = Boolean(settings.showGeometryTimeline);
+        showPointGeometries.checked = settings.showPointGeometries !== false;
+        showLineGeometries.checked = settings.showLineGeometries !== false;
+        showPolygonGeometries.checked = settings.showPolygonGeometries !== false;
         largeCityPopulationThreshold.value = String(
           settings.largeCityPopulationThreshold ?? 400000,
         );
@@ -532,6 +561,9 @@ if (typeof document !== 'undefined') {
               showLineLabels: showLineLabels.checked,
               showLinePopups: showLinePopups.checked,
               showGeometryTimeline: showGeometryTimeline.checked,
+              showPointGeometries: showPointGeometries.checked,
+              showLineGeometries: showLineGeometries.checked,
+              showPolygonGeometries: showPolygonGeometries.checked,
               largeCityPopulationThreshold: Number(largeCityPopulationThreshold.value),
               largeCityAreaKm2Threshold: largeCityAreaKm2Threshold.value === ''
                 ? null
