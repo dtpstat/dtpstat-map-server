@@ -14,36 +14,27 @@ if (typeof document !== 'undefined') {
     stylesheet.href = '/admin/project-settings.css';
     document.head.append(stylesheet);
 
-    const interfaceTabs = document.querySelector('#interface-tabs');
-    const interfacePanels = document.querySelector('#interface-panels');
+    const projectHost =
+      document.querySelector(
+        '#project-settings-editor-host',
+      );
+    const mapHost =
+      document.querySelector(
+        '#map-settings-editor-host',
+      );
+    const mapPanel =
+      document.querySelector(
+        '[data-interface-panel="map"]',
+      );
 
     if (
-      interfaceTabs &&
-      interfacePanels &&
-      !document.querySelector('[data-interface-tab="project"]')
+      projectHost &&
+      mapHost &&
+      !document.querySelector(
+        '#project-settings-form',
+      )
     ) {
-      const tab = document.createElement('button');
-      tab.className = 'task-tab';
-      tab.id = 'interface-tab-project';
-      tab.type = 'button';
-      tab.role = 'tab';
-      tab.setAttribute('aria-selected', 'true');
-      tab.setAttribute('aria-controls', 'interface-panel-project');
-      tab.dataset.interfaceTab = 'project';
-      tab.textContent = 'Проект';
-      interfaceTabs.prepend(tab);
-
-      const panel = document.createElement('article');
-      panel.className = 'task-panel interface-task-panel';
-      panel.id = 'interface-panel-project';
-      panel.role = 'tabpanel';
-      panel.setAttribute('aria-labelledby', 'interface-tab-project');
-      panel.dataset.interfacePanel = 'project';
-      panel.innerHTML = `
-        <h3>Проект</h3>
-        <p class="panel-description">Название, оформление, метаданные, аналитика и информационный блок проекта.</p>
-
-        <section class="operation-panel transfer-mode" id="operation-project-settings">
+      projectHost.innerHTML = `
           <div class="mode-heading">
             <div>
               <h4>Оформление и метаданные</h4>
@@ -280,86 +271,43 @@ if (typeof document !== 'undefined') {
             <button class="task-action" type="submit" data-project-settings-submit>Сохранить настройки проекта</button>
           </form>
           <p class="project-settings-message" id="project-settings-message" role="status"></p>
-        </section>
-      `;
-      interfacePanels.prepend(panel);
+`;
 
       const mapSettings =
-        panel.querySelector(
+        projectHost.querySelector(
           '#project-settings-map',
         );
+
       if (mapSettings) {
-        const mapTab =
-          document.createElement(
-            'button',
-          );
-        mapTab.className =
-          'task-tab';
-        mapTab.id =
-          'interface-tab-map';
-        mapTab.type =
-          'button';
-        mapTab.role =
-          'tab';
-        mapTab.setAttribute(
-          'aria-selected',
-          'false',
-        );
-        mapTab.setAttribute(
-          'aria-controls',
-          'interface-panel-map',
-        );
-        mapTab.dataset.interfaceTab =
-          'map';
-        mapTab.textContent =
-          'Карта';
+        if (mapPanel) {
+          mapPanel.dataset
+            .dirtyFormId =
+            'project-settings-form';
+        }
 
-        const mapPanel =
-          document.createElement(
-            'article',
-          );
-        mapPanel.className =
-          'task-panel interface-task-panel';
-        mapPanel.id =
-          'interface-panel-map';
-        mapPanel.role =
-          'tabpanel';
-        mapPanel.hidden =
-          true;
-        mapPanel.setAttribute(
-          'aria-labelledby',
-          'interface-tab-map',
-        );
-        mapPanel.dataset.interfacePanel =
-          'map';
-        mapPanel.dataset.dirtyFormId =
-          'project-settings-form';
-        mapPanel.innerHTML = `
-          <h3>Карта</h3>
-          <p class="panel-description">Отображение публичной карты, геометрии, история, маркеры и параметры классификации городов.</p>
-
-          <section class="operation-panel transfer-mode" id="operation-map-settings">
-            <div class="mode-heading">
-              <div>
-                <h4>Настройки карты</h4>
-                <p>Параметры этого раздела управляют только отображением и поведением публичной карты.</p>
-              </div>
+        mapHost.innerHTML = `
+          <div class="mode-heading">
+            <div>
+              <h4>Настройки карты</h4>
+              <p>Параметры этого раздела управляют только отображением и поведением публичной карты.</p>
             </div>
+          </div>
 
-            <p class="project-settings-meta">
-              <span>Последнее изменение</span><time data-project-settings-updated-at>—</time>
-            </p>
+          <p class="project-settings-meta">
+            <span>Последнее изменение</span><time data-project-settings-updated-at>—</time>
+          </p>
 
-            <div class="form-fields project-settings-grid" id="map-settings-host"></div>
-            <button class="task-action" type="submit"
-                    form="project-settings-form"
-                    data-project-settings-submit>Сохранить настройки карты</button>
-            <p class="project-settings-message" data-project-settings-message role="status"></p>
-          </section>
+          <div class="form-fields project-settings-grid"
+               id="map-settings-host"></div>
+          <button class="task-action" type="submit"
+                  form="project-settings-form"
+                  data-project-settings-submit>Сохранить настройки карты</button>
+          <p class="project-settings-message"
+             data-project-settings-message role="status"></p>
         `;
 
-        const mapHost =
-          mapPanel.querySelector(
+        const mapSettingsHost =
+          mapHost.querySelector(
             '#map-settings-host',
           );
 
@@ -390,17 +338,10 @@ if (typeof document !== 'undefined') {
           }
         }
 
-        mapHost.append(
+        mapSettingsHost.append(
           ...mapSettings.childNodes,
         );
         mapSettings.remove();
-
-        interfaceTabs.append(
-          mapTab,
-        );
-        interfacePanels.append(
-          mapPanel,
-        );
       }
     }
 
