@@ -16,19 +16,19 @@ test('project settings transfer policy validates kind and schema before DB work'
   );
   assert.throws(
     () => validateProjectSettingsTransferEnvelope({
-      _dtpstat: { kind: 'project-settings', schemaVersion: 10 },
+      _dtpstat: { kind: 'project-settings', schemaVersion: 11 },
     }),
     ProjectSettingsTransferValidationError,
   );
   assert.equal(
     validateProjectSettingsTransferEnvelope({
-      _dtpstat: { kind: 'project-settings', schemaVersion: 9 },
+      _dtpstat: { kind: 'project-settings', schemaVersion: 10 },
       projectSettings: {},
       lineTypes: [],
       reportConfig: {},
       securitySettings: {},
     }).schemaVersion,
-    9,
+    10,
   );
 });
 
@@ -44,6 +44,9 @@ test('project settings transfer policy preserves legacy popup and threshold defa
 
   assert.equal(settings.showLineLabels, false);
   assert.equal(settings.showLinePopups, true);
+  assert.equal(settings.showPointGeometries, true);
+  assert.equal(settings.showLineGeometries, true);
+  assert.equal(settings.showPolygonGeometries, true);
   assert.equal(settings.largeCityPopulationThreshold, 400000);
   assert.equal(settings.largeCityAreaKm2Threshold, null);
   assert.equal(settings.hasPublicDownloadName, false);
