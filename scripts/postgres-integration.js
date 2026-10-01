@@ -190,6 +190,41 @@ async function verifySettingsTransfer(
     'string',
   );
 
+  assert.equal(
+    payload._dtpstat
+      .schemaVersion,
+    11,
+  );
+  assert.ok(
+    Array.isArray(
+      payload.projectSettings
+        .historySpeeds,
+    ),
+  );
+  assert.equal(
+    payload.projectSettings
+      .historySpeeds.length,
+    4,
+  );
+  assert.equal(
+    payload.projectSettings
+      .historySpeeds
+      .filter(
+        (speed) =>
+          speed.isDefault,
+      ).length,
+    1,
+  );
+  assert.deepEqual(
+    payload.projectSettings
+      .historySpeeds
+      .map(
+        (speed) =>
+          speed.name,
+      ),
+    ['1x', '2x', '5x', '10x'],
+  );
+
   assert.ok(
     Array.isArray(
       payload.lineTypes,
