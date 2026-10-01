@@ -866,6 +866,10 @@ export const API_REQUEST_CONTRACTS =
     ),
     c(
       'GET',
+      '/admin/profile/discussions',
+    ),
+    c(
+      'GET',
       '/admin/profile/password-policy',
     ),
     c(
