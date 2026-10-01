@@ -67,18 +67,63 @@ export const adminInterfaceTabs = [
   {
     id: 'report',
     title: 'Расчёты',
+    description:
+      'Безопасный конструктор расчётных показателей, колонок публичного рейтинга и статического CSV.',
+    blocks: [
+      {
+        id: 'report-config',
+        hostId:
+          'report-config-editor-host',
+        className:
+          'transfer-mode report-config-editor',
+        span: {
+          base: 12,
+          wide: 12,
+        },
+      },
+    ],
   },
   {
     id: 'line-types',
     title: 'Типы линий',
+    description:
+      'NAME и CODE задаются импортом/БД; здесь редактируются только подпись легенды и визуальный стиль.',
     openEvent:
       'dtpstat:line-types-changed',
+    blocks: [
+      {
+        id: 'line-types-editor',
+        hostId:
+          'line-types-editor-host',
+        className:
+          'operation-panel transfer-mode line-types-editor',
+        span: {
+          base: 12,
+          wide: 12,
+        },
+      },
+    ],
   },
   {
     id: 'point-types',
     title: 'Типы точек',
+    description:
+      'Тип определяет иконку Point-геометрии на карте. Неактивные типы остаются в данных, но не отображаются на публичной карте.',
     openEvent:
       'dtpstat:point-types-changed',
+    blocks: [
+      {
+        id: 'point-types-editor',
+        hostId:
+          'point-types-editor-host',
+        className:
+          'operation-panel transfer-mode point-types-editor',
+        span: {
+          base: 12,
+          wide: 12,
+        },
+      },
+    ],
   },
   {
     id: 'project-transfer',
