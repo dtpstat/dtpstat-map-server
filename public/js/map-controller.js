@@ -321,11 +321,54 @@ export async function createMapController(config) {
     closeOnClick: false,
     offset: 8,
   });
-  const pointHintPopup = new window.mapboxgl.Popup({
-    closeButton: false,
-    closeOnClick: false,
-    offset: 12,
-  });
+  let pointHintPopup = null;
+
+  function poiPopup() {
+    if (!pointHintPopup) {
+      pointHintPopup = new window.mapboxgl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        offset: 12,
+      });
+    }
+    return pointHintPopup;
+  }
+
+  function hidePointHint() {
+    pointHintPopup?.remove();
+  }
+
+  function showPointHint(event) {
+    const feature =
+      event.features?.find(
+        (candidate) =>
+          pointFeatureHint(
+            candidate,
+          ),
+      ) ??
+      null;
+    const content =
+      feature
+        ? pointHintContent(
+            feature,
+          )
+        : null;
+
+    if (!content) {
+      hidePointHint();
+      return;
+    }
+
+    lineNamePopup.remove();
+    poiPopup()
+      .setLngLat(
+        event.lngLat,
+      )
+      .setDOMContent(
+        content,
+      )
+      .addTo(map);
+  }
   let rawGeoJson = EMPTY_COLLECTION;
   let currentGeoJson = EMPTY_COLLECTION;
   let currentCities = EMPTY_COLLECTION;
@@ -857,7 +900,7 @@ export async function createMapController(config) {
   await ensureMapLayers();
   map.on('style.load', () => {
     lineNamePopup.remove();
-    pointHintPopup.remove();
+    hidePointHint();
     lineLayerIds = new Map();
     lineLabelLayerIds = new Map();
     void ensureMapLayers()
@@ -870,53 +913,28 @@ export async function createMapController(config) {
   map.on('moveend', () => {
     if (viewportHandler) viewportHandler(readViewport(map));
   });
+  map.on(
+    'mousemove',
+    POINT_LAYER_ID,
+    showPointHint,
+  );
+  map.on(
+    'mousemove',
+    POINT_FALLBACK_LAYER_ID,
+    showPointHint,
+  );
+  map.on(
+    'mouseleave',
+    POINT_LAYER_ID,
+    hidePointHint,
+  );
+  map.on(
+    'mouseleave',
+    POINT_FALLBACK_LAYER_ID,
+    hidePointHint,
+  );
+
   map.on('mousemove', (event) => {
-    const pointLayers = [
-      POINT_LAYER_ID,
-      POINT_FALLBACK_LAYER_ID,
-    ].filter(
-      (layerId) =>
-        map.getLayer(layerId),
-    );
-    const pointFeature =
-      pointLayers.length > 0
-        ? map
-            .queryRenderedFeatures(
-              event.point,
-              {
-                layers:
-                  pointLayers,
-              },
-            )
-            .find(
-              (candidate) =>
-                pointFeatureHint(
-                  candidate,
-                ),
-            )
-        : null;
-    const pointContent =
-      pointFeature
-        ? pointHintContent(
-            pointFeature,
-          )
-        : null;
-
-    if (pointContent) {
-      lineNamePopup.remove();
-      pointHintPopup
-        .setLngLat(
-          event.lngLat,
-        )
-        .setDOMContent(
-          pointContent,
-        )
-        .addTo(map);
-      return;
-    }
-
-    pointHintPopup.remove();
-
     if (!showLinePopups) {
       lineNamePopup.remove();
       return;
@@ -950,6 +968,8 @@ export async function createMapController(config) {
       lineNamePopup.remove();
       return;
     }
+
+    hidePointHint();
     lineNamePopup
       .setLngLat(event.lngLat)
       .setText(name)
@@ -959,7 +979,7 @@ export async function createMapController(config) {
     'mouseleave',
     () => {
       lineNamePopup.remove();
-      pointHintPopup.remove();
+      hidePointHint();
     },
   );
   map.on('click', CITY_LAYER_ID, (event) => {
@@ -998,7 +1018,7 @@ export async function createMapController(config) {
         lineNamePopup.remove();
       }
       if (!showPointGeometries) {
-        pointHintPopup.remove();
+        hidePointHint();
       }
       publishCurrentGeoJson();
     },
@@ -1064,7 +1084,7 @@ export async function createMapController(config) {
     },
     setViewportData(geojson) {
       lineNamePopup.remove();
-      pointHintPopup.remove();
+      hidePointHint();
       rawGeoJson = geojson;
       rebuildCurrentGeoJson();
       ensureBusLaneLayers();
@@ -1078,7 +1098,7 @@ export async function createMapController(config) {
     },
     clearViewportData() {
       lineNamePopup.remove();
-      pointHintPopup.remove();
+      hidePointHint();
       rawGeoJson =
         EMPTY_COLLECTION;
       currentGeoJson =
@@ -1091,7 +1111,7 @@ export async function createMapController(config) {
     },
     focusCity(bounds) {
       lineNamePopup.remove();
-      pointHintPopup.remove();
+      hidePointHint();
       const compact = window.matchMedia('(max-width: 760px)').matches;
       map.fitBounds(
         [[bounds[0], bounds[1]], [bounds[2], bounds[3]]],
