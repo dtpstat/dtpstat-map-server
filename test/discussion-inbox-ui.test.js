@@ -64,7 +64,7 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
   );
   assert.match(
     shell,
-    /dataAdminSectionTab =[\s\S]*'messages'/u,
+    /tab\.dataset\.adminSectionTab\s*=\s*[\s\S]*'messages'/u,
   );
   assert.match(
     shell,
