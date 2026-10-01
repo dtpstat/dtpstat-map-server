@@ -104,11 +104,34 @@ test('admin interface loads editors and helpers explicitly without transitive si
   assert.doesNotMatch(notices, /-editor\.js/);
   assert.doesNotMatch(branding, /public-download-name-editor\.js/);
 
-  assert.match(editor, /dataset\.interfaceTab = 'project'/);
-  assert.match(editor, /dataset\.interfacePanel = 'project'/);
-  assert.match(editor, /mapTab\.dataset\.interfaceTab =\s*'map'/u);
-  assert.match(editor, /mapPanel\.dataset\.interfacePanel =\s*'map'/u);
-  assert.match(editor, /mapTab\.textContent =\s*'Карта'/u);
+  assert.doesNotMatch(
+    editor,
+    /document\.createElement\(['"]button['"]\)[\s\S]*interface-tab-project|mapTab\.dataset\.interfaceTab/u,
+  );
+  assert.match(
+    layoutSchema,
+    /id:\s*'project'[\s\S]*elementId:[\s\S]*'operation-project-settings'[\s\S]*hostId:[\s\S]*'project-settings-editor-host'/u,
+  );
+  assert.match(
+    layoutSchema,
+    /id:\s*'map'[\s\S]*elementId:[\s\S]*'operation-map-settings'[\s\S]*hostId:[\s\S]*'map-settings-editor-host'/u,
+  );
+  assert.match(
+    editor,
+    /#project-settings-editor-host/u,
+  );
+  assert.match(
+    editor,
+    /#map-settings-editor-host/u,
+  );
+  assert.match(
+    editor,
+    /projectHost\.innerHTML/u,
+  );
+  assert.match(
+    editor,
+    /mapHost\.innerHTML/u,
+  );
   assert.match(editor, /form="project-settings-form"/u);
   assert.match(editor, /Сохранить настройки карты/u);
   assert.match(editor, /data-project-settings-tab="general"/);
@@ -118,6 +141,14 @@ test('admin interface loads editors and helpers explicitly without transitive si
   assert.match(editor, /data-project-settings-panel="general"/);
   assert.match(editor, /id="project-settings-map"/u);
   assert.match(editor, /mapSettings\.removeAttribute\(\s*'data-project-settings-panel'/u);
+  assert.match(
+    editor,
+    /mapSettingsHost\.append\([\s\S]*mapSettings\.childNodes/u,
+  );
+  assert.match(
+    editor,
+    /control\.setAttribute\([\s\S]*'form',[\s\S]*'project-settings-form'/u,
+  );
   assert.match(editor, /data-project-settings-panel="metadata"/);
   assert.match(editor, /data-project-settings-panel="footer"/);
   assert.match(editor, /name="projectName"/);
@@ -191,7 +222,9 @@ test('admin interface loads editors and helpers explicitly without transitive si
   assert.match(downloadEditor, /`\/\$\{name\}\.geojson`/);
   assert.match(downloadEditor, /`\/\$\{name\}\.csv`/);
   assert.match(downloadEditor, /\/api\/admin\/project-settings\/public-download-name/);
+  assert.match(downloadEditor, /#project-settings-editor-host/);
   assert.match(downloadEditor, /#project-settings-metadata/);
+  assert.match(downloadEditor, /projectMessage\.before\(externalForm\)/);
   assert.match(downloadEditor, /metadataPanel\.append\(section\)/);
   assert.match(downloadEditor, /section\.hidden = metadataPanel\.hidden/);
   assert.match(downloadEditor, /attributeFilter: \['hidden'\]/);
