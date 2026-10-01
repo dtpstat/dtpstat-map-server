@@ -12,6 +12,7 @@ import {
   securityLog,
 } from '../service-log.js';
 import {
+  isLoopbackClientIp,
   requestClientIp,
 } from '../shared/http/client-ip.js';
 import {
@@ -199,6 +200,14 @@ export function createAdminAuthorization(
       response,
       result,
     ) => {
+      if (
+        isLoopbackClientIp(
+          requestClientIp(request),
+        )
+      ) {
+        return true;
+      }
+
       const rateLimit =
         requestRateLimiter
           .consumeUser({
@@ -245,6 +254,15 @@ export function createAdminAuthorization(
       next,
     ) => {
       try {
+        if (
+          isLoopbackClientIp(
+            requestClientIp(request),
+          )
+        ) {
+          next();
+          return;
+        }
+
         const settings =
           await loadRateSettings();
         const rateLimit =
