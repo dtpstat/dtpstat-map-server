@@ -3,6 +3,9 @@ import { normalizePublicDownloadName } from './public-download-policy.js';
 import {
   normalizeProjectSettingsUpdate,
 } from './settings-update-policy.js';
+import {
+  projectSettingsAffectDerivedState,
+} from './settings-impact.js';
 
 /**
  * @param {{
@@ -114,9 +117,23 @@ export function createProjectSettingsService(
     // Keep the query-only fallback for isolated repository tests and simple
     // queryable implementations. Production Pools use one atomic transaction.
     if (typeof database.connect !== 'function') {
+      const previous =
+        await storage.get(database);
       const saved =
-        await storage.updateSettings(database, settings);
-      await recalculateStatistics(database);
+        await storage.updateSettings(
+          database,
+          settings,
+        );
+      if (
+        projectSettingsAffectDerivedState(
+          previous,
+          saved,
+        )
+      ) {
+        await recalculateStatistics(
+          database,
+        );
+      }
       return saved;
     }
 
@@ -124,9 +141,23 @@ export function createProjectSettingsService(
     try {
       await client.query('BEGIN');
       await acquireLock(client, database);
+      const previous =
+        await storage.get(client);
       const saved =
-        await storage.updateSettings(client, settings);
-      await recalculateStatistics(client);
+        await storage.updateSettings(
+          client,
+          settings,
+        );
+      if (
+        projectSettingsAffectDerivedState(
+          previous,
+          saved,
+        )
+      ) {
+        await recalculateStatistics(
+          client,
+        );
+      }
       await client.query('COMMIT');
       return saved;
     } catch (error) {
