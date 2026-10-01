@@ -116,6 +116,30 @@ test('interface settings expose point type CRUD and safe icon controls', async (
   );
   assert.match(
     editor,
+    /name=['"]minZoom['"]/u,
+  );
+  assert.match(
+    editor,
+    /name=['"]maxZoom['"]/u,
+  );
+  assert.match(
+    editor,
+    /Zoom от/u,
+  );
+  assert.match(
+    editor,
+    /Zoom до/u,
+  );
+  assert.match(
+    editor,
+    /minZoom:[\s\S]*=== ''[\s\S]*null/u,
+  );
+  assert.match(
+    editor,
+    /maxZoom:[\s\S]*=== ''[\s\S]*null/u,
+  );
+  assert.match(
+    editor,
     /const refreshPreview =[\s\S]*anchorX\.value[\s\S]*anchorY\.value[\s\S]*preview\(\{[\s\S]*anchorX:[\s\S]*nextAnchorX[\s\S]*anchorY:[\s\S]*nextAnchorY/u,
   );
   assert.match(
