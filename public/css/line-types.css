@@ -74,7 +74,7 @@
   z-index: 2;
   left: 12px;
   bottom: 28px;
-  min-width: 160px;
+  width: max-content;
   max-width: min(280px, calc(100% - 24px));
   max-height: min(48vh, 360px);
   padding: 9px;
@@ -94,13 +94,12 @@
   text-transform: uppercase;
 }
 .point-legend-item {
-  width: 100%;
-  min-height: 34px;
-  padding: 5px 7px;
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
-  gap: 8px;
-  align-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 4px;
+  display: inline-grid;
+  place-items: center;
+  vertical-align: top;
   border: 0;
   border-radius: 7px;
   color: #23383b;
@@ -109,6 +108,10 @@
   text-align: left;
   font-size: .8rem;
 }
+.point-legend-item + .point-legend-item {
+  margin-left: 4px;
+}
+
 .point-legend-item:hover {
   background: #edf4f3;
 }
