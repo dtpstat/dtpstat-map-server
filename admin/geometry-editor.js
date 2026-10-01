@@ -9629,6 +9629,67 @@ if (section) {
     window.setTimeout(() => state.map?.resize(), 0);
   });
 
+  window.addEventListener(
+    'dtpstat:geometry-editor-select',
+    (event) => {
+      const id =
+        Number(
+          event.detail?.id,
+        );
+      if (
+        !Number.isSafeInteger(id) ||
+        id <= 0
+      ) {
+        return;
+      }
+
+      const cityId =
+        event.detail?.cityId;
+      const workspace =
+        cityId === null ||
+        cityId === undefined
+          ? '__unlinked__'
+          : String(
+              Number(cityId),
+            );
+
+      void (
+        async () => {
+          try {
+            await ensureMap();
+
+            if (
+              citySelect.value !==
+              workspace
+            ) {
+              await loadWorkspace(
+                workspace,
+                {
+                  keepSelection:
+                    false,
+                  fit: false,
+                },
+              );
+            }
+
+            await selectGeometry(
+              id,
+              {
+                focus: true,
+              },
+            );
+          } catch (error) {
+            setMessage(
+              'Не удалось открыть геометрию из обсуждения: ' +
+                error.message,
+              'error',
+            );
+          }
+        }
+      )();
+    },
+  );
+
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Control' || event.key === 'Meta') {
       state.deleteModifier = true;
