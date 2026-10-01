@@ -1717,6 +1717,10 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
   );
   assert.match(
     html,
+    /geometry-discussion-envelope[\s\S]*viewBox="0 0 20 16"[\s\S]*M2\.5 3\.5 10 9l7\.5-5\.5/u,
+  );
+  assert.match(
+    html,
     /id="geometry-discussion-unread"[\s\S]*hidden/u,
   );
   assert.match(
@@ -1770,6 +1774,22 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
   );
   assert.match(
     script,
+    /async function loadDiscussionUnread\([\s\S]*\/api\/admin\/geometry-editor\/discussions\/unread/u,
+  );
+  assert.match(
+    script,
+    /async function persistDiscussionRead\([\s\S]*\/discussion\/read/u,
+  );
+  assert.match(
+    script,
+    /function markOwnMessagesReadThrough\(/u,
+  );
+  assert.match(
+    script,
+    /readByOthersCount[\s\S]*✓✓ Прочитано[\s\S]*✓ Доставлено/u,
+  );
+  assert.match(
+    script,
     /discussionIsOpenFor\([\s\S]*appendDiscussionMessage[\s\S]*incrementDiscussionUnread/u,
   );
   assert.match(
@@ -1791,7 +1811,7 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
   );
   assert.match(
     styles,
-    /\.geometry-discussion-open::before[\s\S]*border: 1\.6px solid currentColor/u,
+    /\.geometry-discussion-envelope \{[\s\S]*stroke: currentColor/u,
   );
   assert.match(
     styles,
@@ -1815,7 +1835,19 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
   );
   assert.match(
     styles,
-    /\.geometry-discussion \{[\s\S]*max-height: min\(34rem, calc\(100vh - 2rem\)\)/u,
+    /\.geometry-discussion \{[\s\S]*min-width: 20rem[\s\S]*min-height: 16rem[\s\S]*resize: both/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-discussion-open\.has-unread \{[\s\S]*background: #52d7c6/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-discussion-receipt \{/u,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 650px\)[\s\S]*\.geometry-discussion \{[\s\S]*resize: none/u,
   );
   assert.doesNotMatch(
     html,
