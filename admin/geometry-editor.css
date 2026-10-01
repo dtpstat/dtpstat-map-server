@@ -791,6 +791,48 @@
   margin-bottom: .8rem;
 }
 
+.geometry-discussion-open {
+  position: relative;
+  width: 2.35rem;
+  min-width: 2.35rem;
+  height: 2.35rem;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 9px;
+}
+
+.geometry-discussion-open-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.geometry-discussion-open.has-unread {
+  border-color: #35c6b4;
+}
+
+.geometry-discussion-unread {
+  position: absolute;
+  top: -.4rem;
+  right: -.45rem;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 .25rem;
+  display: inline-grid;
+  place-items: center;
+  border: 2px solid #0b1417;
+  border-radius: 999px;
+  color: #071416;
+  background: #52d7c6;
+  font-size: .56rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.geometry-discussion-unread[hidden] {
+  display: none;
+}
+
 .geometry-edit-lock-status {
   font-size: .82rem;
   opacity: .78;
@@ -1071,12 +1113,12 @@
   right: 1rem;
   bottom: 1rem;
   z-index: 145;
-  width: min(25rem, calc(100vw - 2rem));
-  max-height: min(34rem, calc(100vh - 2rem));
+  width: min(26rem, calc(100vw - 2rem));
+  height: min(34rem, calc(100vh - 2rem));
   display: grid;
-  grid-template-rows: auto minmax(7rem, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   border: 1px solid #38515a;
-  border-radius: 11px;
+  border-radius: 14px;
   background: #0b1417;
   box-shadow: 0 1.4rem 4rem rgb(0 0 0 / 58%);
   overflow: hidden;
@@ -1091,15 +1133,23 @@
 }
 
 @keyframes geometry-discussion-attention {
-  0% { box-shadow: 0 0 0 0 rgb(53 198 180 / 70%), 0 1.4rem 4rem rgb(0 0 0 / 58%); }
-  100% { box-shadow: 0 0 0 .7rem rgb(53 198 180 / 0%), 0 1.4rem 4rem rgb(0 0 0 / 58%); }
+  0% {
+    box-shadow:
+      0 0 0 0 rgb(53 198 180 / 70%),
+      0 1.4rem 4rem rgb(0 0 0 / 58%);
+  }
+  100% {
+    box-shadow:
+      0 0 0 .7rem rgb(53 198 180 / 0%),
+      0 1.4rem 4rem rgb(0 0 0 / 58%);
+  }
 }
 
 .geometry-discussion-header {
   display: flex;
   align-items: center;
   gap: .65rem;
-  padding: .65rem .7rem;
+  padding: .62rem .7rem;
   border-bottom: 1px solid var(--line);
   background: #101b1f;
 }
@@ -1117,51 +1167,107 @@
   white-space: nowrap;
 }
 
-.geometry-discussion-header small {
+.geometry-discussion-header strong {
+  font-size: .79rem;
+}
+
+.geometry-discussion-kicker {
+  margin-bottom: .12rem;
+  color: #52d7c6;
+  font-size: .56rem;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.geometry-discussion-header small:not(.geometry-discussion-kicker) {
   margin-top: .12rem;
   color: var(--muted);
-  font-size: .63rem;
+  font-size: .6rem;
 }
 
 .geometry-discussion-close {
   width: 2rem;
   min-width: 2rem;
-  padding: .3rem;
+  height: 2rem;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
   font-size: 1rem;
 }
 
 .geometry-discussion-messages {
-  min-height: 7rem;
-  padding: .65rem;
+  min-height: 0;
+  padding: .75rem;
   display: flex;
   flex-direction: column;
   gap: .55rem;
-  overflow: auto;
+  overflow-y: auto;
   scrollbar-gutter: stable;
+  background:
+    linear-gradient(
+      rgb(255 255 255 / 1.5%),
+      rgb(255 255 255 / 0%)
+    );
 }
 
 .geometry-discussion-message {
+  width: min(92%, 22rem);
   display: grid;
-  grid-template-columns: 1.8rem minmax(0, 1fr);
-  gap: .45rem;
-  align-items: start;
+  grid-template-columns: 1.75rem minmax(0, 1fr);
+  gap: .42rem;
+  align-items: end;
 }
 
 .geometry-discussion-message.is-own {
-  padding-left: 1.2rem;
+  align-self: flex-end;
+  grid-template-columns: minmax(0, 1fr) 1.75rem;
+}
+
+.geometry-discussion-message.is-own > .geometry-discussion-avatar,
+.geometry-discussion-message.is-own > .geometry-discussion-avatar-fallback {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.geometry-discussion-message.is-own > .geometry-discussion-message-body {
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .geometry-discussion-message-body {
   min-width: 0;
-  padding: .45rem .55rem;
+  padding: .48rem .6rem;
   border: 1px solid #243c44;
-  border-radius: 8px;
+  border-radius: 11px 11px 11px 4px;
   background: #101c20;
 }
 
 .geometry-discussion-message.is-own .geometry-discussion-message-body {
   border-color: #37756f;
-  background: #102421;
+  border-radius: 11px 11px 4px 11px;
+  background: #102824;
+}
+
+.geometry-discussion-message.is-incoming .geometry-discussion-message-body {
+  animation: geometry-discussion-message-arrival 1.25s ease-out 1;
+}
+
+@keyframes geometry-discussion-message-arrival {
+  0% {
+    border-color: #52d7c6;
+    box-shadow: 0 0 0 3px rgb(82 215 198 / 22%);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(82 215 198 / 0%);
+  }
+}
+
+.geometry-discussion-avatar {
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: 0 0 1.75rem;
 }
 
 .geometry-discussion-message-meta {
@@ -1169,7 +1275,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: .5rem;
-  margin-bottom: .2rem;
+  margin-bottom: .18rem;
 }
 
 .geometry-discussion-message-meta strong {
@@ -1177,41 +1283,56 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: .68rem;
+  font-size: .65rem;
 }
 
 .geometry-discussion-message-meta time {
   flex: 0 0 auto;
   color: var(--muted);
-  font-size: .58rem;
+  font-size: .55rem;
 }
 
 .geometry-discussion-message-text {
   margin: 0;
   font-size: .7rem;
-  line-height: 1.45;
+  line-height: 1.42;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .geometry-discussion-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 2.35rem;
   gap: .45rem;
   align-items: end;
-  padding: .6rem;
+  padding: .55rem;
   border-top: 1px solid var(--line);
   background: #101b1f;
 }
 
 .geometry-discussion-form textarea {
-  min-height: 3.2rem;
-  max-height: 8rem;
-  resize: vertical;
+  min-height: 2.35rem;
+  max-height: 7rem;
+  padding: .58rem .65rem;
+  resize: none;
+  overflow-y: auto;
+  border-radius: 10px;
+  line-height: 1.3;
 }
 
-.geometry-discussion-form button {
-  width: auto;
+.geometry-discussion-send {
+  width: 2.35rem;
+  min-width: 2.35rem;
+  height: 2.35rem;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: .82rem;
+}
+
+.geometry-discussion-send > span[aria-hidden="true"] {
+  transform: translateX(1px);
 }
 
 @media (max-width: 650px) {
@@ -1219,14 +1340,10 @@
     right: .5rem;
     bottom: .5rem;
     width: calc(100vw - 1rem);
-    max-height: min(31rem, calc(100vh - 1rem));
+    height: min(32rem, calc(100vh - 1rem));
   }
 
-  .geometry-discussion-form {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .geometry-discussion-form button {
-    width: 100%;
+  .geometry-discussion-message {
+    width: min(94%, 22rem);
   }
 }
