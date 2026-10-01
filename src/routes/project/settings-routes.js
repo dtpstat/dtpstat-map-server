@@ -17,6 +17,9 @@ import {
   createAdminOperationAudit,
   recordAdminOperationChanges,
 } from '../../http/admin-operation-audit.js';
+import {
+  projectSettingsAffectDerivedState,
+} from '../../modules/project/settings-impact.js';
 
 export function registerProjectSettingsAdminRoutes(
   router,
@@ -93,8 +96,15 @@ export function registerProjectSettingsAdminRoutes(
           await projectSettingsRepository
             .save(request.body);
 
+        const derivedRecalculated =
+          projectSettingsAffectDerivedState(
+            previousSettings,
+            settings,
+          );
         const derived =
-          await afterSettingsSave?.();
+          derivedRecalculated
+            ? await afterSettingsSave?.()
+            : null;
 
         recordAdminOperationChanges(
           response,
@@ -110,6 +120,7 @@ export function registerProjectSettingsAdminRoutes(
         response.json({
           settings,
           derived,
+          derivedRecalculated,
         });
       } catch (error) {
         if (
