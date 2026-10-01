@@ -2,10 +2,12 @@
   min-height: 0;
 }
 
-.admin-messages-layout,
 .admin-messages-card,
-#discussion-inbox-host,
-.discussion-inbox-panel {
+.admin-messages-list-block,
+.admin-messages-thread-block,
+#discussion-inbox-list-host,
+#discussion-inbox-thread-host,
+.discussion-inbox-thread-panel {
   min-height: 0;
   height: 100%;
 }
@@ -27,17 +29,14 @@
   font-size: .82rem;
 }
 
-.discussion-inbox-panel {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+.admin-messages-card .admin-layout-grid {
+  align-items: stretch;
+  grid-auto-rows: minmax(0, 1fr);
 }
 
-.profile-discussions-layout {
-  min-height: 0;
-  height: 100%;
+.discussion-inbox-thread-panel {
   display: grid;
-  grid-template-columns: minmax(19rem, 24rem) minmax(0, 1fr);
-  gap: 1rem;
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 
 .profile-discussions-list-wrap,
@@ -276,18 +275,11 @@
   resize: vertical;
 }
 
-@container admin-layout-block (max-width: 56rem) {
-  .profile-discussions-layout {
-    min-height: auto;
-    grid-template-columns: 1fr;
-  }
-
-  .profile-discussions-list-wrap {
-    max-height: 18rem;
-  }
-
-  .profile-discussion-thread {
-    min-height: 28rem;
+@container admin-layout-grid (max-width: 63.999rem) {
+  .admin-messages-card .admin-layout-grid {
+    grid-template-rows:
+      minmax(10rem, 18rem)
+      minmax(28rem, 1fr);
   }
 }
 
