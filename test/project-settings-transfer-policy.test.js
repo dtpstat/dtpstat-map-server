@@ -16,19 +16,19 @@ test('project settings transfer policy validates kind and schema before DB work'
   );
   assert.throws(
     () => validateProjectSettingsTransferEnvelope({
-      _dtpstat: { kind: 'project-settings', schemaVersion: 11 },
+      _dtpstat: { kind: 'project-settings', schemaVersion: 12 },
     }),
     ProjectSettingsTransferValidationError,
   );
   assert.equal(
     validateProjectSettingsTransferEnvelope({
-      _dtpstat: { kind: 'project-settings', schemaVersion: 10 },
+      _dtpstat: { kind: 'project-settings', schemaVersion: 11 },
       projectSettings: {},
       lineTypes: [],
       reportConfig: {},
       securitySettings: {},
     }).schemaVersion,
-    10,
+    11,
   );
 });
 
@@ -47,6 +47,9 @@ test('project settings transfer policy preserves legacy popup and threshold defa
   assert.equal(settings.showPointGeometries, true);
   assert.equal(settings.showLineGeometries, true);
   assert.equal(settings.showPolygonGeometries, true);
+  assert.equal(settings.showGeometryTimeline, false);
+  assert.equal(settings.historyStartDate, null);
+  assert.equal(settings.historySpeeds, null);
   assert.equal(settings.largeCityPopulationThreshold, 400000);
   assert.equal(settings.largeCityAreaKm2Threshold, null);
   assert.equal(settings.hasPublicDownloadName, false);
@@ -116,5 +119,83 @@ test('project settings transfer policy supplies security defaults for legacy sch
   assert.equal(
     v8.requestRateLimitGlobalPerMinute,
     5000,
+  );
+});
+
+
+test('project settings transfer policy validates history mode profiles', () => {
+  const settings = normalizeTransferredProjectSettings({
+    projectName: 'Test',
+    keywords: [],
+    footerHtml: '<p>Test</p>',
+    yandexMetrikaId: null,
+    googleAnalyticsId: null,
+    themePreset: 'modern',
+    showGeometryTimeline: true,
+    historyStartDate: '2000-01-01',
+    historySpeeds: [
+      {
+        name: '1x',
+        stepUnit: 'month',
+        intervalSeconds: 1,
+        isActive: true,
+        isDefault: true,
+      },
+      {
+        name: '10x',
+        stepUnit: 'decade',
+        intervalSeconds: 0.2,
+        isActive: true,
+        isDefault: false,
+      },
+    ],
+  });
+
+  assert.equal(settings.showGeometryTimeline, true);
+  assert.equal(settings.historyStartDate, '2000-01-01');
+  assert.deepEqual(
+    settings.historySpeeds.map(
+      ({ name, stepUnit, intervalSeconds, isDefault }) => ({
+        name,
+        stepUnit,
+        intervalSeconds,
+        isDefault,
+      }),
+    ),
+    [
+      {
+        name: '1x',
+        stepUnit: 'month',
+        intervalSeconds: 1,
+        isDefault: true,
+      },
+      {
+        name: '10x',
+        stepUnit: 'decade',
+        intervalSeconds: 0.2,
+        isDefault: false,
+      },
+    ],
+  );
+
+  assert.throws(
+    () => normalizeTransferredProjectSettings({
+      projectName: 'Test',
+      keywords: [],
+      footerHtml: '<p>Test</p>',
+      yandexMetrikaId: null,
+      googleAnalyticsId: null,
+      themePreset: 'modern',
+      historySpeeds: [
+        {
+          name: 'bad',
+          stepUnit: 'century',
+          intervalSeconds: 1,
+          isActive: true,
+          isDefault: true,
+        },
+      ],
+    }),
+    /stepUnit/u,
   );
 });
