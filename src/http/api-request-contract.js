@@ -585,6 +585,11 @@ export const API_REQUEST_CONTRACTS =
     c(
       'GET',
       '/admin/geometry-editor/users/:userId/avatar',
+      {
+        query: [
+          'v',
+        ],
+      },
     ),
     c(
       'GET',
@@ -855,6 +860,11 @@ export const API_REQUEST_CONTRACTS =
     c(
       'GET',
       '/admin/profile/avatar',
+      {
+        query: [
+          'v',
+        ],
+      },
     ),
     c(
       'PUT',
@@ -982,6 +992,11 @@ export const API_REQUEST_CONTRACTS =
     c(
       'GET',
       '/admin/security/users/:userId/avatar',
+      {
+        query: [
+          'v',
+        ],
+      },
     ),
     c(
       'GET',
