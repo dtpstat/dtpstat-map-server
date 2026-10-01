@@ -4611,8 +4611,6 @@ if (section) {
   }
 
   function renderTopologyState() {
-    const item =
-      state.current;
     const family =
       familyOf(
         state.draft,
