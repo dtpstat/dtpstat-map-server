@@ -375,7 +375,7 @@ th button:focus-visible {
   transform: translateX(50%);
   padding: 10px 12px;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 11px;
   align-items: center;
   border: 1px solid rgb(11 72 80 / 15%);
@@ -388,6 +388,31 @@ th button:focus-visible {
 .geometry-timeline[hidden] {
   display: none;
 }
+.geometry-timeline-controls {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+}
+
+.geometry-timeline-speed-label {
+  display: grid;
+  gap: 2px;
+  color: var(--ink-muted);
+  font-size: .62rem;
+  text-align: center;
+}
+
+.geometry-timeline-speed-label select {
+  min-width: 72px;
+  padding: 4px 6px;
+  border: 1px solid #b8ccca;
+  border-radius: 7px;
+  color: #23383b;
+  background: #fff;
+  font: inherit;
+  font-size: .72rem;
+}
+
 .geometry-timeline-play {
   width: 42px;
   height: 42px;
@@ -406,6 +431,7 @@ th button:focus-visible {
   background: var(--accent-dark);
 }
 .geometry-timeline-play:focus-visible,
+.geometry-timeline-speed-label select:focus-visible,
 .geometry-timeline input[type="range"]:focus-visible {
   outline: 3px solid #84d6dd;
   outline-offset: 2px;
@@ -629,7 +655,7 @@ th button:focus-visible {
     width: auto;
     transform: none;
     min-height: 72px;
-    grid-template-columns: 38px minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
     gap: 8px;
     padding: 8px 9px;
   }
