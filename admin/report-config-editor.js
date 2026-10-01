@@ -6,33 +6,18 @@ stylesheet.rel = 'stylesheet';
 stylesheet.href = '/admin/report-config.css';
 document.head.append(stylesheet);
 
-const taskTabs = document.querySelector('.task-tabs');
-const controlCard = document.querySelector('.control-card');
+const host =
+  document.querySelector(
+    '#report-config-editor-host',
+  );
 
-if (taskTabs && controlCard && !document.querySelector('[data-task-tab="report"]')) {
-  const tab = document.createElement('button');
-  tab.className = 'task-tab';
-  tab.id = 'tab-report';
-  tab.type = 'button';
-  tab.role = 'tab';
-  tab.setAttribute('aria-selected', 'false');
-  tab.setAttribute('aria-controls', 'panel-report');
-  tab.dataset.taskTab = 'report';
-  tab.textContent = 'Расчёты';
-  taskTabs.append(tab);
-
-  const panel = document.createElement('article');
-  panel.className = 'task-panel';
-  panel.id = 'panel-report';
-  panel.role = 'tabpanel';
-  panel.setAttribute('aria-labelledby', 'tab-report');
-  panel.dataset.taskPanel = 'report';
-  panel.hidden = true;
-  panel.innerHTML = `
-    <h3>Расчёты и таблица</h3>
-    <p class="panel-description">Безопасный конструктор расчётных показателей, колонок публичного рейтинга и статического CSV. SQL и произвольные технические имена не принимаются.</p>
-
-    <section class="transfer-mode report-config-editor">
+if (
+  host &&
+  !document.querySelector(
+    '#report-config-form',
+  )
+) {
+  host.innerHTML = `
       <div class="mode-heading">
         <div>
           <h4>Материализованный отчёт по городам</h4>
@@ -108,10 +93,9 @@ if (taskTabs && controlCard && !document.querySelector('[data-task-tab="report"]
         <button class="task-action report-save-button" type="submit">Сохранить и пересчитать</button>
       </form>
       <p class="report-config-message" id="report-config-message" role="status"></p>
-    </section>
+
     <p class="notice" data-task-notice="report" role="status"></p>
   `;
-  controlCard.append(panel);
 }
 
 const form = document.querySelector('#report-config-form');
