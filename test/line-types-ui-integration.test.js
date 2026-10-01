@@ -103,16 +103,29 @@ test('successful-update timestamps stay inside their operation blocks', async ()
 });
 
 test('admin line type editor keeps CODE and NAME read-only and edits TITLE/style only', async () => {
-  const [html, shell, editor] = await Promise.all([
+  const [
+    html,
+    shell,
+    schema,
+    editor,
+  ] = await Promise.all([
     source('admin/index.html'),
     source('admin/admin-shell.js'),
+    source('admin/admin-layout-schema.js'),
     source('admin/line-types-editor.js'),
   ]);
 
   assert.match(shell, /await import\('\.\/line-types-editor\.js'\)/);
   assert.doesNotMatch(html, /src="\/admin\/line-types-editor\.js"/);
   assert.match(html, /href="\/admin\/line-types\.css"/);
-  assert.match(html, /id="line-types-editor-host"/);
+  assert.doesNotMatch(
+    html,
+    /id="line-types-editor-host"/u,
+  );
+  assert.match(
+    schema,
+    /id:\s*'line-types'[\s\S]*hostId:[\s\S]*'line-types-editor-host'/u,
+  );
   assert.match(editor, /CODE генерируется базой автоматически/);
   assert.match(editor, /NAME приходит из импорта/);
   assert.match(editor, /TITLE — редактируемая подпись легенды/);
