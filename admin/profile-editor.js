@@ -566,8 +566,9 @@ if (host) {
         }),
       });
       passwordForm.reset();
-      renderUser(payload.user);
-      await globalThis.dtpstatReloadAdminSession?.();
+      await refreshSessionUser(
+        payload.user,
+      );
       window.dispatchEvent(new CustomEvent('dtpstat:password-changed'));
       message(passwordMessage, 'Пароль изменён. Остальные сессии завершены.', 'success');
     } catch (error) {
