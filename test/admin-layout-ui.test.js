@@ -54,6 +54,10 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
   );
   assert.match(
     shell,
+    /ensureAdminTabPanels\([\s\S]*adminInterfaceTabs/u,
+  );
+  assert.match(
+    shell,
     /setupAdminTabs\([\s\S]*adminInterfaceTabs/u,
   );
   assert.doesNotMatch(
@@ -92,7 +96,38 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
     schema,
     /openEvent:[\s\S]*'dtpstat:point-types-changed'/u,
   );
+  for (
+    const hostId of [
+      'report-config-editor-host',
+      'line-types-editor-host',
+      'point-types-editor-host',
+    ]
+  ) {
+    assert.match(
+      schema,
+      new RegExp(
+        `hostId:[\\s\\S]*['"]${hostId}['"]`,
+        'u',
+      ),
+    );
+  }
 
+  assert.match(
+    engine,
+    /export function ensureAdminTabPanels/u,
+  );
+  assert.match(
+    engine,
+    /definition\.blocks\?\.length/u,
+  );
+  assert.match(
+    engine,
+    /admin-layout-tab-grid/u,
+  );
+  assert.match(
+    engine,
+    /createInterfaceBlock/u,
+  );
   assert.match(
     engine,
     /export function setupAdminTabs/u,
