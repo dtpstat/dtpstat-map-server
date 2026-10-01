@@ -20,6 +20,9 @@ const TEST_PROJECT_SETTINGS =
     themePreset: 'classic',
     showLineLabels: false,
     showLinePopups: true,
+    showPointGeometries: true,
+    showLineGeometries: true,
+    showPolygonGeometries: true,
     largeCityPopulationThreshold:
       400000,
     largeCityAreaKm2Threshold:
@@ -248,7 +251,7 @@ function settingsTransferService() {
         _dtpstat: {
           kind:
             'project-settings',
-          schemaVersion: 9,
+          schemaVersion: 10,
           exportedAt:
             '2026-01-01T00:00:00.000Z',
         },
