@@ -164,6 +164,8 @@ test('admin can update project settings including independent line labels and po
     assert.equal(payload.settings.showLineLabels, true);
     assert.equal(payload.settings.showLinePopups, false);
     assert.equal(payload.settings.showGeometryTimeline, true);
+    assert.equal(payload.derivedRecalculated, false);
+    assert.equal(payload.derived, null);
     assert.equal(payload.settings.publicDownloadName, 'bus-lanes');
     assert.equal(payload.settings.yandexMetrikaId, '12345678');
     assert.equal(payload.settings.googleAnalyticsId, 'G-AB12CD34EF');
@@ -213,6 +215,7 @@ test('saving large-city thresholds waits for derived report refresh', async () =
     const payload = await response.json();
     assert.equal(payload.settings.largeCityPopulationThreshold, 500000);
     assert.equal(payload.settings.largeCityAreaKm2Threshold, 250);
+    assert.equal(payload.derivedRecalculated, true);
     assert.deepEqual(payload.derived, {
       reports: { cities: 12 },
       downloads: { csvRows: 12 },
@@ -226,6 +229,42 @@ test('saving large-city thresholds waits for derived report refresh', async () =
         reports: { cities: 12 },
         downloads: { csvRows: 12 },
       };
+    },
+  });
+});
+
+test('history-only project settings do not refresh ratings or downloads', async () => {
+  let refreshes = 0;
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/admin/project-settings`, {
+      method: 'PUT',
+      headers: {
+        Cookie: authorization,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        projectName: 'Выделенные полосы в России',
+        themePreset: 'classic',
+        showLineLabels: false,
+        showLinePopups: true,
+        showGeometryTimeline: true,
+        keywords: ['транспорт'],
+        yandexMetrikaId: null,
+        googleAnalyticsId: null,
+        footerHtml: '<p>Описание</p>',
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.settings.showGeometryTimeline, true);
+    assert.equal(payload.derivedRecalculated, false);
+    assert.equal(payload.derived, null);
+    assert.equal(refreshes, 0);
+  }, {
+    async afterSettingsSave() {
+      refreshes += 1;
+      return { unexpected: true };
     },
   });
 });
