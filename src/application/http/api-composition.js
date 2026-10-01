@@ -8,6 +8,9 @@ import {
   createKmlTransferRouter,
 } from '../../routes/kml-transfer-api.js';
 import {
+  createDiscussionInboxRouter,
+} from '../../routes/discussion-inbox-api.js';
+import {
   createGeometryEditorRouter,
 } from '../../routes/geometry-editor-api.js';
 import {
@@ -42,6 +45,7 @@ export function installApplicationApiRoutes(
     projectSettingsRepository,
     settingsTransferService,
     reportConfigService,
+    discussionInboxService,
     geometryEditorService,
     geometryImportService,
     refreshPublicDownloads,
@@ -83,6 +87,16 @@ export function installApplicationApiRoutes(
       commonAdmin,
     ),
   );
+
+  if (discussionInboxService) {
+    app.use(
+      '/api',
+      createDiscussionInboxRouter({
+        discussionInboxService,
+        adminAuth,
+      }),
+    );
+  }
 
   app.use(
     '/api',
