@@ -1047,6 +1047,25 @@
                             type="button" disabled>
                       Отключить ветку
                     </button>
+                    <button class="secondary geometry-discussion-open"
+                            id="osm-boundary-discussion-open"
+                            type="button"
+                            disabled
+                            aria-label="Открыть обсуждение OSM-объекта"
+                            title="Открыть обсуждение OSM-объекта">
+                      <svg class="geometry-discussion-envelope"
+                           viewBox="0 0 20 16"
+                           aria-hidden="true"
+                           focusable="false">
+                        <rect x="1.5" y="1.5" width="17" height="13"
+                              rx="2" ry="2"></rect>
+                        <path d="M2.5 3.5 10 9l7.5-5.5"></path>
+                      </svg>
+                      <span class="geometry-discussion-unread"
+                            id="osm-boundary-discussion-unread"
+                            aria-label="Непрочитанные сообщения"
+                            hidden>0</span>
+                    </button>
                   </div>
                 </header>
 
@@ -1123,6 +1142,45 @@
               </aside>
             </div>
           </div>
+
+          <section class="geometry-discussion"
+                   id="osm-boundary-discussion" hidden
+                   aria-label="Обсуждение OSM-объекта"
+                   aria-live="polite">
+            <header class="geometry-discussion-header">
+              <div>
+                <small class="geometry-discussion-kicker">Обсуждение OSM</small>
+                <strong id="osm-boundary-discussion-title">OSM-объект</strong>
+                <small id="osm-boundary-discussion-subtitle"></small>
+              </div>
+              <button class="secondary geometry-discussion-close"
+                      id="osm-boundary-discussion-close"
+                      type="button"
+                      aria-label="Свернуть обсуждение"
+                      title="Свернуть обсуждение">×</button>
+            </header>
+
+            <div class="geometry-discussion-messages"
+                 id="osm-boundary-discussion-messages"
+                 role="log"
+                 aria-live="polite"
+                 aria-relevant="additions">
+              <p class="empty-state">Сообщений пока нет.</p>
+            </div>
+
+            <form class="geometry-discussion-form"
+                  id="osm-boundary-discussion-form">
+              <textarea id="osm-boundary-discussion-input"
+                        rows="1"
+                        maxlength="4000"
+                        placeholder="Сообщение…"
+                        aria-label="Сообщение в обсуждение OSM-объекта"></textarea>
+              <button class="geometry-discussion-send"
+                      type="submit"
+                      aria-label="Отправить"
+                      title="Отправить"></button>
+            </form>
+          </section>
 
         </section>
       </div>
