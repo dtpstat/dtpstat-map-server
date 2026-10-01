@@ -206,7 +206,7 @@ async function replaceHistorySpeeds(
   queryable,
   speeds,
 ) {
-  if (speeds === null) {
+  if (speeds == null) {
     return;
   }
 
