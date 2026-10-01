@@ -6,9 +6,9 @@ import {
   subscribeAdminRealtime,
 } from './realtime-client.js';
 
-const profileHost =
+const inboxHost =
   document.querySelector(
-    '#profile-editor-host',
+    '#discussion-inbox-host',
   );
 
 const session =
@@ -213,39 +213,23 @@ function avatarNode(
 }
 
 function createPanel() {
-  if (!profileHost) {
+  if (!inboxHost) {
     return null;
   }
-
-  const grid =
-    profileHost.querySelector(
-      '.profile-grid',
-    );
-
-  if (!grid) return null;
 
   const panel =
     document.createElement(
       'section',
     );
   panel.className =
-    'profile-panel profile-discussions-panel';
+    'discussion-inbox-panel';
   panel.innerHTML = `
-    <div class="profile-section-heading profile-discussions-heading">
-      <div>
-        <h3>Сообщения</h3>
-        <p class="profile-muted">
-          Обсуждения геометрий и объектов OSM, доступных вашей роли.
-        </p>
-      </div>
-      <strong id="profile-discussions-total">0 непрочитанных</strong>
-    </div>
     <div class="profile-discussions-layout">
-      <aside class="profile-discussions-list-wrap">
+      <aside class="profile-discussions-list-wrap"
+             aria-label="Обсуждения">
         <div id="profile-discussions-list"
              class="profile-discussions-list"
-             role="listbox"
-             aria-label="Обсуждения"></div>
+             role="listbox"></div>
       </aside>
       <section class="profile-discussion-thread"
                id="profile-discussion-thread">
@@ -259,26 +243,14 @@ function createPanel() {
        role="status"></p>
   `;
 
-  const firstPanel =
-    grid.querySelector(
-      '.profile-panel',
-    );
-
-  if (firstPanel?.nextSibling) {
-    grid.insertBefore(
-      panel,
-      firstPanel.nextSibling,
-    );
-  } else {
-    grid.append(
-      panel,
-    );
-  }
+  inboxHost.replaceChildren(
+    panel,
+  );
 
   return panel;
 }
 
-if (profileHost && currentUser) {
+if (inboxHost && currentUser) {
   const stylesheet =
     document.createElement(
       'link',
@@ -304,38 +276,38 @@ if (profileHost && currentUser) {
         '#profile-discussion-thread',
       );
     const totalHost =
-      panel.querySelector(
-        '#profile-discussions-total',
+      document.querySelector(
+        '#admin-messages-total',
       );
     const statusHost =
       panel.querySelector(
         '#profile-discussions-message',
       );
-    const profileTab =
+    const messagesTab =
       document.querySelector(
-        '[data-admin-section-tab="profile"]',
+        '[data-admin-section-tab="messages"]',
       );
 
-    let profileBadge =
-      profileTab?.querySelector(
-        '.admin-profile-unread',
+    let messagesBadge =
+      messagesTab?.querySelector(
+        '.admin-messages-unread',
       ) ??
       null;
 
     if (
-      profileTab &&
-      !profileBadge
+      messagesTab &&
+      !messagesBadge
     ) {
-      profileBadge =
+      messagesBadge =
         document.createElement(
           'span',
         );
-      profileBadge.className =
-        'admin-profile-unread';
-      profileBadge.hidden =
+      messagesBadge.className =
+        'admin-messages-unread';
+      messagesBadge.hidden =
         true;
-      profileTab.append(
-        profileBadge,
+      messagesTab.append(
+        messagesBadge,
       );
     }
 
@@ -396,12 +368,12 @@ if (profileHost && currentUser) {
           : total +
             ' непрочитанных';
 
-      if (profileBadge) {
-        profileBadge.textContent =
+      if (messagesBadge) {
+        messagesBadge.textContent =
           total > 99
             ? '99+'
             : String(total);
-        profileBadge.hidden =
+        messagesBadge.hidden =
           total <= 0;
       }
     }
@@ -1141,7 +1113,7 @@ if (profileHost && currentUser) {
     );
 
     window.addEventListener(
-      'dtpstat:profile-open',
+      'dtpstat:messages-open',
       () => {
         void loadInbox({
           keepSelection:
