@@ -700,9 +700,19 @@
                     </button>
                     <span id="geometry-edit-lock-status"
                           class="geometry-edit-lock-status"></span>
-                    <button class="secondary" id="geometry-discussion-open"
-                            type="button" disabled>
-                      Обсуждение
+                    <button class="secondary geometry-discussion-open"
+                            id="geometry-discussion-open"
+                            type="button"
+                            disabled
+                            aria-label="Открыть обсуждение геометрии"
+                            title="Открыть обсуждение геометрии">
+                      <span class="geometry-discussion-open-icon"
+                            aria-hidden="true">✉</span>
+                      <span class="visually-hidden">Открыть обсуждение геометрии</span>
+                      <span class="geometry-discussion-unread"
+                            id="geometry-discussion-unread"
+                            aria-label="Непрочитанные сообщения"
+                            hidden>0</span>
                     </button>
                   </div>
 
@@ -819,7 +829,8 @@
                      aria-live="polite">
               <header class="geometry-discussion-header">
                 <div>
-                  <strong id="geometry-discussion-title">Обсуждение</strong>
+                  <small class="geometry-discussion-kicker">Обсуждение</small>
+                  <strong id="geometry-discussion-title">Геометрия</strong>
                   <small id="geometry-discussion-subtitle"></small>
                 </div>
                 <button class="secondary geometry-discussion-close"
@@ -845,11 +856,18 @@
                 </label>
                 <textarea id="geometry-discussion-input"
                           name="message"
-                          rows="2"
+                          rows="1"
                           maxlength="4000"
                           required
-                          placeholder="Комментарий к геометрии…"></textarea>
-                <button type="submit">Отправить</button>
+                          placeholder="Сообщение…"
+                          aria-label="Сообщение"></textarea>
+                <button class="geometry-discussion-send"
+                        type="submit"
+                        aria-label="Отправить сообщение"
+                        title="Отправить">
+                  <span aria-hidden="true">➤</span>
+                  <span class="visually-hidden">Отправить</span>
+                </button>
               </form>
             </section>
           </div>
