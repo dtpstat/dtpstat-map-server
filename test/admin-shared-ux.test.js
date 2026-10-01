@@ -46,6 +46,9 @@ test('dirty settings are guarded by one shared service', async () => {
   assert.match(dirty, /export function installDirtyTabGuard/);
   assert.match(dirty, /adminConfirm\(/);
   assert.match(dirty, /data-dirty-ignore/);
+  assert.match(dirty, /target\.dataset\.dirtyFormId/u);
+  assert.match(project, /mapPanel\.dataset\.dirtyFormId =\s*'project-settings-form'/u);
+  assert.match(project, /Настройки проекта \/ карты/u);
   assert.match(shell, /installDirtyTabGuard\(\)/);
   assert.match(shell, /confirmDirtyNavigation\(/);
 
