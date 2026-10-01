@@ -1527,6 +1527,82 @@ test('geometry editor keeps creation and edit activation explicit and selects lo
 });
 
 
+test('geometry merge starts from an explicit operation and owns its selection mode', async () => {
+  const [
+    html,
+    editor,
+    styles,
+  ] =
+    await Promise.all([
+      read('admin/index.html'),
+      read('admin/geometry-editor.js'),
+      read('admin/geometry-editor.css'),
+    ]);
+
+  assert.doesNotMatch(
+    html,
+    /id="geometry-bulk-select"/u,
+  );
+  assert.doesNotMatch(
+    html,
+    />\s*Выбрать несколько\s*</u,
+  );
+  assert.match(
+    html,
+    /id="geometry-topology-actions"[\s\S]*id="geometry-merge-start"[\s\S]*Объединить геометрии/u,
+  );
+  assert.match(
+    html,
+    /id="geometry-merge-mode"[\s\S]*Объединение геометрий[\s\S]*id="geometry-merge-selected"[\s\S]*id="geometry-merge-clear"[\s\S]*id="geometry-merge-cancel"/u,
+  );
+
+  assert.match(
+    editor,
+    /function startMergeSelection\([\s\S]*state\.bulkSelecting =\s*true/u,
+  );
+  assert.match(
+    editor,
+    /function cancelMergeSelection\([\s\S]*state\.selectedSet\.clear\(\)[\s\S]*state\.bulkSelecting =\s*false/u,
+  );
+  assert.match(
+    editor,
+    /function toggleMergeSelection\([\s\S]*mergeCandidateProblem/u,
+  );
+  assert.match(
+    editor,
+    /state\.bulkSelecting[\s\S]*toggleMergeSelection\([\s\S]*return;[\s\S]*selectGeometry/u,
+  );
+  assert.match(
+    editor,
+    /highlightedGeometries =[\s\S]*state\.bulkSelecting[\s\S]*selectedMergeItems\(\)/u,
+  );
+  assert.match(
+    editor,
+    /mergeFamilyCounts\.line >= 2 \|\|[\s\S]*mergeFamilyCounts\.polygon >= 2/u,
+  );
+  assert.match(
+    editor,
+    /event\.originalEvent[\s\S]*__dtpstatMergeHandled/u,
+  );
+  assert.match(
+    editor,
+    /event\.key === 'Escape'[\s\S]*state\.bulkSelecting[\s\S]*cancelMergeSelection/u,
+  );
+
+  assert.match(
+    styles,
+    /\.geometry-merge-mode \{[\s\S]*display: flex/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-editor-row\.is-bulk-selected[\s\S]*border-color: #52d7c6/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-editor-row\.is-merge-incompatible[\s\S]*opacity: \.42/u,
+  );
+});
+
 test('external local draft refresh does not silently re-enter edit mode', async () => {
   const editor =
     await read(
