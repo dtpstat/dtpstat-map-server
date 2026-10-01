@@ -999,6 +999,8 @@ if (section) {
             document.createElement('article');
           article.className =
             'geometry-discussion-message';
+          article.dataset.messageId =
+            String(entry.id);
           if (
             Number(entry.id) ===
             Number(
@@ -1101,16 +1103,17 @@ if (section) {
       );
     }
 
-    const shouldScroll =
-      scrollToEnd;
+    const previousScrollTop =
+      discussionMessages
+        ?.scrollTop ??
+      0;
     renderDiscussion();
 
-    if (
-      shouldScroll &&
-      discussionMessages
-    ) {
+    if (discussionMessages) {
       discussionMessages.scrollTop =
-        discussionMessages.scrollHeight;
+        scrollToEnd
+          ? discussionMessages.scrollHeight
+          : previousScrollTop;
     }
 
     if (focusInput) {
@@ -1285,6 +1288,7 @@ if (section) {
       if (discussionInput) {
         discussionInput.value =
           '';
+        resizeDiscussionInput();
       }
 
       markDiscussionRead(
@@ -8597,7 +8601,19 @@ if (section) {
             ) {
               state.discussionAttentionMessageId =
                 null;
-              renderDiscussion();
+              discussionMessages
+                ?.querySelector(
+                  '[data-message-id="' +
+                  CSS.escape(
+                    String(
+                      incoming.id,
+                    ),
+                  ) +
+                  '"]',
+                )
+                ?.classList.remove(
+                  'is-incoming',
+                );
             }
           },
           1400,
@@ -8664,6 +8680,24 @@ if (section) {
       event.preventDefault();
       void sendDiscussionMessage();
     },
+  );
+
+  function resizeDiscussionInput() {
+    if (!discussionInput) {
+      return;
+    }
+    discussionInput.style.height =
+      'auto';
+    discussionInput.style.height =
+      Math.min(
+        discussionInput.scrollHeight,
+        112,
+      ) + 'px';
+  }
+
+  discussionInput?.addEventListener(
+    'input',
+    resizeDiscussionInput,
   );
 
   discussionInput?.addEventListener(
