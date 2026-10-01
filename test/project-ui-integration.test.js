@@ -92,12 +92,24 @@ test('admin interface loads editors and helpers explicitly without transitive si
   assert.match(editor, /name="showLineLabels" type="checkbox"/);
   assert.match(editor, /name="showLinePopups" type="checkbox"/);
   assert.match(editor, /name="showGeometryTimeline" type="checkbox"/);
+  assert.match(editor, /Включить режим истории/u);
+  assert.match(editor, /name="historyStartDate" type="date"/u);
+  assert.match(editor, /id="project-history-speeds"/u);
+  assert.match(editor, /id="project-history-speed-add"/u);
+  assert.match(editor, /day: 'День'/u);
+  assert.match(editor, /week: 'Неделя'/u);
+  assert.match(editor, /month: 'Месяц'/u);
+  assert.match(editor, /quarter: 'Квартал'/u);
+  assert.match(editor, /five_years: 'Пятилетка'/u);
+  assert.match(editor, /decade: 'Декада'/u);
   assert.match(editor, /name="showPointGeometries" type="checkbox"/);
   assert.match(editor, /name="showLineGeometries" type="checkbox"/);
   assert.match(editor, /name="showPolygonGeometries" type="checkbox"/);
   assert.match(editor, /showLineLabels: showLineLabels\.checked/);
   assert.match(editor, /showLinePopups: showLinePopups\.checked/);
   assert.match(editor, /showGeometryTimeline: showGeometryTimeline\.checked/);
+  assert.match(editor, /historyStartDate: historyStartDate\.value \|\| null/u);
+  assert.match(editor, /historySpeeds: readHistorySpeeds\(\)/u);
   assert.match(editor, /showPointGeometries: showPointGeometries\.checked/);
   assert.match(editor, /showLineGeometries: showLineGeometries\.checked/);
   assert.match(editor, /showPolygonGeometries: showPolygonGeometries\.checked/);
@@ -111,6 +123,7 @@ test('admin interface loads editors and helpers explicitly without transitive si
   assert.match(css, /\.project-theme-grid/);
   assert.match(css, /\.project-settings-tabs/);
   assert.match(css, /\.project-settings-page\[hidden\]/);
+  assert.match(css, /\.project-history-speed-row/u);
   assert.match(css, /data-theme-preview/);
   assert.match(shell, /classList\.remove\('transfer-mode'\)/);
 
