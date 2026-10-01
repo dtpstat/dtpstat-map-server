@@ -610,7 +610,21 @@ export const API_REQUEST_CONTRACTS =
     ),
     c(
       'GET',
+      '/admin/geometry-editor/discussions/unread',
+    ),
+    c(
+      'GET',
       '/admin/geometry-editor/geometries/:geometryId/discussion',
+    ),
+    c(
+      'POST',
+      '/admin/geometry-editor/geometries/:geometryId/discussion/read',
+      {
+        body: 'json-object-optional',
+        bodyKeys: [
+          'messageId',
+        ],
+      },
     ),
     c(
       'POST',
