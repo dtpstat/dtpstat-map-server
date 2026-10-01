@@ -1,3 +1,4 @@
+import { adminAvatarObjectUrl } from './admin-avatar.js';
 import { confirmDirtyNavigation, installDirtyTabGuard } from './admin-dirty-state.js';
 import { readTabState, writeTabState } from './admin-tab-state.js';
 import {
@@ -339,6 +340,8 @@ function setupPrimarySections(
   return { select };
 }
 
+let userBadgeAvatarRequestSequence = 0;
+
 function updateUserBadge(user) {
   const badge = document.querySelector('#admin-user');
   const label = document.querySelector('#admin-user-label');
@@ -371,25 +374,62 @@ function updateUserBadge(user) {
     user.displayName ?? user.username ?? '?',
   ).trim().slice(0, 1).toLocaleUpperCase('ru-RU') || '?';
 
-  if (!user.hasAvatar) {
-    image.hidden = true;
-    image.removeAttribute('src');
-    fallback.hidden = false;
-    return;
-  }
+  const requestSequence =
+    ++userBadgeAvatarRequestSequence;
 
   image.hidden = true;
   fallback.hidden = false;
-  image.onload = () => {
-    image.hidden = false;
-    fallback.hidden = true;
-  };
-  image.onerror = () => {
-    image.hidden = true;
-    fallback.hidden = false;
-  };
-  const avatarVersion = encodeURIComponent(user.updatedAt ?? '1');
-  image.src = `/api/admin/profile/avatar?v=${avatarVersion}`;
+
+  if (!user.hasAvatar) {
+    image.removeAttribute('src');
+    return;
+  }
+
+  const avatarVersion =
+    encodeURIComponent(
+      user.updatedAt ?? '1',
+    );
+  const avatarUrl =
+    `/api/admin/profile/avatar?v=${avatarVersion}`;
+
+  void adminAvatarObjectUrl(
+    avatarUrl,
+  )
+    .then(
+      (objectUrl) => {
+        if (
+          requestSequence !==
+          userBadgeAvatarRequestSequence
+        ) {
+          return;
+        }
+
+        image.src =
+          objectUrl;
+        image.hidden =
+          false;
+        fallback.hidden =
+          true;
+      },
+    )
+    .catch(
+      () => {
+        if (
+          requestSequence !==
+          userBadgeAvatarRequestSequence
+        ) {
+          return;
+        }
+
+        image.removeAttribute(
+          'src',
+        );
+        image.hidden =
+          true;
+        fallback.hidden =
+          false;
+      },
+    );
 }
 
 
