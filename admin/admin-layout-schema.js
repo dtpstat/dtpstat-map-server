@@ -19,17 +19,30 @@ export const adminDynamicSections = [
     },
     blocks: [
       {
-        id: 'messages-inbox',
+        id: 'messages-list',
         hostId:
-          'discussion-inbox-host',
+          'discussion-inbox-list-host',
         className:
-          'admin-messages-layout',
+          'admin-messages-list-block',
         span: {
           base: 12,
-          wide: 12,
+          wide: 4,
         },
         placeholder:
-          'Загружаем сообщения…',
+          'Загружаем список обсуждений…',
+      },
+      {
+        id: 'messages-thread',
+        hostId:
+          'discussion-inbox-thread-host',
+        className:
+          'admin-messages-thread-block',
+        span: {
+          base: 12,
+          wide: 8,
+        },
+        placeholder:
+          'Выберите обсуждение слева.',
       },
     ],
   },
