@@ -1,4 +1,6 @@
 import { adminAvatarObjectUrl } from './admin-avatar.js';
+import { ensureAdminSections } from './admin-layout.js';
+import { adminDynamicSections } from './admin-layout-schema.js';
 import { confirmDirtyNavigation, installDirtyTabGuard } from './admin-dirty-state.js';
 import { readTabState, writeTabState } from './admin-tab-state.js';
 import {
@@ -45,132 +47,6 @@ function permissionFingerprint(
     Boolean(user?.canViewAudit),
     Boolean(user?.canManageSecurity),
   ].join(':');
-}
-
-function ensureMessagesSection() {
-  const tabsHost =
-    document.querySelector(
-      '#admin-primary-tabs',
-    );
-  const sectionsHost =
-    document.querySelector(
-      '.admin-sections',
-    );
-
-  if (!tabsHost || !sectionsHost) {
-    return;
-  }
-
-  if (
-    !document.querySelector(
-      '[data-admin-section-tab="messages"]',
-    )
-  ) {
-    const tab =
-      document.createElement(
-        'button',
-      );
-    tab.type = 'button';
-    tab.role = 'tab';
-    tab.dataset.adminSectionTab =
-      'messages';
-    tab.setAttribute(
-      'aria-selected',
-      'false',
-    );
-    tab.setAttribute(
-      'aria-controls',
-      'admin-section-messages',
-    );
-    tab.textContent =
-      'Сообщения';
-    tabsHost.append(tab);
-  }
-
-  if (
-    !document.querySelector(
-      '[data-admin-section-panel="messages"]',
-    )
-  ) {
-    const section =
-      document.createElement(
-        'section',
-      );
-    section.className =
-      'admin-section-panel admin-messages-section';
-    section.id =
-      'admin-section-messages';
-    section.dataset
-      .adminSectionPanel =
-      'messages';
-    section.role =
-      'tabpanel';
-    section.hidden =
-      true;
-    section.innerHTML = `
-      <div class="admin-layout admin-layout-single admin-messages-layout">
-        <section class="settings-card admin-messages-card"
-                 aria-labelledby="messages-title">
-          <div class="section-heading admin-messages-heading">
-            <div>
-              <p class="eyebrow">ОБСУЖДЕНИЯ</p>
-              <h2 id="messages-title">Сообщения</h2>
-              <p class="admin-messages-subtitle">
-                Обсуждения геометрий и объектов OSM, доступных вашей роли.
-              </p>
-            </div>
-            <strong id="admin-messages-total">0 непрочитанных</strong>
-          </div>
-          <div id="discussion-inbox-host">
-            <p class="empty-state">Загружаем сообщения…</p>
-          </div>
-        </section>
-      </div>
-    `;
-    sectionsHost.append(
-      section,
-    );
-  }
-}
-
-function ensureProfileSection() {
-  const tabsHost = document.querySelector('#admin-primary-tabs');
-  const sectionsHost = document.querySelector('.admin-sections');
-  if (!tabsHost || !sectionsHost) return;
-
-  if (!document.querySelector('[data-admin-section-tab="profile"]')) {
-    const tab = document.createElement('button');
-    tab.type = 'button';
-    tab.role = 'tab';
-    tab.dataset.adminSectionTab = 'profile';
-    tab.setAttribute('aria-selected', 'false');
-    tab.setAttribute('aria-controls', 'admin-section-profile');
-    tab.textContent = 'Профиль';
-    tabsHost.append(tab);
-  }
-
-  if (!document.querySelector('[data-admin-section-panel="profile"]')) {
-    const section = document.createElement('section');
-    section.className = 'admin-section-panel';
-    section.id = 'admin-section-profile';
-    section.dataset.adminSectionPanel = 'profile';
-    section.role = 'tabpanel';
-    section.hidden = true;
-    section.innerHTML = `
-      <div class="admin-layout admin-layout-single">
-        <section class="settings-card" aria-labelledby="profile-title">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">АКТИВНАЯ УЧЁТНАЯ ЗАПИСЬ</p>
-              <h2 id="profile-title">Профиль</h2>
-            </div>
-          </div>
-          <div id="profile-editor-host"><p class="empty-state">Загружаем профиль…</p></div>
-        </section>
-      </div>
-    `;
-    sectionsHost.append(section);
-  }
 }
 
 function ensureTopbarActions() {
@@ -555,8 +431,18 @@ async function startAdminShell() {
       startAdminRealtime,
     } = await import('./realtime-client.js');
     startAdminRealtime();
-    ensureProfileSection();
-    ensureMessagesSection();
+    ensureAdminSections({
+      tabsHost:
+        document.querySelector(
+          '#admin-primary-tabs',
+        ),
+      sectionsHost:
+        document.querySelector(
+          '.admin-sections',
+        ),
+      sections:
+        adminDynamicSections,
+    });
     ensureTopbarActions();
     updateUserBadge(user);
     setupPrimarySections(
