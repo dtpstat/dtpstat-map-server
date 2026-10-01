@@ -18,6 +18,8 @@ test('project settings update policy preserves optional runtime settings semanti
   assert.equal(normalized.showLineLabels, false);
   assert.equal(normalized.showLinePopups, null);
   assert.equal(normalized.showGeometryTimeline, false);
+  assert.equal(normalized.historyStartDate, null);
+  assert.equal(normalized.historySpeeds, null);
   assert.equal(normalized.showPointGeometries, true);
   assert.equal(normalized.showLineGeometries, true);
   assert.equal(normalized.showPolygonGeometries, true);
@@ -37,6 +39,23 @@ test('project settings update policy normalizes theme token and thresholds', () 
     showLineLabels: true,
     showLinePopups: false,
     showGeometryTimeline: true,
+    historyStartDate: '2000-01-01',
+    historySpeeds: [
+      {
+        name: '1x',
+        stepUnit: 'month',
+        intervalSeconds: '1.0',
+        isActive: true,
+        isDefault: true,
+      },
+      {
+        name: '10x',
+        stepUnit: 'decade',
+        intervalSeconds: '0.2',
+        isActive: true,
+        isDefault: false,
+      },
+    ],
     showPointGeometries: false,
     showLineGeometries: true,
     showPolygonGeometries: false,
@@ -49,6 +68,10 @@ test('project settings update policy normalizes theme token and thresholds', () 
   assert.equal(normalized.showLineLabels, true);
   assert.equal(normalized.showLinePopups, false);
   assert.equal(normalized.showGeometryTimeline, true);
+  assert.equal(normalized.historyStartDate, '2000-01-01');
+  assert.equal(normalized.historySpeeds.length, 2);
+  assert.equal(normalized.historySpeeds[0].sortOrder, 10);
+  assert.equal(normalized.historySpeeds[1].intervalSeconds, 0.2);
   assert.equal(normalized.showPointGeometries, false);
   assert.equal(normalized.showLineGeometries, true);
   assert.equal(normalized.showPolygonGeometries, false);
@@ -125,4 +148,51 @@ test('project settings update policy rejects non-boolean geometry type settings'
       new RegExp(field + ' must be boolean', 'u'),
     );
   }
+});
+
+
+test('project settings update policy rejects invalid history configuration', () => {
+  const base = {
+    projectName: 'Test',
+    keywords: [],
+    footerHtml: '<p>Test</p>',
+    yandexMetrikaId: null,
+    googleAnalyticsId: null,
+  };
+
+  assert.throws(
+    () => normalizeProjectSettingsUpdate({
+      ...base,
+      historyStartDate: '2025-02-30',
+    }),
+    /historyStartDate/u,
+  );
+
+  assert.throws(
+    () => normalizeProjectSettingsUpdate({
+      ...base,
+      historySpeeds: [{
+        name: '1x',
+        stepUnit: 'month',
+        intervalSeconds: 0.05,
+        isActive: true,
+        isDefault: true,
+      }],
+    }),
+    /intervalSeconds/u,
+  );
+
+  assert.throws(
+    () => normalizeProjectSettingsUpdate({
+      ...base,
+      historySpeeds: [{
+        name: '1x',
+        stepUnit: 'month',
+        intervalSeconds: 1,
+        isActive: true,
+        isDefault: false,
+      }],
+    }),
+    /exactly one/u,
+  );
 });
