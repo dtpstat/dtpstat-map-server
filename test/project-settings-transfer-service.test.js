@@ -25,10 +25,23 @@ function exportPool() {
             showPointGeometries: true,
             showLineGeometries: false,
             showPolygonGeometries: true,
+            showGeometryTimeline: true,
+            historyStartDate: '2000-01-01',
             largeCityPopulationThreshold: 400000,
             largeCityAreaKm2Threshold: 250,
             publicDownloadName: 'tram-lines',
             mapboxAccessToken: 'pk.test-public-token-value',
+          }],
+        };
+      }
+      if (/FROM geometry_history_speeds/i.test(text)) {
+        return {
+          rows: [{
+            name: '1x',
+            stepUnit: 'month',
+            intervalSeconds: 1,
+            isActive: true,
+            isDefault: true,
           }],
         };
       }
@@ -115,13 +128,17 @@ test('settings export contains download name, sequential ranking and line displa
   const payload = await service.exportSettings();
 
   assert.equal(payload._dtpstat.kind, 'project-settings');
-  assert.equal(payload._dtpstat.schemaVersion, 10);
+  assert.equal(payload._dtpstat.schemaVersion, 11);
   assert.equal(payload.projectSettings.themePreset, 'modern');
   assert.equal(payload.projectSettings.showLineLabels, true);
   assert.equal(payload.projectSettings.showLinePopups, false);
   assert.equal(payload.projectSettings.showPointGeometries, true);
   assert.equal(payload.projectSettings.showLineGeometries, false);
   assert.equal(payload.projectSettings.showPolygonGeometries, true);
+  assert.equal(payload.projectSettings.showGeometryTimeline, true);
+  assert.equal(payload.projectSettings.historyStartDate, '2000-01-01');
+  assert.equal(payload.projectSettings.historySpeeds[0].name, '1x');
+  assert.equal(payload.projectSettings.historySpeeds[0].stepUnit, 'month');
   assert.equal(payload.projectSettings.largeCityPopulationThreshold, 400000);
   assert.equal(payload.projectSettings.largeCityAreaKm2Threshold, 250);
   assert.equal(payload.projectSettings.publicDownloadName, 'tram-lines');
@@ -166,7 +183,7 @@ test('settings import rejects unsupported schema versions before touching the da
 
   await assert.rejects(
     service.importSettings({
-      _dtpstat: { kind: 'project-settings', schemaVersion: 11 },
+      _dtpstat: { kind: 'project-settings', schemaVersion: 12 },
     }),
     (error) => error instanceof ProjectSettingsTransferValidationError && /schemaVersion/.test(error.message),
   );
