@@ -47,6 +47,29 @@ function serviceDependencies(
       async listMessages() {
         return [];
       },
+      async unreadCounts() {
+        return [];
+      },
+      async latestMessageId() {
+        return null;
+      },
+      async markRead(
+        _client,
+        {
+          geometryId,
+          userId,
+          messageId,
+        },
+      ) {
+        return {
+          geometryId,
+          userId,
+          lastReadMessageId:
+            messageId,
+          updatedAt:
+            '2026-09-25T12:02:00.000Z',
+        };
+      },
       async createMessage(
         _client,
         {
@@ -71,6 +94,7 @@ function serviceDependencies(
           createdAt:
             '2026-09-25T12:01:00.000Z',
           editedAt: null,
+          readByOthersCount: 0,
         };
       },
     },
@@ -726,6 +750,14 @@ test('geometry discussions persist normalized messages and expose public author 
     created.message,
     'Проверить эту линию',
   );
+  assert.equal(
+    created.deliveredAt,
+    '2026-09-25T12:01:00.000Z',
+  );
+  assert.equal(
+    created.readByOthersCount,
+    0,
+  );
   assert.deepEqual(
     created.author,
     {
@@ -736,5 +768,137 @@ test('geometry discussions persist normalized messages and expose public author 
       avatarUrl:
         '/api/admin/geometry-editor/users/77/avatar',
     },
+  );
+});
+
+
+test('geometry discussion unread and read position are user-specific and transactional', async () => {
+  const rows = [
+    geometry(
+      9,
+      '2026-09-25T12:00:00.000Z',
+    ),
+  ];
+  const queries = [];
+  const client = {
+    async query(text) {
+      queries.push(text);
+      return {
+        rows: [],
+        rowCount: 0,
+      };
+    },
+    release() {},
+  };
+  const pool = {
+    async connect() {
+      return client;
+    },
+  };
+  const storage = {
+    async getGeometry() {
+      return rows[0];
+    },
+  };
+  const reads = [];
+  const discussionStorage = {
+    async geometryExists(id) {
+      return id === 9;
+    },
+    async listMessages() {
+      return [];
+    },
+    async unreadCounts(userId) {
+      assert.equal(userId, 77);
+      return [
+        {
+          geometryId: 9,
+          unreadCount: 3,
+        },
+      ];
+    },
+    async latestMessageId(id) {
+      assert.equal(id, 9);
+      return 15;
+    },
+    async markRead(
+      _client,
+      value,
+    ) {
+      reads.push(
+        structuredClone(value),
+      );
+      return {
+        geometryId:
+          value.geometryId,
+        userId:
+          value.userId,
+        lastReadMessageId:
+          value.messageId,
+        updatedAt:
+          '2026-09-25T12:03:00.000Z',
+      };
+    },
+    async createMessage() {
+      throw new Error(
+        'not expected',
+      );
+    },
+  };
+
+  const service =
+    createGeometryEditorService(
+      pool,
+      {
+        ...serviceDependencies(
+          storage,
+          '9',
+        ),
+        discussionStorage,
+      },
+    );
+
+  assert.deepEqual(
+    await service
+      .listDiscussionUnread({
+        id: 77,
+      }),
+    {
+      items: [
+        {
+          geometryId: 9,
+          unreadCount: 3,
+        },
+      ],
+    },
+  );
+
+  const read =
+    await service
+      .markDiscussionRead(
+        9,
+        {
+          id: 77,
+        },
+        {},
+      );
+
+  assert.equal(
+    read.lastReadMessageId,
+    15,
+  );
+  assert.deepEqual(
+    reads,
+    [{
+      geometryId: 9,
+      userId: 77,
+      messageId: 15,
+    }],
+  );
+  assert.ok(
+    queries.includes('BEGIN'),
+  );
+  assert.ok(
+    queries.includes('COMMIT'),
   );
 });
