@@ -1846,6 +1846,15 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
   );
   assert.match(
     script,
+    /adminAvatarObjectUrl\([\s\S]*avatarUrl/u,
+  );
+  assert.doesNotMatch(
+    script,
+    /image\.src\s*=\s*avatarUrl/u,
+  );
+
+  assert.match(
+    script,
     /'geometry-discussions'/u,
   );
   assert.match(
