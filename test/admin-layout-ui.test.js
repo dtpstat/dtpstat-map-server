@@ -141,6 +141,26 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
     schema,
     /id:\s*'messages-thread'[\s\S]*capabilities:[\s\S]*fill:\s*true/u,
   );
+  for (
+    const [id, wide] of [
+      ['profile-account', 5],
+      ['profile-password', 7],
+      ['profile-mfa', 12],
+      ['profile-sessions', 12],
+    ]
+  ) {
+    assert.match(
+      schema,
+      new RegExp(
+        `id:\\s*['"]${id}['"][\\s\\S]*wide:\\s*${wide}`,
+        'u',
+      ),
+    );
+  }
+  assert.doesNotMatch(
+    schema,
+    /profile-editor-host/u,
+  );
   assert.match(
     engine,
     /definition\.elementId[\s\S]*block\.id[\s\S]*definition\.elementId/u,
