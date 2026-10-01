@@ -1,0 +1,24 @@
+SET SEARCH_PATH = BUSLANES, PUBLIC;
+
+CREATE TABLE IF NOT EXISTS BUSLANES.GEOMETRY_DISCUSSION_READ_STATE
+(
+    GEOMETRY_ID          BIGINT      NOT NULL
+                                    REFERENCES BUSLANES.CITY_GEOMETRIES (ID)
+                                    ON DELETE CASCADE,
+    USER_ID              BIGINT      NOT NULL
+                                    REFERENCES BUSLANES.ADMIN_USERS (ID)
+                                    ON DELETE CASCADE,
+    LAST_READ_MESSAGE_ID BIGINT
+                                    REFERENCES BUSLANES.GEOMETRY_DISCUSSION_MESSAGES (ID)
+                                    ON DELETE SET NULL,
+    UPDATED_AT           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (GEOMETRY_ID, USER_ID)
+);
+
+CREATE INDEX IF NOT EXISTS GEOMETRY_DISCUSSION_READ_STATE_USER_ID_IDX
+    ON BUSLANES.GEOMETRY_DISCUSSION_READ_STATE (USER_ID, GEOMETRY_ID);
+
+COMMENT ON TABLE BUSLANES.GEOMETRY_DISCUSSION_READ_STATE IS
+    'Per-user persistent read position for geometry discussion messages.';
+COMMENT ON COLUMN BUSLANES.GEOMETRY_DISCUSSION_READ_STATE.LAST_READ_MESSAGE_ID IS
+    'Highest discussion message ID explicitly marked read by this user for the geometry.';
