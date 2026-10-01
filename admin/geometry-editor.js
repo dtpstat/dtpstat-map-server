@@ -48,6 +48,7 @@ if (section) {
   const editLockStatus = document.querySelector('#geometry-edit-lock-status');
   const editingNotice = document.querySelector('#geometry-editing-notice');
   const discussionOpenButton = document.querySelector('#geometry-discussion-open');
+  const discussionUnread = document.querySelector('#geometry-discussion-unread');
   const discussionPanel = document.querySelector('#geometry-discussion');
   const discussionCloseButton = document.querySelector('#geometry-discussion-close');
   const discussionTitle = document.querySelector('#geometry-discussion-title');
@@ -165,6 +166,8 @@ if (section) {
     discussionLoading: false,
     discussionSending: false,
     discussionRequestSequence: 0,
+    discussionUnreadByGeometry: new Map(),
+    discussionAttentionMessageId: null,
   };
 
   const REMOTE_SYNC_DELAY_MS = 75;
@@ -766,6 +769,122 @@ if (section) {
     );
   }
 
+  function discussionUnreadCount(
+    geometryId,
+  ) {
+    return Number(
+      state.discussionUnreadByGeometry.get(
+        Number(geometryId),
+      ) ?? 0,
+    );
+  }
+
+  function setDiscussionUnread(
+    geometryId,
+    count,
+  ) {
+    const id =
+      Number(geometryId);
+    if (
+      !Number.isSafeInteger(id) ||
+      id <= 0
+    ) {
+      return;
+    }
+
+    if (count > 0) {
+      state.discussionUnreadByGeometry.set(
+        id,
+        count,
+      );
+    } else {
+      state.discussionUnreadByGeometry.delete(
+        id,
+      );
+    }
+
+    renderDiscussionUnreadBadge();
+  }
+
+  function incrementDiscussionUnread(
+    geometryId,
+  ) {
+    setDiscussionUnread(
+      geometryId,
+      discussionUnreadCount(
+        geometryId,
+      ) + 1,
+    );
+  }
+
+  function renderDiscussionUnreadBadge() {
+    if (
+      !discussionOpenButton ||
+      !discussionUnread
+    ) {
+      return;
+    }
+
+    const geometryId =
+      Number(
+        state.current?.id,
+      );
+    const count =
+      Number.isSafeInteger(
+        geometryId,
+      ) &&
+      geometryId > 0
+        ? discussionUnreadCount(
+            geometryId,
+          )
+        : 0;
+
+    discussionUnread.hidden =
+      count <= 0;
+    discussionUnread.textContent =
+      count > 99
+        ? '99+'
+        : String(count);
+    discussionOpenButton.classList.toggle(
+      'has-unread',
+      count > 0,
+    );
+  }
+
+  function markDiscussionRead(
+    geometryId,
+  ) {
+    setDiscussionUnread(
+      geometryId,
+      0,
+    );
+  }
+
+  function discussionIsOpenFor(
+    geometryId,
+  ) {
+    return Boolean(
+      discussionPanel &&
+      !discussionPanel.hidden &&
+      Number(
+        state.discussionGeometryId,
+      ) === Number(
+        geometryId,
+      ),
+    );
+  }
+
+  function discussionNearBottom() {
+    if (!discussionMessages) {
+      return true;
+    }
+    return (
+      discussionMessages.scrollHeight -
+      discussionMessages.scrollTop -
+      discussionMessages.clientHeight
+    ) <= 56;
+  }
+
   function discussionGeometryLabel(
     geometryId,
   ) {
@@ -828,11 +947,10 @@ if (section) {
 
     discussionTitle.textContent =
       geometryId
-        ? 'Обсуждение · ' +
-          discussionGeometryLabel(
+        ? discussionGeometryLabel(
             geometryId,
           )
-        : 'Обсуждение';
+        : 'Геометрия';
 
     discussionSubtitle.textContent =
       geometryId
@@ -881,6 +999,16 @@ if (section) {
             document.createElement('article');
           article.className =
             'geometry-discussion-message';
+          if (
+            Number(entry.id) ===
+            Number(
+              state.discussionAttentionMessageId,
+            )
+          ) {
+            article.classList.add(
+              'is-incoming',
+            );
+          }
           if (
             Number(
               entry.author?.userId,
@@ -951,13 +1079,12 @@ if (section) {
       ...elements,
     );
 
-    discussionMessages.scrollTop =
-      discussionMessages.scrollHeight;
   }
 
   function revealDiscussion({
     attention = false,
     focusInput = false,
+    scrollToEnd = true,
   } = {}) {
     if (!discussionPanel) return;
 
@@ -974,7 +1101,17 @@ if (section) {
       );
     }
 
+    const shouldScroll =
+      scrollToEnd;
     renderDiscussion();
+
+    if (
+      shouldScroll &&
+      discussionMessages
+    ) {
+      discussionMessages.scrollTop =
+        discussionMessages.scrollHeight;
+    }
 
     if (focusInput) {
       discussionInput?.focus();
@@ -1055,9 +1192,13 @@ if (section) {
         [];
       state.discussionLoading =
         false;
+      markDiscussionRead(
+        id,
+      );
       revealDiscussion({
         attention,
         focusInput,
+        scrollToEnd: true,
       });
     } catch (error) {
       if (
@@ -1146,9 +1287,13 @@ if (section) {
           '';
       }
 
+      markDiscussionRead(
+        geometryId,
+      );
       revealDiscussion({
         attention: true,
         focusInput: true,
+        scrollToEnd: true,
       });
     } catch (error) {
       setMessage(
@@ -3619,6 +3764,7 @@ if (section) {
       Boolean(
         state.importSession,
       );
+    renderDiscussionUnreadBadge();
 
     beginEditButton.hidden =
       !item?.id ||
@@ -8415,25 +8561,50 @@ if (section) {
         change.discussionMessage ??
         null;
 
+      if (!incoming) {
+        return;
+      }
+
       if (
-        Number(
-          state.discussionGeometryId,
-        ) ===
-          geometryId &&
-        incoming
+        discussionIsOpenFor(
+          geometryId,
+        )
       ) {
+        const keepScroll =
+          discussionNearBottom();
         appendDiscussionMessage(
           incoming,
         );
+        state.discussionAttentionMessageId =
+          incoming.id;
+        markDiscussionRead(
+          geometryId,
+        );
         revealDiscussion({
           attention: true,
+          scrollToEnd:
+            keepScroll,
         });
-      } else {
-        void loadDiscussion(
-          geometryId,
-          {
-            attention: true,
+        window.setTimeout(
+          () => {
+            if (
+              Number(
+                state.discussionAttentionMessageId,
+              ) ===
+              Number(
+                incoming.id,
+              )
+            ) {
+              state.discussionAttentionMessageId =
+                null;
+              renderDiscussion();
+            }
           },
+          1400,
+        );
+      } else {
+        incrementDiscussionUnread(
+          geometryId,
         );
       }
       return;
@@ -8500,7 +8671,8 @@ if (section) {
     (event) => {
       if (
         event.key === 'Enter' &&
-        (event.ctrlKey || event.metaKey)
+        !event.shiftKey &&
+        !event.isComposing
       ) {
         event.preventDefault();
         discussionForm
