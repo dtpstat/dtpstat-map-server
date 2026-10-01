@@ -34,6 +34,12 @@ async function withServer(callback) {
         anchorY:
           payload.anchorY ??
           16,
+        minZoom:
+          payload.minZoom ??
+          null,
+        maxZoom:
+          payload.maxZoom ??
+          null,
         iconConfigured: false,
         geometryCount: 0,
       };
@@ -186,6 +192,8 @@ test('point type API lists creates updates and deletes types', async () => {
               JSON.stringify({
                 name:
                   'Остановка',
+                minZoom: 10,
+                maxZoom: 18,
               }),
           },
         );
@@ -200,6 +208,18 @@ test('point type API lists creates updates and deletes types', async () => {
           .pointType
           .displayWidth,
         32,
+      );
+      assert.equal(
+        createdPayload
+          .pointType
+          .minZoom,
+        10,
+      );
+      assert.equal(
+        createdPayload
+          .pointType
+          .maxZoom,
+        18,
       );
 
       const updated =
@@ -216,6 +236,8 @@ test('point type API lists creates updates and deletes types', async () => {
                 isActive: false,
                 displayWidth: 48,
                 anchorX: 24,
+                minZoom: 11.5,
+                maxZoom: 17,
               }),
           },
         );
@@ -223,11 +245,25 @@ test('point type API lists creates updates and deletes types', async () => {
         updated.status,
         200,
       );
+      const updatedPayload =
+        await updated.json();
       assert.equal(
-        (await updated.json())
+        updatedPayload
           .pointType
           .isActive,
         false,
+      );
+      assert.equal(
+        updatedPayload
+          .pointType
+          .minZoom,
+        11.5,
+      );
+      assert.equal(
+        updatedPayload
+          .pointType
+          .maxZoom,
+        17,
       );
 
       const deleted =
