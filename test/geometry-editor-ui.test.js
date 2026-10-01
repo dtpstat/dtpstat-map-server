@@ -1835,7 +1835,7 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
   );
   assert.match(
     styles,
-    /\.geometry-discussion \{[\s\S]*min-width: 20rem[\s\S]*min-height: 16rem[\s\S]*resize: both/u,
+    /\.geometry-discussion \{[\s\S]*min-width: 20rem[\s\S]*min-height: 16rem[\s\S]*grid-template-rows: auto minmax\(7rem, 1fr\) auto[\s\S]*resize: both/u,
   );
   assert.match(
     styles,
@@ -1844,6 +1844,10 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
   assert.match(
     styles,
     /\.geometry-discussion-receipt \{/u,
+  );
+  assert.doesNotMatch(
+    styles,
+    /\.geometry-discussion-messages \{[\s\S]{0,160}max-height:/u,
   );
   assert.match(
     styles,
