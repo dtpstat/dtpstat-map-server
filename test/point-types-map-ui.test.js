@@ -85,6 +85,22 @@ test('public map loads point types and renders only loaded versioned icons', asy
     controller,
     /async setPointTypes/u,
   );
+  assert.match(
+    controller,
+    /export function pointFeatureHint/u,
+  );
+  assert.match(
+    controller,
+    /feature\.properties[\s\S]*\.tooltip/u,
+  );
+  assert.match(
+    controller,
+    /POINT_LAYER_ID,[\s\S]*POINT_FALLBACK_LAYER_ID/u,
+  );
+  assert.match(
+    controller,
+    /setDOMContent\([\s\S]*pointContent/u,
+  );
 
   assert.match(
     icons,
