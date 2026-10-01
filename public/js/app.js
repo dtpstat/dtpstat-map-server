@@ -971,13 +971,18 @@ function renderPointLegend(
     button.dataset
       .pointTypeId =
       String(pointType.id);
-    button.title =
-      'Точек этого типа: ' +
+    const pointCount =
       Number(
         pointType
           .geometryCount ??
         0,
       );
+    button.title =
+      pointType.name;
+    button.setAttribute(
+      'aria-label',
+      `${pointType.name}. Точек этого типа: ${pointCount}`,
+    );
 
     const sample =
       document.createElement(
@@ -1002,16 +1007,8 @@ function renderPointLegend(
       );
     }
 
-    const name =
-      document.createElement(
-        'span',
-      );
-    name.textContent =
-      pointType.name;
-
     button.append(
       sample,
-      name,
     );
     button.addEventListener(
       'click',
