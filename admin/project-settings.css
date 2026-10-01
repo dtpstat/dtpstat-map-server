@@ -193,6 +193,52 @@
   gap: .75rem;
 }
 
+.project-history-settings > label:not(.check) {
+  max-width: 22rem;
+}
+
+.project-history-speeds-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+}
+
+.project-history-speeds-heading button {
+  width: auto;
+}
+
+.project-history-speeds {
+  display: grid;
+  gap: .55rem;
+}
+
+.project-history-speed-row {
+  display: grid;
+  grid-template-columns:
+    minmax(7rem, 1.2fr)
+    minmax(7rem, 1fr)
+    minmax(7rem, .8fr)
+    auto
+    auto
+    auto;
+  gap: .55rem;
+  align-items: end;
+  padding: .65rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #101b1f;
+}
+
+.project-history-speed-row .check {
+  align-self: center;
+  margin-bottom: .45rem;
+}
+
+.project-history-speed-row button {
+  width: auto;
+}
+
 .project-city-marker-editor {
   min-width: 0;
   display: grid;
@@ -309,6 +355,12 @@
   }
 }
 
+@media (max-width: 1050px) {
+  .project-history-speed-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
   .project-city-marker-editor {
     grid-template-columns: auto minmax(0, 1fr);
@@ -334,6 +386,7 @@
   }
 
   .project-metrics-grid,
+  .project-history-speed-row,
   .project-city-marker-editor {
     grid-template-columns: 1fr;
   }
