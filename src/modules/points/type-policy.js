@@ -68,6 +68,47 @@ function size(value, label) {
   return number;
 }
 
+function zoom(
+  value,
+  label,
+) {
+  if (
+    value === undefined ||
+    value === null ||
+    value === ''
+  ) {
+    return null;
+  }
+
+  const number = Number(value);
+  if (
+    !Number.isFinite(number) ||
+    number < 0 ||
+    number > 24
+  ) {
+    throw new PointTypeValidationError(
+      `${label} must be null or a number from 0 to 24`,
+    );
+  }
+
+  return number;
+}
+
+function assertZoomRange(
+  minZoom,
+  maxZoom,
+) {
+  if (
+    minZoom !== null &&
+    maxZoom !== null &&
+    minZoom > maxZoom
+  ) {
+    throw new PointTypeValidationError(
+      'minZoom must not exceed maxZoom',
+    );
+  }
+}
+
 function anchor(
   value,
   label,
@@ -104,6 +145,8 @@ export function normalizePointTypeCreate(payload) {
       'displayHeight',
       'anchorX',
       'anchorY',
+      'minZoom',
+      'maxZoom',
     ]);
   const unknown =
     Object.keys(source)
@@ -146,6 +189,21 @@ export function normalizePointTypeCreate(payload) {
     );
   }
 
+  const minZoom =
+    zoom(
+      source.minZoom,
+      'minZoom',
+    );
+  const maxZoom =
+    zoom(
+      source.maxZoom,
+      'maxZoom',
+    );
+  assertZoomRange(
+    minZoom,
+    maxZoom,
+  );
+
   return {
     name:
       name(source.name),
@@ -172,6 +230,8 @@ export function normalizePointTypeCreate(payload) {
           'anchorY',
           displayHeight,
         ),
+    minZoom,
+    maxZoom,
   };
 }
 
@@ -195,6 +255,8 @@ export function normalizePointTypeUpdate(
             'displayHeight',
             'anchorX',
             'anchorY',
+            'minZoom',
+            'maxZoom',
           ].includes(key),
       );
   if (unknown.length > 0) {
@@ -243,6 +305,26 @@ export function normalizePointTypeUpdate(
       'anchorY' in source
         ? Number(source.anchorY)
         : current.anchorY,
+    minZoom:
+      'minZoom' in source
+        ? zoom(
+          source.minZoom,
+          'minZoom',
+        )
+        : (
+            current.minZoom ??
+            null
+          ),
+    maxZoom:
+      'maxZoom' in source
+        ? zoom(
+          source.maxZoom,
+          'maxZoom',
+        )
+        : (
+            current.maxZoom ??
+            null
+          ),
   };
 
   if (
@@ -266,6 +348,11 @@ export function normalizePointTypeUpdate(
       'anchorY',
       next.displayHeight,
     );
+
+  assertZoomRange(
+    next.minZoom,
+    next.maxZoom,
+  );
 
   return next;
 }
