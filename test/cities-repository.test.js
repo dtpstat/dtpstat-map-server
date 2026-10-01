@@ -140,6 +140,14 @@ test('viewport query uses padded selector and returns public lines plus active t
   );
   assert.match(
     sql,
+    /COALESCE\([\s\S]*point_type\.min_zoom[\s\S]*0\.0[\s\S]*<= viewport\.zoom/u,
+  );
+  assert.match(
+    sql,
+    /point_type\.max_zoom IS NULL[\s\S]*viewport\.zoom <=[\s\S]*point_type\.max_zoom/u,
+  );
+  assert.match(
+    sql,
     /WHERE geometry\.is_visible/u,
   );
   assert.match(
