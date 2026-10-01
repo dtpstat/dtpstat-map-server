@@ -138,6 +138,14 @@ State хранится в `ADMIN_LOGIN_IP_STATE`.
 
 Account и IP counters независимы.
 
+Loopback addresses (`127.0.0.0/8`, `::1` and IPv4-mapped loopback)
+are excluded from IP anti-bruteforce state, request-security IP lockout,
+manual IP blocks and admin HTTP request rate-limit budgets. Account password
+lockout remains active for loopback logins. When Express trust-proxy is
+configured, authoritative `request.ip` is used before socket
+`remoteAddress`, so an nginx connection from `127.0.0.1` does not exempt
+an external client.
+
 ## Manual blocks
 
 Account manual block fields находятся в `ADMIN_USERS`.
