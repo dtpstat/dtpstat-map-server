@@ -1811,6 +1811,49 @@ if (typeof document !== 'undefined') {
       ]);
       window.setTimeout(() => state.map?.resize(), 0);
     });
+    window.addEventListener(
+      'dtpstat:osm-boundary-editor-select',
+      (event) => {
+        const id =
+          Number(
+            event.detail?.id,
+          );
+        if (
+          !Number.isSafeInteger(id) ||
+          id <= 0
+        ) {
+          return;
+        }
+
+        void (
+          async () => {
+            try {
+              if (
+                !state.boundaries.some(
+                  (item) =>
+                    item.id === id,
+                )
+              ) {
+                await load({
+                  keepSelection:
+                    false,
+                });
+              }
+
+              await selectBoundary(
+                id,
+              );
+            } catch (error) {
+              setMessage(
+                'Не удалось открыть OSM-объект из обсуждения: ' +
+                  error.message,
+                'error',
+              );
+            }
+          }
+        )();
+      },
+    );
     window.addEventListener('dtpstat:osm-boundaries-reloaded', () => void load());
     refreshDraftControls();
     void Promise.all([
