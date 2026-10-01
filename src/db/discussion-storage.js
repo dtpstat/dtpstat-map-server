@@ -52,6 +52,165 @@ export function createDiscussionStorage(
   }
 
   return {
+    async getSubject(
+      subjectType,
+      subjectId,
+      queryable = database,
+    ) {
+      const result =
+        await queryable.query(
+          `SELECT
+             $1::text AS "subjectType",
+             $2::bigint::integer AS "subjectId",
+             CASE
+               WHEN $1::text = 'geometry'
+                 THEN geometry.display_name
+               WHEN $1::text = 'osm-boundary'
+                 THEN COALESCE(
+                   boundary.display_name,
+                   boundary.osm_name
+                 )
+               ELSE NULL
+             END AS "title",
+             CASE
+               WHEN $1::text = 'geometry'
+                 THEN 'Геометрия #' || $2::bigint::text
+               WHEN $1::text = 'osm-boundary'
+                 THEN boundary.osm_type || '/' || boundary.osm_id::text
+               ELSE NULL
+             END AS "subtitle",
+             CASE
+               WHEN $1::text = 'geometry'
+                 THEN geometry.updated_at
+               WHEN $1::text = 'osm-boundary'
+                 THEN boundary.updated_at
+               ELSE NULL
+             END AS "subjectRevision"
+           FROM (SELECT 1) AS seed
+           LEFT JOIN city_geometries AS geometry
+             ON $1::text = 'geometry'
+            AND geometry.id = $2::bigint
+           LEFT JOIN city_boundaries AS boundary
+             ON $1::text = 'osm-boundary'
+            AND boundary.id = $2::bigint
+           WHERE
+             ($1::text = 'geometry' AND geometry.id IS NOT NULL)
+             OR
+             ($1::text = 'osm-boundary' AND boundary.id IS NOT NULL)`,
+          [
+            subjectType,
+            subjectId,
+          ],
+        );
+
+      return result.rows[0] ?? null;
+    },
+
+    async listInbox(
+      userId,
+      subjectTypes,
+      limit = 200,
+    ) {
+      const result =
+        await database.query(
+          `WITH latest AS (
+             SELECT DISTINCT ON (
+               message.subject_type,
+               message.subject_id
+             )
+               message.subject_type,
+               message.subject_id,
+               message.id,
+               message.author_user_id,
+               message.message,
+               message.created_at
+             FROM admin_discussion_messages AS message
+             WHERE message.deleted_at IS NULL
+               AND message.subject_type = ANY($2::text[])
+             ORDER BY
+               message.subject_type,
+               message.subject_id,
+               message.id DESC
+           )
+           SELECT
+             latest.subject_type AS "subjectType",
+             latest.subject_id::integer AS "subjectId",
+             latest.id::integer AS "latestMessageId",
+             latest.message AS "latestMessage",
+             latest.created_at AS "latestCreatedAt",
+             latest.author_user_id::integer AS "latestAuthorUserId",
+             COALESCE(
+               NULLIF(BTRIM(author.display_name), ''),
+               author.username,
+               'Удалённый пользователь'
+             ) AS "latestAuthorDisplayName",
+             author.username AS "latestAuthorUsername",
+             (author.avatar_data IS NOT NULL) AS "latestAuthorHasAvatar",
+             CASE
+               WHEN latest.subject_type = 'geometry'
+                 THEN COALESCE(
+                   NULLIF(BTRIM(geometry.display_name), ''),
+                   'Геометрия #' || latest.subject_id::text
+                 )
+               WHEN latest.subject_type = 'osm-boundary'
+                 THEN COALESCE(
+                   NULLIF(BTRIM(boundary.display_name), ''),
+                   NULLIF(BTRIM(boundary.osm_name), ''),
+                   'OSM-объект #' || latest.subject_id::text
+                 )
+             END AS "subjectTitle",
+             CASE
+               WHEN latest.subject_type = 'geometry'
+                 THEN 'Геометрия #' || latest.subject_id::text
+               WHEN latest.subject_type = 'osm-boundary'
+                 THEN boundary.osm_type || '/' || boundary.osm_id::text
+             END AS "subjectSubtitle",
+             (
+               CASE
+                 WHEN latest.subject_type = 'geometry'
+                   THEN geometry.id IS NOT NULL
+                 WHEN latest.subject_type = 'osm-boundary'
+                   THEN boundary.id IS NOT NULL
+                 ELSE FALSE
+               END
+             ) AS "subjectExists",
+             (
+               SELECT COUNT(*)::integer
+               FROM admin_discussion_messages AS unread
+               LEFT JOIN admin_discussion_read_state AS read_state
+                 ON read_state.subject_type = unread.subject_type
+                AND read_state.subject_id = unread.subject_id
+                AND read_state.user_id = $1::bigint
+               WHERE unread.subject_type = latest.subject_type
+                 AND unread.subject_id = latest.subject_id
+                 AND unread.deleted_at IS NULL
+                 AND unread.author_user_id IS DISTINCT FROM $1::bigint
+                 AND (
+                   read_state.last_read_message_id IS NULL
+                   OR unread.id > read_state.last_read_message_id
+                 )
+             ) AS "unreadCount"
+           FROM latest
+           LEFT JOIN admin_users AS author
+             ON author.id = latest.author_user_id
+           LEFT JOIN city_geometries AS geometry
+             ON latest.subject_type = 'geometry'
+            AND geometry.id = latest.subject_id
+           LEFT JOIN city_boundaries AS boundary
+             ON latest.subject_type = 'osm-boundary'
+            AND boundary.id = latest.subject_id
+           ORDER BY latest.id DESC
+           LIMIT $3::integer`,
+          [
+            userId,
+            subjectTypes,
+            limit,
+          ],
+        );
+
+      return result.rows;
+    },
+
     async listMessages(
       subjectType,
       subjectId,
