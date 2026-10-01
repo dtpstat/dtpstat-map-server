@@ -1881,6 +1881,10 @@ if (section) {
       canvas.style.cursor = 'crosshair';
       return;
     }
+    if (state.bulkSelecting) {
+      canvas.style.cursor = 'crosshair';
+      return;
+    }
     if (state.geometryDrag) {
       canvas.style.cursor = 'grabbing';
       return;
@@ -2831,6 +2835,13 @@ if (section) {
             state.drawing ||
             state.suppressMapClick
           ) return;
+          if (
+            state.bulkSelecting &&
+            event.originalEvent
+              ?.__dtpstatMergeHandled
+          ) {
+            return;
+          }
           const vertexHits = map.queryRenderedFeatures(event.point, {
             layers: ['geometry-editor-vertices'],
           });
@@ -2862,6 +2873,13 @@ if (section) {
             if (
               state.bulkSelecting
             ) {
+              if (
+                event.originalEvent
+              ) {
+                event.originalEvent
+                  .__dtpstatMergeHandled =
+                  true;
+              }
               event.originalEvent
                 ?.preventDefault?.();
               event.originalEvent
@@ -4459,6 +4477,7 @@ if (section) {
     state.selectedSet.clear();
     state.bulkSelecting =
       true;
+    refreshMapCursor();
     topologyActions.open =
       false;
     modeLabel.textContent =
@@ -4472,6 +4491,7 @@ if (section) {
     state.selectedSet.clear();
     state.bulkSelecting =
       false;
+    refreshMapCursor();
     modeLabel.textContent =
       editingModeText(
         state.current,
@@ -4604,19 +4624,30 @@ if (section) {
         family,
       );
 
-    const mergeCandidateCount =
-      state.geometries.filter(
-        (candidate) =>
-          !candidate._conflict &&
-          [
-            'line',
-            'polygon',
-          ].includes(
-            candidate.family,
-          ),
-      ).length;
+    const mergeFamilyCounts =
+      state.geometries.reduce(
+        (counts, candidate) => {
+          if (
+            !candidate._conflict &&
+            [
+              'line',
+              'polygon',
+            ].includes(
+              candidate.family,
+            )
+          ) {
+            counts[candidate.family] += 1;
+          }
+          return counts;
+        },
+        {
+          line: 0,
+          polygon: 0,
+        },
+      );
     const mergeAvailable =
-      mergeCandidateCount >= 2;
+      mergeFamilyCounts.line >= 2 ||
+      mergeFamilyCounts.polygon >= 2;
 
     topologyActions.hidden =
       !topologyFamily &&
@@ -9401,6 +9432,8 @@ if (section) {
         }
 
         state.selectedSet.clear();
+        state.bulkSelecting =
+          false;
         void loadWorkspace(
           workspace,
           {
