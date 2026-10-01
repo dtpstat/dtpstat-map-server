@@ -89,7 +89,9 @@ test('city marker API serves fallback, accepts PNG and can reset it', async () =
     assert.equal(uploadPayload.settings.cityMarkerIconConfigured, true);
     assert.equal(uploadPayload.settings.cityMarkerIconWidth, 32);
 
-    const configured = await fetch(`${baseUrl}/api/city-marker-icon`);
+    const configured = await fetch(`${baseUrl}/api/city-marker-icon?v=123`);
+    assert.equal(configured.status, 200);
+    assert.equal(configured.headers.get('content-type'), 'image/png');
     assert.deepEqual(Buffer.from(await configured.arrayBuffer()), bundledPng);
 
     const reset = await fetch(`${baseUrl}/api/admin/project-settings/city-marker-icon`, {
