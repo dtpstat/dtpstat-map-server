@@ -92,9 +92,15 @@ test('admin interface loads editors and helpers explicitly without transitive si
   assert.match(editor, /name="showLineLabels" type="checkbox"/);
   assert.match(editor, /name="showLinePopups" type="checkbox"/);
   assert.match(editor, /name="showGeometryTimeline" type="checkbox"/);
+  assert.match(editor, /name="showPointGeometries" type="checkbox"/);
+  assert.match(editor, /name="showLineGeometries" type="checkbox"/);
+  assert.match(editor, /name="showPolygonGeometries" type="checkbox"/);
   assert.match(editor, /showLineLabels: showLineLabels\.checked/);
   assert.match(editor, /showLinePopups: showLinePopups\.checked/);
   assert.match(editor, /showGeometryTimeline: showGeometryTimeline\.checked/);
+  assert.match(editor, /showPointGeometries: showPointGeometries\.checked/);
+  assert.match(editor, /showLineGeometries: showLineGeometries\.checked/);
+  assert.match(editor, /showPolygonGeometries: showPolygonGeometries\.checked/);
   assert.match(editor, /name="keywords"/);
   assert.match(editor, /name="yandexMetrikaId"/);
   assert.match(editor, /name="googleAnalyticsId"/);
@@ -240,6 +246,13 @@ test('public map reloads independent line display settings without a page refres
   assert.match(mapController, /let showLinePopups = config\.showLinePopups !== false/);
   assert.match(mapController, /if \(!showLinePopups\)/);
   assert.match(mapController, /setLineDisplayOptions\(options = \{\}\)/);
+  assert.match(publicApp, /showPointGeometries:\s*projectSettings\.showPointGeometries !== false/u);
+  assert.match(publicApp, /showLineGeometries:\s*projectSettings\.showLineGeometries !== false/u);
+  assert.match(publicApp, /showPolygonGeometries:\s*projectSettings\.showPolygonGeometries !== false/u);
+  assert.match(mapController, /setGeometryTypeVisibility\(options = \{\}\)/u);
+  assert.match(mapController, /!showPointGeometries/u);
+  assert.match(mapController, /!showLineGeometries/u);
+  assert.match(mapController, /!showPolygonGeometries/u);
 });
 
 test('retro table hides the low-zoom hint and uses zebra striping', async () => {
