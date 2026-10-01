@@ -520,6 +520,43 @@ export const API_REQUEST_CONTRACTS =
     ),
     c(
       'GET',
+      '/admin/osm-boundaries/users/:userId/avatar',
+      {
+        query: [
+          'v',
+        ],
+      },
+    ),
+    c(
+      'GET',
+      '/admin/osm-boundaries/discussions/unread',
+    ),
+    c(
+      'GET',
+      '/admin/osm-boundaries/:boundaryId/discussion',
+    ),
+    c(
+      'POST',
+      '/admin/osm-boundaries/:boundaryId/discussion/read',
+      {
+        body: 'json-object-optional',
+        bodyKeys: [
+          'messageId',
+        ],
+      },
+    ),
+    c(
+      'POST',
+      '/admin/osm-boundaries/:boundaryId/discussion',
+      {
+        body: 'json-object',
+        bodyKeys: [
+          'message',
+        ],
+      },
+    ),
+    c(
+      'GET',
       '/admin/osm-boundaries/:boundaryId/geometry',
     ),
     c(
