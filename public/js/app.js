@@ -32,10 +32,6 @@ const timelineToggle =
   document.querySelector(
     '#geometry-timeline-toggle',
   );
-const timelineToggleState =
-  document.querySelector(
-    '#geometry-timeline-toggle-state',
-  );
 const timelineCollapse =
   document.querySelector(
     '#geometry-timeline-collapse',
@@ -386,46 +382,6 @@ function selectedTimelineSpeed() {
   );
 }
 
-function updateTimelineToggleState(
-  date,
-) {
-  if (
-    !timelineToggle ||
-    !date
-  ) {
-    return;
-  }
-
-  const formatted =
-    formatTimelineDate(
-      date,
-    );
-  const isToday =
-    date ===
-    localIsoDate();
-  const stateLabel =
-    isToday
-      ? 'Сейчас · ' +
-        formatted
-      : formatted;
-
-  if (timelineToggleState) {
-    timelineToggleState
-      .textContent =
-      stateLabel;
-  }
-
-  timelineToggle.title =
-    'История геометрий · ' +
-    stateLabel;
-  timelineToggle
-    .setAttribute(
-      'aria-label',
-      'Открыть управление историей. Активно: ' +
-        stateLabel,
-    );
-}
-
 function setTimelineCollapsed(
   collapsed,
 ) {
@@ -509,13 +465,11 @@ function applyTimelineDay(day) {
     );
   if (timelineDate) {
     timelineDate.value =
+      'На карте: ' +
       formatTimelineDate(
         date,
       );
   }
-  updateTimelineToggleState(
-    date,
-  );
 
   mapController
     .setTimelineDate(
@@ -763,6 +717,15 @@ timelineCollapse
     'click',
     () => {
       stopTimelinePlayback();
+      const today =
+        dateToDay(
+          localIsoDate(),
+        );
+      if (today !== null) {
+        applyTimelineDay(
+          today,
+        );
+      }
       setTimelineCollapsed(
         true,
       );
