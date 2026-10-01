@@ -145,6 +145,8 @@ function normalizeInterfaceEditorNodes() {
 
   const projectTab = document.querySelector('[data-interface-tab="project"]');
   const projectPanel = document.querySelector('[data-interface-panel="project"]');
+  const mapTab = document.querySelector('[data-interface-tab="map"]');
+  const mapPanel = document.querySelector('[data-interface-panel="map"]');
   const lineTypesTab = document.querySelector('[data-interface-tab="line-types"]');
   const lineTypesPanel = document.querySelector('[data-interface-panel="line-types"]');
   const pointTypesTab = document.querySelector('[data-interface-tab="point-types"]');
@@ -156,6 +158,7 @@ function normalizeInterfaceEditorNodes() {
 
   for (const node of [
     projectTab,
+    mapTab,
     reportTab,
     lineTypesTab,
     pointTypesTab,
@@ -165,6 +168,7 @@ function normalizeInterfaceEditorNodes() {
   }
   for (const node of [
     projectPanel,
+    mapPanel,
     reportPanel,
     lineTypesPanel,
     pointTypesPanel,
