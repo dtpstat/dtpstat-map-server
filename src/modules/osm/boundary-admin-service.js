@@ -6,6 +6,10 @@ import {
   normalizeOsmSubtreeActive,
   OsmBoundaryAdminValidationError,
 } from './boundary-admin-policy.js';
+import {
+  normalizeDiscussionId,
+  normalizeDiscussionMessage,
+} from '../discussions/policy.js';
 
 export { OsmBoundaryAdminValidationError };
 
@@ -104,12 +108,19 @@ export function createOsmBoundaryAdminService(
   dependencies,
 ) {
   const storage = dependencies?.storage;
+  const discussionStorage =
+    dependencies?.discussionStorage;
   const acquireLock = dependencies?.acquireLock;
   const syncDerivedData = dependencies?.syncDerivedData;
 
   if (!storage) {
     throw new TypeError(
       'OSM boundary admin storage dependency is required',
+    );
+  }
+  if (!discussionStorage) {
+    throw new TypeError(
+      'OSM discussion storage dependency is required',
     );
   }
   if (typeof acquireLock !== 'function') {
@@ -123,6 +134,79 @@ export function createOsmBoundaryAdminService(
     );
   }
 
+  async function discussionTransaction(
+    operation,
+  ) {
+    const client =
+      await pool.connect();
+
+    try {
+      await client.query(
+        'BEGIN',
+      );
+      const result =
+        await operation(
+          client,
+        );
+      await client.query(
+        'COMMIT',
+      );
+      return result;
+    } catch (error) {
+      await client.query(
+        'ROLLBACK',
+      ).catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  function publicDiscussionMessage(
+    message,
+  ) {
+    if (!message) return null;
+
+    return {
+      id:
+        message.id,
+      boundaryId:
+        message.boundaryId,
+      boundaryRevision:
+        message.boundaryRevision,
+      message:
+        message.message,
+      createdAt:
+        message.createdAt,
+      editedAt:
+        message.editedAt,
+      deliveredAt:
+        message.createdAt,
+      readByOthersCount:
+        Number(
+          message.readByOthersCount ??
+          0,
+        ),
+      author: {
+        userId:
+          message.authorUserId,
+        username:
+          message.authorUsername,
+        displayName:
+          message.authorDisplayName ??
+          message.authorUsername ??
+          'Удалённый пользователь',
+        avatarUrl:
+          message.authorHasAvatar &&
+          message.authorUserId
+            ? '/api/admin/osm-boundaries/users/' +
+              message.authorUserId +
+              '/avatar'
+            : null,
+      },
+    };
+  }
+
   return {
     list() {
       return storage.list();
@@ -131,6 +215,158 @@ export function createOsmBoundaryAdminService(
     getGeometry(boundaryId) {
       return storage.getGeometry(
         normalizeOsmBoundaryId(boundaryId),
+      );
+    },
+
+    async listDiscussion(
+      boundaryId,
+    ) {
+      const id =
+        normalizeOsmBoundaryId(
+          boundaryId,
+        );
+
+      if (
+        !await discussionStorage
+          .boundaryExists(id)
+      ) {
+        return null;
+      }
+
+      return {
+        boundaryId:
+          id,
+        messages:
+          (
+            await discussionStorage
+              .listMessages(id)
+          ).map(
+            publicDiscussionMessage,
+          ),
+      };
+    },
+
+    async listDiscussionUnread(
+      actor,
+    ) {
+      const userId =
+        normalizeDiscussionId(
+          actor?.id,
+          'userId',
+        );
+      const rows =
+        await discussionStorage
+          .unreadCounts(
+            userId,
+          );
+
+      return {
+        items:
+          rows.map(
+            (row) => ({
+              boundaryId:
+                row.boundaryId,
+              unreadCount:
+                row.unreadCount,
+            }),
+          ),
+      };
+    },
+
+    async markDiscussionRead(
+      boundaryId,
+      actor,
+      payload = {},
+    ) {
+      const id =
+        normalizeOsmBoundaryId(
+          boundaryId,
+        );
+      const userId =
+        normalizeDiscussionId(
+          actor?.id,
+          'userId',
+        );
+
+      if (
+        !await discussionStorage
+          .boundaryExists(id)
+      ) {
+        return null;
+      }
+
+      const messageId =
+        payload?.messageId ===
+          undefined ||
+        payload?.messageId ===
+          null
+          ? await discussionStorage
+            .latestMessageId(id)
+          : normalizeDiscussionId(
+            payload.messageId,
+            'messageId',
+          );
+
+      if (!messageId) {
+        return {
+          boundaryId:
+            id,
+          userId,
+          lastReadMessageId:
+            null,
+        };
+      }
+
+      return discussionTransaction(
+        (client) =>
+          discussionStorage
+            .markRead(
+              client,
+              {
+                boundaryId:
+                  id,
+                userId,
+                messageId,
+              },
+            ),
+      );
+    },
+
+    async postDiscussionMessage(
+      boundaryId,
+      actor,
+      payload,
+    ) {
+      const id =
+        normalizeOsmBoundaryId(
+          boundaryId,
+        );
+      const userId =
+        normalizeDiscussionId(
+          actor?.id,
+          'userId',
+        );
+      const normalized =
+        normalizeDiscussionMessage(
+          payload,
+        );
+
+      return discussionTransaction(
+        async (client) =>
+          publicDiscussionMessage(
+            await discussionStorage
+              .createMessage(
+                client,
+                {
+                  boundaryId:
+                    id,
+                  authorUserId:
+                    userId,
+                  message:
+                    normalized.message,
+                },
+              ),
+          ),
       );
     },
 
