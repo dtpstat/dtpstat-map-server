@@ -21,6 +21,9 @@ export function normalizeProjectSettingsUpdate(payload) {
     showLineLabels = false,
     showLinePopups: rawShowLinePopups,
     showGeometryTimeline = false,
+    showPointGeometries = true,
+    showLineGeometries = true,
+    showPolygonGeometries = true,
     mapboxAccessToken = null,
     largeCityPopulationThreshold = 400000,
     largeCityAreaKm2Threshold = null,
@@ -47,6 +50,31 @@ export function normalizeProjectSettingsUpdate(payload) {
     throw new ProjectSettingsValidationError(
       'showGeometryTimeline must be boolean',
     );
+  }
+  for (
+    const [
+      field,
+      value,
+    ] of [
+      [
+        'showPointGeometries',
+        showPointGeometries,
+      ],
+      [
+        'showLineGeometries',
+        showLineGeometries,
+      ],
+      [
+        'showPolygonGeometries',
+        showPolygonGeometries,
+      ],
+    ]
+  ) {
+    if (typeof value !== 'boolean') {
+      throw new ProjectSettingsValidationError(
+        field + ' must be boolean',
+      );
+    }
   }
 
   const populationThreshold =
@@ -86,6 +114,9 @@ export function normalizeProjectSettingsUpdate(payload) {
     showLinePopups:
       hasShowLinePopups ? rawShowLinePopups : null,
     showGeometryTimeline,
+    showPointGeometries,
+    showLineGeometries,
+    showPolygonGeometries,
     mapboxAccessToken: normalizeMapboxAccessToken(
       mapboxAccessToken,
       { optional: true },
