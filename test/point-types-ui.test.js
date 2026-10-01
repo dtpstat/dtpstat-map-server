@@ -42,17 +42,21 @@ test('interface settings expose point type CRUD and safe icon controls', async (
       read('admin/point-types.css'),
     ]);
 
-  assert.match(
+  assert.doesNotMatch(
     html,
     /data-interface-tab="point-types"/u,
   );
-  assert.match(
+  assert.doesNotMatch(
     html,
     /data-interface-panel="point-types"/u,
   );
-  assert.match(
+  assert.doesNotMatch(
     html,
     /id="point-types-editor-host"/u,
+  );
+  assert.match(
+    schema,
+    /id:\s*'point-types'[\s\S]*hostId:[\s\S]*'point-types-editor-host'/u,
   );
   assert.match(
     html,
