@@ -33,6 +33,8 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
     shell,
     inbox,
     styles,
+    layout,
+    layoutSchema,
     geometry,
     osm,
   ] =
@@ -45,6 +47,12 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
       ),
       read(
         'admin/discussion-inbox.css',
+      ),
+      read(
+        'admin/admin-layout.js',
+      ),
+      read(
+        'admin/admin-layout-schema.js',
       ),
       read(
         'admin/geometry-editor.js',
@@ -60,11 +68,27 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
   );
   assert.match(
     shell,
-    /ensureMessagesSection\(\)/u,
+    /ensureAdminSections\([\s\S]*adminDynamicSections/u,
+  );
+  assert.doesNotMatch(
+    shell,
+    /function ensureMessagesSection/u,
+  );
+  assert.doesNotMatch(
+    shell,
+    /function ensureProfileSection/u,
   );
   assert.match(
-    shell,
-    /tab\.dataset\.adminSectionTab\s*=\s*[\s\S]*'messages'/u,
+    layoutSchema,
+    /id:[\s\S]*'messages'[\s\S]*hostId:[\s\S]*'discussion-inbox-host'/u,
+  );
+  assert.match(
+    layoutSchema,
+    /id:[\s\S]*'profile'[\s\S]*hostId:[\s\S]*'profile-editor-host'/u,
+  );
+  assert.match(
+    layout,
+    /grid-template-columns|admin-layout-grid/u,
   );
   assert.match(
     shell,
