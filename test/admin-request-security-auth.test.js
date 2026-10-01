@@ -181,7 +181,9 @@ test('admin authorization returns 429 when request budget is exhausted', async (
       },
     );
   const req =
-    request();
+    request({
+      ip: '203.0.113.10',
+    });
   const res =
     response();
 
@@ -266,7 +268,9 @@ test('global admin request limiter blocks before authentication and uses cached 
     response();
   await adminAuth
     .limitGlobalRequest(
-      request(),
+      request({
+        ip: '203.0.113.10',
+      }),
       first,
       () => {
         throw new Error(
@@ -301,7 +305,9 @@ test('global admin request limiter blocks before authentication and uses cached 
     response();
   await adminAuth
     .limitGlobalRequest(
-      request(),
+      request({
+        ip: '203.0.113.10',
+      }),
       second,
       () => {
         throw new Error(
