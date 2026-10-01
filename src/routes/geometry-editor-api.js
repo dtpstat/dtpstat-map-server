@@ -152,6 +152,8 @@ function publishChange(
  *     listUnlinkedGeometries: Function,
  *     listEditLeases: Function,
  *     listDiscussion: Function,
+ *     listDiscussionUnread: Function,
+ *     markDiscussionRead: Function,
  *     postDiscussionMessage: Function,
  *     beginEdit: Function,
  *     heartbeatEdit: Function,
@@ -434,6 +436,33 @@ export function createGeometryEditorRouter({
   );
 
   router.get(
+    '/admin/geometry-editor/discussions/unread',
+    adminAuth
+      .requireGeometryEditor,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json(
+            await geometryEditorService
+              .listDiscussionUnread(
+                request.adminUser,
+              ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.get(
     '/admin/geometry-editor/geometries/:geometryId/discussion',
     adminAuth
       .requireGeometryEditor,
@@ -468,6 +497,92 @@ export function createGeometryEditorRouter({
           .json(
             discussion,
           );
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/geometry-editor/geometries/:geometryId/discussion/read',
+    adminAuth
+      .requireGeometryEditor,
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const readState =
+          await geometryEditorService
+            .markDiscussionRead(
+              request.params
+                .geometryId,
+              request.adminUser,
+              request.body,
+            );
+
+        if (!readState) {
+          response
+            .status(404)
+            .json({
+              error:
+                'Geometry not found',
+            });
+          return;
+        }
+
+        realtimeEvents?.publish({
+          resource:
+            'geometry-discussions',
+          permission:
+            'geometry-editor',
+          originClientId:
+            realtimeClientId(
+              request,
+            ),
+          action:
+            'read',
+          entityIds: [
+            Number(
+              request.params
+                .geometryId,
+            ),
+          ],
+          geometryId:
+            Number(
+              request.params
+                .geometryId,
+            ),
+          readerUserId:
+            request.adminUser?.id ??
+            null,
+          lastReadMessageId:
+            readState
+              .lastReadMessageId ??
+            null,
+          message:
+            'Сообщения обсуждения прочитаны.',
+        });
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            read:
+              readState,
+          });
       } catch (error) {
         if (
           validationError(
