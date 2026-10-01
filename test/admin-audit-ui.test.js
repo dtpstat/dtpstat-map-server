@@ -66,7 +66,10 @@ test('current user and audit rows load protected avatars through guarded fetch w
   assert.match(editor, /function applyAvatarBackground\(/);
   assert.match(editor, /adminAvatarObjectUrl\([\s\S]*url/u);
   assert.match(editor, /avatar\.style\.backgroundImage/);
-  assert.match(editor, /avatar\.classList\.add\('is-image-loaded'\)/);
+  assert.match(
+    editor,
+    /avatar\.classList\.add\([\s\S]*'is-image-loaded'[\s\S]*\)/u,
+  );
   assert.doesNotMatch(editor, /new Image\(\)/u);
 
   assert.match(
