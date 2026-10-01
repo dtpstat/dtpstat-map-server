@@ -41,7 +41,7 @@ if (typeof document !== 'undefined') {
       panel.dataset.interfacePanel = 'project';
       panel.innerHTML = `
         <h3>Проект</h3>
-        <p class="panel-description">Название, метаданные, аналитика и общие параметры публичной карты.</p>
+        <p class="panel-description">Название, оформление, метаданные, аналитика и информационный блок проекта.</p>
 
         <section class="operation-panel transfer-mode" id="operation-project-settings">
           <div class="mode-heading">
@@ -59,8 +59,6 @@ if (typeof document !== 'undefined') {
             <nav class="project-settings-tabs" role="tablist" aria-label="Разделы настроек проекта">
               <button type="button" role="tab" data-project-settings-tab="general"
                       aria-selected="true" aria-controls="project-settings-general">Основное</button>
-              <button type="button" role="tab" data-project-settings-tab="map"
-                      aria-selected="false" aria-controls="project-settings-map">Карта</button>
               <button type="button" role="tab" data-project-settings-tab="metadata"
                       aria-selected="false" aria-controls="project-settings-metadata">Метаданные и API</button>
               <button type="button" role="tab" data-project-settings-tab="footer"
@@ -279,12 +277,131 @@ if (typeof document !== 'undefined') {
               </div>
               </section>
             </div>
-            <button class="task-action" type="submit">Сохранить настройки проекта</button>
+            <button class="task-action" type="submit" data-project-settings-submit>Сохранить настройки проекта</button>
           </form>
           <p class="project-settings-message" id="project-settings-message" role="status"></p>
         </section>
       `;
       interfacePanels.prepend(panel);
+
+      const mapSettings =
+        panel.querySelector(
+          '#project-settings-map',
+        );
+      if (mapSettings) {
+        const mapTab =
+          document.createElement(
+            'button',
+          );
+        mapTab.className =
+          'task-tab';
+        mapTab.id =
+          'interface-tab-map';
+        mapTab.type =
+          'button';
+        mapTab.role =
+          'tab';
+        mapTab.setAttribute(
+          'aria-selected',
+          'false',
+        );
+        mapTab.setAttribute(
+          'aria-controls',
+          'interface-panel-map',
+        );
+        mapTab.dataset.interfaceTab =
+          'map';
+        mapTab.textContent =
+          'Карта';
+
+        const mapPanel =
+          document.createElement(
+            'article',
+          );
+        mapPanel.className =
+          'task-panel interface-task-panel';
+        mapPanel.id =
+          'interface-panel-map';
+        mapPanel.role =
+          'tabpanel';
+        mapPanel.hidden =
+          true;
+        mapPanel.setAttribute(
+          'aria-labelledby',
+          'interface-tab-map',
+        );
+        mapPanel.dataset.interfacePanel =
+          'map';
+        mapPanel.dataset.dirtyFormId =
+          'project-settings-form';
+        mapPanel.innerHTML = `
+          <h3>Карта</h3>
+          <p class="panel-description">Отображение публичной карты, геометрии, история, маркеры и параметры классификации городов.</p>
+
+          <section class="operation-panel transfer-mode" id="operation-map-settings">
+            <div class="mode-heading">
+              <div>
+                <h4>Настройки карты</h4>
+                <p>Параметры этого раздела управляют только отображением и поведением публичной карты.</p>
+              </div>
+            </div>
+
+            <p class="project-settings-meta">
+              <span>Последнее изменение</span><time data-project-settings-updated-at>—</time>
+            </p>
+
+            <div class="form-fields project-settings-grid" id="map-settings-host"></div>
+            <button class="task-action" type="submit"
+                    form="project-settings-form"
+                    data-project-settings-submit>Сохранить настройки карты</button>
+            <p class="project-settings-message" data-project-settings-message role="status"></p>
+          </section>
+        `;
+
+        const mapHost =
+          mapPanel.querySelector(
+            '#map-settings-host',
+          );
+
+        mapSettings.removeAttribute(
+          'role',
+        );
+        mapSettings.removeAttribute(
+          'data-project-settings-panel',
+        );
+        mapSettings.hidden =
+          false;
+
+        for (
+          const control of
+          mapSettings.querySelectorAll(
+            'input, select, textarea, button',
+          )
+        ) {
+          if (
+            control.matches(
+              'input, select, textarea, button[type="submit"]',
+            )
+          ) {
+            control.setAttribute(
+              'form',
+              'project-settings-form',
+            );
+          }
+        }
+
+        mapHost.append(
+          ...mapSettings.childNodes,
+        );
+        mapSettings.remove();
+
+        interfaceTabs.append(
+          mapTab,
+        );
+        interfacePanels.append(
+          mapPanel,
+        );
+      }
     }
 
     const form = document.querySelector('#project-settings-form');
@@ -317,15 +434,44 @@ if (typeof document !== 'undefined') {
         'general',
       ));
 
-      const dirtyState = trackDirtyForm(form, { label: 'Настройки проекта' });
+      const dirtyState = trackDirtyForm(
+        form,
+        {
+          label:
+            'Настройки проекта / карты',
+        },
+      );
+      const mapPanel =
+        document.querySelector(
+          '[data-interface-panel="map"]',
+        );
+      const markMapDirty =
+        (event) => {
+          if (
+            event.target.matches(
+              '[data-dirty-ignore]',
+            )
+          ) {
+            return;
+          }
+          dirtyState?.markDirty();
+        };
+      mapPanel?.addEventListener(
+        'input',
+        markMapDirty,
+      );
+      mapPanel?.addEventListener(
+        'change',
+        markMapDirty,
+      );
       const projectName = form.elements.namedItem('projectName');
       const themePreset = form.elements.namedItem('themePreset');
       const showLineLabels = form.elements.namedItem('showLineLabels');
       const showLinePopups = form.elements.namedItem('showLinePopups');
       const showGeometryTimeline = form.elements.namedItem('showGeometryTimeline');
       const historyStartDate = form.elements.namedItem('historyStartDate');
-      const historySpeedsHost = form.querySelector('#project-history-speeds');
-      const historyAddSpeed = form.querySelector('#project-history-speed-add');
+      const historySpeedsHost = document.querySelector('#project-history-speeds');
+      const historyAddSpeed = document.querySelector('#project-history-speed-add');
       const showPointGeometries = form.elements.namedItem('showPointGeometries');
       const showLineGeometries = form.elements.namedItem('showLineGeometries');
       const showPolygonGeometries = form.elements.namedItem('showPolygonGeometries');
@@ -337,13 +483,23 @@ if (typeof document !== 'undefined') {
       const googleAnalyticsId = form.elements.namedItem('googleAnalyticsId');
       const mapboxAccessToken = form.elements.namedItem('mapboxAccessToken');
       const footerHtml = form.elements.namedItem('footerHtml');
-      const saveButton = form.querySelector('button[type="submit"]');
+      const saveButtons = [
+        ...document.querySelectorAll(
+          '[data-project-settings-submit]',
+        ),
+      ];
       const cityMarkerUpload = document.querySelector('#project-city-marker-upload');
       const cityMarkerReset = document.querySelector('#project-city-marker-reset');
       const cityMarkerPreview = document.querySelector('#project-city-marker-preview');
       const cityMarkerState = document.querySelector('#project-city-marker-state');
-      const message = document.querySelector('#project-settings-message');
-      const updatedAt = document.querySelector('#project-settings-updated-at');
+      const messages = [
+        document.querySelector('#project-settings-message'),
+        ...document.querySelectorAll('[data-project-settings-message]'),
+      ].filter(Boolean);
+      const updatedAts = [
+        document.querySelector('#project-settings-updated-at'),
+        ...document.querySelectorAll('[data-project-settings-updated-at]'),
+      ].filter(Boolean);
       const toolbar = document.querySelector('#project-html-toolbar');
       const allowedTags = document.querySelector('#project-allowed-tags');
       const allowedClasses = document.querySelector('#project-allowed-classes');
@@ -354,8 +510,20 @@ if (typeof document !== 'undefined') {
       };
 
       function setMessage(text, tone = '') {
-        message.textContent = text;
-        message.className = `project-settings-message${tone ? ` is-${tone}` : ''}`;
+        for (const message of messages) {
+          message.textContent = text;
+          message.className =
+            `project-settings-message${tone ? ` is-${tone}` : ''}`;
+        }
+      }
+
+      function setUpdatedAt(value) {
+        const text =
+          formatUpdatedAt(value);
+        for (const updatedAt of updatedAts) {
+          updatedAt.textContent =
+            text;
+        }
       }
 
       function formatUpdatedAt(value) {
@@ -465,6 +633,7 @@ if (typeof document !== 'undefined') {
 
         const name = document.createElement('input');
         name.type = 'text';
+        name.setAttribute('form', 'project-settings-form');
         name.maxLength = 40;
         name.required = true;
         name.value = speed.name ?? '';
@@ -472,6 +641,7 @@ if (typeof document !== 'undefined') {
         name.dataset.historySpeedName = '';
 
         const unit = document.createElement('select');
+        unit.setAttribute('form', 'project-settings-form');
         unit.required = true;
         unit.dataset.historySpeedUnit = '';
         for (const [value, title] of Object.entries(HISTORY_STEP_LABELS)) {
@@ -484,6 +654,7 @@ if (typeof document !== 'undefined') {
 
         const interval = document.createElement('input');
         interval.type = 'number';
+        interval.setAttribute('form', 'project-settings-form');
         interval.min = '0.1';
         interval.max = '60';
         interval.step = '0.1';
@@ -494,11 +665,13 @@ if (typeof document !== 'undefined') {
 
         const active = document.createElement('input');
         active.type = 'checkbox';
+        active.setAttribute('form', 'project-settings-form');
         active.checked = speed.isActive !== false;
         active.dataset.historySpeedActive = '';
 
         const defaultSpeed = document.createElement('input');
         defaultSpeed.type = 'radio';
+        defaultSpeed.setAttribute('form', 'project-settings-form');
         defaultSpeed.name = 'historySpeedDefault';
         defaultSpeed.checked = speed.isDefault === true;
         defaultSpeed.dataset.historySpeedDefault = '';
@@ -613,7 +786,7 @@ if (typeof document !== 'undefined') {
         setMapboxState(Boolean(settings.mapboxAccessTokenConfigured));
         setCityMarkerState(settings);
         footerHtml.value = settings.footerHtml;
-        updatedAt.textContent = formatUpdatedAt(settings.updatedAt);
+        setUpdatedAt(settings.updatedAt);
       }
 
       async function load() {
@@ -667,7 +840,7 @@ if (typeof document !== 'undefined') {
           const payload = await response.json();
           if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
           setCityMarkerState(payload.settings);
-          updatedAt.textContent = formatUpdatedAt(payload.settings.updatedAt);
+          setUpdatedAt(payload.settings.updatedAt);
           setMessage('Иконка города сохранена.', 'success');
           window.dispatchEvent(new CustomEvent('dtpstat:project-settings-changed'));
         } catch (error) {
@@ -699,7 +872,7 @@ if (typeof document !== 'undefined') {
           const payload = await response.json();
           if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
           setCityMarkerState(payload.settings);
-          updatedAt.textContent = formatUpdatedAt(payload.settings.updatedAt);
+          setUpdatedAt(payload.settings.updatedAt);
           setMessage('Стандартная иконка города восстановлена.', 'success');
           window.dispatchEvent(new CustomEvent('dtpstat:project-settings-changed'));
         } catch (error) {
@@ -711,7 +884,7 @@ if (typeof document !== 'undefined') {
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (!form.reportValidity()) return;
-        saveButton.disabled = true;
+        for (const button of saveButtons) button.disabled = true;
         setMessage('Проверяем и сохраняем…');
         try {
           const mapboxChanged = mapboxAccessToken.dataset.changed === 'true';
@@ -759,7 +932,7 @@ if (typeof document !== 'undefined') {
         } catch (error) {
           setMessage(error.message, 'error');
         } finally {
-          saveButton.disabled = false;
+          for (const button of saveButtons) button.disabled = false;
         }
       });
 
