@@ -113,9 +113,19 @@
           class="geometry-timeline"
           id="geometry-timeline"
           aria-label="История геометрий"
+          data-collapsed="true"
           hidden
         >
-          <div class="geometry-timeline-controls">
+          <button
+            class="geometry-timeline-toggle"
+            id="geometry-timeline-toggle"
+            type="button"
+            aria-label="Открыть управление историей"
+            aria-expanded="false"
+            title="История геометрий"
+          >▶</button>
+
+          <div class="geometry-timeline-bar">
             <button
               class="geometry-timeline-play"
               id="geometry-timeline-play"
@@ -124,23 +134,21 @@
               aria-pressed="false"
               title="Воспроизвести историю"
             >▶</button>
+
             <label class="geometry-timeline-speed-label">
-              <span>Скорость</span>
+              <span class="visually-hidden">Скорость</span>
               <select
                 id="geometry-timeline-speed"
                 aria-label="Скорость воспроизведения истории"
               ></select>
             </label>
-          </div>
 
-          <div class="geometry-timeline-main">
-            <div class="geometry-timeline-heading">
-              <strong>История геометрий</strong>
-              <output
-                id="geometry-timeline-date"
-                for="geometry-timeline-range"
-              >—</output>
-            </div>
+            <output
+              class="geometry-timeline-date"
+              id="geometry-timeline-date"
+              for="geometry-timeline-range"
+            >—</output>
+
             <input
               id="geometry-timeline-range"
               type="range"
@@ -150,7 +158,16 @@
               value="0"
               aria-label="Дата отображения геометрий"
             >
-            <div class="geometry-timeline-bounds" aria-hidden="true">
+
+            <button
+              class="geometry-timeline-collapse"
+              id="geometry-timeline-collapse"
+              type="button"
+              aria-label="Свернуть управление историей"
+              title="Свернуть"
+            >‹</button>
+
+            <div class="visually-hidden" aria-hidden="true">
               <time id="geometry-timeline-start">—</time>
               <time id="geometry-timeline-end">—</time>
             </div>
