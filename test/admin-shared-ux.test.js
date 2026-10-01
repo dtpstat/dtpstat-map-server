@@ -58,9 +58,18 @@ test('dirty settings are guarded by one shared service', async () => {
 });
 
 test('selected admin tabs are session-scoped and never stored in cookies', async () => {
-  const [state, shell, data, project, report, security] = await Promise.all([
+  const [
+    state,
+    shell,
+    layout,
+    data,
+    project,
+    report,
+    security,
+  ] = await Promise.all([
     read('admin/admin-tab-state.js'),
     read('admin/admin-shell.js'),
+    read('admin/admin-layout.js'),
     read('admin/admin.js'),
     read('admin/project-settings-editor.js'),
     read('admin/report-config-editor.js'),
@@ -72,7 +81,14 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
   assert.doesNotMatch(state, /document\.cookie|localStorage/);
 
   assert.match(shell, /readTabState\('primary'/);
-  assert.match(shell, /readTabState\([\s\S]*'interface'/);
+  assert.match(
+    shell,
+    /setupAdminTabs\([\s\S]*readState:[\s\S]*readTabState[\s\S]*stateKey:[\s\S]*'interface'/u,
+  );
+  assert.match(
+    layout,
+    /readState\([\s\S]*stateKey,[\s\S]*available,[\s\S]*fallback/u,
+  );
   assert.match(data, /readTabState\('data-task'/);
   assert.match(data, /data-operation-/);
   assert.match(project, /'project-settings'/);
