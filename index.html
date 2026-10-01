@@ -115,14 +115,23 @@
           aria-label="История геометрий"
           hidden
         >
-          <button
-            class="geometry-timeline-play"
-            id="geometry-timeline-play"
-            type="button"
-            aria-label="Запустить воспроизведение истории"
-            aria-pressed="false"
-            title="Воспроизвести историю"
-          >▶</button>
+          <div class="geometry-timeline-controls">
+            <button
+              class="geometry-timeline-play"
+              id="geometry-timeline-play"
+              type="button"
+              aria-label="Запустить воспроизведение истории"
+              aria-pressed="false"
+              title="Воспроизвести историю"
+            >▶</button>
+            <label class="geometry-timeline-speed-label">
+              <span>Скорость</span>
+              <select
+                id="geometry-timeline-speed"
+                aria-label="Скорость воспроизведения истории"
+              ></select>
+            </label>
+          </div>
 
           <div class="geometry-timeline-main">
             <div class="geometry-timeline-heading">
