@@ -99,7 +99,7 @@ test('public map loads point types and renders only loaded versioned icons', asy
   );
   assert.match(
     controller,
-    /setDOMContent\([\s\S]*pointContent/u,
+    /setDOMContent\([\s\S]*content/u,
   );
 
   assert.match(
