@@ -119,6 +119,9 @@ export function createDiscussionInboxService(
               Boolean(
                 item.subjectExists,
               ),
+            subjectCityId:
+              item.subjectCityId ??
+              null,
             latestMessageId:
               item.latestMessageId,
             latestMessage:
