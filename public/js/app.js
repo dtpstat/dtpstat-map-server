@@ -36,6 +36,10 @@ const timelineRange =
   document.querySelector(
     '#geometry-timeline-range',
   );
+const timelineSpeed =
+  document.querySelector(
+    '#geometry-timeline-speed',
+  );
 const timelineDate =
   document.querySelector(
     '#geometry-timeline-date',
@@ -112,6 +116,9 @@ let timelineEnabled = false;
 let timelinePlayback = null;
 let timelineMinDay = null;
 let timelineMaxDay = null;
+let timelineHistoryStartDate = null;
+let timelineSpeeds = [];
+let timelineConfigSignature = '';
 let geometryTypeVisibility = {
   showPointGeometries: true,
   showLineGeometries: true,
@@ -188,6 +195,137 @@ function formatTimelineDate(value) {
       day *
       DAY_MS,
     ),
+  );
+}
+
+function addCalendarStep(
+  isoDate,
+  unit,
+) {
+  const day =
+    dateToDay(isoDate);
+  if (day === null) {
+    return null;
+  }
+
+  const date =
+    new Date(
+      day * DAY_MS,
+    );
+
+  if (unit === 'day') {
+    date.setUTCDate(
+      date.getUTCDate() + 1,
+    );
+  } else if (unit === 'week') {
+    date.setUTCDate(
+      date.getUTCDate() + 7,
+    );
+  } else if (unit === 'month') {
+    date.setUTCMonth(
+      date.getUTCMonth() + 1,
+    );
+  } else if (unit === 'quarter') {
+    date.setUTCMonth(
+      date.getUTCMonth() + 3,
+    );
+  } else if (unit === 'year') {
+    date.setUTCFullYear(
+      date.getUTCFullYear() + 1,
+    );
+  } else if (unit === 'five_years') {
+    date.setUTCFullYear(
+      date.getUTCFullYear() + 5,
+    );
+  } else if (unit === 'decade') {
+    date.setUTCFullYear(
+      date.getUTCFullYear() + 10,
+    );
+  } else {
+    return null;
+  }
+
+  return date.toISOString()
+    .slice(0, 10);
+}
+
+function activeTimelineSpeeds(
+  speeds,
+) {
+  return (
+    Array.isArray(speeds)
+      ? speeds
+      : []
+  ).filter(
+    (speed) =>
+      speed?.isActive !== false,
+  );
+}
+
+function renderTimelineSpeeds(
+  speeds,
+) {
+  timelineSpeeds =
+    activeTimelineSpeeds(
+      speeds,
+    );
+
+  if (!timelineSpeed) {
+    return;
+  }
+
+  const previous =
+    timelineSpeed.value;
+  timelineSpeed.replaceChildren(
+    ...timelineSpeeds.map(
+      (speed) => {
+        const option =
+          document.createElement(
+            'option',
+          );
+        option.value =
+          String(speed.id);
+        option.textContent =
+          speed.name;
+        return option;
+      },
+    ),
+  );
+
+  const selected =
+    timelineSpeeds.find(
+      (speed) =>
+        String(speed.id) ===
+        previous,
+    ) ??
+    timelineSpeeds.find(
+      (speed) =>
+        speed.isDefault === true,
+    ) ??
+    timelineSpeeds[0];
+
+  if (selected) {
+    timelineSpeed.value =
+      String(selected.id);
+  }
+}
+
+function selectedTimelineSpeed() {
+  const selectedId =
+    timelineSpeed?.value ??
+    '';
+  return (
+    timelineSpeeds.find(
+      (speed) =>
+        String(speed.id) ===
+        selectedId,
+    ) ??
+    timelineSpeeds.find(
+      (speed) =>
+        speed.isDefault === true,
+    ) ??
+    timelineSpeeds[0] ??
+    null
   );
 }
 
@@ -273,6 +411,10 @@ async function refreshGeometryTimelineBounds() {
     dateToDay(
       localIsoDate(),
     );
+  const configuredMin =
+    dateToDay(
+      timelineHistoryStartDate,
+    );
   const sourceMin =
     dateToDay(
       bounds.minDate,
@@ -285,6 +427,7 @@ async function refreshGeometryTimelineBounds() {
   if (
     today === null ||
     (
+      configuredMin === null &&
       sourceMin === null &&
       sourceMax === null
     )
@@ -299,6 +442,7 @@ async function refreshGeometryTimelineBounds() {
   }
 
   timelineMinDay =
+    configuredMin ??
     Math.min(
       sourceMin ??
         sourceMax ??
@@ -367,13 +511,49 @@ async function refreshGeometryTimelineBounds() {
 }
 
 async function configureGeometryTimeline(
-  enabled,
+  settings,
 ) {
   const nextEnabled =
-    Boolean(enabled);
+    Boolean(
+      settings
+        ?.showGeometryTimeline,
+    );
+  const nextStartDate =
+    settings
+      ?.historyStartDate ??
+    null;
+  const nextSpeeds =
+    activeTimelineSpeeds(
+      settings
+        ?.historySpeeds,
+    );
+  const signature =
+    JSON.stringify({
+      enabled:
+        nextEnabled,
+      startDate:
+        nextStartDate,
+      speeds:
+        nextSpeeds.map(
+          ({
+            id,
+            name,
+            stepUnit,
+            intervalSeconds,
+            isDefault,
+          }) => ({
+            id,
+            name,
+            stepUnit,
+            intervalSeconds,
+            isDefault,
+          }),
+        ),
+    });
+
   if (
-    timelineEnabled ===
-      nextEnabled &&
+    timelineConfigSignature ===
+      signature &&
     (
       !nextEnabled ||
       timelineRange?.dataset
@@ -383,11 +563,21 @@ async function configureGeometryTimeline(
     return;
   }
 
+  timelineConfigSignature =
+    signature;
   timelineEnabled =
     nextEnabled;
+  timelineHistoryStartDate =
+    nextStartDate;
+  renderTimelineSpeeds(
+    nextSpeeds,
+  );
   stopTimelinePlayback();
 
-  if (!timelineEnabled) {
+  if (
+    !timelineEnabled ||
+    timelineSpeeds.length === 0
+  ) {
     timelineMinDay =
       null;
     timelineMaxDay =
@@ -442,6 +632,14 @@ timelineRange
     },
   );
 
+timelineSpeed
+  ?.addEventListener(
+    'change',
+    () => {
+      stopTimelinePlayback();
+    },
+  );
+
 timelinePlay
   ?.addEventListener(
     'click',
@@ -475,20 +673,11 @@ timelinePlay
         );
       }
 
-      const span =
-        Math.max(
-          1,
-          timelineMaxDay -
-          timelineMinDay,
-        );
-      const step =
-        Math.max(
-          1,
-          Math.ceil(
-            span /
-            240,
-          ),
-        );
+      const speed =
+        selectedTimelineSpeed();
+      if (!speed) {
+        return;
+      }
 
       timelinePlay.textContent =
         '⏸';
@@ -508,11 +697,22 @@ timelinePlay
       timelinePlayback =
         setInterval(
           () => {
+            const nextDate =
+              addCalendarStep(
+                dayToDate(
+                  current,
+                ),
+                speed.stepUnit,
+              );
+            const nextDay =
+              dateToDay(
+                nextDate,
+              );
             current =
               Math.min(
                 timelineMaxDay,
-                current +
-                step,
+                nextDay ??
+                  timelineMaxDay,
               );
             applyTimelineDay(
               current,
@@ -525,7 +725,14 @@ timelinePlay
               stopTimelinePlayback();
             }
           },
-          120,
+          Math.max(
+            100,
+            Math.round(
+              Number(
+                speed.intervalSeconds,
+              ) * 1000,
+            ),
+          ),
         );
     },
   );
@@ -882,8 +1089,7 @@ async function refreshLineDisplayOptions() {
         showLinePopups: projectSettings.showLinePopups !== false,
       });
       await configureGeometryTimeline(
-        projectSettings
-          .showGeometryTimeline,
+        projectSettings,
       );
     } catch (error) {
       console.error('Не удалось обновить настройки отображения линий', error);
@@ -1055,8 +1261,7 @@ async function start() {
       ...geometryTypeVisibility,
     });
     await configureGeometryTimeline(
-      projectSettings
-        .showGeometryTimeline,
+      projectSettings,
     );
     if (!lineTypes.length) throw new Error('Справочник типов линий пуст');
 
