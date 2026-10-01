@@ -22,6 +22,20 @@ function createQueryable() {
           rowCount: 1,
         };
       }
+      if (normalized.includes('FROM geometry_history_speeds')) {
+        return {
+          rows: [{
+            id: 1,
+            name: '1x',
+            stepUnit: 'month',
+            intervalSeconds: 1,
+            sortOrder: 10,
+            isActive: true,
+            isDefault: true,
+          }],
+          rowCount: 1,
+        };
+      }
       if (normalized.startsWith('UPDATE project_settings') &&
           normalized.includes('project_name = $1')) {
         return {
@@ -62,6 +76,8 @@ test('project settings storage owns singleton read and update SQL', async () => 
     showLineLabels: true,
     showLinePopups: false,
     showGeometryTimeline: true,
+    historyStartDate: '2000-01-01',
+    historySpeeds: null,
     showPointGeometries: true,
     showLineGeometries: false,
     showPolygonGeometries: true,
@@ -77,19 +93,19 @@ test('project settings storage owns singleton read and update SQL', async () => 
     /city_marker_icon_height::integer AS "cityMarkerIconHeight"/u,
   );
   assert.match(
-    database.queries[1].text,
+    database.queries[2].text,
     /^UPDATE project_settings/u,
   );
   assert.deepEqual(
-    database.queries[1].values.slice(-6),
-    [500000, 250, true, true, false, true],
+    database.queries[2].values.slice(-7),
+    [500000, 250, true, true, false, true, '2000-01-01'],
   );
   assert.match(
     database.queries[0].text,
     /show_geometry_timeline AS "showGeometryTimeline"/u,
   );
   assert.match(
-    database.queries[1].text,
+    database.queries[2].text,
     /show_geometry_timeline = \$12::boolean/u,
   );
   assert.match(
@@ -104,9 +120,15 @@ test('project settings storage owns singleton read and update SQL', async () => 
     database.queries[0].text,
     /show_polygon_geometries AS "showPolygonGeometries"/u,
   );
-  assert.match(database.queries[1].text, /show_point_geometries = \$13::boolean/u);
-  assert.match(database.queries[1].text, /show_line_geometries = \$14::boolean/u);
-  assert.match(database.queries[1].text, /show_polygon_geometries = \$15::boolean/u);
+  assert.match(database.queries[2].text, /show_point_geometries = \$13::boolean/u);
+  assert.match(database.queries[2].text, /show_line_geometries = \$14::boolean/u);
+  assert.match(database.queries[2].text, /show_polygon_geometries = \$15::boolean/u);
+  assert.match(database.queries[0].text, /history_start_date::text AS "historyStartDate"/u);
+  assert.match(database.queries[2].text, /history_start_date = \$16::date/u);
+  assert.match(database.queries[1].text, /FROM geometry_history_speeds/u);
+  assert.match(database.queries[3].text, /FROM geometry_history_speeds/u);
+  assert.equal(current.historySpeeds[0].name, '1x');
+  assert.equal(saved.historySpeeds[0].stepUnit, 'month');
 });
 
 test('project settings storage keeps public download name in dedicated update', async () => {
