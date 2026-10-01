@@ -26,6 +26,9 @@ import {
   createPointTypesRepository,
 } from '../db/point-types-repository.js';
 import {
+  createDiscussionInboxRuntime,
+} from './discussion-inbox-runtime.js';
+import {
   createGeometryEditorRuntime,
 } from './geometry-editor-runtime.js';
 import {
@@ -72,6 +75,7 @@ const DEFAULT_FACTORIES =
     createLineTypesRepository,
     createPointTypesRepository,
     createPointTypeIconFileStore,
+    createDiscussionInboxRuntime,
     createGeometryEditorRuntime,
     createGeometryImportRuntime,
     createOsmBoundaryAdminRuntime,
@@ -124,6 +128,11 @@ export function createServerRuntime({
           'var',
           'point-type-icons',
         ),
+      );
+  const discussionInboxService =
+    runtimeFactories
+      .createDiscussionInboxRuntime(
+        pool,
       );
   const geometryEditorService =
     runtimeFactories
@@ -260,6 +269,7 @@ export function createServerRuntime({
     projectSettingsRepository,
     settingsTransferService,
     reportConfigService,
+    discussionInboxService,
     geometryEditorService,
     geometryImportService,
     refreshPublicDownloads:
