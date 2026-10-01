@@ -6,9 +6,13 @@ import {
   subscribeAdminRealtime,
 } from './realtime-client.js';
 
-const inboxHost =
+const inboxListMount =
   document.querySelector(
-    '#discussion-inbox-host',
+    '#discussion-inbox-list-host',
+  );
+const inboxThreadMount =
+  document.querySelector(
+    '#discussion-inbox-thread-host',
   );
 
 const session =
@@ -213,44 +217,75 @@ function avatarNode(
 }
 
 function createPanel() {
-  if (!inboxHost) {
+  if (
+    !inboxListMount ||
+    !inboxThreadMount
+  ) {
     return null;
   }
 
-  const panel =
+  const listPanel =
     document.createElement(
-      'section',
+      'aside',
     );
-  panel.className =
-    'discussion-inbox-panel';
-  panel.innerHTML = `
-    <div class="profile-discussions-layout">
-      <aside class="profile-discussions-list-wrap"
-             aria-label="Обсуждения">
-        <div id="profile-discussions-list"
-             class="profile-discussions-list"
-             role="listbox"></div>
-      </aside>
-      <section class="profile-discussion-thread"
-               id="profile-discussion-thread">
-        <p class="empty-state">
-          Выберите обсуждение слева.
-        </p>
-      </section>
-    </div>
+  listPanel.className =
+    'profile-discussions-list-wrap';
+  listPanel.setAttribute(
+    'aria-label',
+    'Обсуждения',
+  );
+  listPanel.innerHTML = `
+    <div id="profile-discussions-list"
+         class="profile-discussions-list"
+         role="listbox"></div>
+  `;
+
+  const threadPanel =
+    document.createElement(
+      'div',
+    );
+  threadPanel.className =
+    'discussion-inbox-thread-panel';
+  threadPanel.innerHTML = `
+    <section class="profile-discussion-thread"
+             id="profile-discussion-thread">
+      <p class="empty-state">
+        Выберите обсуждение слева.
+      </p>
+    </section>
     <p id="profile-discussions-message"
        class="profile-message"
        role="status"></p>
   `;
 
-  inboxHost.replaceChildren(
-    panel,
+  inboxListMount.replaceChildren(
+    listPanel,
+  );
+  inboxThreadMount.replaceChildren(
+    threadPanel,
   );
 
-  return panel;
+  return {
+    listHost:
+      listPanel.querySelector(
+        '#profile-discussions-list',
+      ),
+    threadHost:
+      threadPanel.querySelector(
+        '#profile-discussion-thread',
+      ),
+    statusHost:
+      threadPanel.querySelector(
+        '#profile-discussions-message',
+      ),
+  };
 }
 
-if (inboxHost && currentUser) {
+if (
+  inboxListMount &&
+  inboxThreadMount &&
+  currentUser
+) {
   const stylesheet =
     document.createElement(
       'link',
@@ -267,21 +302,14 @@ if (inboxHost && currentUser) {
     createPanel();
 
   if (panel) {
-    const listHost =
-      panel.querySelector(
-        '#profile-discussions-list',
-      );
-    const threadHost =
-      panel.querySelector(
-        '#profile-discussion-thread',
-      );
+    const {
+      listHost,
+      threadHost,
+      statusHost,
+    } = panel;
     const totalHost =
       document.querySelector(
         '#admin-messages-total',
-      );
-    const statusHost =
-      panel.querySelector(
-        '#profile-discussions-message',
       );
     const messagesTab =
       document.querySelector(
