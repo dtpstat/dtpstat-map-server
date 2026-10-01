@@ -1697,7 +1697,7 @@ test('geometry editor shows explicit editing notice and edits zoom/date visibili
 });
 
 
-test('geometry editor includes editor identity and non-modal geometry discussion', async () => {
+test('geometry editor discussion uses compact messenger UI with unread realtime state', async () => {
   const html =
     await read(
       'admin/index.html',
@@ -1713,7 +1713,11 @@ test('geometry editor includes editor identity and non-modal geometry discussion
 
   assert.match(
     html,
-    /id="geometry-discussion-open"/u,
+    /id="geometry-discussion-open"[\s\S]*aria-label="Открыть обсуждение геометрии"[\s\S]*geometry-discussion-open-icon/u,
+  );
+  assert.match(
+    html,
+    /id="geometry-discussion-unread"[\s\S]*hidden/u,
   );
   assert.match(
     html,
@@ -1726,6 +1730,14 @@ test('geometry editor includes editor identity and non-modal geometry discussion
   assert.match(
     html,
     /id="geometry-discussion-form"/u,
+  );
+  assert.match(
+    html,
+    /id="geometry-discussion-input"[\s\S]*rows="1"[\s\S]*placeholder="Сообщение…"/u,
+  );
+  assert.match(
+    html,
+    /geometry-discussion-send[\s\S]*aria-label="Отправить сообщение"/u,
   );
 
   assert.match(
@@ -1744,14 +1756,54 @@ test('geometry editor includes editor identity and non-modal geometry discussion
     script,
     /async function sendDiscussionMessage\(/u,
   );
+  assert.match(
+    script,
+    /discussionUnreadByGeometry:\s*new Map\(\)/u,
+  );
+  assert.match(
+    script,
+    /function incrementDiscussionUnread\(/u,
+  );
+  assert.match(
+    script,
+    /function markDiscussionRead\(/u,
+  );
+  assert.match(
+    script,
+    /discussionIsOpenFor\([\s\S]*appendDiscussionMessage[\s\S]*incrementDiscussionUnread/u,
+  );
+  assert.match(
+    script,
+    /event\.key === 'Enter'[\s\S]*!event\.shiftKey[\s\S]*requestSubmit\(\)/u,
+  );
+  assert.match(
+    script,
+    /function resizeDiscussionInput\(/u,
+  );
 
   assert.match(
     styles,
-    /\.geometry-discussion \{/u,
+    /\.geometry-discussion \{[\s\S]*position: fixed/u,
   );
   assert.match(
     styles,
-    /position: fixed/u,
+    /\.geometry-discussion-open \{[\s\S]*width: 2\.35rem/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-discussion-unread \{/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-discussion-message\.is-own[\s\S]*align-self: flex-end/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-discussion-message\.is-incoming/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-discussion-form \{[\s\S]*grid-template-columns: minmax\(0, 1fr\) 2\.35rem/u,
   );
   assert.match(
     styles,
