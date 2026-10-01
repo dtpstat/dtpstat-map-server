@@ -98,6 +98,8 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
   );
   for (
     const hostId of [
+      'project-settings-editor-host',
+      'map-settings-editor-host',
       'report-config-editor-host',
       'line-types-editor-host',
       'point-types-editor-host',
@@ -113,7 +115,19 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
   }
   assert.match(
     schema,
+    /id:\s*'project'[\s\S]*elementId:[\s\S]*'operation-project-settings'/u,
+  );
+  assert.match(
+    schema,
+    /id:\s*'map'[\s\S]*elementId:[\s\S]*'operation-map-settings'/u,
+  );
+  assert.match(
+    schema,
     /id:\s*'report'[\s\S]*panelClass:[\s\S]*'report-interface-panel'/u,
+  );
+  assert.match(
+    engine,
+    /definition\.elementId[\s\S]*block\.id[\s\S]*definition\.elementId/u,
   );
   assert.match(
     engine,
