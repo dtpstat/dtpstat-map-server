@@ -128,22 +128,17 @@ test('project settings repository reads and updates the singleton row', async ()
     true,
     null,
   ]);
-  const firstRecalculationIndex = calls.findIndex((call) =>
-    /WITH\s+geometry_statistics\s+AS/i.test(call.text) &&
-    /UPDATE\s+cities\s+AS\s+city/i.test(call.text),
-  );
   const firstUpdateIndex = calls.findIndex((call) =>
     /UPDATE\s+project_settings/i.test(call.text),
   );
   assert.ok(firstUpdateIndex >= 0);
-  assert.ok(firstRecalculationIndex > firstUpdateIndex);
-  assert.match(
-    calls[firstRecalculationIndex].text,
-    /large_city_population_threshold\s+AS\s+population_threshold/i,
-  );
-  assert.match(
-    calls[firstRecalculationIndex].text,
-    /large_city_area_km2_threshold\s+AS\s+area_threshold_km2/i,
+  assert.equal(
+    calls.some((call) =>
+      /WITH\s+geometry_statistics\s+AS/i.test(call.text) &&
+      /UPDATE\s+cities\s+AS\s+city/i.test(call.text),
+    ),
+    false,
+    'UI-only project settings must not recalculate city statistics',
   );
 
   await repository.save({
@@ -183,7 +178,15 @@ test('project settings repository reads and updates the singleton row', async ()
     /WITH\s+geometry_statistics\s+AS/i.test(call.text) &&
     /UPDATE\s+cities\s+AS\s+city/i.test(call.text),
   );
-  assert.equal(recalculations.length, 3);
+  assert.equal(recalculations.length, 1);
+  assert.match(
+    recalculations[0].text,
+    /large_city_population_threshold\s+AS\s+population_threshold/i,
+  );
+  assert.match(
+    recalculations[0].text,
+    /large_city_area_km2_threshold\s+AS\s+area_threshold_km2/i,
+  );
 
   await assert.rejects(
     async () => repository.save({
@@ -214,6 +217,45 @@ test('project settings save commits thresholds and city classification atomicall
     async query(text, values) {
       const normalized = text.trim();
       calls.push({ text: normalized, values });
+      if (
+        /SELECT[\s\S]*FROM project_settings/i.test(normalized)
+      ) {
+        return {
+          rows: [{
+            projectName: 'Выделенные полосы в России',
+            keywords: ['транспорт'],
+            footerHtml: '<p>Описание</p>',
+            yandexMetrikaId: null,
+            googleAnalyticsId: null,
+            themePreset: 'classic',
+            showLineLabels: false,
+            showLinePopups: true,
+            showGeometryTimeline: false,
+            showPointGeometries: true,
+            showLineGeometries: true,
+            showPolygonGeometries: true,
+            historyStartDate: null,
+            publicDownloadName: 'bus-lanes',
+            mapboxAccessTokenConfigured: false,
+            largeCityPopulationThreshold: 400000,
+            largeCityAreaKm2Threshold: null,
+            updatedAt: '2026-09-22T17:00:00.000Z',
+          }],
+        };
+      }
+      if (/FROM geometry_history_speeds/i.test(normalized)) {
+        return {
+          rows: [{
+            id: 1,
+            name: '1x',
+            stepUnit: 'month',
+            intervalSeconds: 1,
+            sortOrder: 10,
+            isActive: true,
+            isDefault: true,
+          }],
+        };
+      }
       if (/UPDATE project_settings/i.test(normalized)) {
         return {
           rows: [{
