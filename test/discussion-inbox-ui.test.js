@@ -86,9 +86,25 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
     layoutSchema,
     /id:[\s\S]*'messages-thread'[\s\S]*hostId:[\s\S]*'discussion-inbox-thread-host'[\s\S]*wide:\s*8/u,
   );
-  assert.match(
+  for (
+    const hostId of [
+      'profile-account-host',
+      'profile-password-host',
+      'profile-mfa-host',
+      'profile-sessions-host',
+    ]
+  ) {
+    assert.match(
+      layoutSchema,
+      new RegExp(
+        `id:[\\s\\S]*'profile'[\\s\\S]*hostId:[\\s\\S]*'${hostId}'`,
+        'u',
+      ),
+    );
+  }
+  assert.doesNotMatch(
     layoutSchema,
-    /id:[\s\S]*'profile'[\s\S]*hostId:[\s\S]*'profile-editor-host'/u,
+    /profile-editor-host/u,
   );
   assert.match(
     layout,
