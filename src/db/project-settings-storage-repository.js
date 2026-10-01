@@ -9,6 +9,7 @@ const SELECT_SETTINGS_SQL = `
     show_line_labels AS "showLineLabels",
     show_line_popups AS "showLinePopups",
     show_geometry_timeline AS "showGeometryTimeline",
+    history_start_date::text AS "historyStartDate",
     show_point_geometries AS "showPointGeometries",
     show_line_geometries AS "showLineGeometries",
     show_polygon_geometries AS "showPolygonGeometries",
@@ -22,6 +23,42 @@ const SELECT_SETTINGS_SQL = `
     updated_at AS "updatedAt"
   FROM project_settings
   WHERE id = 1
+`;
+
+const SELECT_HISTORY_SPEEDS_SQL = `
+  SELECT
+    id::integer AS id,
+    name,
+    step_unit AS "stepUnit",
+    interval_seconds::double precision AS "intervalSeconds",
+    sort_order::integer AS "sortOrder",
+    is_active AS "isActive",
+    is_default AS "isDefault"
+  FROM geometry_history_speeds
+  ORDER BY sort_order, id
+`;
+
+const DELETE_HISTORY_SPEEDS_SQL = `
+  DELETE FROM geometry_history_speeds
+`;
+
+const INSERT_HISTORY_SPEED_SQL = `
+  INSERT INTO geometry_history_speeds (
+    name,
+    step_unit,
+    interval_seconds,
+    sort_order,
+    is_active,
+    is_default
+  )
+  VALUES (
+    $1::text,
+    $2::text,
+    $3::double precision,
+    $4::integer,
+    $5::boolean,
+    $6::boolean
+  )
 `;
 
 const SELECT_MAPBOX_TOKEN_SQL = `
@@ -73,6 +110,7 @@ const UPDATE_SETTINGS_SQL = `
     show_point_geometries = $13::boolean,
     show_line_geometries = $14::boolean,
     show_polygon_geometries = $15::boolean,
+    history_start_date = $16::date,
     updated_at = now()
   WHERE id = 1
   RETURNING
@@ -85,6 +123,7 @@ const UPDATE_SETTINGS_SQL = `
     show_line_labels AS "showLineLabels",
     show_line_popups AS "showLinePopups",
     show_geometry_timeline AS "showGeometryTimeline",
+    history_start_date::text AS "historyStartDate",
     show_point_geometries AS "showPointGeometries",
     show_line_geometries AS "showLineGeometries",
     show_polygon_geometries AS "showPolygonGeometries",
@@ -153,6 +192,43 @@ const BOOTSTRAP_MAPBOX_TOKEN_SQL = `
     (mapbox_access_token IS NOT NULL) AS "mapboxAccessTokenConfigured"
 `;
 
+async function listHistorySpeeds(
+  queryable,
+) {
+  const result =
+    await queryable.query(
+      SELECT_HISTORY_SPEEDS_SQL,
+    );
+  return result.rows;
+}
+
+async function replaceHistorySpeeds(
+  queryable,
+  speeds,
+) {
+  if (speeds === null) {
+    return;
+  }
+
+  await queryable.query(
+    DELETE_HISTORY_SPEEDS_SQL,
+  );
+
+  for (const speed of speeds) {
+    await queryable.query(
+      INSERT_HISTORY_SPEED_SQL,
+      [
+        speed.name,
+        speed.stepUnit,
+        speed.intervalSeconds,
+        speed.sortOrder,
+        speed.isActive,
+        speed.isDefault,
+      ],
+    );
+  }
+}
+
 function requireRow(result) {
   if (!result.rows[0]) {
     throw new Error(
@@ -165,9 +241,19 @@ function requireRow(result) {
 export function createProjectSettingsStorageRepository() {
   return {
     async get(queryable) {
-      return requireRow(
-        await queryable.query(SELECT_SETTINGS_SQL),
-      );
+      const settings =
+        requireRow(
+          await queryable.query(
+            SELECT_SETTINGS_SQL,
+          ),
+        );
+      return {
+        ...settings,
+        historySpeeds:
+          await listHistorySpeeds(
+            queryable,
+          ),
+      };
     },
 
     async getMapboxAccessToken(queryable) {
@@ -224,9 +310,22 @@ export function createProjectSettingsStorageRepository() {
           settings.showPointGeometries,
           settings.showLineGeometries,
           settings.showPolygonGeometries,
+          settings.historyStartDate,
         ],
       );
-      return requireRow(result);
+
+      await replaceHistorySpeeds(
+        queryable,
+        settings.historySpeeds,
+      );
+
+      return {
+        ...requireRow(result),
+        historySpeeds:
+          await listHistorySpeeds(
+            queryable,
+          ),
+      };
     },
 
     async updatePublicDownloadName(queryable, value) {
