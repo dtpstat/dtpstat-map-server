@@ -1,3 +1,4 @@
+import { adminAvatarObjectUrl } from './admin-avatar.js';
 import { adminConfirm } from './admin-dialog.js';
 import { createDraftStore } from './draft-store.js';
 import { publishDerivedDataChange } from './derived-data-events.js';
@@ -63,8 +64,31 @@ if (typeof document !== 'undefined') {
   const persistDrafts = document.querySelector('#osm-boundary-persist-drafts');
   const saveAll = document.querySelector('#osm-boundary-save-all');
   const discardAll = document.querySelector('#osm-boundary-discard-all');
+  const discussionOpen =
+    document.querySelector('#osm-boundary-discussion-open');
+  const discussionUnread =
+    document.querySelector('#osm-boundary-discussion-unread');
+  const discussionPanel =
+    document.querySelector('#osm-boundary-discussion');
+  const discussionClose =
+    document.querySelector('#osm-boundary-discussion-close');
+  const discussionTitle =
+    document.querySelector('#osm-boundary-discussion-title');
+  const discussionSubtitle =
+    document.querySelector('#osm-boundary-discussion-subtitle');
+  const discussionMessages =
+    document.querySelector('#osm-boundary-discussion-messages');
+  const discussionForm =
+    document.querySelector('#osm-boundary-discussion-form');
+  const discussionInput =
+    document.querySelector('#osm-boundary-discussion-input');
 
   if (panel && treeHost && searchInput && refreshButton && form && mapHost) {
+    const adminSession =
+      await globalThis.dtpstatAdminSession;
+    const currentUser =
+      adminSession.user;
+
     const state = {
       boundaries: [],
       serverBoundaries: [],
@@ -72,6 +96,13 @@ if (typeof document !== 'undefined') {
       expandedIds: new Set(),
       map: null,
       mapReady: null,
+      discussionBoundaryId: null,
+      discussionMessages: [],
+      discussionLoading: false,
+      discussionSending: false,
+      discussionRequestSequence: 0,
+      discussionUnreadByBoundary:
+        new Map(),
     };
 
     const field = (name) => form.elements.namedItem(name);
@@ -259,6 +290,520 @@ if (typeof document !== 'undefined') {
         throw error;
       }
       return payload;
+    }
+
+    function discussionTime(value) {
+      if (!value) return '';
+      return new Date(value)
+        .toLocaleString(
+          'ru-RU',
+          {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          },
+        );
+    }
+
+    function discussionIdentityName(identity) {
+      return (
+        identity?.displayName?.trim?.() ||
+        identity?.username?.trim?.() ||
+        'Пользователь'
+      );
+    }
+
+    function discussionInitials(identity) {
+      return discussionIdentityName(
+        identity,
+      )
+        .split(/\s+/u)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map(
+          (part) =>
+            part[0]
+              ?.toLocaleUpperCase(
+                'ru-RU',
+              ) ?? '',
+        )
+        .join('') || '?';
+    }
+
+    function discussionAvatar(identity) {
+      const fallback =
+        document.createElement(
+          'span',
+        );
+      fallback.className =
+        'geometry-discussion-avatar geometry-discussion-avatar-fallback';
+      fallback.textContent =
+        discussionInitials(
+          identity,
+        );
+
+      if (!identity?.avatarUrl) {
+        return fallback;
+      }
+
+      const image =
+        document.createElement(
+          'img',
+        );
+      image.className =
+        'geometry-discussion-avatar';
+      image.alt = '';
+      image.hidden = true;
+
+      const wrapper =
+        document.createElement(
+          'span',
+        );
+      wrapper.className =
+        'geometry-discussion-avatar';
+      wrapper.append(
+        fallback,
+        image,
+      );
+
+      void adminAvatarObjectUrl(
+        identity.avatarUrl,
+      )
+        .then(
+          (objectUrl) => {
+            image.src =
+              objectUrl;
+            image.hidden =
+              false;
+            fallback.hidden =
+              true;
+          },
+        )
+        .catch(
+          () => {
+            image.hidden =
+              true;
+            fallback.hidden =
+              false;
+          },
+        );
+
+      return wrapper;
+    }
+
+    function updateDiscussionControl(
+      item = null,
+    ) {
+      if (!discussionOpen) return;
+
+      discussionOpen.disabled =
+        !item;
+
+      const count =
+        item
+          ? Number(
+            state
+              .discussionUnreadByBoundary
+              .get(item.id) ??
+            0,
+          )
+          : 0;
+
+      if (discussionUnread) {
+        discussionUnread.textContent =
+          String(count);
+        discussionUnread.hidden =
+          count <= 0;
+      }
+
+      discussionOpen.title =
+        item
+          ? count > 0
+            ? `Обсуждение OSM-объекта · непрочитанных: ${count}`
+            : 'Открыть обсуждение OSM-объекта'
+          : 'Выберите OSM-объект';
+    }
+
+    async function loadDiscussionUnread() {
+      const payload =
+        await api(
+          '/api/admin/osm-boundaries/discussions/unread',
+        );
+
+      state.discussionUnreadByBoundary =
+        new Map(
+          (
+            payload?.items ??
+            []
+          ).map(
+            (item) => [
+              Number(
+                item.boundaryId,
+              ),
+              Number(
+                item.unreadCount ??
+                0,
+              ),
+            ],
+          ),
+        );
+
+      updateDiscussionControl(
+        state.boundaries.find(
+          (item) =>
+            item.id ===
+            state.selectedId,
+        ) ?? null,
+      );
+    }
+
+    function renderDiscussion() {
+      if (!discussionMessages) {
+        return;
+      }
+
+      if (state.discussionLoading) {
+        const loading =
+          document.createElement(
+            'p',
+          );
+        loading.className =
+          'empty-state';
+        loading.textContent =
+          'Загрузка сообщений…';
+        discussionMessages
+          .replaceChildren(
+            loading,
+          );
+        return;
+      }
+
+      if (
+        state.discussionMessages
+          .length === 0
+      ) {
+        const empty =
+          document.createElement(
+            'p',
+          );
+        empty.className =
+          'empty-state';
+        empty.textContent =
+          'Сообщений пока нет.';
+        discussionMessages
+          .replaceChildren(
+            empty,
+          );
+        return;
+      }
+
+      const nodes =
+        state.discussionMessages
+          .map(
+            (entry) => {
+              const article =
+                document.createElement(
+                  'article',
+                );
+              article.className =
+                'geometry-discussion-message';
+              article.dataset.messageId =
+                String(entry.id);
+
+              const own =
+                Number(
+                  entry.author?.userId,
+                ) ===
+                Number(
+                  currentUser?.id,
+                );
+
+              if (own) {
+                article.classList.add(
+                  'is-own',
+                );
+              }
+
+              const body =
+                document.createElement(
+                  'div',
+                );
+              body.className =
+                'geometry-discussion-message-body';
+
+              const meta =
+                document.createElement(
+                  'div',
+                );
+              meta.className =
+                'geometry-discussion-message-meta';
+
+              const author =
+                document.createElement(
+                  'strong',
+                );
+              author.textContent =
+                discussionIdentityName(
+                  entry.author,
+                );
+
+              const time =
+                document.createElement(
+                  'time',
+                );
+              time.dateTime =
+                entry.createdAt ?? '';
+              time.textContent =
+                discussionTime(
+                  entry.createdAt,
+                );
+
+              const text =
+                document.createElement(
+                  'p',
+                );
+              text.className =
+                'geometry-discussion-message-text';
+              text.textContent =
+                entry.message;
+
+              meta.append(
+                author,
+                time,
+              );
+              body.append(
+                meta,
+                text,
+              );
+
+              if (own) {
+                const receipt =
+                  document.createElement(
+                    'small',
+                  );
+                receipt.className =
+                  'geometry-discussion-receipt';
+                receipt.textContent =
+                  Number(
+                    entry.readByOthersCount ??
+                    0,
+                  ) > 0
+                    ? '✓✓ Прочитано'
+                    : '✓ Доставлено';
+                body.append(
+                  receipt,
+                );
+              }
+
+              article.append(
+                discussionAvatar(
+                  entry.author,
+                ),
+                body,
+              );
+
+              return article;
+            },
+          );
+
+      discussionMessages
+        .replaceChildren(
+          ...nodes,
+        );
+      discussionMessages.scrollTop =
+        discussionMessages.scrollHeight;
+    }
+
+    async function persistDiscussionRead(
+      boundaryId,
+      messageId = null,
+    ) {
+      await api(
+        `/api/admin/osm-boundaries/${encodeURIComponent(boundaryId)}/discussion/read`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body:
+            JSON.stringify(
+              messageId
+                ? { messageId }
+                : {},
+            ),
+        },
+      );
+
+      state
+        .discussionUnreadByBoundary
+        .set(
+          Number(boundaryId),
+          0,
+        );
+      updateDiscussionControl(
+        state.boundaries.find(
+          (item) =>
+            item.id ===
+            state.selectedId,
+        ) ?? null,
+      );
+    }
+
+    async function loadDiscussion(
+      boundaryId,
+      {
+        focusInput = false,
+      } = {},
+    ) {
+      const id =
+        Number(boundaryId);
+      const item =
+        state.boundaries.find(
+          (candidate) =>
+            candidate.id === id,
+        );
+
+      if (!item) return;
+
+      const sequence =
+        ++state
+          .discussionRequestSequence;
+      state.discussionBoundaryId =
+        id;
+      state.discussionLoading =
+        true;
+      state.discussionMessages =
+        [];
+
+      if (discussionTitle) {
+        discussionTitle.textContent =
+          item.displayName;
+      }
+      if (discussionSubtitle) {
+        discussionSubtitle.textContent =
+          `${item.osmType}/${item.osmId}`;
+      }
+      if (discussionPanel) {
+        discussionPanel.hidden =
+          false;
+      }
+      renderDiscussion();
+
+      try {
+        const payload =
+          await api(
+            `/api/admin/osm-boundaries/${encodeURIComponent(id)}/discussion`,
+          );
+
+        if (
+          sequence !==
+          state
+            .discussionRequestSequence
+        ) {
+          return;
+        }
+
+        state.discussionMessages =
+          payload?.messages ??
+          [];
+
+        const latest =
+          state.discussionMessages
+            .at(-1)?.id ??
+          null;
+
+        if (latest) {
+          await persistDiscussionRead(
+            id,
+            latest,
+          );
+        } else {
+          state
+            .discussionUnreadByBoundary
+            .set(
+              id,
+              0,
+            );
+          updateDiscussionControl(
+            item,
+          );
+        }
+      } finally {
+        if (
+          sequence ===
+          state
+            .discussionRequestSequence
+        ) {
+          state.discussionLoading =
+            false;
+          renderDiscussion();
+          if (focusInput) {
+            discussionInput?.focus();
+          }
+        }
+      }
+    }
+
+    async function sendDiscussionMessage() {
+      if (
+        state.discussionSending ||
+        !state.discussionBoundaryId ||
+        !discussionInput
+      ) {
+        return;
+      }
+
+      const messageText =
+        discussionInput.value
+          .trim();
+
+      if (!messageText) {
+        return;
+      }
+
+      state.discussionSending =
+        true;
+
+      try {
+        const payload =
+          await api(
+            `/api/admin/osm-boundaries/${encodeURIComponent(state.discussionBoundaryId)}/discussion`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type':
+                  'application/json',
+              },
+              body:
+                JSON.stringify({
+                  message:
+                    messageText,
+                }),
+            },
+          );
+
+        if (payload?.message) {
+          state.discussionMessages
+            .push(
+              payload.message,
+            );
+        }
+
+        discussionInput.value = '';
+        discussionInput.style.height =
+          'auto';
+        renderDiscussion();
+      } catch (error) {
+        setMessage(
+          `Не удалось отправить сообщение: ${error.message}`,
+          'error',
+        );
+      } finally {
+        state.discussionSending =
+          false;
+      }
     }
 
     function sourceLabel(item) {
@@ -543,6 +1088,7 @@ if (typeof document !== 'undefined') {
         sourceMeta?.replaceChildren();
         geometryMeta?.replaceChildren();
         updateBranchActions(null);
+        updateDiscussionControl(null);
         renderTree();
         return;
       }
@@ -578,6 +1124,7 @@ if (typeof document !== 'undefined') {
         ),
       );
       updateBranchActions(item);
+      updateDiscussionControl(item);
       if (localDraft?.conflict) {
         setMessage(
           'Серверная версия изменилась после создания локального черновика. Проверьте изменения перед сохранением.',
@@ -849,6 +1396,14 @@ if (typeof document !== 'undefined') {
       const item = state.boundaries.find((candidate) => candidate.id === id);
       if (!item) return;
       applySelection(item);
+      if (
+        discussionPanel &&
+        !discussionPanel.hidden
+      ) {
+        void loadDiscussion(
+          id,
+        );
+      }
       if (!draftFor(id)?.conflict) setMessage('');
       try {
         await showGeometry(id);
@@ -1100,9 +1655,80 @@ if (typeof document !== 'undefined') {
 
     subscribeAdminRealtime((message) => {
       if (
-        message?.type !== 'data-change' ||
-        message.change?.resource !== 'osm-boundaries' ||
-        message.change?.originClientId === realtimeClientId()
+        message?.type !==
+        'data-change'
+      ) {
+        return;
+      }
+
+      const change =
+        message.change;
+
+      if (
+        change?.resource ===
+          'osm-boundary-discussions'
+      ) {
+        if (
+          change.originClientId ===
+          realtimeClientId()
+        ) {
+          return;
+        }
+
+        const boundaryId =
+          Number(
+            change
+              .discussionMessage
+              ?.boundaryId ??
+            change.entityIds?.[0],
+          );
+
+        if (
+          !Number.isSafeInteger(
+            boundaryId,
+          ) ||
+          boundaryId <= 0
+        ) {
+          return;
+        }
+
+        if (
+          discussionPanel &&
+          !discussionPanel.hidden &&
+          state.discussionBoundaryId ===
+            boundaryId
+        ) {
+          void loadDiscussion(
+            boundaryId,
+          );
+        } else {
+          state
+            .discussionUnreadByBoundary
+            .set(
+              boundaryId,
+              Number(
+                state
+                  .discussionUnreadByBoundary
+                  .get(boundaryId) ??
+                0,
+              ) + 1,
+            );
+          updateDiscussionControl(
+            state.boundaries.find(
+              (item) =>
+                item.id ===
+                state.selectedId,
+            ) ?? null,
+          );
+        }
+        return;
+      }
+
+      if (
+        change?.resource !==
+          'osm-boundaries' ||
+        change.originClientId ===
+          realtimeClientId()
       ) {
         return;
       }
@@ -1112,16 +1738,84 @@ if (typeof document !== 'undefined') {
       );
     });
 
+    discussionOpen?.addEventListener(
+      'click',
+      () => {
+        if (
+          state.selectedId
+        ) {
+          void loadDiscussion(
+            state.selectedId,
+            {
+              focusInput: true,
+            },
+          );
+        }
+      },
+    );
+
+    discussionClose?.addEventListener(
+      'click',
+      () => {
+        if (discussionPanel) {
+          discussionPanel.hidden =
+            true;
+        }
+      },
+    );
+
+    discussionForm?.addEventListener(
+      'submit',
+      (event) => {
+        event.preventDefault();
+        void sendDiscussionMessage();
+      },
+    );
+
+    discussionInput?.addEventListener(
+      'input',
+      () => {
+        discussionInput.style.height =
+          'auto';
+        discussionInput.style.height =
+          Math.min(
+            discussionInput.scrollHeight,
+            112,
+          ) + 'px';
+      },
+    );
+
+    discussionInput?.addEventListener(
+      'keydown',
+      (event) => {
+        if (
+          event.key === 'Enter' &&
+          !event.shiftKey &&
+          !event.isComposing
+        ) {
+          event.preventDefault();
+          discussionForm
+            ?.requestSubmit();
+        }
+      },
+    );
+
     enableBranch?.addEventListener('click', () => void setBranchActive(true));
     disableBranch?.addEventListener('click', () => void setBranchActive(false));
     searchInput.addEventListener('input', () => renderTree());
     refreshButton.addEventListener('click', () => void load());
     window.addEventListener('dtpstat:osm-boundary-editor-open', () => {
-      void load();
+      void Promise.all([
+        loadDiscussionUnread(),
+        load(),
+      ]);
       window.setTimeout(() => state.map?.resize(), 0);
     });
     window.addEventListener('dtpstat:osm-boundaries-reloaded', () => void load());
     refreshDraftControls();
-    void load({ keepSelection: false });
+    void Promise.all([
+      loadDiscussionUnread(),
+      load({ keepSelection: false }),
+    ]);
   }
 }
