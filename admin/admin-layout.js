@@ -307,6 +307,163 @@ export function ensureAdminSections({
 }
 
 
+function createInterfaceBlock(
+  definition,
+) {
+  return createBlock(
+    definition,
+  );
+}
+
+export function ensureAdminTabPanels({
+  tabsHost,
+  panelsHost,
+  definitions,
+  user,
+}) {
+  if (
+    !tabsHost ||
+    !panelsHost
+  ) {
+    return;
+  }
+
+  for (
+    const definition of
+    definitions
+  ) {
+    if (
+      !tabAllowed(
+        definition,
+        user,
+      )
+    ) {
+      continue;
+    }
+
+    let tab =
+      tabsHost.querySelector(
+        `[data-interface-tab="${definition.id}"]`,
+      );
+
+    if (!tab) {
+      tab =
+        document.createElement(
+          'button',
+        );
+      tab.className =
+        'task-tab';
+      tab.id =
+        `interface-tab-${definition.id}`;
+      tab.type =
+        'button';
+      tab.role =
+        'tab';
+      tab.dataset
+        .interfaceTab =
+        definition.id;
+      tab.setAttribute(
+        'aria-selected',
+        'false',
+      );
+      tab.setAttribute(
+        'aria-controls',
+        `interface-panel-${definition.id}`,
+      );
+      tab.textContent =
+        definition.title;
+      tabsHost.append(
+        tab,
+      );
+    }
+
+    if (
+      !definition.blocks?.length
+    ) {
+      continue;
+    }
+
+    let panel =
+      panelsHost.querySelector(
+        `[data-interface-panel="${definition.id}"]`,
+      );
+
+    if (!panel) {
+      panel =
+        document.createElement(
+          'article',
+        );
+      panel.className =
+        'task-panel interface-task-panel admin-layout-tab-panel';
+      panel.id =
+        `interface-panel-${definition.id}`;
+      panel.role =
+        'tabpanel';
+      panel.dataset
+        .interfacePanel =
+        definition.id;
+      panel.setAttribute(
+        'aria-labelledby',
+        tab.id,
+      );
+      panel.hidden =
+        true;
+
+      const title =
+        document.createElement(
+          'h3',
+        );
+      title.textContent =
+        definition.title;
+      panel.append(
+        title,
+      );
+
+      if (
+        definition.description
+      ) {
+        const description =
+          document.createElement(
+            'p',
+          );
+        description.className =
+          'panel-description';
+        description.textContent =
+          definition.description;
+        panel.append(
+          description,
+        );
+      }
+
+      const grid =
+        document.createElement(
+          'div',
+        );
+      grid.className =
+        'admin-layout-grid admin-layout-tab-grid';
+
+      for (
+        const block of
+        definition.blocks
+      ) {
+        grid.append(
+          createInterfaceBlock(
+            block,
+          ),
+        );
+      }
+
+      panel.append(
+        grid,
+      );
+      panelsHost.append(
+        panel,
+      );
+    }
+  }
+}
+
+
 function tabAllowed(
   definition,
   user,
