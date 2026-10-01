@@ -1884,6 +1884,19 @@ if (typeof document !== 'undefined') {
               await selectBoundary(
                 id,
               );
+
+              if (
+                event.detail
+                  ?.openDiscussion
+              ) {
+                await loadDiscussion(
+                  id,
+                  {
+                    focusInput:
+                      true,
+                  },
+                );
+              }
             } catch (error) {
               setMessage(
                 'Не удалось открыть OSM-объект из обсуждения: ' +
