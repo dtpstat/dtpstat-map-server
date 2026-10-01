@@ -23,11 +23,14 @@ test('admin data and project settings are split into meaningful visual groups', 
   assert.match(adminCss, /\.export-link/);
 
   assert.match(project, /data-project-settings-tab="general"/);
-  assert.match(project, /data-project-settings-tab="map"/);
+  assert.doesNotMatch(project, /data-project-settings-tab="map"/);
   assert.match(project, /data-project-settings-tab="metadata"/);
   assert.match(project, /data-project-settings-tab="footer"/);
   assert.match(project, /readTabState\([\s\S]*'project-settings'/);
-  assert.match(project, /trackDirtyForm\(form, \{ label: 'Настройки проекта' \}\)/);
+  assert.match(project, /mapTab\.dataset\.interfaceTab =\s*'map'/u);
+  assert.match(project, /mapPanel\.dataset\.interfacePanel =\s*'map'/u);
+  assert.match(project, /Сохранить настройки карты/u);
+  assert.match(project, /trackDirtyForm\([\s\S]*Настройки проекта \/ карты/u);
 
   assert.match(reportCss, /\.report-interface-panel[\s\S]*padding:\s*0/);
   assert.match(reportCss, /\.report-interface-panel[\s\S]*border:\s*0/);
