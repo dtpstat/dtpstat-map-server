@@ -1693,6 +1693,47 @@ if (typeof document !== 'undefined') {
         }
 
         if (
+          change.action ===
+          'read'
+        ) {
+          if (
+            Number(
+              change.readerUserId,
+            ) ===
+            Number(
+              currentUser?.id,
+            )
+          ) {
+            state
+              .discussionUnreadByBoundary
+              .set(
+                boundaryId,
+                0,
+              );
+            updateDiscussionControl(
+              state.boundaries.find(
+                (item) =>
+                  item.id ===
+                  state.selectedId,
+              ) ?? null,
+            );
+          }
+
+          if (
+            discussionPanel &&
+            !discussionPanel.hidden &&
+            state.discussionBoundaryId ===
+              boundaryId
+          ) {
+            void loadDiscussion(
+              boundaryId,
+            );
+          }
+
+          return;
+        }
+
+        if (
           discussionPanel &&
           !discussionPanel.hidden &&
           state.discussionBoundaryId ===
