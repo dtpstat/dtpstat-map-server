@@ -38,6 +38,22 @@
   height: 100%;
 }
 
+.admin-layout-fill,
+.admin-layout-fill > .admin-layout-block-host {
+  min-height: 0;
+  height: 100%;
+}
+
+.admin-layout-scroll > .admin-layout-block-host {
+  overflow: auto;
+}
+
+.admin-layout-sticky {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+}
+
 @container admin-layout-grid (min-width: 64rem) {
   .admin-layout-block {
     grid-column:
