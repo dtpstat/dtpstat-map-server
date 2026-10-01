@@ -330,6 +330,9 @@ function setupPrimarySections(
     if (key === 'osm-objects') {
       window.dispatchEvent(new CustomEvent('dtpstat:osm-boundary-editor-open'));
     }
+    if (key === 'profile') {
+      window.dispatchEvent(new CustomEvent('dtpstat:profile-open'));
+    }
   };
 
   for (const tab of tabs) tab.addEventListener('click', () => select(tab.dataset.adminSectionTab));
@@ -456,6 +459,7 @@ async function startAdminShell() {
     );
 
     await import('./profile-editor.js');
+    await import('./discussion-inbox.js');
     const restricted =
       Boolean(
         user.mustChangePassword ||
