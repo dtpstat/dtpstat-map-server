@@ -410,7 +410,7 @@ th button:focus-visible {
 }
 
 .geometry-timeline-bar {
-  width: min(760px, calc(100vw - 44px));
+  width: min(760px, calc(100% - 28px));
   min-height: 46px;
   display: grid;
   grid-template-columns: 38px auto auto minmax(180px, 1fr) 32px;
