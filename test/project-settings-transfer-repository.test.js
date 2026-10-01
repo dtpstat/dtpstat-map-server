@@ -15,6 +15,18 @@ function createClient() {
       if (normalized.includes('FROM project_settings')) {
         return { rows: [{ projectName: 'Test' }], rowCount: 1 };
       }
+      if (normalized.includes('FROM geometry_history_speeds')) {
+        return {
+          rows: [{
+            name: '1x',
+            stepUnit: 'month',
+            intervalSeconds: 1,
+            isActive: true,
+            isDefault: true,
+          }],
+          rowCount: 1,
+        };
+      }
       if (
         normalized.startsWith('SELECT code::integer AS code') &&
         normalized.includes('FROM line_types')
@@ -44,9 +56,11 @@ test('project settings transfer repository exports one consistent snapshot', asy
   const snapshot = await repository.exportSnapshot(client);
 
   assert.equal(snapshot.projectSettings.projectName, 'Test');
+  assert.equal(snapshot.historySpeeds, undefined);
+  assert.equal(snapshot.projectSettings.historySpeeds[0].name, '1x');
   assert.equal(snapshot.lineTypes[0].name, 'default');
   assert.equal(snapshot.securitySettings.maxFailedAttempts, 5);
-  assert.equal(client.queries.length, 4);
+  assert.equal(client.queries.length, 5);
 });
 
 test('project settings transfer repository never overlaps queries on one client', async () => {
@@ -91,6 +105,17 @@ test('project settings transfer repository never overlaps queries on one client'
               },
             ],
             rowCount: 1,
+          };
+        }
+
+        if (
+          normalized.includes(
+            'FROM geometry_history_speeds',
+          )
+        ) {
+          return {
+            rows: [],
+            rowCount: 0,
           };
         }
 
@@ -149,7 +174,7 @@ test('project settings transfer repository never overlaps queries on one client'
 
   assert.equal(
     sequence.length,
-    4,
+    5,
   );
   assert.match(
     sequence[0],
@@ -157,14 +182,18 @@ test('project settings transfer repository never overlaps queries on one client'
   );
   assert.match(
     sequence[1],
-    /FROM line_types/u,
+    /FROM geometry_history_speeds/u,
   );
   assert.match(
     sequence[2],
-    /FROM report_config/u,
+    /FROM line_types/u,
   );
   assert.match(
     sequence[3],
+    /FROM report_config/u,
+  );
+  assert.match(
+    sequence[4],
     /FROM admin_security_settings/u,
   );
 });
@@ -193,6 +222,9 @@ test('project settings transfer repository owns line-type staging and settings S
     showPointGeometries: true,
     showLineGeometries: false,
     showPolygonGeometries: true,
+    showGeometryTimeline: true,
+    historyStartDate: '2000-01-01',
+    historySpeeds: null,
     hasPublicDownloadName: false,
     publicDownloadName: null,
     hasMapboxAccessToken: false,
@@ -215,12 +247,20 @@ test('project settings transfer repository owns line-type staging and settings S
     /^UPDATE project_settings SET/u,
   );
   assert.deepEqual(
-    client.queries.at(-1).values.slice(-3),
-    [true, false, true],
+    client.queries.at(-1).values.slice(-5),
+    [true, false, true, true, '2000-01-01'],
   );
   assert.match(
     client.queries.at(-1).text,
     /show_point_geometries=\$15::boolean/u,
+  );
+  assert.match(
+    client.queries.at(-1).text,
+    /show_geometry_timeline=\$18::boolean/u,
+  );
+  assert.match(
+    client.queries.at(-1).text,
+    /history_start_date=\$19::date/u,
   );
 });
 
@@ -233,6 +273,9 @@ test('project settings transfer repository preserves report row presence separat
       const normalized = text.trim();
       if (normalized.includes('FROM project_settings')) {
         return { rows: [{ projectName: 'Test' }], rowCount: 1 };
+      }
+      if (normalized.includes('FROM geometry_history_speeds')) {
+        return { rows: [], rowCount: 0 };
       }
       if (normalized.includes('FROM line_types')) {
         return { rows: [], rowCount: 0 };
@@ -256,6 +299,9 @@ test('project settings transfer repository preserves report row presence separat
       const normalized = text.trim();
       if (normalized.includes('FROM project_settings')) {
         return { rows: [{ projectName: 'Test' }], rowCount: 1 };
+      }
+      if (normalized.includes('FROM geometry_history_speeds')) {
+        return { rows: [], rowCount: 0 };
       }
       if (normalized.includes('FROM line_types')) {
         return { rows: [], rowCount: 0 };
