@@ -128,6 +128,18 @@ test('profile discussion inbox unifies geometry and OSM threads with realtime un
     osm,
     /dtpstat:osm-boundary-editor-select[\s\S]*selectBoundary/u,
   );
+  assert.match(
+    inbox,
+    /openDiscussion:[\s\S]*true/u,
+  );
+  assert.match(
+    geometry,
+    /dtpstat:geometry-editor-select[\s\S]*openDiscussion[\s\S]*loadDiscussion/u,
+  );
+  assert.match(
+    osm,
+    /dtpstat:osm-boundary-editor-select[\s\S]*openDiscussion[\s\S]*loadDiscussion/u,
+  );
 
   assert.match(
     styles,
