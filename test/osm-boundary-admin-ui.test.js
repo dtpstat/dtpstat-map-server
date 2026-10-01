@@ -300,7 +300,10 @@ test('OSM editor keeps optimistic drafts locally and bulk-saves them over realti
   assert.match(editor, /baseUpdatedAt/);
   assert.match(editor, /\/api\/admin\/osm-boundaries'[\s\S]*method: 'PATCH'/);
   assert.match(editor, /subscribeAdminRealtime/);
-  assert.match(editor, /message\.change\?\.resource !== 'osm-boundaries'/);
+  assert.match(
+    editor,
+    /const change =[\s\S]*message\.change[\s\S]*change\?\.resource !==[\s\S]*'osm-boundaries'/u,
+  );
   assert.match(editor, /drafts\.markConflict/);
   assert.match(editor, /realtimeMutationHeaders/);
   assert.match(draftStore, /sessionStorage/);
