@@ -182,7 +182,7 @@ test('public map timeline is setting-controlled and exposes horizontal playback 
 
   assert.match(
     html,
-    /id="geometry-timeline"[\s\S]*id="geometry-timeline-play"[\s\S]*id="geometry-timeline-range"/u,
+    /id="geometry-timeline"[\s\S]*id="geometry-timeline-play"[\s\S]*id="geometry-timeline-speed"[\s\S]*id="geometry-timeline-range"/u,
   );
   assert.match(
     api,
@@ -202,11 +202,27 @@ test('public map timeline is setting-controlled and exposes horizontal playback 
   );
   assert.match(
     app,
-    /setInterval\([\s\S]*120/u,
+    /function renderTimelineSpeeds/u,
   );
   assert.match(
     app,
-    /span[\s\S]*240/u,
+    /selectedTimelineSpeed/u,
+  );
+  assert.match(
+    app,
+    /addCalendarStep\(/u,
+  );
+  assert.match(
+    app,
+    /speed\.stepUnit/u,
+  );
+  assert.match(
+    app,
+    /speed\.intervalSeconds/u,
+  );
+  assert.match(
+    app,
+    /Math\.round\([\s\S]*intervalSeconds[\s\S]*\* 1000/u,
   );
   assert.match(
     styles,
