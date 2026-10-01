@@ -10,6 +10,9 @@ const EXPORT_PROJECT_SETTINGS_SQL = `
     theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
     show_line_popups AS "showLinePopups",
+    show_point_geometries AS "showPointGeometries",
+    show_line_geometries AS "showLineGeometries",
+    show_polygon_geometries AS "showPolygonGeometries",
     large_city_population_threshold::integer AS "largeCityPopulationThreshold",
     large_city_area_km2_threshold::double precision AS "largeCityAreaKm2Threshold",
     public_download_name AS "publicDownloadName",
@@ -66,6 +69,9 @@ const UPDATE_PROJECT_SETTINGS_SQL = `
     END,
     large_city_population_threshold=$13::integer,
     large_city_area_km2_threshold=$14::double precision,
+    show_point_geometries=$15::boolean,
+    show_line_geometries=$16::boolean,
+    show_polygon_geometries=$17::boolean,
     updated_at=NOW()
   WHERE id=1
 `;
@@ -213,6 +219,9 @@ export function createProjectSettingsTransferRepository() {
         settings.mapboxAccessToken,
         settings.largeCityPopulationThreshold,
         settings.largeCityAreaKm2Threshold,
+        settings.showPointGeometries,
+        settings.showLineGeometries,
+        settings.showPolygonGeometries,
       ]);
     },
 
