@@ -198,7 +198,7 @@ function formatTimelineDate(value) {
   );
 }
 
-function addCalendarStep(
+export function addCalendarStep(
   isoDate,
   unit,
 ) {
@@ -212,35 +212,80 @@ function addCalendarStep(
     new Date(
       day * DAY_MS,
     );
+  const originalDay =
+    date.getUTCDate();
+
+  const setMonthClamped =
+    (delta) => {
+      date.setUTCDate(1);
+      date.setUTCMonth(
+        date.getUTCMonth() +
+        delta,
+      );
+      const targetMonth =
+        date.getUTCMonth();
+      const targetYear =
+        date.getUTCFullYear();
+      const lastDay =
+        new Date(
+          Date.UTC(
+            targetYear,
+            targetMonth + 1,
+            0,
+          ),
+        ).getUTCDate();
+      date.setUTCDate(
+        Math.min(
+          originalDay,
+          lastDay,
+        ),
+      );
+    };
+
+  const setYearClamped =
+    (delta) => {
+      const month =
+        date.getUTCMonth();
+      date.setUTCDate(1);
+      date.setUTCFullYear(
+        date.getUTCFullYear() +
+        delta,
+      );
+      const lastDay =
+        new Date(
+          Date.UTC(
+            date.getUTCFullYear(),
+            month + 1,
+            0,
+          ),
+        ).getUTCDate();
+      date.setUTCMonth(month);
+      date.setUTCDate(
+        Math.min(
+          originalDay,
+          lastDay,
+        ),
+      );
+    };
 
   if (unit === 'day') {
     date.setUTCDate(
-      date.getUTCDate() + 1,
+      originalDay + 1,
     );
   } else if (unit === 'week') {
     date.setUTCDate(
-      date.getUTCDate() + 7,
+      originalDay + 7,
     );
   } else if (unit === 'month') {
-    date.setUTCMonth(
-      date.getUTCMonth() + 1,
-    );
+    setMonthClamped(1);
   } else if (unit === 'quarter') {
-    date.setUTCMonth(
-      date.getUTCMonth() + 3,
-    );
+    setMonthClamped(3);
   } else if (unit === 'year') {
-    date.setUTCFullYear(
-      date.getUTCFullYear() + 1,
-    );
+    setYearClamped(1);
   } else if (unit === 'five_years') {
-    date.setUTCFullYear(
-      date.getUTCFullYear() + 5,
-    );
+    setYearClamped(5);
   } else if (unit === 'decade') {
-    date.setUTCFullYear(
-      date.getUTCFullYear() + 10,
-    );
+    setYearClamped(10);
   } else {
     return null;
   }
@@ -455,6 +500,8 @@ async function refreshGeometryTimelineBounds() {
         sourceMin ??
         today,
       today,
+      configuredMin ??
+        today,
     );
 
   timelineRange.min =
