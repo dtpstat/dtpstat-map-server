@@ -129,6 +129,12 @@ function createBlock(
   block.dataset
     .adminLayoutBlock =
     definition.id;
+  if (
+    definition.elementId
+  ) {
+    block.id =
+      definition.elementId;
+  }
   appendClassNames(
     block,
     definition.className,
