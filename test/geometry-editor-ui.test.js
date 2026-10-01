@@ -1911,7 +1911,23 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
   );
   assert.match(
     styles,
-    /\.geometry-discussion \{[\s\S]*min-width: 20rem[\s\S]*min-height: 16rem[\s\S]*grid-template-rows: auto minmax\(7rem, 1fr\) auto[\s\S]*resize: both/u,
+    /\.geometry-discussion \{[\s\S]*min-width: 20rem[\s\S]*min-height: 16rem[\s\S]*grid-template-rows: auto minmax\(7rem, 1fr\) auto/u,
+  );
+  assert.doesNotMatch(
+    styles,
+    /\.geometry-discussion \{[\s\S]{0,600}resize: both/u,
+  );
+  assert.match(
+    html,
+    /id="geometry-discussion-resize-grip"/u,
+  );
+  assert.match(
+    script,
+    /function beginDiscussionResize\([\s\S]*startWidth \+[\s\S]*startX -[\s\S]*moveEvent\.clientX[\s\S]*startHeight \+[\s\S]*startY -[\s\S]*moveEvent\.clientY/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-discussion-resize-grip \{[\s\S]*top: 0[\s\S]*left: 0[\s\S]*cursor: nwse-resize/u,
   );
   assert.match(
     styles,
@@ -1927,7 +1943,7 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
   );
   assert.match(
     styles,
-    /@media \(max-width: 650px\)[\s\S]*\.geometry-discussion \{[\s\S]*resize: none/u,
+    /@media \(max-width: 650px\)[\s\S]*\.geometry-discussion-resize-grip \{[\s\S]*display: none/u,
   );
   assert.doesNotMatch(
     html,
