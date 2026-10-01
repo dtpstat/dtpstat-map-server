@@ -228,7 +228,15 @@ export const API_REQUEST_CONTRACTS =
     ),
     c('GET', '/report-config'),
     c('GET', '/project'),
-    c('GET', '/city-marker-icon'),
+    c(
+      'GET',
+      '/city-marker-icon',
+      {
+        query: [
+          'v',
+        ],
+      },
+    ),
 
     c(
       'PUT',
