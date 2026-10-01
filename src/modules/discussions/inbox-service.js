@@ -1,0 +1,165 @@
+function allowedSubjectTypes(
+  user,
+) {
+  const types = [];
+
+  if (
+    user?.isSuperuser ||
+    user?.canEditGeometries
+  ) {
+    types.push(
+      'geometry',
+    );
+  }
+
+  if (
+    user?.isSuperuser ||
+    user?.canEditOsm
+  ) {
+    types.push(
+      'osm-boundary',
+    );
+  }
+
+  return types;
+}
+
+function authorAvatarUrl(
+  item,
+) {
+  if (
+    !item.latestAuthorHasAvatar ||
+    !item.latestAuthorUserId
+  ) {
+    return null;
+  }
+
+  const base =
+    item.subjectType ===
+    'geometry'
+      ? '/api/admin/geometry-editor/users/'
+      : '/api/admin/osm-boundaries/users/';
+
+  const version =
+    encodeURIComponent(
+      item.latestAuthorUpdatedAt ??
+      '1',
+    );
+
+  return (
+    base +
+    item.latestAuthorUserId +
+    '/avatar?v=' +
+    version
+  );
+}
+
+export function createDiscussionInboxService(
+  storage,
+) {
+  if (!storage) {
+    throw new TypeError(
+      'Discussion storage dependency is required',
+    );
+  }
+
+  return {
+    async listInbox(
+      user,
+    ) {
+      const userId =
+        Number(
+          user?.id,
+        );
+      if (
+        !Number.isSafeInteger(
+          userId,
+        ) ||
+        userId <= 0
+      ) {
+        throw new TypeError(
+          'Authenticated user id is required',
+        );
+      }
+
+      const subjectTypes =
+        allowedSubjectTypes(
+          user,
+        );
+
+      if (
+        subjectTypes.length ===
+        0
+      ) {
+        return {
+          items: [],
+          totalUnread: 0,
+        };
+      }
+
+      const rows =
+        await storage
+          .listInbox(
+            userId,
+            subjectTypes,
+          );
+
+      const items =
+        rows.map(
+          (item) => ({
+            subjectType:
+              item.subjectType,
+            subjectId:
+              item.subjectId,
+            subjectTitle:
+              item.subjectTitle,
+            subjectSubtitle:
+              item.subjectSubtitle,
+            subjectExists:
+              Boolean(
+                item.subjectExists,
+              ),
+            latestMessageId:
+              item.latestMessageId,
+            latestMessage:
+              item.latestMessage,
+            latestCreatedAt:
+              item.latestCreatedAt,
+            unreadCount:
+              Number(
+                item.unreadCount ??
+                0,
+              ),
+            latestAuthor: {
+              userId:
+                item.latestAuthorUserId,
+              username:
+                item.latestAuthorUsername,
+              displayName:
+                item.latestAuthorDisplayName ??
+                item.latestAuthorUsername ??
+                'Удалённый пользователь',
+              avatarUrl:
+                authorAvatarUrl(
+                  item,
+                ),
+            },
+          }),
+        );
+
+      return {
+        items,
+        totalUnread:
+          items.reduce(
+            (
+              total,
+              item,
+            ) =>
+              total +
+              item.unreadCount,
+            0,
+          ),
+      };
+    },
+  };
+}
