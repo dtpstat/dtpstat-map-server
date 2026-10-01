@@ -250,7 +250,7 @@ test('public map timeline is setting-controlled and exposes collapsible one-line
   );
   assert.match(
     app,
-    /timelineCollapse[\s\S]*stopTimelinePlayback\(\)[\s\S]*setTimelineCollapsed\([\s\S]*true/u,
+    /timelineCollapse[\s\S]*stopTimelinePlayback\(\)[\s\S]*dateToDay\([\s\S]*localIsoDate\(\)[\s\S]*applyTimelineDay\([\s\S]*setTimelineCollapsed\([\s\S]*true/u,
   );
   assert.match(
     styles,
