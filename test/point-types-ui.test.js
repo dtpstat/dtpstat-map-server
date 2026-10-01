@@ -30,12 +30,14 @@ test('interface settings expose point type CRUD and safe icon controls', async (
   const [
     html,
     shell,
+    schema,
     editor,
     styles,
   ] =
     await Promise.all([
       read('admin/index.html'),
       read('admin/admin-shell.js'),
+      read('admin/admin-layout-schema.js'),
       read('admin/point-types-editor.js'),
       read('admin/point-types.css'),
     ]);
@@ -63,7 +65,11 @@ test('interface settings expose point type CRUD and safe icon controls', async (
   );
   assert.match(
     shell,
-    /dtpstat:point-types-changed/u,
+    /adminInterfaceTabs/u,
+  );
+  assert.match(
+    schema,
+    /id:\s*'point-types'[\s\S]*openEvent:\s*'dtpstat:point-types-changed'/u,
   );
 
   assert.match(
