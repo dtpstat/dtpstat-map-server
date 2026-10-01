@@ -860,6 +860,127 @@ if (section) {
     );
   }
 
+  async function loadDiscussionUnread() {
+    const payload =
+      await api(
+        '/api/admin/geometry-editor/discussions/unread',
+      );
+
+    state.discussionUnreadByGeometry =
+      new Map(
+        (payload.items ?? [])
+          .filter(
+            (item) =>
+              Number.isSafeInteger(
+                Number(
+                  item.geometryId,
+                ),
+              ) &&
+              Number(
+                item.unreadCount,
+              ) > 0,
+          )
+          .map(
+            (item) => [
+              Number(
+                item.geometryId,
+              ),
+              Number(
+                item.unreadCount,
+              ),
+            ],
+          ),
+      );
+
+    renderDiscussionUnreadBadge();
+  }
+
+  async function persistDiscussionRead(
+    geometryId,
+    messageId = null,
+  ) {
+    const id =
+      Number(geometryId);
+    if (
+      !Number.isSafeInteger(id) ||
+      id <= 0
+    ) {
+      return null;
+    }
+
+    const payload =
+      await api(
+        '/api/admin/geometry-editor/geometries/' +
+          encodeURIComponent(id) +
+          '/discussion/read',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body:
+            JSON.stringify(
+              messageId
+                ? {
+                  messageId:
+                    Number(
+                      messageId,
+                    ),
+                }
+                : {},
+            ),
+        },
+      );
+
+    markDiscussionRead(id);
+    return payload.read ?? null;
+  }
+
+  function markOwnMessagesReadThrough(
+    geometryId,
+    messageId,
+  ) {
+    if (
+      Number(
+        state.discussionGeometryId,
+      ) !==
+        Number(geometryId)
+    ) {
+      return;
+    }
+
+    let changed = false;
+    for (
+      const message of
+      state.discussionMessages
+    ) {
+      if (
+        Number(
+          message.author
+            ?.userId,
+        ) ===
+          Number(
+            currentUser?.id,
+          ) &&
+        Number(message.id) <=
+          Number(messageId) &&
+        Number(
+          message.readByOthersCount ??
+          0,
+        ) < 1
+      ) {
+        message.readByOthersCount =
+          1;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      renderDiscussion();
+    }
+  }
+
   function discussionIsOpenFor(
     geometryId,
   ) {
@@ -1066,6 +1187,39 @@ if (section) {
             meta,
             text,
           );
+
+          if (
+            Number(
+              entry.author
+                ?.userId,
+            ) ===
+              Number(
+                currentUser?.id,
+              )
+          ) {
+            const receipt =
+              document.createElement(
+                'small',
+              );
+            receipt.className =
+              'geometry-discussion-receipt';
+            const read =
+              Number(
+                entry.readByOthersCount ??
+                0,
+              ) > 0;
+            receipt.textContent =
+              read
+                ? '✓✓ Прочитано'
+                : '✓ Доставлено';
+            receipt.title =
+              read
+                ? 'Сообщение прочитано другим пользователем'
+                : 'Сообщение сохранено сервером';
+            body.append(
+              receipt,
+            );
+          }
           article.append(
             identityAvatar(
               entry.author,
@@ -1198,6 +1352,23 @@ if (section) {
       markDiscussionRead(
         id,
       );
+      const lastMessageId =
+        state.discussionMessages
+          .at(-1)
+          ?.id ??
+        null;
+      if (lastMessageId) {
+        void persistDiscussionRead(
+          id,
+          lastMessageId,
+        ).catch(
+          (error) =>
+            console.warn(
+              'Geometry discussion read state update failed',
+              error,
+            ),
+        );
+      }
       revealDiscussion({
         attention,
         focusInput,
@@ -8561,6 +8732,27 @@ if (section) {
         return;
       }
 
+      if (
+        change.action ===
+          'read'
+      ) {
+        if (
+          Number(
+            change.readerUserId,
+          ) !==
+            Number(
+              currentUser?.id,
+            ) &&
+          change.lastReadMessageId
+        ) {
+          markOwnMessagesReadThrough(
+            geometryId,
+            change.lastReadMessageId,
+          );
+        }
+        return;
+      }
+
       const incoming =
         change.discussionMessage ??
         null;
@@ -8583,6 +8775,16 @@ if (section) {
           incoming.id;
         markDiscussionRead(
           geometryId,
+        );
+        void persistDiscussionRead(
+          geometryId,
+          incoming.id,
+        ).catch(
+          (error) =>
+            console.warn(
+              'Geometry discussion realtime read update failed',
+              error,
+            ),
         );
         revealDiscussion({
           attention: true,
@@ -8965,6 +9167,7 @@ if (section) {
   window.addEventListener('dtpstat:geometry-editor-open', () => {
     void Promise.all([
       ensurePointTypes(),
+      loadDiscussionUnread(),
       refresh({
         keepSelection: true,
         fit: false,
@@ -9039,6 +9242,7 @@ if (section) {
       () =>
         void Promise.all([
           ensurePointTypes(),
+          loadDiscussionUnread(),
           refresh({
             keepSelection: false,
             fit: true,
