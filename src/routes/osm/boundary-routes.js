@@ -263,6 +263,31 @@ export function registerOsmBoundaryRoutes(
           return;
         }
 
+        realtimeEvents?.publish({
+          resource:
+            'osm-boundary-discussions',
+          action:
+            'read',
+          entityIds:
+            [read.boundaryId],
+          permission:
+            'osm-editor',
+          originClientId:
+            realtimeClientId(
+              request,
+            ),
+          boundaryId:
+            read.boundaryId,
+          readerUserId:
+            request.adminUser?.id ??
+            null,
+          lastReadMessageId:
+            read.lastReadMessageId ??
+            null,
+          message:
+            'Сообщения обсуждения OSM-объекта прочитаны.',
+        });
+
         response
           .set(
             'Cache-Control',
