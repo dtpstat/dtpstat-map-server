@@ -88,84 +88,6 @@ function ensureTopbarActions() {
   host.append(button);
 }
 
-function adaptLegacyReportEditorNode() {
-  const reportTab =
-    document.querySelector(
-      '[data-task-tab="report"]',
-    );
-  const reportPanel =
-    document.querySelector(
-      '[data-task-panel="report"]',
-    );
-
-  if (reportTab) {
-    delete reportTab.dataset
-      .taskTab;
-    reportTab.dataset
-      .interfaceTab =
-      'report';
-    reportTab.id =
-      'interface-tab-report';
-    reportTab.setAttribute(
-      'aria-controls',
-      'interface-panel-report',
-    );
-    document
-      .querySelector(
-        '#interface-tabs',
-      )
-      ?.append(
-        reportTab,
-      );
-  }
-
-  if (reportPanel) {
-    delete reportPanel.dataset
-      .taskPanel;
-    reportPanel.dataset
-      .interfacePanel =
-      'report';
-    reportPanel.id =
-      'interface-panel-report';
-    reportPanel.classList.add(
-      'interface-task-panel',
-      'report-interface-panel',
-    );
-    reportPanel.setAttribute(
-      'aria-labelledby',
-      'interface-tab-report',
-    );
-    reportPanel
-      .querySelector(
-        '#report-config-form',
-      )
-      ?.removeAttribute(
-        'data-task-form',
-      );
-    reportPanel
-      .querySelector(
-        '.report-config-sections',
-      )
-      ?.classList.remove(
-        'form-fields',
-      );
-    reportPanel
-      .querySelector(
-        '.report-config-editor',
-      )
-      ?.classList.remove(
-        'transfer-mode',
-      );
-    document
-      .querySelector(
-        '#interface-panels',
-      )
-      ?.append(
-        reportPanel,
-      );
-  }
-}
-
 async function loadInterfaceEditors(user) {
   ensureAdminTabPanels({
     tabsHost:
@@ -186,27 +108,14 @@ async function loadInterfaceEditors(user) {
   await import('./line-types-editor.js');
   await import('./point-types-editor.js');
 
-  // Compatibility bootstrap for the legacy report module only. The temporary
-  // classes are removed immediately and normalizeInterfaceEditorNodes() strips
-  // every remaining data-task marker before the editor becomes visible.
-  const interfaceTabs = document.querySelector('#interface-tabs');
-  const interfaceCard = document.querySelector('#interface-card');
-  interfaceTabs?.classList.add('task-tabs');
-  interfaceCard?.classList.add('control-card');
-  try {
-    await import('./report-config-editor.js');
-    await import('./report-range-ui.js');
-  } finally {
-    interfaceTabs?.classList.remove('task-tabs');
-    interfaceCard?.classList.remove('control-card');
-  }
+  await import('./report-config-editor.js');
+  await import('./report-range-ui.js');
   if (user.isSuperuser) {
     await import(
       './project-transfer-editor.js'
     );
   }
 
-  adaptLegacyReportEditorNode();
 
   setupAdminTabs({
     tabsHost:
