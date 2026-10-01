@@ -8,8 +8,12 @@ import {
 } from './settings-policy.js';
 import { normalizeMapboxAccessToken } from './mapbox-token-policy.js';
 import { normalizePublicDownloadName } from './public-download-policy.js';
+import {
+  normalizeHistoryDate,
+  normalizeHistorySpeeds,
+} from './settings-update-policy.js';
 
-export const PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION = 10;
+export const PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION = 11;
 export const PROJECT_SETTINGS_TRANSFER_KIND = 'project-settings';
 
 const LEGACY_SECURITY_DEFAULTS = Object.freeze({
@@ -68,12 +72,12 @@ export function validateProjectSettingsTransferEnvelope(payload) {
     );
   }
   const supportedVersions = [
-    1, 2, 3, 4, 5, 6, 7, 8, 9,
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
     PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION,
   ];
   if (!supportedVersions.includes(metadata.schemaVersion)) {
     throw new ProjectSettingsTransferValidationError(
-      '_dtpstat.schemaVersion must be 1, 2, 3, 4, 5, 6, 7, 8, 9 or ' +
+      '_dtpstat.schemaVersion must be 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 or ' +
       PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION,
     );
   }
@@ -92,6 +96,9 @@ export function normalizeTransferredProjectSettings(payload) {
   const hasShowPointGeometries = Object.hasOwn(input, 'showPointGeometries');
   const hasShowLineGeometries = Object.hasOwn(input, 'showLineGeometries');
   const hasShowPolygonGeometries = Object.hasOwn(input, 'showPolygonGeometries');
+  const hasShowGeometryTimeline = Object.hasOwn(input, 'showGeometryTimeline');
+  const hasHistoryStartDate = Object.hasOwn(input, 'historyStartDate');
+  const hasHistorySpeeds = Object.hasOwn(input, 'historySpeeds');
   const hasPopulationThreshold = Object.hasOwn(
     input,
     'largeCityPopulationThreshold',
@@ -106,6 +113,9 @@ export function normalizeTransferredProjectSettings(payload) {
     showPointGeometries: rawShowPointGeometries,
     showLineGeometries: rawShowLineGeometries,
     showPolygonGeometries: rawShowPolygonGeometries,
+    showGeometryTimeline: rawShowGeometryTimeline,
+    historyStartDate: rawHistoryStartDate,
+    historySpeeds: rawHistorySpeeds,
     publicDownloadName: rawPublicDownloadName,
     mapboxAccessToken: rawMapboxAccessToken,
     largeCityPopulationThreshold: rawPopulationThreshold,
@@ -128,6 +138,7 @@ export function normalizeTransferredProjectSettings(payload) {
       ['showPointGeometries', hasShowPointGeometries, rawShowPointGeometries],
       ['showLineGeometries', hasShowLineGeometries, rawShowLineGeometries],
       ['showPolygonGeometries', hasShowPolygonGeometries, rawShowPolygonGeometries],
+      ['showGeometryTimeline', hasShowGeometryTimeline, rawShowGeometryTimeline],
     ]
   ) {
     if (present && typeof value !== 'boolean') {
@@ -178,6 +189,16 @@ export function normalizeTransferredProjectSettings(payload) {
       hasShowLineGeometries ? rawShowLineGeometries : true,
     showPolygonGeometries:
       hasShowPolygonGeometries ? rawShowPolygonGeometries : true,
+    showGeometryTimeline:
+      hasShowGeometryTimeline ? rawShowGeometryTimeline : false,
+    historyStartDate:
+      hasHistoryStartDate
+        ? normalizeHistoryDate(rawHistoryStartDate)
+        : null,
+    historySpeeds:
+      hasHistorySpeeds
+        ? normalizeHistorySpeeds(rawHistorySpeeds)
+        : null,
     hasPublicDownloadName,
     publicDownloadName: hasPublicDownloadName
       ? normalizePublicDownloadName(rawPublicDownloadName)
