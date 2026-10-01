@@ -167,11 +167,31 @@ if (typeof document !== 'undefined') {
                 <small>При наведении указателя на линию показывается popup с KML Placemark/name. Эта настройка независима от постоянных подписей.</small>
               </label>
 
-              <label class="check project-setting-check">
-                <input name="showGeometryTimeline" type="checkbox">
-                Показывать временную шкалу геометрий
-                <small>На публичной карте появится горизонтальная шкала дат и кнопка Play для просмотра развития геометрий по полям «С» / «По».</small>
-              </label>
+              <section class="project-settings-section project-history-settings"
+                       aria-labelledby="project-history-title">
+                <div>
+                  <h5 id="project-history-title">Режим истории</h5>
+                  <p>Публичная карта показывает геометрии на выбранную дату и может автоматически перематывать историю с одной из настроенных скоростей.</p>
+                </div>
+
+                <label class="check project-setting-check">
+                  <input name="showGeometryTimeline" type="checkbox">
+                  Включить режим истории
+                  <small>На публичной карте появятся горизонтальная шкала дат, Play и выбор скорости.</small>
+                </label>
+
+                <label>Начало шкалы
+                  <input name="historyStartDate" type="date">
+                  <small>Необязательно. Если пусто, начало определяется по самой ранней дате «С» / «По» опубликованных геометрий.</small>
+                </label>
+
+                <div class="project-history-speeds-heading">
+                  <strong>Скорости воспроизведения</strong>
+                  <button type="button" class="secondary" id="project-history-speed-add">Добавить скорость</button>
+                </div>
+                <div id="project-history-speeds" class="project-history-speeds"></div>
+                <small>Квант задаёт, насколько сдвигается календарная дата за один такт. Интервал — частота тактов в секундах, допускаются десятые.</small>
+              </section>
 
               <section class="project-settings-section" aria-labelledby="project-city-marker-title">
                 <div>
@@ -303,6 +323,9 @@ if (typeof document !== 'undefined') {
       const showLineLabels = form.elements.namedItem('showLineLabels');
       const showLinePopups = form.elements.namedItem('showLinePopups');
       const showGeometryTimeline = form.elements.namedItem('showGeometryTimeline');
+      const historyStartDate = form.elements.namedItem('historyStartDate');
+      const historySpeedsHost = form.querySelector('#project-history-speeds');
+      const historyAddSpeed = form.querySelector('#project-history-speed-add');
       const showPointGeometries = form.elements.namedItem('showPointGeometries');
       const showLineGeometries = form.elements.namedItem('showLineGeometries');
       const showPolygonGeometries = form.elements.namedItem('showPolygonGeometries');
@@ -426,12 +449,156 @@ if (typeof document !== 'undefined') {
         if (snippet) insertSnippet(snippet);
       });
 
+      const HISTORY_STEP_LABELS = Object.freeze({
+        day: 'День',
+        week: 'Неделя',
+        month: 'Месяц',
+        quarter: 'Квартал',
+        year: 'Год',
+        five_years: 'Пятилетка',
+        decade: 'Декада',
+      });
+
+      function createHistorySpeedRow(speed = {}) {
+        const row = document.createElement('div');
+        row.className = 'project-history-speed-row';
+
+        const name = document.createElement('input');
+        name.type = 'text';
+        name.maxLength = 40;
+        name.required = true;
+        name.value = speed.name ?? '';
+        name.placeholder = 'Например: 2x';
+        name.dataset.historySpeedName = '';
+
+        const unit = document.createElement('select');
+        unit.required = true;
+        unit.dataset.historySpeedUnit = '';
+        for (const [value, title] of Object.entries(HISTORY_STEP_LABELS)) {
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = title;
+          option.selected = value === (speed.stepUnit ?? 'month');
+          unit.append(option);
+        }
+
+        const interval = document.createElement('input');
+        interval.type = 'number';
+        interval.min = '0.1';
+        interval.max = '60';
+        interval.step = '0.1';
+        interval.inputMode = 'decimal';
+        interval.required = true;
+        interval.value = String(speed.intervalSeconds ?? 1);
+        interval.dataset.historySpeedInterval = '';
+
+        const active = document.createElement('input');
+        active.type = 'checkbox';
+        active.checked = speed.isActive !== false;
+        active.dataset.historySpeedActive = '';
+
+        const defaultSpeed = document.createElement('input');
+        defaultSpeed.type = 'radio';
+        defaultSpeed.name = 'historySpeedDefault';
+        defaultSpeed.checked = speed.isDefault === true;
+        defaultSpeed.dataset.historySpeedDefault = '';
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'danger';
+        remove.textContent = 'Удалить';
+        remove.addEventListener('click', () => {
+          const wasDefault = defaultSpeed.checked;
+          row.remove();
+          if (wasDefault) {
+            const firstActive = [...historySpeedsHost.querySelectorAll('.project-history-speed-row')]
+              .find((candidate) => candidate.querySelector('[data-history-speed-active]')?.checked);
+            const radio = firstActive?.querySelector('[data-history-speed-default]');
+            if (radio) radio.checked = true;
+          }
+        });
+
+        const field = (title, control) => {
+          const label = document.createElement('label');
+          label.append(document.createTextNode(title), control);
+          return label;
+        };
+
+        const activeLabel = field('Активна', active);
+        activeLabel.className = 'check';
+        const defaultLabel = field('По умолчанию', defaultSpeed);
+        defaultLabel.className = 'check';
+
+        row.append(
+          field('Название', name),
+          field('Квант', unit),
+          field('Интервал, сек', interval),
+          activeLabel,
+          defaultLabel,
+          remove,
+        );
+
+        active.addEventListener('change', () => {
+          if (!active.checked && defaultSpeed.checked) {
+            active.checked = true;
+          }
+        });
+        defaultSpeed.addEventListener('change', () => {
+          if (defaultSpeed.checked) active.checked = true;
+        });
+
+        return row;
+      }
+
+      function renderHistorySpeeds(speeds) {
+        const values = Array.isArray(speeds) && speeds.length
+          ? speeds
+          : [
+              { name: '1x', stepUnit: 'month', intervalSeconds: 1, isActive: true, isDefault: true },
+              { name: '2x', stepUnit: 'month', intervalSeconds: 0.5, isActive: true, isDefault: false },
+              { name: '5x', stepUnit: 'quarter', intervalSeconds: 0.5, isActive: true, isDefault: false },
+              { name: '10x', stepUnit: 'year', intervalSeconds: 0.5, isActive: true, isDefault: false },
+            ];
+        historySpeedsHost.replaceChildren(
+          ...values.map(createHistorySpeedRow),
+        );
+      }
+
+      function readHistorySpeeds() {
+        return [...historySpeedsHost.querySelectorAll('.project-history-speed-row')]
+          .map((row) => ({
+            name: row.querySelector('[data-history-speed-name]').value.trim(),
+            stepUnit: row.querySelector('[data-history-speed-unit]').value,
+            intervalSeconds: Number(row.querySelector('[data-history-speed-interval]').value),
+            isActive: row.querySelector('[data-history-speed-active]').checked,
+            isDefault: row.querySelector('[data-history-speed-default]').checked,
+          }));
+      }
+
+      historyAddSpeed?.addEventListener('click', () => {
+        if (historySpeedsHost.children.length >= 20) {
+          setMessage('Можно настроить не более 20 скоростей.', 'error');
+          return;
+        }
+        historySpeedsHost.append(
+          createHistorySpeedRow({
+            name: '',
+            stepUnit: 'month',
+            intervalSeconds: 1,
+            isActive: true,
+            isDefault: historySpeedsHost.children.length === 0,
+          }),
+        );
+      });
+
       function applySettings(settings) {
         projectName.value = settings.projectName;
         themePreset.value = settings.themePreset ?? 'classic';
         showLineLabels.checked = Boolean(settings.showLineLabels);
         showLinePopups.checked = settings.showLinePopups !== false;
         showGeometryTimeline.checked = Boolean(settings.showGeometryTimeline);
+        historyStartDate.value = settings.historyStartDate ?? '';
+        renderHistorySpeeds(settings.historySpeeds);
         showPointGeometries.checked = settings.showPointGeometries !== false;
         showLineGeometries.checked = settings.showLineGeometries !== false;
         showPolygonGeometries.checked = settings.showPolygonGeometries !== false;
@@ -561,6 +728,8 @@ if (typeof document !== 'undefined') {
               showLineLabels: showLineLabels.checked,
               showLinePopups: showLinePopups.checked,
               showGeometryTimeline: showGeometryTimeline.checked,
+              historyStartDate: historyStartDate.value || null,
+              historySpeeds: readHistorySpeeds(),
               showPointGeometries: showPointGeometries.checked,
               showLineGeometries: showLineGeometries.checked,
               showPolygonGeometries: showPolygonGeometries.checked,
