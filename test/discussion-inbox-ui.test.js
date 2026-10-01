@@ -28,7 +28,7 @@ function read(
   );
 }
 
-test('profile discussion inbox unifies geometry and OSM threads with realtime unread state', async () => {
+test('dedicated discussion inbox unifies geometry and OSM threads with realtime unread state', async () => {
   const [
     shell,
     inbox,
@@ -60,7 +60,19 @@ test('profile discussion inbox unifies geometry and OSM threads with realtime un
   );
   assert.match(
     shell,
-    /key === 'profile'[\s\S]*dtpstat:profile-open/u,
+    /ensureMessagesSection\(\)/u,
+  );
+  assert.match(
+    shell,
+    /dataAdminSectionTab =[\s\S]*'messages'/u,
+  );
+  assert.match(
+    shell,
+    /messages:[\s\S]*canEditGeometries\(user\)[\s\S]*canEditOsm\(user\)/u,
+  );
+  assert.match(
+    shell,
+    /key === 'messages'[\s\S]*dtpstat:messages-open/u,
   );
 
   assert.match(
@@ -101,7 +113,15 @@ test('profile discussion inbox unifies geometry and OSM threads with realtime un
   );
   assert.match(
     inbox,
-    /className =[\s\S]*'admin-profile-unread'/u,
+    /discussion-inbox-host/u,
+  );
+  assert.doesNotMatch(
+    inbox,
+    /profile-editor-host/u,
+  );
+  assert.match(
+    inbox,
+    /className =[\s\S]*'admin-messages-unread'/u,
   );
   assert.match(
     inbox,
@@ -143,7 +163,7 @@ test('profile discussion inbox unifies geometry and OSM threads with realtime un
 
   assert.match(
     styles,
-    /\.profile-discussions-panel[\s\S]*grid-column: 1 \/ -1/u,
+    /\.admin-messages-card[\s\S]*grid-template-rows:/u,
   );
   assert.match(
     styles,
@@ -151,7 +171,7 @@ test('profile discussion inbox unifies geometry and OSM threads with realtime un
   );
   assert.match(
     styles,
-    /\.admin-profile-unread/u,
+    /\.admin-messages-unread/u,
   );
   assert.match(
     styles,
