@@ -130,6 +130,15 @@ export const VIEWPORT_GEOMETRIES_SQL = `
           ) = 'POINT'
           AND point_type.id IS NOT NULL
           AND point_type.is_active
+          AND COALESCE(
+            point_type.min_zoom,
+            0.0
+          ) <= viewport.zoom
+          AND (
+            point_type.max_zoom IS NULL
+            OR viewport.zoom <=
+               point_type.max_zoom
+          )
         )
       )
   ),
