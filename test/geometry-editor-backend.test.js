@@ -713,6 +713,7 @@ test('geometry discussions are persistent, permission-protected and realtime aft
   const [
     migration,
     storage,
+    discussionStorage,
     leaseStorage,
     policy,
     service,
@@ -726,6 +727,7 @@ test('geometry discussions are persistent, permission-protected and realtime aft
         read('db/migrations/V062__geometry_discussion_read_state.sql'),
       ]),
       read('src/db/geometry-discussion-storage.js'),
+      read('src/db/discussion-storage.js'),
       read('src/db/geometry-edit-lease-storage.js'),
       read('src/modules/geometry/editor-policy.js'),
       read('src/modules/geometry/editor-service.js'),
@@ -762,11 +764,15 @@ test('geometry discussions are persistent, permission-protected and realtime aft
 
   assert.match(
     storage,
-    /INSERT INTO geometry_discussion_messages[\s\S]*geometry\.updated_at[\s\S]*RETURNING id::integer AS id/u,
+    /createDiscussionStorage\([\s\S]*SUBJECT_TYPE[\s\S]*subjectRevision:[\s\S]*subject\.updatedAt/u,
   );
   assert.match(
-    storage,
-    /ORDER BY message\.id DESC[\s\S]*LIMIT \$2::integer/u,
+    discussionStorage,
+    /INSERT INTO admin_discussion_messages[\s\S]*subject_type[\s\S]*subject_id[\s\S]*RETURNING id::integer AS id/u,
+  );
+  assert.match(
+    discussionStorage,
+    /ORDER BY message\.id DESC[\s\S]*LIMIT \$3::integer/u,
   );
   assert.match(
     leaseStorage,
