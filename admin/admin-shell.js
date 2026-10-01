@@ -1,6 +1,7 @@
 import { adminAvatarObjectUrl } from './admin-avatar.js';
 import {
   ensureAdminSections,
+  ensureAdminTabPanels,
   setupAdminTabs,
 } from './admin-layout.js';
 import {
@@ -166,6 +167,20 @@ function adaptLegacyReportEditorNode() {
 }
 
 async function loadInterfaceEditors(user) {
+  ensureAdminTabPanels({
+    tabsHost:
+      document.querySelector(
+        '#interface-tabs',
+      ),
+    panelsHost:
+      document.querySelector(
+        '#interface-panels',
+      ),
+    definitions:
+      adminInterfaceTabs,
+    user,
+  });
+
   await import('./project-settings-editor.js');
   await import('./public-download-name-editor.js');
   await import('./line-types-editor.js');
