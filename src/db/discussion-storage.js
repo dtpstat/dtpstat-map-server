@@ -1,0 +1,241 @@
+const MESSAGE_COLUMNS_SQL = `
+  message.id::integer AS id,
+  message.subject_type AS "subjectType",
+  message.subject_id::integer AS "subjectId",
+  message.author_user_id::integer AS "authorUserId",
+  COALESCE(
+    NULLIF(BTRIM(author.display_name), ''),
+    author.username,
+    'Удалённый пользователь'
+  ) AS "authorDisplayName",
+  author.username AS "authorUsername",
+  (author.avatar_data IS NOT NULL) AS "authorHasAvatar",
+  message.subject_revision AS "subjectRevision",
+  message.message,
+  message.created_at AS "createdAt",
+  message.edited_at AS "editedAt",
+  (
+    SELECT COUNT(*)::integer
+    FROM admin_discussion_read_state AS read_state
+    WHERE read_state.subject_type = message.subject_type
+      AND read_state.subject_id = message.subject_id
+      AND read_state.user_id <> message.author_user_id
+      AND read_state.last_read_message_id IS NOT NULL
+      AND read_state.last_read_message_id >= message.id
+  ) AS "readByOthersCount"
+`;
+
+const MESSAGE_BY_ID_SQL = `
+  SELECT
+    ${MESSAGE_COLUMNS_SQL}
+  FROM admin_discussion_messages AS message
+  LEFT JOIN admin_users AS author
+    ON author.id = message.author_user_id
+  WHERE message.id = $1::bigint
+    AND message.deleted_at IS NULL
+`;
+
+export function createDiscussionStorage(
+  database,
+) {
+  async function one(
+    queryable,
+    messageId,
+  ) {
+    const result =
+      await queryable.query(
+        MESSAGE_BY_ID_SQL,
+        [messageId],
+      );
+
+    return result.rows[0] ?? null;
+  }
+
+  return {
+    async listMessages(
+      subjectType,
+      subjectId,
+      limit = 200,
+    ) {
+      const result =
+        await database.query(
+          `SELECT
+             ${MESSAGE_COLUMNS_SQL}
+           FROM admin_discussion_messages AS message
+           LEFT JOIN admin_users AS author
+             ON author.id = message.author_user_id
+           WHERE message.subject_type = $1::text
+             AND message.subject_id = $2::bigint
+             AND message.deleted_at IS NULL
+           ORDER BY message.id DESC
+           LIMIT $3::integer`,
+          [
+            subjectType,
+            subjectId,
+            limit,
+          ],
+        );
+
+      return result.rows.reverse();
+    },
+
+    async unreadCounts(
+      userId,
+      subjectTypes,
+    ) {
+      const result =
+        await database.query(
+          `SELECT
+             message.subject_type AS "subjectType",
+             message.subject_id::integer AS "subjectId",
+             COUNT(*)::integer AS "unreadCount"
+           FROM admin_discussion_messages AS message
+           LEFT JOIN admin_discussion_read_state AS read_state
+             ON read_state.subject_type = message.subject_type
+            AND read_state.subject_id = message.subject_id
+            AND read_state.user_id = $1::bigint
+           WHERE message.deleted_at IS NULL
+             AND message.author_user_id IS DISTINCT FROM $1::bigint
+             AND message.subject_type = ANY($2::text[])
+             AND (
+               read_state.last_read_message_id IS NULL
+               OR message.id > read_state.last_read_message_id
+             )
+           GROUP BY
+             message.subject_type,
+             message.subject_id
+           ORDER BY
+             message.subject_type,
+             message.subject_id`,
+          [
+            userId,
+            subjectTypes,
+          ],
+        );
+
+      return result.rows;
+    },
+
+    async markRead(
+      client,
+      {
+        subjectType,
+        subjectId,
+        userId,
+        messageId,
+      },
+    ) {
+      const result =
+        await client.query(
+          `INSERT INTO admin_discussion_read_state (
+             subject_type,
+             subject_id,
+             user_id,
+             last_read_message_id,
+             updated_at
+           )
+           SELECT
+             $1::text,
+             $2::bigint,
+             $3::bigint,
+             message.id,
+             NOW()
+           FROM admin_discussion_messages AS message
+           WHERE message.id = $4::bigint
+             AND message.subject_type = $1::text
+             AND message.subject_id = $2::bigint
+             AND message.deleted_at IS NULL
+           ON CONFLICT (subject_type, subject_id, user_id)
+           DO UPDATE SET
+             last_read_message_id =
+               GREATEST(
+                 admin_discussion_read_state.last_read_message_id,
+                 EXCLUDED.last_read_message_id
+               ),
+             updated_at = NOW()
+           RETURNING
+             subject_type AS "subjectType",
+             subject_id::integer AS "subjectId",
+             user_id::integer AS "userId",
+             last_read_message_id::integer AS "lastReadMessageId",
+             updated_at AS "updatedAt"`,
+          [
+            subjectType,
+            subjectId,
+            userId,
+            messageId,
+          ],
+        );
+
+      return result.rows[0] ?? null;
+    },
+
+    async latestMessageId(
+      subjectType,
+      subjectId,
+      queryable = database,
+    ) {
+      const result =
+        await queryable.query(
+          `SELECT MAX(id)::integer AS id
+           FROM admin_discussion_messages
+           WHERE subject_type = $1::text
+             AND subject_id = $2::bigint
+             AND deleted_at IS NULL`,
+          [
+            subjectType,
+            subjectId,
+          ],
+        );
+
+      return result.rows[0]?.id ?? null;
+    },
+
+    async createMessage(
+      client,
+      {
+        subjectType,
+        subjectId,
+        authorUserId,
+        subjectRevision,
+        message,
+      },
+    ) {
+      const result =
+        await client.query(
+          `INSERT INTO admin_discussion_messages (
+             subject_type,
+             subject_id,
+             author_user_id,
+             subject_revision,
+             message
+           )
+           VALUES (
+             $1::text,
+             $2::bigint,
+             $3::bigint,
+             $4::timestamptz,
+             $5::text
+           )
+           RETURNING id::integer AS id`,
+          [
+            subjectType,
+            subjectId,
+            authorUserId,
+            subjectRevision,
+            message,
+          ],
+        );
+
+      const id =
+        result.rows[0]?.id;
+
+      return id
+        ? one(
+          client,
+          id,
+        )
+        : null;
+    },
+  };
+}
