@@ -309,10 +309,51 @@ if (host) {
     accountDirty?.markClean();
   }
 
+  async function refreshSessionUser(
+    fallbackUser = null,
+  ) {
+    if (
+      typeof globalThis
+        .dtpstatReloadAdminSession ===
+      'function'
+    ) {
+      return globalThis
+        .dtpstatReloadAdminSession();
+    }
+
+    if (fallbackUser) {
+      renderUser(
+        fallbackUser,
+      );
+    }
+
+    return null;
+  }
+
   async function loadSession() {
-    const session = await globalThis.dtpstatReloadAdminSession?.() ?? await globalThis.dtpstatAdminSession;
-    currentSessionId = session.sessionId ?? null;
-    renderUser(session.user);
+    if (
+      typeof globalThis
+        .dtpstatReloadAdminSession ===
+      'function'
+    ) {
+      const session =
+        await globalThis
+          .dtpstatReloadAdminSession();
+      currentSessionId =
+        session.sessionId ??
+        null;
+      return session;
+    }
+
+    const session =
+      await globalThis
+        .dtpstatAdminSession;
+    currentSessionId =
+      session.sessionId ??
+      null;
+    renderUser(
+      session.user,
+    );
     return session;
   }
 
@@ -494,8 +535,9 @@ if (host) {
           email: accountForm.elements.email.value.trim() || null,
         }),
       });
-      renderUser(payload.user);
-      await globalThis.dtpstatReloadAdminSession?.();
+      await refreshSessionUser(
+        payload.user,
+      );
       message(accountMessage, 'Профиль сохранён.', 'success');
     } catch (error) {
       message(accountMessage, error.message, 'error');
@@ -795,8 +837,9 @@ if (host) {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error ?? `HTTP ${response.status}`);
-      renderUser(payload.user);
-      await globalThis.dtpstatReloadAdminSession?.();
+      await refreshSessionUser(
+        payload.user,
+      );
       message(accountMessage, 'Аватар обновлён.', 'success');
     } catch (error) {
       message(accountMessage, error.message, 'error');
@@ -809,8 +852,9 @@ if (host) {
     if (!currentUser?.hasAvatar) return;
     try {
       const payload = await api('/api/admin/profile/avatar', { method: 'DELETE' });
-      renderUser(payload.user);
-      await globalThis.dtpstatReloadAdminSession?.();
+      await refreshSessionUser(
+        payload.user,
+      );
       message(accountMessage, 'Аватар удалён.', 'success');
     } catch (error) {
       message(accountMessage, error.message, 'error');
