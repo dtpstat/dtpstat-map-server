@@ -22,6 +22,9 @@ function exportPool() {
             themePreset: 'modern',
             showLineLabels: true,
             showLinePopups: false,
+            showPointGeometries: true,
+            showLineGeometries: false,
+            showPolygonGeometries: true,
             largeCityPopulationThreshold: 400000,
             largeCityAreaKm2Threshold: 250,
             publicDownloadName: 'tram-lines',
@@ -112,10 +115,13 @@ test('settings export contains download name, sequential ranking and line displa
   const payload = await service.exportSettings();
 
   assert.equal(payload._dtpstat.kind, 'project-settings');
-  assert.equal(payload._dtpstat.schemaVersion, 9);
+  assert.equal(payload._dtpstat.schemaVersion, 10);
   assert.equal(payload.projectSettings.themePreset, 'modern');
   assert.equal(payload.projectSettings.showLineLabels, true);
   assert.equal(payload.projectSettings.showLinePopups, false);
+  assert.equal(payload.projectSettings.showPointGeometries, true);
+  assert.equal(payload.projectSettings.showLineGeometries, false);
+  assert.equal(payload.projectSettings.showPolygonGeometries, true);
   assert.equal(payload.projectSettings.largeCityPopulationThreshold, 400000);
   assert.equal(payload.projectSettings.largeCityAreaKm2Threshold, 250);
   assert.equal(payload.projectSettings.publicDownloadName, 'tram-lines');
@@ -160,7 +166,7 @@ test('settings import rejects unsupported schema versions before touching the da
 
   await assert.rejects(
     service.importSettings({
-      _dtpstat: { kind: 'project-settings', schemaVersion: 10 },
+      _dtpstat: { kind: 'project-settings', schemaVersion: 11 },
     }),
     (error) => error instanceof ProjectSettingsTransferValidationError && /schemaVersion/.test(error.message),
   );
