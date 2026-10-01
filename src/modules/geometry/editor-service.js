@@ -591,6 +591,13 @@ export function createGeometryEditorService(
         message.createdAt,
       editedAt:
         message.editedAt,
+      deliveredAt:
+        message.createdAt,
+      readByOthersCount:
+        Number(
+          message.readByOthersCount ??
+          0,
+        ),
       author: {
         userId:
           message.authorUserId,
@@ -1614,6 +1621,86 @@ export function createGeometryEditorService(
             publicDiscussionMessage,
           ),
       };
+    },
+
+    async listDiscussionUnread(
+      actor,
+    ) {
+      const userId =
+        actorId(actor);
+      const rows =
+        await discussionStorage
+          .unreadCounts(
+            userId,
+          );
+
+      return {
+        items:
+          rows.map(
+            (row) => ({
+              geometryId:
+                row.geometryId,
+              unreadCount:
+                row.unreadCount,
+            }),
+          ),
+      };
+    },
+
+    async markDiscussionRead(
+      geometryId,
+      actor,
+      payload = {},
+    ) {
+      const id =
+        normalizeGeometryId(
+          geometryId,
+        );
+      const userId =
+        actorId(actor);
+
+      if (
+        !await discussionStorage
+          .geometryExists(id)
+      ) {
+        return null;
+      }
+
+      const messageId =
+        payload?.messageId ===
+          undefined ||
+        payload?.messageId ===
+          null
+          ? await discussionStorage
+            .latestMessageId(id)
+          : normalizeGeometryId(
+            payload.messageId,
+            'messageId',
+          );
+
+      if (!messageId) {
+        return {
+          geometryId:
+            id,
+          userId,
+          lastReadMessageId:
+            null,
+        };
+      }
+
+      return leaseTransaction(
+        (client) =>
+          discussionStorage
+            .markRead(
+              client,
+              {
+                geometryId:
+                  id,
+                userId,
+                messageId,
+              },
+            ),
+      );
     },
 
     async postDiscussionMessage(
