@@ -53,3 +53,38 @@ export const adminDynamicSections = [
     ],
   },
 ];
+
+
+export const adminInterfaceTabs = [
+  {
+    id: 'project',
+    title: 'Проект',
+  },
+  {
+    id: 'map',
+    title: 'Карта',
+  },
+  {
+    id: 'report',
+    title: 'Расчёты',
+  },
+  {
+    id: 'line-types',
+    title: 'Типы линий',
+    openEvent:
+      'dtpstat:line-types-changed',
+  },
+  {
+    id: 'point-types',
+    title: 'Типы точек',
+    openEvent:
+      'dtpstat:point-types-changed',
+  },
+  {
+    id: 'project-transfer',
+    title:
+      'Импорт / экспорт проекта',
+    permission:
+      'superuser',
+  },
+];
