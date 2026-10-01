@@ -9,7 +9,7 @@ import {
 import { normalizeMapboxAccessToken } from './mapbox-token-policy.js';
 import { normalizePublicDownloadName } from './public-download-policy.js';
 
-export const PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION = 9;
+export const PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION = 10;
 export const PROJECT_SETTINGS_TRANSFER_KIND = 'project-settings';
 
 const LEGACY_SECURITY_DEFAULTS = Object.freeze({
@@ -68,12 +68,12 @@ export function validateProjectSettingsTransferEnvelope(payload) {
     );
   }
   const supportedVersions = [
-    1, 2, 3, 4, 5, 6, 7, 8,
+    1, 2, 3, 4, 5, 6, 7, 8, 9,
     PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION,
   ];
   if (!supportedVersions.includes(metadata.schemaVersion)) {
     throw new ProjectSettingsTransferValidationError(
-      '_dtpstat.schemaVersion must be 1, 2, 3, 4, 5, 6, 7, 8 or ' +
+      '_dtpstat.schemaVersion must be 1, 2, 3, 4, 5, 6, 7, 8, 9 or ' +
       PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION,
     );
   }
@@ -89,6 +89,9 @@ export function normalizeTransferredProjectSettings(payload) {
   const hasMapboxAccessToken = Object.hasOwn(input, 'mapboxAccessToken');
   const hasShowLinePopups = Object.hasOwn(input, 'showLinePopups');
   const hasPublicDownloadName = Object.hasOwn(input, 'publicDownloadName');
+  const hasShowPointGeometries = Object.hasOwn(input, 'showPointGeometries');
+  const hasShowLineGeometries = Object.hasOwn(input, 'showLineGeometries');
+  const hasShowPolygonGeometries = Object.hasOwn(input, 'showPolygonGeometries');
   const hasPopulationThreshold = Object.hasOwn(
     input,
     'largeCityPopulationThreshold',
@@ -100,6 +103,9 @@ export function normalizeTransferredProjectSettings(payload) {
   const {
     showLineLabels = false,
     showLinePopups: rawShowLinePopups,
+    showPointGeometries: rawShowPointGeometries,
+    showLineGeometries: rawShowLineGeometries,
+    showPolygonGeometries: rawShowPolygonGeometries,
     publicDownloadName: rawPublicDownloadName,
     mapboxAccessToken: rawMapboxAccessToken,
     largeCityPopulationThreshold: rawPopulationThreshold,
@@ -116,6 +122,19 @@ export function normalizeTransferredProjectSettings(payload) {
     throw new ProjectSettingsValidationError(
       'showLinePopups must be boolean',
     );
+  }
+  for (
+    const [field, present, value] of [
+      ['showPointGeometries', hasShowPointGeometries, rawShowPointGeometries],
+      ['showLineGeometries', hasShowLineGeometries, rawShowLineGeometries],
+      ['showPolygonGeometries', hasShowPolygonGeometries, rawShowPolygonGeometries],
+    ]
+  ) {
+    if (present && typeof value !== 'boolean') {
+      throw new ProjectSettingsValidationError(
+        field + ' must be boolean',
+      );
+    }
   }
 
   const populationThreshold = hasPopulationThreshold
@@ -153,6 +172,12 @@ export function normalizeTransferredProjectSettings(payload) {
     // Transfer schemas 1-3 predate this field. Their effective behaviour was
     // always to show hover popups, so missing values normalize to true.
     showLinePopups: hasShowLinePopups ? rawShowLinePopups : true,
+    showPointGeometries:
+      hasShowPointGeometries ? rawShowPointGeometries : true,
+    showLineGeometries:
+      hasShowLineGeometries ? rawShowLineGeometries : true,
+    showPolygonGeometries:
+      hasShowPolygonGeometries ? rawShowPolygonGeometries : true,
     hasPublicDownloadName,
     publicDownloadName: hasPublicDownloadName
       ? normalizePublicDownloadName(rawPublicDownloadName)
