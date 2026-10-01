@@ -111,6 +111,14 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
       ),
     );
   }
+  assert.match(
+    schema,
+    /id:\s*'report'[\s\S]*panelClass:[\s\S]*'report-interface-panel'/u,
+  );
+  assert.match(
+    engine,
+    /appendClassNames\([\s\S]*panel,[\s\S]*definition\.panelClass/u,
+  );
 
   assert.match(
     engine,
