@@ -16,7 +16,7 @@ const HISTORY_STEP_UNITS =
     'decade',
   ]);
 
-function normalizeHistoryDate(value) {
+export function normalizeHistoryDate(value) {
   if (
     value === undefined ||
     value === null ||
@@ -45,7 +45,7 @@ function normalizeHistoryDate(value) {
   return value;
 }
 
-function normalizeHistorySpeeds(value) {
+export function normalizeHistorySpeeds(value) {
   if (value === undefined) {
     return null;
   }
