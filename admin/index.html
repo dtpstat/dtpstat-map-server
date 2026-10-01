@@ -72,8 +72,6 @@
   </nav>
 
   <main class="admin-sections">
-    <!-- Interface is intentionally first in DOM. The legacy report editor is
-         loaded only after the data controller and is attached here by the shell. -->
     <section class="admin-section-panel" id="admin-section-interface"
              data-admin-section-panel="interface" role="tabpanel" hidden>
       <div class="admin-layout admin-layout-single">
@@ -84,42 +82,9 @@
               <h2 id="interface-title">Настройка интерфейса</h2>
             </div>
           </div>
-          <nav class="interface-tabs" id="interface-tabs" role="tablist" aria-label="Настройки интерфейса">
-            <button class="task-tab" id="interface-tab-line-types" type="button" role="tab"
-                    aria-selected="false" aria-controls="interface-panel-line-types"
-                    data-interface-tab="line-types">
-              Типы линий
-            </button>
-            <button class="task-tab" id="interface-tab-point-types" type="button" role="tab"
-                    aria-selected="false" aria-controls="interface-panel-point-types"
-                    data-interface-tab="point-types">
-              Типы точек
-            </button>
-          </nav>
-          <div class="interface-panels" id="interface-panels">
-            <article class="task-panel interface-task-panel" id="interface-panel-line-types"
-                     role="tabpanel" aria-labelledby="interface-tab-line-types"
-                     data-interface-panel="line-types" hidden>
-              <h3>Типы линий</h3>
-              <p class="panel-description">NAME и CODE задаются импортом/БД; здесь редактируются только подпись легенды и визуальный стиль.</p>
-              <section class="operation-panel transfer-mode line-types-editor">
-                <div id="line-types-editor-host"></div>
-              </section>
-            </article>
-
-            <article class="task-panel interface-task-panel" id="interface-panel-point-types"
-                     role="tabpanel" aria-labelledby="interface-tab-point-types"
-                     data-interface-panel="point-types" hidden>
-              <h3>Типы точек</h3>
-              <p class="panel-description">
-                Тип определяет иконку Point-геометрии на карте. Неактивные типы
-                остаются в данных, но не отображаются на публичной карте.
-              </p>
-              <section class="operation-panel transfer-mode point-types-editor">
-                <div id="point-types-editor-host"></div>
-              </section>
-            </article>
-          </div>
+          <nav class="interface-tabs" id="interface-tabs"
+               role="tablist" aria-label="Настройки интерфейса"></nav>
+          <div class="interface-panels" id="interface-panels"></div>
         </section>
       </div>
     </section>
