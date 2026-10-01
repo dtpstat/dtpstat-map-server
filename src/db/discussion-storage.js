@@ -175,6 +175,11 @@ export function createDiscussionStorage(
                  ELSE FALSE
                END
              ) AS "subjectExists",
+             CASE
+               WHEN latest.subject_type = 'geometry'
+                 THEN geometry.city_id::integer
+               ELSE NULL
+             END AS "subjectCityId",
              (
                SELECT COUNT(*)::integer
                FROM admin_discussion_messages AS unread
