@@ -1713,7 +1713,7 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
 
   assert.match(
     html,
-    /id="geometry-discussion-open"[\s\S]*aria-label="Открыть обсуждение геометрии"[\s\S]*geometry-discussion-open-icon/u,
+    /id="geometry-discussion-open"[\s\S]*aria-label="Открыть обсуждение геометрии"/u,
   );
   assert.match(
     html,
@@ -1737,7 +1737,7 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
   );
   assert.match(
     html,
-    /geometry-discussion-send[\s\S]*aria-label="Отправить сообщение"/u,
+    /geometry-discussion-send[\s\S]*aria-label="Отправить сообщение"[\s\S]*><\/button>/u,
   );
 
   assert.match(
@@ -1791,6 +1791,10 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
   );
   assert.match(
     styles,
+    /\.geometry-discussion-open::before[\s\S]*border: 1\.6px solid currentColor/u,
+  );
+  assert.match(
+    styles,
     /\.geometry-discussion-unread \{/u,
   );
   assert.match(
@@ -1804,6 +1808,18 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
   assert.match(
     styles,
     /\.geometry-discussion-form \{[\s\S]*grid-template-columns: minmax\(0, 1fr\) 2\.35rem/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-discussion-send::before[\s\S]*border-left: 10px solid currentColor/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-discussion \{[\s\S]*max-height: min\(34rem, calc\(100vh - 2rem\)\)/u,
+  );
+  assert.doesNotMatch(
+    html,
+    /class="visually-hidden"[\s\S]*geometry-discussion/u,
   );
   assert.match(
     styles,
