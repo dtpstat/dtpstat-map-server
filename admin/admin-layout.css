@@ -48,12 +48,8 @@
   }
 }
 
-@media (max-width: 1050px) {
-  .admin-layout-grid {
-    grid-template-columns: 1fr;
-  }
-
+@container admin-layout-grid (max-width: 63.999rem) {
   .admin-layout-block {
-    grid-column: 1;
+    grid-column: 1 / -1;
   }
 }
