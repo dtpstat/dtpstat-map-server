@@ -33,6 +33,27 @@ function applyBlockSpan(
   );
 }
 
+function applyBlockCapabilities(
+  block,
+  capabilities = {},
+) {
+  if (capabilities.fill) {
+    block.classList.add(
+      'admin-layout-fill',
+    );
+  }
+  if (capabilities.scroll) {
+    block.classList.add(
+      'admin-layout-scroll',
+    );
+  }
+  if (capabilities.sticky) {
+    block.classList.add(
+      'admin-layout-sticky',
+    );
+  }
+}
+
 function createHeading(
   section,
 ) {
@@ -142,6 +163,10 @@ function createBlock(
   applyBlockSpan(
     block,
     definition.span,
+  );
+  applyBlockCapabilities(
+    block,
+    definition.capabilities,
   );
 
   const host =
