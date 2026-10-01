@@ -1211,11 +1211,45 @@
   background: #0b1417;
   box-shadow: 0 1.4rem 4rem rgb(0 0 0 / 58%);
   overflow: hidden;
-  resize: both;
 }
 
 .geometry-discussion[hidden] {
   display: none;
+}
+
+.geometry-discussion-resize-grip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 4;
+  width: 1.1rem;
+  height: 1.1rem;
+  cursor: nwse-resize;
+  opacity: .22;
+}
+
+.geometry-discussion-resize-grip::before,
+.geometry-discussion-resize-grip::after {
+  position: absolute;
+  top: .22rem;
+  left: .22rem;
+  width: .55rem;
+  height: 1px;
+  background: #8fbab4;
+  content: "";
+  transform: rotate(-45deg);
+  transform-origin: left center;
+}
+
+.geometry-discussion-resize-grip::after {
+  top: .42rem;
+  left: .18rem;
+  width: .35rem;
+}
+
+.geometry-discussion:hover
+.geometry-discussion-resize-grip {
+  opacity: .8;
 }
 
 .geometry-discussion.is-attention {
@@ -1446,10 +1480,14 @@
     width: calc(100vw - 1rem);
     min-width: 0;
     max-height: min(32rem, calc(100vh - 1rem));
-    resize: none;
+
   }
 
   .geometry-discussion-message {
     width: min(94%, 22rem);
+  }
+
+  .geometry-discussion-resize-grip {
+    display: none;
   }
 }
