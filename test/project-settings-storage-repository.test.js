@@ -62,6 +62,9 @@ test('project settings storage owns singleton read and update SQL', async () => 
     showLineLabels: true,
     showLinePopups: false,
     showGeometryTimeline: true,
+    showPointGeometries: true,
+    showLineGeometries: false,
+    showPolygonGeometries: true,
     mapboxAccessToken: null,
     largeCityPopulationThreshold: 500000,
     largeCityAreaKm2Threshold: 250,
@@ -78,8 +81,8 @@ test('project settings storage owns singleton read and update SQL', async () => 
     /^UPDATE project_settings/u,
   );
   assert.deepEqual(
-    database.queries[1].values.slice(-3),
-    [500000, 250, true],
+    database.queries[1].values.slice(-6),
+    [500000, 250, true, true, false, true],
   );
   assert.match(
     database.queries[0].text,
@@ -89,6 +92,21 @@ test('project settings storage owns singleton read and update SQL', async () => 
     database.queries[1].text,
     /show_geometry_timeline = \$12::boolean/u,
   );
+  assert.match(
+    database.queries[0].text,
+    /show_point_geometries AS "showPointGeometries"/u,
+  );
+  assert.match(
+    database.queries[0].text,
+    /show_line_geometries AS "showLineGeometries"/u,
+  );
+  assert.match(
+    database.queries[0].text,
+    /show_polygon_geometries AS "showPolygonGeometries"/u,
+  );
+  assert.match(database.queries[1].text, /show_point_geometries = \$13::boolean/u);
+  assert.match(database.queries[1].text, /show_line_geometries = \$14::boolean/u);
+  assert.match(database.queries[1].text, /show_polygon_geometries = \$15::boolean/u);
 });
 
 test('project settings storage keeps public download name in dedicated update', async () => {
