@@ -275,15 +275,6 @@
   resize: vertical;
 }
 
-@container admin-layout-grid (max-width: 63.999rem) {
-  .admin-messages-card .admin-layout-grid {
-    grid-template-rows:
-      minmax(10rem, 18rem)
-      minmax(28rem, 1fr);
-  }
-}
-
-
 #admin-messages-total {
   white-space: nowrap;
   color: #d9f7f3;
