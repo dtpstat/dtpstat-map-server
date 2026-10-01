@@ -10,6 +10,8 @@ const EXPORT_PROJECT_SETTINGS_SQL = `
     theme_preset AS "themePreset",
     show_line_labels AS "showLineLabels",
     show_line_popups AS "showLinePopups",
+    show_geometry_timeline AS "showGeometryTimeline",
+    history_start_date::text AS "historyStartDate",
     show_point_geometries AS "showPointGeometries",
     show_line_geometries AS "showLineGeometries",
     show_polygon_geometries AS "showPolygonGeometries",
@@ -18,6 +20,17 @@ const EXPORT_PROJECT_SETTINGS_SQL = `
     public_download_name AS "publicDownloadName",
     mapbox_access_token AS "mapboxAccessToken"
   FROM project_settings WHERE id = 1
+`;
+
+const EXPORT_HISTORY_SPEEDS_SQL = `
+  SELECT
+    name,
+    step_unit AS "stepUnit",
+    interval_seconds::double precision AS "intervalSeconds",
+    is_active AS "isActive",
+    is_default AS "isDefault"
+  FROM geometry_history_speeds
+  ORDER BY sort_order, id
 `;
 
 const EXPORT_LINE_TYPES_SQL = `
@@ -72,8 +85,33 @@ const UPDATE_PROJECT_SETTINGS_SQL = `
     show_point_geometries=$15::boolean,
     show_line_geometries=$16::boolean,
     show_polygon_geometries=$17::boolean,
+    show_geometry_timeline=$18::boolean,
+    history_start_date=$19::date,
     updated_at=NOW()
   WHERE id=1
+`;
+
+const DELETE_HISTORY_SPEEDS_SQL = `
+  DELETE FROM geometry_history_speeds
+`;
+
+const INSERT_HISTORY_SPEED_SQL = `
+  INSERT INTO geometry_history_speeds(
+    name,
+    step_unit,
+    interval_seconds,
+    sort_order,
+    is_active,
+    is_default
+  )
+  VALUES (
+    $1::text,
+    $2::text,
+    $3::double precision,
+    $4::integer,
+    $5::boolean,
+    $6::boolean
+  )
 `;
 
 const CREATE_LINE_TYPES_STAGE_SQL = `
@@ -155,6 +193,11 @@ export function createProjectSettingsTransferRepository() {
           EXPORT_PROJECT_SETTINGS_SQL,
         );
 
+      const historySpeeds =
+        await client.query(
+          EXPORT_HISTORY_SPEEDS_SQL,
+        );
+
       const lineTypes =
         await client.query(
           EXPORT_LINE_TYPES_SQL,
@@ -171,7 +214,11 @@ export function createProjectSettingsTransferRepository() {
         );
 
       return {
-        projectSettings: project.rows[0],
+        projectSettings: {
+          ...project.rows[0],
+          historySpeeds:
+            historySpeeds.rows,
+        },
         lineTypes: lineTypes.rows,
         reportConfigPresent: Boolean(report.rows[0]),
         reportConfig: report.rows[0]?.config,
@@ -203,26 +250,53 @@ export function createProjectSettingsTransferRepository() {
       return result.rows.map((row) => row.name);
     },
 
-    updateProjectSettings(client, settings) {
-      return client.query(UPDATE_PROJECT_SETTINGS_SQL, [
-        settings.projectName,
-        settings.keywords,
-        settings.footerHtml,
-        settings.yandexMetrikaId,
-        settings.googleAnalyticsId,
-        settings.themePreset,
-        settings.showLineLabels,
-        settings.showLinePopups,
-        settings.hasPublicDownloadName,
-        settings.publicDownloadName,
-        settings.hasMapboxAccessToken,
-        settings.mapboxAccessToken,
-        settings.largeCityPopulationThreshold,
-        settings.largeCityAreaKm2Threshold,
-        settings.showPointGeometries,
-        settings.showLineGeometries,
-        settings.showPolygonGeometries,
-      ]);
+    async updateProjectSettings(client, settings) {
+      const result =
+        await client.query(
+          UPDATE_PROJECT_SETTINGS_SQL,
+          [
+            settings.projectName,
+            settings.keywords,
+            settings.footerHtml,
+            settings.yandexMetrikaId,
+            settings.googleAnalyticsId,
+            settings.themePreset,
+            settings.showLineLabels,
+            settings.showLinePopups,
+            settings.hasPublicDownloadName,
+            settings.publicDownloadName,
+            settings.hasMapboxAccessToken,
+            settings.mapboxAccessToken,
+            settings.largeCityPopulationThreshold,
+            settings.largeCityAreaKm2Threshold,
+            settings.showPointGeometries,
+            settings.showLineGeometries,
+            settings.showPolygonGeometries,
+            settings.showGeometryTimeline,
+            settings.historyStartDate,
+          ],
+        );
+
+      if (settings.historySpeeds !== null) {
+        await client.query(
+          DELETE_HISTORY_SPEEDS_SQL,
+        );
+        for (const speed of settings.historySpeeds) {
+          await client.query(
+            INSERT_HISTORY_SPEED_SQL,
+            [
+              speed.name,
+              speed.stepUnit,
+              speed.intervalSeconds,
+              speed.sortOrder,
+              speed.isActive,
+              speed.isDefault,
+            ],
+          );
+        }
+      }
+
+      return result;
     },
 
     saveReportConfig(client, config) {
