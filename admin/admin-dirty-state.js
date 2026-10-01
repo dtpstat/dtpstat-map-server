@@ -85,6 +85,13 @@ function dirtyLeavingForTab(tab) {
   return [...states.values()].filter((state) => {
     if (!state.dirty) return false;
     if (!target) return true;
+    if (
+      target.dataset.dirtyFormId &&
+      target.dataset.dirtyFormId ===
+        state.form.id
+    ) {
+      return false;
+    }
     return !target.contains(state.form) && !state.form.contains(target);
   });
 }
