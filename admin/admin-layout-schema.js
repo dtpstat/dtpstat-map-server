@@ -28,6 +28,9 @@ export const adminDynamicSections = [
           base: 12,
           wide: 4,
         },
+        capabilities: {
+          fill: true,
+        },
         placeholder:
           'Загружаем список обсуждений…',
       },
@@ -40,6 +43,9 @@ export const adminDynamicSections = [
         span: {
           base: 12,
           wide: 8,
+        },
+        capabilities: {
+          fill: true,
         },
         placeholder:
           'Выберите обсуждение слева.',
