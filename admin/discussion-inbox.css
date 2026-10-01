@@ -276,7 +276,7 @@
   resize: vertical;
 }
 
-@media (max-width: 900px) {
+@container admin-layout-block (max-width: 56rem) {
   .profile-discussions-layout {
     min-height: auto;
     grid-template-columns: 1fr;
