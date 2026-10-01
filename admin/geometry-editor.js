@@ -68,7 +68,11 @@ if (section) {
   const meta = document.querySelector('#geometry-editor-meta');
   const sourceTags = document.querySelector('#geometry-source-tags');
   const mergeButton = document.querySelector('#geometry-merge-selected');
-  const bulkSelectButton = document.querySelector('#geometry-bulk-select');
+  const mergeStartButton = document.querySelector('#geometry-merge-start');
+  const mergeMode = document.querySelector('#geometry-merge-mode');
+  const mergeStatus = document.querySelector('#geometry-merge-status');
+  const mergeClearButton = document.querySelector('#geometry-merge-clear');
+  const mergeCancelButton = document.querySelector('#geometry-merge-cancel');
   const deleteButton = document.querySelector('#geometry-delete');
   const revertButton = document.querySelector('#geometry-revert');
   const cutButton = document.querySelector('#geometry-cut-area');
@@ -2855,6 +2859,18 @@ if (section) {
               id > 0
             )
           ) {
+            if (
+              state.bulkSelecting
+            ) {
+              event.originalEvent
+                ?.preventDefault?.();
+              event.originalEvent
+                ?.stopPropagation?.();
+              toggleMergeSelection(
+                id,
+              );
+              return;
+            }
             void selectGeometry(
               id,
             );
@@ -3084,11 +3100,22 @@ if (section) {
         backgroundGeometries,
       ),
     );
+    const highlightedGeometries =
+      state.bulkSelecting
+        ? selectedMergeItems()
+        : (
+            selectedGeometry
+              ? [
+                  selectedGeometry,
+                ]
+              : []
+          );
+
     map.getSource(SELECTED_SOURCE)?.setData(
-      selectedGeometry
-        ? featureCollection([
-            selectedGeometry,
-          ])
+      highlightedGeometries.length
+        ? featureCollection(
+            highlightedGeometries,
+          )
         : emptyCollection(),
     );
     map.getSource(HANDLE_SOURCE)?.setData(handleFeatures());
@@ -4185,6 +4212,27 @@ if (section) {
         'is-bulk-selecting',
         state.bulkSelecting,
       );
+      row.classList.toggle(
+        'is-bulk-selected',
+        state.selectedSet.has(
+          item.id,
+        ),
+      );
+      const mergeCandidateIssue =
+        state.bulkSelecting
+          ? mergeCandidateProblem(
+              item,
+            )
+          : null;
+      row.classList.toggle(
+        'is-merge-incompatible',
+        Boolean(
+          mergeCandidateIssue &&
+          !state.selectedSet.has(
+            item.id,
+          ),
+        ),
+      );
       row.classList.toggle('has-draft', Boolean(item._draft));
       row.classList.toggle('has-conflict', Boolean(item._conflict));
       row.classList.toggle('is-unlinked', !item.boundaryId);
@@ -4195,20 +4243,33 @@ if (section) {
       check.checked = state.selectedSet.has(item.id);
       check.disabled = Boolean(
         state.importSession ||
-        item._conflict
+        (
+          mergeCandidateIssue &&
+          !state.selectedSet.has(
+            item.id,
+          )
+        )
       );
-      check.title = check.disabled
-        ? 'Сначала разрешите конфликт этой геометрии'
-        : 'Выбрать для групповой или topology-операции';
+      check.title =
+        check.disabled
+          ? mergeCandidateIssue
+          : 'Добавить или убрать геометрию из объединения';
       check.setAttribute(
         'aria-label',
         'Выбрать для операции: ' + displayName(item),
       );
-      check.addEventListener('change', () => {
-        if (check.checked) state.selectedSet.add(item.id);
-        else state.selectedSet.delete(item.id);
-        renderMergeState();
-      });
+      check.addEventListener(
+        'change',
+        () => {
+          toggleMergeSelection(
+            item.id,
+            {
+              desired:
+                check.checked,
+            },
+          );
+        },
+      );
 
       const open = document.createElement('button');
       open.type = 'button';
@@ -4247,7 +4308,22 @@ if (section) {
       type.textContent = typeLabel(item);
 
       open.append(copy, type);
-      open.addEventListener('click', () => void selectGeometry(item.id));
+      open.addEventListener(
+        'click',
+        () => {
+          if (
+            state.bulkSelecting
+          ) {
+            toggleMergeSelection(
+              item.id,
+            );
+            return;
+          }
+          void selectGeometry(
+            item.id,
+          );
+        },
+      );
 
       if (
         state.bulkSelecting
@@ -4264,6 +4340,144 @@ if (section) {
       listHost.append(row);
     }
 
+    renderMergeState();
+  }
+
+  function mergeSelectionFamily() {
+    return selectedMergeItems()
+      .at(0)
+      ?.family ??
+      null;
+  }
+
+  function mergeCandidateProblem(
+    item,
+  ) {
+    if (!item) {
+      return 'Геометрия не найдена.';
+    }
+    if (item._conflict) {
+      return 'Сначала разрешите конфликт этой геометрии.';
+    }
+    if (item.family === 'point') {
+      return 'Точечные геометрии объединять нельзя.';
+    }
+    if (
+      ![
+        'line',
+        'polygon',
+      ].includes(
+        item.family,
+      )
+    ) {
+      return 'Этот тип геометрии нельзя объединять.';
+    }
+
+    const family =
+      mergeSelectionFamily();
+    if (
+      family &&
+      family !==
+        item.family
+    ) {
+      return family === 'line'
+        ? 'Сейчас выбираются линии. Полигон добавить нельзя.'
+        : 'Сейчас выбираются полигоны. Линию добавить нельзя.';
+    }
+
+    return null;
+  }
+
+  function toggleMergeSelection(
+    id,
+    {
+      desired,
+    } = {},
+  ) {
+    if (!state.bulkSelecting) {
+      return false;
+    }
+
+    const item =
+      state.geometries.find(
+        (candidate) =>
+          String(
+            candidate.id,
+          ) ===
+          String(id),
+      );
+    if (!item) {
+      return false;
+    }
+
+    const selected =
+      state.selectedSet.has(
+        item.id,
+      );
+    const shouldSelect =
+      desired === undefined
+        ? !selected
+        : Boolean(desired);
+
+    if (!shouldSelect) {
+      state.selectedSet.delete(
+        item.id,
+      );
+    } else {
+      const problem =
+        mergeCandidateProblem(
+          item,
+        );
+      if (problem) {
+        setMessage(
+          problem,
+          'error',
+        );
+        renderMergeState();
+        return false;
+      }
+      state.selectedSet.add(
+        item.id,
+      );
+    }
+
+    renderList();
+    updateMapSources();
+    renderMergeState();
+    return true;
+  }
+
+  function startMergeSelection() {
+    if (
+      state.importSession ||
+      state.editing ||
+      state.drawing
+    ) {
+      return;
+    }
+
+    state.selectedSet.clear();
+    state.bulkSelecting =
+      true;
+    topologyActions.open =
+      false;
+    modeLabel.textContent =
+      'Объединение геометрий · выбирайте объекты на карте или в списке';
+    renderList();
+    updateMapSources();
+    renderMergeState();
+  }
+
+  function cancelMergeSelection() {
+    state.selectedSet.clear();
+    state.bulkSelecting =
+      false;
+    modeLabel.textContent =
+      editingModeText(
+        state.current,
+      );
+    renderList();
+    updateMapSources();
     renderMergeState();
   }
 
@@ -4390,9 +4604,23 @@ if (section) {
         family,
       );
 
+    const mergeCandidateCount =
+      state.geometries.filter(
+        (candidate) =>
+          !candidate._conflict &&
+          [
+            'line',
+            'polygon',
+          ].includes(
+            candidate.family,
+          ),
+      ).length;
+    const mergeAvailable =
+      mergeCandidateCount >= 2;
+
     topologyActions.hidden =
-      !item?.id ||
-      !topologyFamily;
+      !topologyFamily &&
+      !mergeAvailable;
 
     if (
       topologyActions.hidden
@@ -4412,6 +4640,19 @@ if (section) {
       'polygon';
     splitButton.hidden =
       !topologyFamily;
+    mergeStartButton.hidden =
+      !mergeAvailable;
+    mergeStartButton.disabled =
+      !mergeAvailable ||
+      Boolean(
+        state.importSession ||
+        state.editing ||
+        state.drawing,
+      );
+    mergeStartButton.title =
+      mergeAvailable
+        ? 'Выбрать несколько совместимых линий или полигонов и объединить их'
+        : 'Для объединения нужны минимум две линии или два полигона';
 
     const polygonReady =
       topologyTargetReady([
@@ -4473,27 +4714,49 @@ if (section) {
         selected,
       );
 
-    bulkSelectButton.disabled =
-      Boolean(
-        state.importSession ||
-        state.editing ||
-        state.drawing,
-      );
-    bulkSelectButton.textContent =
-      state.bulkSelecting
-        ? 'Закончить выбор'
-        : 'Выбрать несколько';
+    mergeMode.hidden =
+      !state.bulkSelecting;
+    section.classList.toggle(
+      'is-merge-selecting',
+      state.bulkSelecting,
+    );
 
     mergeButton.disabled =
+      !state.bulkSelecting ||
       Boolean(problem) ||
       Boolean(state.drawing);
-    mergeButton.hidden =
-      !state.bulkSelecting ||
-      selected.length === 0;
     mergeButton.textContent =
-      `Объединить (${selected.length})`;
+      selected.length >= 2
+        ? `Объединить ${selected.length}`
+        : 'Объединить';
     mergeButton.title =
       problem ?? '';
+
+    mergeClearButton.disabled =
+      selected.length === 0;
+
+    if (mergeStatus) {
+      const family =
+        mergeSelectionFamily();
+      const familyLabel =
+        family === 'line'
+          ? 'линии'
+          : family === 'polygon'
+            ? 'полигоны'
+            : 'линии или полигоны';
+
+      mergeStatus.textContent =
+        selected.length === 0
+          ? 'Выберите минимум две совместимые линии или полигона на карте или в списке.'
+          : `Выбрано: ${selected.length} · сейчас можно добавлять только ${familyLabel}.` +
+            (
+              problem &&
+              selected.length >= 2
+                ? ' ' + problem
+                : ''
+            );
+    }
+
     renderTopologyState();
   }
 
@@ -7982,19 +8245,24 @@ if (section) {
   }
 
 
-  bulkSelectButton.addEventListener(
+  mergeStartButton.addEventListener(
+    'click',
+    startMergeSelection,
+  );
+
+  mergeClearButton.addEventListener(
     'click',
     () => {
-      state.bulkSelecting =
-        !state.bulkSelecting;
-      if (
-        !state.bulkSelecting
-      ) {
-        state.selectedSet
-          .clear();
-      }
+      state.selectedSet.clear();
       renderList();
+      updateMapSources();
+      renderMergeState();
     },
+  );
+
+  mergeCancelButton.addEventListener(
+    'click',
+    cancelMergeSelection,
   );
 
 
@@ -8262,6 +8530,11 @@ if (section) {
         state.selectedSet.clear();
         state.bulkSelecting =
           false;
+        section.classList.remove(
+          'is-merge-selecting',
+        );
+        mergeMode.hidden =
+          true;
         state.editing =
           false;
         state.editLease =
@@ -9202,6 +9475,14 @@ if (section) {
       state.coordinateWindowOpen
     ) {
       closeCoordinateWindow();
+      return;
+    }
+    if (
+      !editingText &&
+      event.key === 'Escape' &&
+      state.bulkSelecting
+    ) {
+      cancelMergeSelection();
       return;
     }
     if (!editingText && event.key === 'Escape' && state.drawing) cancelDrawing();
