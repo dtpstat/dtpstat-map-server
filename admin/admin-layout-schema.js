@@ -69,13 +69,15 @@ export const adminInterfaceTabs = [
     title: 'Расчёты',
     description:
       'Безопасный конструктор расчётных показателей, колонок публичного рейтинга и статического CSV.',
+    panelClass:
+      'report-interface-panel',
     blocks: [
       {
         id: 'report-config',
         hostId:
           'report-config-editor-host',
         className:
-          'transfer-mode report-config-editor',
+          'report-config-editor',
         span: {
           base: 12,
           wide: 12,
