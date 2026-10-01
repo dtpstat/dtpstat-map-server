@@ -2,7 +2,26 @@ import { adminConfirm } from './admin-dialog.js';
 import { adminAvatarObjectUrl } from './admin-avatar.js';
 import { trackDirtyForm } from './admin-dirty-state.js';
 
-const host = document.querySelector('#profile-editor-host');
+const profileRoot =
+  document.querySelector(
+    '[data-admin-section-panel="profile"]',
+  );
+const accountHost =
+  document.querySelector(
+    '#profile-account-host',
+  );
+const passwordHost =
+  document.querySelector(
+    '#profile-password-host',
+  );
+const mfaHost =
+  document.querySelector(
+    '#profile-mfa-host',
+  );
+const profileSessionsHost =
+  document.querySelector(
+    '#profile-sessions-host',
+  );
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -35,15 +54,20 @@ function formatDate(value) {
   return value ? new Date(value).toLocaleString('ru-RU') : '—';
 }
 
-if (host) {
+if (
+  profileRoot &&
+  accountHost &&
+  passwordHost &&
+  mfaHost &&
+  profileSessionsHost
+) {
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
   stylesheet.href = '/admin/profile.css';
   document.head.append(stylesheet);
 
-  host.innerHTML = `
-    <div class="profile-grid">
-      <section class="profile-panel">
+  accountHost.innerHTML = `
+    <section class="profile-panel">
         <h3>Профиль</h3>
         <div class="profile-identity">
           <div class="profile-avatar-wrap">
@@ -78,8 +102,10 @@ if (host) {
         <small class="profile-muted">PNG/JPEG/WebP, до 256 КиБ. SVG не принимается.</small>
         <p id="profile-account-message" class="profile-message" role="status"></p>
       </section>
+  `;
 
-      <section class="profile-panel">
+  passwordHost.innerHTML = `
+    <section class="profile-panel">
         <h3>Пароль</h3>
         <div id="profile-password-required" class="profile-warning" hidden>
           Используется временный пароль. До его смены остальные разделы админки недоступны.
@@ -101,8 +127,10 @@ if (host) {
         </form>
         <p id="profile-password-message" class="profile-message" role="status"></p>
       </section>
+  `;
 
-      <section class="profile-panel profile-mfa-panel">
+  mfaHost.innerHTML = `
+    <section class="profile-panel profile-mfa-panel">
         <div class="profile-section-heading">
           <div>
             <h3>Multi-factor authentication</h3>
@@ -185,8 +213,10 @@ if (host) {
 
         <p id="profile-mfa-message" class="profile-message" role="status"></p>
       </section>
+  `;
 
-      <section class="profile-panel profile-sessions-panel">
+  profileSessionsHost.innerHTML = `
+    <section class="profile-panel profile-sessions-panel">
         <div class="profile-section-heading">
           <div>
             <h3>Активные сессии</h3>
@@ -197,20 +227,19 @@ if (host) {
         <div id="profile-sessions"></div>
         <p id="profile-sessions-message" class="profile-message" role="status"></p>
       </section>
-    </div>
   `;
 
-  const accountForm = host.querySelector('#profile-account-form');
-  const passwordForm = host.querySelector('#profile-password-form');
-  const accountMessage = host.querySelector('#profile-account-message');
-  const passwordMessage = host.querySelector('#profile-password-message');
-  const sessionsMessage = host.querySelector('#profile-sessions-message');
-  const sessionsHost = host.querySelector('#profile-sessions');
-  const mfaMessage = host.querySelector('#profile-mfa-message');
-  const mfaEnrollForm = host.querySelector('#profile-mfa-enroll-form');
-  const mfaConfirmForm = host.querySelector('#profile-mfa-confirm-form');
-  const mfaRecoveryForm = host.querySelector('#profile-mfa-recovery-form');
-  const mfaDisableForm = host.querySelector('#profile-mfa-disable-form');
+  const accountForm = profileRoot.querySelector('#profile-account-form');
+  const passwordForm = profileRoot.querySelector('#profile-password-form');
+  const accountMessage = profileRoot.querySelector('#profile-account-message');
+  const passwordMessage = profileRoot.querySelector('#profile-password-message');
+  const sessionsMessage = profileRoot.querySelector('#profile-sessions-message');
+  const sessionsHost = profileRoot.querySelector('#profile-sessions');
+  const mfaMessage = profileRoot.querySelector('#profile-mfa-message');
+  const mfaEnrollForm = profileRoot.querySelector('#profile-mfa-enroll-form');
+  const mfaConfirmForm = profileRoot.querySelector('#profile-mfa-confirm-form');
+  const mfaRecoveryForm = profileRoot.querySelector('#profile-mfa-recovery-form');
+  const mfaDisableForm = profileRoot.querySelector('#profile-mfa-disable-form');
   const accountDirty = trackDirtyForm(accountForm, { label: 'Профиль' });
   let currentSessionId = null;
   let currentUser = null;
@@ -256,7 +285,7 @@ if (host) {
       policy.passwordRequireDigit ? 'минимум одна цифра' : null,
       policy.passwordRequireSpecial ? 'минимум один спецсимвол' : null,
     ].filter(Boolean);
-    host.querySelector('#profile-password-policy').innerHTML =
+    profileRoot.querySelector('#profile-password-policy').innerHTML =
       `<strong>Требования к новому паролю</strong><ul>${
         requirements.map((item) => `<li>${item}</li>`).join('')
       }</ul>`;
@@ -270,8 +299,8 @@ if (host) {
   let avatarRequestSequence = 0;
 
   function updateAvatar(user) {
-    const image = host.querySelector('#profile-avatar');
-    const fallback = host.querySelector('#profile-avatar-fallback');
+    const image = profileRoot.querySelector('#profile-avatar');
+    const fallback = profileRoot.querySelector('#profile-avatar-fallback');
     const fallbackText = (user.displayName || user.username || '?').trim().slice(0, 1).toUpperCase();
     const requestSequence =
       ++avatarRequestSequence;
@@ -337,11 +366,11 @@ if (host) {
     accountForm.elements.username.value = user.username;
     accountForm.elements.displayName.value = user.displayName ?? user.username;
     accountForm.elements.email.value = user.email ?? '';
-    host.querySelector('#profile-display-heading').textContent = user.displayName ?? user.username;
-    host.querySelector('#profile-login-heading').textContent = `@${user.username}`;
-    host.querySelector('#profile-password-required').hidden = !user.mustChangePassword;
-    host.querySelector('#profile-avatar-delete').disabled = !user.hasAvatar;
-    host.querySelector('#profile-avatar-upload-label').textContent =
+    profileRoot.querySelector('#profile-display-heading').textContent = user.displayName ?? user.username;
+    profileRoot.querySelector('#profile-login-heading').textContent = `@${user.username}`;
+    profileRoot.querySelector('#profile-password-required').hidden = !user.mustChangePassword;
+    profileRoot.querySelector('#profile-avatar-delete').disabled = !user.hasAvatar;
+    profileRoot.querySelector('#profile-avatar-upload-label').textContent =
       user.hasAvatar ? 'Заменить аватар' : 'Загрузить аватар';
     updateAvatar(user);
     accountDirty?.markClean();
@@ -397,11 +426,11 @@ if (host) {
 
   function hideRecoveryCodes() {
     const panel =
-      host.querySelector(
+      profileRoot.querySelector(
         '#profile-mfa-recovery-codes',
       );
     const values =
-      host.querySelector(
+      profileRoot.querySelector(
         '#profile-mfa-recovery-values',
       );
     values.textContent = '';
@@ -412,11 +441,11 @@ if (host) {
     codes,
   ) {
     const panel =
-      host.querySelector(
+      profileRoot.querySelector(
         '#profile-mfa-recovery-codes',
       );
     const values =
-      host.querySelector(
+      profileRoot.querySelector(
         '#profile-mfa-recovery-values',
       );
     values.textContent =
@@ -437,20 +466,20 @@ if (host) {
         status.required,
       );
 
-    host.querySelector(
+    profileRoot.querySelector(
       '#profile-mfa-state',
     ).textContent =
       enabled
         ? 'Включена'
         : 'Выключена';
 
-    host.querySelector(
+    profileRoot.querySelector(
       '#profile-mfa-required',
     ).hidden =
       !required ||
       enabled;
 
-    host.querySelector(
+    profileRoot.querySelector(
       '#profile-mfa-unavailable',
     ).hidden =
       Boolean(
@@ -466,17 +495,17 @@ if (host) {
       ).disabled =
       !status.available;
 
-    host.querySelector(
+    profileRoot.querySelector(
       '#profile-mfa-enrollment',
     ).hidden =
       !status.enrollmentPending;
 
-    host.querySelector(
+    profileRoot.querySelector(
       '#profile-mfa-enabled-actions',
     ).hidden =
       !enabled;
 
-    host.querySelector(
+    profileRoot.querySelector(
       '#profile-mfa-recovery-count',
     ).textContent =
       String(
@@ -485,7 +514,7 @@ if (host) {
       );
 
     const disableButton =
-      host.querySelector(
+      profileRoot.querySelector(
         '#profile-mfa-disable',
       );
     disableButton.disabled =
@@ -641,18 +670,18 @@ if (host) {
 
       mfaEnrollForm.reset();
 
-      host.querySelector(
+      profileRoot.querySelector(
         '#profile-mfa-secret',
       ).textContent =
         payload.enrollment.secret;
 
-      host.querySelector(
+      profileRoot.querySelector(
         '#profile-mfa-uri',
       ).textContent =
         payload.enrollment
           .provisioningUri;
 
-      host.querySelector(
+      profileRoot.querySelector(
         '#profile-mfa-enrollment',
       ).hidden =
         false;
@@ -699,10 +728,10 @@ if (host) {
 
       mfaConfirmForm.reset();
 
-      host.querySelector(
+      profileRoot.querySelector(
         '#profile-mfa-secret',
       ).textContent = '';
-      host.querySelector(
+      profileRoot.querySelector(
         '#profile-mfa-uri',
       ).textContent = '';
 
@@ -857,14 +886,14 @@ if (host) {
     }
   });
 
-  host.querySelector(
+  profileRoot.querySelector(
     '#profile-mfa-recovery-hide',
   ).addEventListener(
     'click',
     hideRecoveryCodes,
   );
 
-  host.querySelector('#profile-avatar-file').addEventListener('change', async (event) => {
+  profileRoot.querySelector('#profile-avatar-file').addEventListener('change', async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
@@ -887,7 +916,7 @@ if (host) {
     }
   });
 
-  host.querySelector('#profile-avatar-delete').addEventListener('click', async () => {
+  profileRoot.querySelector('#profile-avatar-delete').addEventListener('click', async () => {
     if (!currentUser?.hasAvatar) return;
     try {
       const payload = await api('/api/admin/profile/avatar', { method: 'DELETE' });
@@ -900,7 +929,7 @@ if (host) {
     }
   });
 
-  host.querySelector('#profile-revoke-others').addEventListener('click', async () => {
+  profileRoot.querySelector('#profile-revoke-others').addEventListener('click', async () => {
     const confirmed = await adminConfirm({
       title: 'Завершить остальные сессии?',
       message: 'Все активные сессии этой учётной записи, кроме текущей, будут отозваны.',
