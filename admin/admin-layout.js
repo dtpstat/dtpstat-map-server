@@ -390,6 +390,10 @@ export function ensureAdminTabPanels({
         );
       panel.className =
         'task-panel interface-task-panel admin-layout-tab-panel';
+      appendClassNames(
+        panel,
+        definition.panelClass,
+      );
       panel.id =
         `interface-panel-${definition.id}`;
       panel.role =
