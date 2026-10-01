@@ -298,7 +298,7 @@ test('public map reloads independent line display settings without a page refres
   assert.match(mapController, /!showPolygonGeometries/u);
 });
 
-test('collapsed public history control keeps the active map date visible', async () => {
+test('public history makes the active moment explicit and collapsing always returns to now', async () => {
   const [
     html,
     publicApp,
@@ -314,16 +314,20 @@ test('collapsed public history control keeps the active map date visible', async
     /id="geometry-timeline-toggle"[\s\S]*geometry-timeline-toggle-icon[\s\S]*id="geometry-timeline-toggle-state"[\s\S]*Сейчас/u,
   );
   assert.match(
-    publicApp,
-    /const timelineToggleState =[\s\S]*#geometry-timeline-toggle-state/u,
+    html,
+    /id="geometry-timeline-date"[\s\S]*На карте: —/u,
   );
   assert.match(
     publicApp,
-    /function updateTimelineToggleState\([\s\S]*isToday[\s\S]*Сейчас · [\s\S]*timelineToggleState[\s\S]*aria-label/u,
+    /function applyTimelineDay\([\s\S]*'На карте: ' \+[\s\S]*mapController[\s\S]*\.setTimelineDate/u,
   );
   assert.match(
     publicApp,
-    /function applyTimelineDay\([\s\S]*updateTimelineToggleState\([\s\S]*mapController[\s\S]*\.setTimelineDate/u,
+    /timelineCollapse[\s\S]*stopTimelinePlayback\(\)[\s\S]*dateToDay\([\s\S]*localIsoDate\(\)[\s\S]*applyTimelineDay\([\s\S]*setTimelineCollapsed\([\s\S]*true/u,
+  );
+  assert.doesNotMatch(
+    publicApp,
+    /timelineToggleState|updateTimelineToggleState/u,
   );
   assert.match(
     publicCss,
