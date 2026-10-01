@@ -1230,7 +1230,7 @@ test('project settings transfer application service delegates policy and persist
   assert.doesNotMatch(service, /UPDATE project_settings SET/u);
   assert.doesNotMatch(service, /CREATE TEMP TABLE project_settings_line_types_stage/u);
 
-  assert.match(policy, /PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION = 9/u);
+  assert.match(policy, /PROJECT_SETTINGS_TRANSFER_SCHEMA_VERSION = 10/u);
   assert.match(policy, /normalizeTransferredSecuritySettings/u);
   assert.doesNotMatch(
     policy,
