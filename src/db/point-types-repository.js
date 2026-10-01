@@ -17,6 +17,8 @@ const LIST_SQL = `
     point_type.display_height::integer AS "displayHeight",
     point_type.anchor_x::double precision AS "anchorX",
     point_type.anchor_y::double precision AS "anchorY",
+    min_zoom::double precision AS "minZoom",
+    max_zoom::double precision AS "maxZoom",
     (point_type.icon_file_name IS NOT NULL) AS "iconConfigured",
     point_type.icon_mime AS "iconMime",
     point_type.icon_source_width::integer AS "iconSourceWidth",
@@ -48,6 +50,8 @@ const GET_SQL = `
     display_height::integer AS "displayHeight",
     anchor_x::double precision AS "anchorX",
     anchor_y::double precision AS "anchorY",
+    min_zoom::double precision AS "minZoom",
+    max_zoom::double precision AS "maxZoom",
     icon_file_name AS "iconFileName",
     icon_mime AS "iconMime",
     icon_source_width::integer AS "iconSourceWidth",
@@ -68,6 +72,8 @@ const GET_FOR_UPDATE_SQL = `
     display_height::integer AS "displayHeight",
     anchor_x::double precision AS "anchorX",
     anchor_y::double precision AS "anchorY",
+    min_zoom::double precision AS "minZoom",
+    max_zoom::double precision AS "maxZoom",
     icon_file_name AS "iconFileName",
     icon_mime AS "iconMime",
     icon_source_width::integer AS "iconSourceWidth",
@@ -87,7 +93,9 @@ const INSERT_SQL = `
     display_width,
     display_height,
     anchor_x,
-    anchor_y
+    anchor_y,
+    min_zoom,
+    max_zoom
   )
   VALUES (
     $1::text,
@@ -95,7 +103,9 @@ const INSERT_SQL = `
     $3::smallint,
     $4::smallint,
     $5::double precision,
-    $6::double precision
+    $6::double precision,
+    $7::double precision,
+    $8::double precision
   )
   RETURNING id::integer AS id
 `;
@@ -109,6 +119,8 @@ const UPDATE_SQL = `
     display_height = $5::smallint,
     anchor_x = $6::double precision,
     anchor_y = $7::double precision,
+    min_zoom = $8::double precision,
+    max_zoom = $9::double precision,
     updated_at = NOW()
   WHERE id = $1::bigint
   RETURNING id::integer AS id
@@ -355,6 +367,8 @@ export function createPointTypesRepository(
                 value.displayHeight,
                 value.anchorX,
                 value.anchorY,
+                value.minZoom,
+                value.maxZoom,
               ],
             );
           const id =
@@ -405,6 +419,8 @@ export function createPointTypesRepository(
               value.displayHeight,
               value.anchorX,
               value.anchorY,
+              value.minZoom,
+              value.maxZoom,
             ],
           );
           return (
