@@ -718,6 +718,8 @@ if (profileHost && currentUser) {
                   cityId:
                     item.subjectCityId ??
                     null,
+                  openDiscussion:
+                    true,
                 },
               },
             ),
