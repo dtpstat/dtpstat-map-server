@@ -82,7 +82,7 @@ test('current user and audit rows render stable avatar URLs with fallback initia
   assert.match(styles, /\.security-password-minimum\s*\{/);
 });
 
-test('profile avatar hides fallback only after successful image load', async () => {
+test('profile avatar hides fallback only after successful image load and renders each session refresh once', async () => {
   const [profile, styles] = await Promise.all([
     read('admin/profile-editor.js'),
     read('admin/profile.css'),
@@ -93,6 +93,23 @@ test('profile avatar hides fallback only after successful image load', async () 
   assert.match(profile, /image\.hidden = false;[\s\S]*fallback\.hidden = true;/);
   assert.match(profile, /image\.hidden = true;[\s\S]*fallback\.hidden = false;/);
   assert.match(styles, /\.profile-avatar\[hidden\] \{ display: none !important; \}/);
+
+  assert.match(
+    profile,
+    /async function refreshSessionUser\([\s\S]*dtpstatReloadAdminSession[\s\S]*fallbackUser[\s\S]*renderUser/u,
+  );
+  assert.match(
+    profile,
+    /async function loadSession\([\s\S]*dtpstatReloadAdminSession[\s\S]*return session;[\s\S]*dtpstatAdminSession[\s\S]*renderUser\([\s\S]*session\.user/u,
+  );
+  assert.match(
+    profile,
+    /\/api\/admin\/profile\/avatar'[\s\S]*method: 'PUT'[\s\S]*await refreshSessionUser\([\s\S]*payload\.user/u,
+  );
+  assert.doesNotMatch(
+    profile,
+    /renderUser\(payload\.user\);\s*await globalThis\.dtpstatReloadAdminSession/u,
+  );
 });
 
 
