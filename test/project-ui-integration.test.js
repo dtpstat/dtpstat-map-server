@@ -161,9 +161,13 @@ test('admin interface loads editors and helpers explicitly without transitive si
   assert.match(css, /\.project-settings-page\[hidden\]/);
   assert.match(css, /\.project-history-speed-row/u);
   assert.match(css, /data-theme-preview/);
-  assert.match(
+  assert.doesNotMatch(
     shell,
-    /querySelector\([\s\S]*'\.report-config-editor'[\s\S]*classList\.remove\([\s\S]*'transfer-mode'/u,
+    /adaptLegacyReportEditorNode|data-task-tab="report"|data-task-panel="report"/u,
+  );
+  assert.match(
+    layoutSchema,
+    /id:\s*'report'[\s\S]*hostId:[\s\S]*'report-config-editor-host'/u,
   );
   assert.match(
     shell,
