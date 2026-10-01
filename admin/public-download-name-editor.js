@@ -8,18 +8,18 @@ if (typeof document !== 'undefined') {
 
   function mountEditor() {
     const projectForm = document.querySelector('#project-settings-form');
-    const operation = document.querySelector('#operation-project-settings');
+    const projectHost = document.querySelector('#project-settings-editor-host');
     const metadataPanel = document.querySelector('#project-settings-metadata');
     const projectMessage = document.querySelector('#project-settings-message');
 
-    if (!projectForm || !operation || !metadataPanel || !projectMessage) return false;
+    if (!projectForm || !projectHost || !metadataPanel || !projectMessage) return false;
     if (document.querySelector('#public-download-name-form')) return true;
 
     const externalForm = document.createElement('form');
     externalForm.id = 'public-download-name-form';
     externalForm.className = 'project-download-name-form-proxy';
     externalForm.hidden = true;
-    operation.insertBefore(externalForm, projectMessage);
+    projectMessage.before(externalForm);
 
     const section = document.createElement('section');
     section.className = 'project-settings-section';
