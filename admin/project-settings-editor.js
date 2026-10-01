@@ -924,11 +924,21 @@ if (typeof document !== 'undefined') {
           applySettings(payload.settings);
           dirtyState?.markClean();
           setMessage(
-            'Настройки проекта сохранены. Таблицы рейтинга пересчитаны.',
+            payload.derivedRecalculated
+              ? 'Настройки сохранены. Метрики и рейтинги пересчитаны.'
+              : 'Настройки сохранены.',
             'success',
           );
-          publishDerivedDataChange('project-settings');
-          window.dispatchEvent(new CustomEvent('dtpstat:project-settings-changed'));
+          if (payload.derivedRecalculated) {
+            publishDerivedDataChange(
+              'project-settings',
+            );
+          }
+          window.dispatchEvent(
+            new CustomEvent(
+              'dtpstat:project-settings-changed',
+            ),
+          );
         } catch (error) {
           setMessage(error.message, 'error');
         } finally {
