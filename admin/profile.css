@@ -1,29 +1,12 @@
-#profile-editor-host {
-  min-height: 0;
-  flex: 1 1 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-}
-
-.profile-grid {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-content: start;
-  gap: 1rem;
-}
-
 .profile-panel {
   min-width: 0;
+  height: 100%;
   padding: 1rem;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--panel-2);
 }
 
-.profile-sessions-panel { grid-column: 1 / -1; }
 .profile-form { display: grid; gap: .8rem; margin-top: 1rem; }
 .profile-form label { display: grid; gap: .35rem; }
 .profile-identity { display: flex; align-items: center; gap: .8rem; }
@@ -114,17 +97,7 @@
   border-color: #8e3a36;
   color: #ffd0cc;
 }
-@media (max-width: 1050px) {
-  #profile-editor-host {
-    flex: 0 0 auto;
-    overflow: visible;
-    scrollbar-gutter: auto;
-  }
-}
-
 @media (max-width: 850px) {
-  .profile-grid { grid-template-columns: 1fr; }
-  .profile-sessions-panel { grid-column: auto; }
   .profile-section-heading { flex-direction: column; }
 }
 
