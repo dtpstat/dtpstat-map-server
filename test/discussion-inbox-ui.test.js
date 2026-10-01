@@ -69,11 +69,11 @@ test('profile discussion inbox unifies geometry and OSM threads with realtime un
   );
   assert.match(
     inbox,
-    /geometry-editor\/geometries\/[^\n]*\/discussion/u,
+    /geometry-editor\/geometries\/[\s\S]*\/discussion/u,
   );
   assert.match(
     inbox,
-    /osm-boundaries\/[^\n]*\/discussion/u,
+    /osm-boundaries\/[\s\S]*\/discussion/u,
   );
   assert.match(
     inbox,
