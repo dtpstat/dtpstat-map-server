@@ -590,18 +590,12 @@
                     <button class="secondary" id="geometry-new-polygon"
                             type="button">Полигон</button>
                   </div>
-                  <button class="secondary" id="geometry-bulk-select"
-                          type="button">
-                    Выбрать несколько
-                  </button>
                 </div>
 
                 <div id="geometry-editor-list" class="geometry-editor-list">
                   <p class="empty-state">Выберите город…</p>
                 </div>
 
-                <button id="geometry-merge-selected" type="button"
-                        disabled hidden>Объединить выбранные</button>
               </section>
 
               <section class="geometry-editor-map-panel"
@@ -617,6 +611,37 @@
                   <button class="secondary" id="geometry-cancel-draw"
                           type="button" hidden>Отмена</button>
                 </div>
+
+                <section class="geometry-merge-mode"
+                         id="geometry-merge-mode"
+                         hidden
+                         aria-live="polite">
+                  <div class="geometry-merge-mode-copy">
+                    <strong>Объединение геометрий</strong>
+                    <span id="geometry-merge-status">
+                      Выберите минимум две совместимые линии или полигона на карте или в списке.
+                    </span>
+                  </div>
+                  <div class="geometry-merge-mode-actions">
+                    <button id="geometry-merge-selected"
+                            type="button"
+                            disabled>
+                      Объединить
+                    </button>
+                    <button class="secondary"
+                            id="geometry-merge-clear"
+                            type="button"
+                            disabled>
+                      Снять выбор
+                    </button>
+                    <button class="secondary"
+                            id="geometry-merge-cancel"
+                            type="button">
+                      Отмена
+                    </button>
+                  </div>
+                </section>
+
                 <div class="geometry-editor-map-controls"
                      aria-label="Инструменты геометрии">
                   <button class="secondary geometry-editor-map-tool"
@@ -646,6 +671,11 @@
                       <button class="secondary" id="geometry-cut-selected"
                               type="button">
                         Вырезать полигоном
+                      </button>
+                      <button class="secondary"
+                              id="geometry-merge-start"
+                              type="button">
+                        Объединить геометрии…
                       </button>
                       <button class="secondary" id="geometry-split"
                               type="button">
