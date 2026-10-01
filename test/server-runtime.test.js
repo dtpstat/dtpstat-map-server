@@ -33,6 +33,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
     'createCitiesRepository',
     'createLineTypesRepository',
     'createPointTypesRepository',
+    'createDiscussionInboxRuntime',
     'createGeometryEditorRuntime',
     'createGeometryImportRuntime',
     'createProjectSettingsTransferRuntime',
@@ -250,6 +251,7 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
       'createLineTypesRepository',
       'createPointTypesRepository',
       'createPointTypeIconFileStore',
+      'createDiscussionInboxRuntime',
       'createGeometryEditorRuntime',
       'createGeometryImportRuntime',
       'createProjectRuntime',
@@ -368,6 +370,13 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
     runtime
       .appDependencies
       .pointTypesRepository,
+  );
+  assert.equal(
+    runtime
+      .appDependencies
+      .discussionInboxService
+      .name,
+    'createDiscussionInboxRuntime',
   );
   assert.equal(
     runtime
