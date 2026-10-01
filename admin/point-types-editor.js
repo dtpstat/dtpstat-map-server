@@ -61,6 +61,8 @@ if (
           <p>
             NAME — бизнес-тип Point. Размер задаёт отображение на карте,
             anchor — точку изображения, совмещаемую с координатой.
+            Zoom от/до ограничивает показ всех POI этого типа; пустое значение
+            не добавляет ограничения к настройке конкретной геометрии.
           </p>
         </div>
       </div>
@@ -198,6 +200,26 @@ if (
               '[name="anchorY"]',
             ).value,
           ),
+        minZoom:
+          row.querySelector(
+            '[name="minZoom"]',
+          ).value === ''
+            ? null
+            : Number(
+              row.querySelector(
+                '[name="minZoom"]',
+              ).value,
+            ),
+        maxZoom:
+          row.querySelector(
+            '[name="maxZoom"]',
+          ).value === ''
+            ? null
+            : Number(
+              row.querySelector(
+                '[name="maxZoom"]',
+              ).value,
+            ),
       };
     }
 
@@ -426,6 +448,30 @@ if (
           },
         );
 
+      const minZoom =
+        numberInput(
+          'minZoom',
+          pointType.minZoom ?? '',
+          {
+            min: 0,
+            max: 24,
+            step: '0.1',
+          },
+        );
+      minZoom.required = false;
+
+      const maxZoom =
+        numberInput(
+          'maxZoom',
+          pointType.maxZoom ?? '',
+          {
+            min: 0,
+            max: 24,
+            step: '0.1',
+          },
+        );
+      maxZoom.required = false;
+
       const refreshPreview =
         () => {
           const displayWidth =
@@ -611,6 +657,14 @@ if (
         label(
           'Anchor Y',
           anchorY,
+        ),
+        label(
+          'Zoom от',
+          minZoom,
+        ),
+        label(
+          'Zoom до',
+          maxZoom,
         ),
       );
 
