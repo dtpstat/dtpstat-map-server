@@ -14,7 +14,16 @@ async function source(relativePath) {
 }
 
 test('project settings migrations create branding, metrics, theme, line popup and dynamic download-name settings', async () => {
-  const [baseSql, metricsSql, limitSql, themeSql, popupSql, downloadNameSql, dynamicLinksSql] = await Promise.all([
+  const [
+    baseSql,
+    metricsSql,
+    limitSql,
+    themeSql,
+    popupSql,
+    downloadNameSql,
+    dynamicLinksSql,
+    historySql,
+  ] = await Promise.all([
     source('db/migrations/V009__project_settings.sql'),
     source('db/migrations/V010__project_metrics.sql'),
     source('db/migrations/V011__limit_yandex_metrika_id.sql'),
@@ -22,6 +31,7 @@ test('project settings migrations create branding, metrics, theme, line popup an
     source('db/migrations/V022__line_popup_setting.sql'),
     source('db/migrations/V025__public_download_name.sql'),
     source('db/migrations/V026__dynamic_public_download_links.sql'),
+    source('db/migrations/V061__geometry_history_mode.sql'),
   ]);
 
   assert.match(baseSql, /CREATE TABLE IF NOT EXISTS BUSLANES\.PROJECT_SETTINGS/i);
@@ -47,6 +57,14 @@ test('project settings migrations create branding, metrics, theme, line popup an
   assert.match(dynamicLinksSql, /\{\{PUBLIC_GEOJSON_URL\}\}/);
   assert.match(dynamicLinksSql, /\{\{PUBLIC_CSV_URL\}\}/);
   assert.match(dynamicLinksSql, /Base name used for materialized public GeoJSON\/CSV files, URLs and download names/i);
+
+  assert.match(historySql, /ADD COLUMN IF NOT EXISTS HISTORY_START_DATE DATE/u);
+  assert.match(historySql, /CREATE TABLE BUSLANES\.GEOMETRY_HISTORY_SPEEDS/u);
+  assert.match(historySql, /'day'[\s\S]*'week'[\s\S]*'month'[\s\S]*'quarter'[\s\S]*'year'[\s\S]*'five_years'[\s\S]*'decade'/u);
+  assert.match(historySql, /INTERVAL_SECONDS BETWEEN 0\.1 AND 60/u);
+  assert.match(historySql, /GEOMETRY_HISTORY_SPEEDS_ONE_DEFAULT_UIDX/u);
+  assert.match(historySql, /\('1x', 'month', 1\.0/u);
+  assert.match(historySql, /\('10x', 'year', 0\.5/u);
 });
 
 test('admin interface loads editors and helpers explicitly without transitive side effects', async () => {
