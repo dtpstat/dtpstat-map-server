@@ -1059,6 +1059,18 @@ test('geometry editor filters empty cities and highlights the active geometry on
     /getSource\(SELECTED_SOURCE\)[\s\S]*highlightedGeometries[\s\S]*featureCollection/u,
   );
   assert.match(
+    editor,
+    /geometry-editor-selected-polygon-outline[\s\S]*#07191d[\s\S]*line-width': 9/u,
+  );
+  assert.match(
+    editor,
+    /geometry-editor-selected-line-halo[\s\S]*#07191d[\s\S]*geometry-editor-selected-line-accent[\s\S]*#66fff0/u,
+  );
+  assert.match(
+    editor,
+    /geometry-editor-selected-point-outline[\s\S]*circle-radius': 13[\s\S]*geometry-editor-selected-point[\s\S]*#66fff0/u,
+  );
+  assert.match(
     styles,
     /\.geometry-editor-city-filter/u,
   );
