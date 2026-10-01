@@ -9,6 +9,9 @@ const SELECT_SETTINGS_SQL = `
     show_line_labels AS "showLineLabels",
     show_line_popups AS "showLinePopups",
     show_geometry_timeline AS "showGeometryTimeline",
+    show_point_geometries AS "showPointGeometries",
+    show_line_geometries AS "showLineGeometries",
+    show_polygon_geometries AS "showPolygonGeometries",
     large_city_population_threshold::integer AS "largeCityPopulationThreshold",
     large_city_area_km2_threshold::double precision AS "largeCityAreaKm2Threshold",
     public_download_name AS "publicDownloadName",
@@ -67,6 +70,9 @@ const UPDATE_SETTINGS_SQL = `
     large_city_population_threshold = $10::integer,
     large_city_area_km2_threshold = $11::double precision,
     show_geometry_timeline = $12::boolean,
+    show_point_geometries = $13::boolean,
+    show_line_geometries = $14::boolean,
+    show_polygon_geometries = $15::boolean,
     updated_at = now()
   WHERE id = 1
   RETURNING
@@ -79,6 +85,9 @@ const UPDATE_SETTINGS_SQL = `
     show_line_labels AS "showLineLabels",
     show_line_popups AS "showLinePopups",
     show_geometry_timeline AS "showGeometryTimeline",
+    show_point_geometries AS "showPointGeometries",
+    show_line_geometries AS "showLineGeometries",
+    show_polygon_geometries AS "showPolygonGeometries",
     large_city_population_threshold::integer AS "largeCityPopulationThreshold",
     large_city_area_km2_threshold::double precision AS "largeCityAreaKm2Threshold",
     public_download_name AS "publicDownloadName",
@@ -212,6 +221,9 @@ export function createProjectSettingsStorageRepository() {
           settings.largeCityPopulationThreshold,
           settings.largeCityAreaKm2Threshold,
           settings.showGeometryTimeline,
+          settings.showPointGeometries,
+          settings.showLineGeometries,
+          settings.showPolygonGeometries,
         ],
       );
       return requireRow(result);
