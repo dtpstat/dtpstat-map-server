@@ -40,8 +40,8 @@ if (
                 aria-controls="report-view-rank" data-report-view-tab="rank">Рейтинг</button>
       </nav>
 
-      <form id="report-config-form" data-task-form="report">
-        <div class="form-fields report-config-sections">
+      <form id="report-config-form">
+        <div class="report-config-sections">
           <section class="report-builder-section report-view-panel" id="report-view-metrics"
                    role="tabpanel" data-report-view-panel="metrics">
             <div class="report-section-heading">
