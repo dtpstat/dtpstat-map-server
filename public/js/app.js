@@ -28,6 +28,14 @@ const timeline =
   document.querySelector(
     '#geometry-timeline',
   );
+const timelineToggle =
+  document.querySelector(
+    '#geometry-timeline-toggle',
+  );
+const timelineCollapse =
+  document.querySelector(
+    '#geometry-timeline-collapse',
+  );
 const timelinePlay =
   document.querySelector(
     '#geometry-timeline-play',
@@ -374,6 +382,23 @@ function selectedTimelineSpeed() {
   );
 }
 
+function setTimelineCollapsed(
+  collapsed,
+) {
+  if (!timeline) {
+    return;
+  }
+  timeline.dataset.collapsed =
+    collapsed
+      ? 'true'
+      : 'false';
+  timelineToggle
+    ?.setAttribute(
+      'aria-expanded',
+      String(!collapsed),
+    );
+}
+
 function stopTimelinePlayback() {
   if (timelinePlayback) {
     clearInterval(
@@ -428,6 +453,16 @@ function applyTimelineDay(day) {
 
   timelineRange.value =
     String(normalized);
+  timelineRange.setAttribute(
+    'aria-valuetext',
+    formatTimelineDate(
+      date,
+    ),
+  );
+  timelineRange.title =
+    formatTimelineDate(
+      date,
+    );
   if (timelineDate) {
     timelineDate.value =
       formatTimelineDate(
@@ -665,6 +700,27 @@ async function configureGeometryTimeline(
     );
   }
 }
+
+timelineToggle
+  ?.addEventListener(
+    'click',
+    () => {
+      setTimelineCollapsed(
+        false,
+      );
+    },
+  );
+
+timelineCollapse
+  ?.addEventListener(
+    'click',
+    () => {
+      stopTimelinePlayback();
+      setTimelineCollapsed(
+        true,
+      );
+    },
+  );
 
 timelineRange
   ?.addEventListener(
