@@ -59,10 +59,44 @@ export const adminInterfaceTabs = [
   {
     id: 'project',
     title: 'Проект',
+    description:
+      'Название, оформление, метаданные, аналитика и информационный блок проекта.',
+    blocks: [
+      {
+        id: 'project-settings',
+        elementId:
+          'operation-project-settings',
+        hostId:
+          'project-settings-editor-host',
+        className:
+          'operation-panel transfer-mode',
+        span: {
+          base: 12,
+          wide: 12,
+        },
+      },
+    ],
   },
   {
     id: 'map',
     title: 'Карта',
+    description:
+      'Отображение публичной карты, геометрии, история, маркеры и параметры классификации городов.',
+    blocks: [
+      {
+        id: 'map-settings',
+        elementId:
+          'operation-map-settings',
+        hostId:
+          'map-settings-editor-host',
+        className:
+          'operation-panel transfer-mode',
+        span: {
+          base: 12,
+          wide: 12,
+        },
+      },
+    ],
   },
   {
     id: 'report',
