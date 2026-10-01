@@ -816,11 +816,19 @@ test('geometry discussions are persistent, permission-protected and realtime aft
   );
   assert.match(
     storage,
+    /async unreadCounts\([\s\S]*\.unreadCounts\([\s\S]*\[SUBJECT_TYPE\]/u,
+  );
+  assert.match(
+    discussionStorage,
     /async unreadCounts\([\s\S]*author_user_id IS DISTINCT FROM \$1::bigint/u,
   );
   assert.match(
     storage,
-    /async markRead\([\s\S]*ON CONFLICT \(geometry_id, user_id\)/u,
+    /async markRead\([\s\S]*subjectType:[\s\S]*SUBJECT_TYPE[\s\S]*subjectId:[\s\S]*geometryId/u,
+  );
+  assert.match(
+    discussionStorage,
+    /async markRead\([\s\S]*ON CONFLICT \(subject_type, subject_id, user_id\)/u,
   );
   assert.match(
     service,
