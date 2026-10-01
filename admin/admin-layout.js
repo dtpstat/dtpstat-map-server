@@ -336,7 +336,8 @@ export function ensureAdminTabPanels({
       !tabAllowed(
         definition,
         user,
-      )
+      ) ||
+      !definition.blocks?.length
     ) {
       continue;
     }
@@ -375,12 +376,6 @@ export function ensureAdminTabPanels({
       tabsHost.append(
         tab,
       );
-    }
-
-    if (
-      !definition.blocks?.length
-    ) {
-      continue;
     }
 
     let panel =
