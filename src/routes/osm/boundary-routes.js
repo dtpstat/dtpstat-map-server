@@ -6,6 +6,10 @@ import {
 import {
   OsmBoundaryAdminValidationError,
 } from '../../modules/osm/boundary-admin-policy.js';
+import {
+  DiscussionValidationError,
+  normalizeDiscussionId,
+} from '../../modules/discussions/policy.js';
 
 function object(value) {
   return (
@@ -34,8 +38,12 @@ function validationError(
   error,
 ) {
   if (
-    !(error instanceof
-      OsmBoundaryAdminValidationError)
+    !(
+      error instanceof
+        OsmBoundaryAdminValidationError ||
+      error instanceof
+        DiscussionValidationError
+    )
   ) {
     return false;
   }
@@ -87,6 +95,275 @@ export function registerOsmBoundaryRoutes(
                 .list(),
           });
       } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.get(
+    '/admin/osm-boundaries/users/:userId/avatar',
+    adminAuth.requireOsmEditor,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const userId =
+          normalizeDiscussionId(
+            request.params.userId,
+            'userId',
+          );
+        const avatar =
+          await securityService
+            .getAvatar(
+              userId,
+            );
+
+        if (!avatar?.data) {
+          response
+            .status(404)
+            .end();
+          return;
+        }
+
+        response
+          .set(
+            'Cache-Control',
+            'private, max-age=60',
+          )
+          .type(
+            avatar.mime,
+          )
+          .send(
+            avatar.data,
+          );
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.get(
+    '/admin/osm-boundaries/discussions/unread',
+    adminAuth.requireOsmEditor,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json(
+            await boundaryRepository
+              .listDiscussionUnread(
+                request.adminUser,
+              ),
+          );
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.get(
+    '/admin/osm-boundaries/:boundaryId/discussion',
+    adminAuth.requireOsmEditor,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const discussion =
+          await boundaryRepository
+            .listDiscussion(
+              request.params
+                .boundaryId,
+            );
+
+        if (!discussion) {
+          response
+            .status(404)
+            .json({
+              error:
+                'OSM boundary not found',
+            });
+          return;
+        }
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json(
+            discussion,
+          );
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/osm-boundaries/:boundaryId/discussion/read',
+    adminAuth.requireOsmEditor,
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const read =
+          await boundaryRepository
+            .markDiscussionRead(
+              request.params
+                .boundaryId,
+              request.adminUser,
+              request.body,
+            );
+
+        if (!read) {
+          response
+            .status(404)
+            .json({
+              error:
+                'OSM boundary not found',
+            });
+          return;
+        }
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            read,
+          });
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/osm-boundaries/:boundaryId/discussion',
+    adminAuth.requireOsmEditor,
+    audit(
+      'data.osm-boundary.discussion.post',
+    ),
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const message =
+          await boundaryRepository
+            .postDiscussionMessage(
+              request.params
+                .boundaryId,
+              request.adminUser,
+              request.body,
+            );
+
+        if (!message) {
+          response
+            .status(404)
+            .json({
+              error:
+                'OSM boundary not found',
+            });
+          return;
+        }
+
+        recordAdminOperationDetails(
+          response,
+          {
+            boundaryId:
+              message.boundaryId,
+            messageId:
+              message.id,
+          },
+        );
+
+        realtimeEvents?.publish({
+          resource:
+            'osm-boundary-discussions',
+          action:
+            'message',
+          entityIds:
+            [message.boundaryId],
+          permission:
+            'osm-editor',
+          originClientId:
+            realtimeClientId(
+              request,
+            ),
+          message:
+            'Новое сообщение в обсуждении OSM-объекта.',
+          discussionMessage:
+            message,
+        });
+
+        response
+          .status(201)
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            message,
+          });
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
         next(error);
       }
     },
