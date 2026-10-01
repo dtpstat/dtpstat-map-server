@@ -154,12 +154,12 @@
 
 .map-panel.has-geometry-timeline .line-legend,
 .map-panel.has-geometry-timeline .point-legend {
-  bottom: 112px;
+  bottom: 70px;
 }
 
 @media (max-width: 760px) {
   .map-panel.has-geometry-timeline .line-legend,
   .map-panel.has-geometry-timeline .point-legend {
-    bottom: 96px;
+    bottom: 60px;
   }
 }
