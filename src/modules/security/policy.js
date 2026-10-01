@@ -467,6 +467,23 @@ export function normalizeAdminIp(value) {
   ).slice(0, 128);
 }
 
+export function isLoopbackAdminIp(value) {
+  const ip =
+    normalizeAdminIp(value)
+      ?.toLowerCase();
+
+  if (!ip) {
+    return false;
+  }
+
+  if (ip === '::1') {
+    return true;
+  }
+
+  return /^127(?:\.\d{1,3}){3}$/u
+    .test(ip);
+}
+
 export function secondsUntil(
   timestamp,
   now = new Date(),
