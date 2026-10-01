@@ -109,6 +109,91 @@ export function lineFeatureName(feature) {
   return normalized || null;
 }
 
+function normalizedText(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const normalized =
+    value.trim();
+  return normalized || null;
+}
+
+export function pointFeatureHint(
+  feature,
+) {
+  if (
+    feature?.geometry?.type !==
+    'Point'
+  ) {
+    return null;
+  }
+
+  const title =
+    normalizedText(
+      feature.properties
+        ?.displayName,
+    );
+  const hint =
+    normalizedText(
+      feature.properties
+        ?.tooltip,
+    );
+
+  if (!title && !hint) {
+    return null;
+  }
+
+  return {
+    title,
+    hint,
+  };
+}
+
+function pointHintContent(
+  feature,
+) {
+  const content =
+    pointFeatureHint(
+      feature,
+    );
+  if (!content) {
+    return null;
+  }
+
+  const root =
+    document.createElement(
+      'div',
+    );
+  root.className =
+    'poi-hint-popup';
+
+  if (content.title) {
+    const title =
+      document.createElement(
+        'strong',
+      );
+    title.textContent =
+      content.title;
+    root.append(title);
+  }
+
+  if (
+    content.hint &&
+    content.hint !==
+      content.title
+  ) {
+    const hint =
+      document.createElement(
+        'div',
+      );
+    hint.textContent =
+      content.hint;
+    root.append(hint);
+  }
+
+  return root;
+}
+
 /** @param {string} style */
 function dashArray(style) {
   if (style === 'dashed') return [2.5, 1.5];
@@ -235,6 +320,11 @@ export async function createMapController(config) {
     closeButton: false,
     closeOnClick: false,
     offset: 8,
+  });
+  const pointHintPopup = new window.mapboxgl.Popup({
+    closeButton: false,
+    closeOnClick: false,
+    offset: 12,
   });
   let rawGeoJson = EMPTY_COLLECTION;
   let currentGeoJson = EMPTY_COLLECTION;
@@ -767,6 +857,7 @@ export async function createMapController(config) {
   await ensureMapLayers();
   map.on('style.load', () => {
     lineNamePopup.remove();
+    pointHintPopup.remove();
     lineLayerIds = new Map();
     lineLabelLayerIds = new Map();
     void ensureMapLayers()
@@ -780,19 +871,81 @@ export async function createMapController(config) {
     if (viewportHandler) viewportHandler(readViewport(map));
   });
   map.on('mousemove', (event) => {
+    const pointLayers = [
+      POINT_LAYER_ID,
+      POINT_FALLBACK_LAYER_ID,
+    ].filter(
+      (layerId) =>
+        map.getLayer(layerId),
+    );
+    const pointFeature =
+      pointLayers.length > 0
+        ? map
+            .queryRenderedFeatures(
+              event.point,
+              {
+                layers:
+                  pointLayers,
+              },
+            )
+            .find(
+              (candidate) =>
+                pointFeatureHint(
+                  candidate,
+                ),
+            )
+        : null;
+    const pointContent =
+      pointFeature
+        ? pointHintContent(
+            pointFeature,
+          )
+        : null;
+
+    if (pointContent) {
+      lineNamePopup.remove();
+      pointHintPopup
+        .setLngLat(
+          event.lngLat,
+        )
+        .setDOMContent(
+          pointContent,
+        )
+        .addTo(map);
+      return;
+    }
+
+    pointHintPopup.remove();
+
     if (!showLinePopups) {
       lineNamePopup.remove();
       return;
     }
-    const layers = [...lineLayerIds.values()].filter((layerId) => map.getLayer(layerId));
+
+    const layers =
+      [...lineLayerIds.values()]
+        .filter(
+          (layerId) =>
+            map.getLayer(layerId),
+        );
     if (layers.length === 0) {
       lineNamePopup.remove();
       return;
     }
+
     const feature = map
-      .queryRenderedFeatures(event.point, { layers })
-      .find((candidate) => lineFeatureName(candidate));
-    const name = lineFeatureName(feature);
+      .queryRenderedFeatures(
+        event.point,
+        { layers },
+      )
+      .find(
+        (candidate) =>
+          lineFeatureName(
+            candidate,
+          ),
+      );
+    const name =
+      lineFeatureName(feature);
     if (!name) {
       lineNamePopup.remove();
       return;
@@ -802,7 +955,13 @@ export async function createMapController(config) {
       .setText(name)
       .addTo(map);
   });
-  map.getCanvas().addEventListener?.('mouseleave', () => lineNamePopup.remove());
+  map.getCanvas().addEventListener?.(
+    'mouseleave',
+    () => {
+      lineNamePopup.remove();
+      pointHintPopup.remove();
+    },
+  );
   map.on('click', CITY_LAYER_ID, (event) => {
     const cityId = Number(event.features?.[0]?.properties?.cityId);
     if (Number.isSafeInteger(cityId) && citySelectHandler) citySelectHandler(cityId);
@@ -837,6 +996,9 @@ export async function createMapController(config) {
         options.showPolygonGeometries !== false;
       if (!showLineGeometries) {
         lineNamePopup.remove();
+      }
+      if (!showPointGeometries) {
+        pointHintPopup.remove();
       }
       publishCurrentGeoJson();
     },
@@ -902,6 +1064,7 @@ export async function createMapController(config) {
     },
     setViewportData(geojson) {
       lineNamePopup.remove();
+      pointHintPopup.remove();
       rawGeoJson = geojson;
       rebuildCurrentGeoJson();
       ensureBusLaneLayers();
@@ -915,6 +1078,7 @@ export async function createMapController(config) {
     },
     clearViewportData() {
       lineNamePopup.remove();
+      pointHintPopup.remove();
       rawGeoJson =
         EMPTY_COLLECTION;
       currentGeoJson =
@@ -927,6 +1091,7 @@ export async function createMapController(config) {
     },
     focusCity(bounds) {
       lineNamePopup.remove();
+      pointHintPopup.remove();
       const compact = window.matchMedia('(max-width: 760px)').matches;
       map.fitBounds(
         [[bounds[0], bounds[1]], [bounds[2], bounds[3]]],
