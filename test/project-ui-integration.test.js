@@ -298,6 +298,47 @@ test('public map reloads independent line display settings without a page refres
   assert.match(mapController, /!showPolygonGeometries/u);
 });
 
+test('collapsed public history control keeps the active map date visible', async () => {
+  const [
+    html,
+    publicApp,
+    publicCss,
+  ] = await Promise.all([
+    source('index.html'),
+    source('public/js/app.js'),
+    source('public/css/app.css'),
+  ]);
+
+  assert.match(
+    html,
+    /id="geometry-timeline-toggle"[\s\S]*geometry-timeline-toggle-icon[\s\S]*id="geometry-timeline-toggle-state"[\s\S]*Сейчас/u,
+  );
+  assert.match(
+    publicApp,
+    /const timelineToggleState =[\s\S]*#geometry-timeline-toggle-state/u,
+  );
+  assert.match(
+    publicApp,
+    /function updateTimelineToggleState\([\s\S]*isToday[\s\S]*Сейчас · [\s\S]*timelineToggleState[\s\S]*aria-label/u,
+  );
+  assert.match(
+    publicApp,
+    /function applyTimelineDay\([\s\S]*updateTimelineToggleState\([\s\S]*mapController[\s\S]*\.setTimelineDate/u,
+  );
+  assert.match(
+    publicCss,
+    /\.geometry-timeline-toggle \{[\s\S]*grid-template-columns: 16px auto[\s\S]*border-radius: 21px/u,
+  );
+  assert.match(
+    publicCss,
+    /\.geometry-timeline-toggle-icon \{[\s\S]*place-items: center/u,
+  );
+  assert.match(
+    publicCss,
+    /\.geometry-timeline-toggle-icon::before \{[\s\S]*border-left: 11px solid #fff/u,
+  );
+});
+
 test('retro table hides the low-zoom hint and uses zebra striping', async () => {
   const [publicApp, cityList, retroCss] = await Promise.all([
     source('public/js/app.js'),
