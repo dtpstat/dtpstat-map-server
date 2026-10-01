@@ -212,7 +212,10 @@ function readViewport(map) {
  *   initialCenter: [number, number],
  *   initialZoom: number,
  *   showLineLabels?: boolean,
- *   showLinePopups?: boolean
+ *   showLinePopups?: boolean,
+ *   showPointGeometries?: boolean,
+ *   showLineGeometries?: boolean,
+ *   showPolygonGeometries?: boolean
  * }} config
  */
 export async function createMapController(config) {
@@ -244,6 +247,12 @@ export async function createMapController(config) {
   let cityMarkerIconSize = 1;
   let showLineLabels = Boolean(config.showLineLabels);
   let showLinePopups = config.showLinePopups !== false;
+  let showPointGeometries =
+    config.showPointGeometries !== false;
+  let showLineGeometries =
+    config.showLineGeometries !== false;
+  let showPolygonGeometries =
+    config.showPolygonGeometries !== false;
   const disabledLineTypes = new Set();
   const disabledPointTypes =
     new Set();
@@ -386,6 +395,40 @@ export async function createMapController(config) {
                 feature,
                 timelineDate,
               )
+            ) {
+              return false;
+            }
+
+            const geometryType =
+              feature?.geometry?.type ??
+              '';
+
+            if (
+              (
+                geometryType === 'Point' ||
+                geometryType === 'MultiPoint'
+              ) &&
+              !showPointGeometries
+            ) {
+              return false;
+            }
+
+            if (
+              (
+                geometryType === 'LineString' ||
+                geometryType === 'MultiLineString'
+              ) &&
+              !showLineGeometries
+            ) {
+              return false;
+            }
+
+            if (
+              (
+                geometryType === 'Polygon' ||
+                geometryType === 'MultiPolygon'
+              ) &&
+              !showPolygonGeometries
             ) {
               return false;
             }
@@ -784,6 +827,18 @@ export async function createMapController(config) {
           ? pointTypes
           : [];
       await syncMapPointTypes();
+    },
+    setGeometryTypeVisibility(options = {}) {
+      showPointGeometries =
+        options.showPointGeometries !== false;
+      showLineGeometries =
+        options.showLineGeometries !== false;
+      showPolygonGeometries =
+        options.showPolygonGeometries !== false;
+      if (!showLineGeometries) {
+        lineNamePopup.remove();
+      }
+      publishCurrentGeoJson();
     },
     setLineDisplayOptions(options = {}) {
       const nextShowLineLabels = Boolean(options.showLineLabels);
