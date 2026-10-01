@@ -143,6 +143,18 @@ test('public map exposes independent POI type toggles and polygon layers', async
   );
   assert.match(
     app,
+    /button\.title =\s*pointType\.name/u,
+  );
+  assert.match(
+    app,
+    /aria-label'[\s\S]*Точек этого типа/u,
+  );
+  assert.doesNotMatch(
+    app,
+    /name\.textContent =\s*pointType\.name/u,
+  );
+  assert.match(
+    app,
     /setPointTypeVisibility/u,
   );
   assert.match(
@@ -160,6 +172,10 @@ test('public map exposes independent POI type toggles and polygon layers', async
   assert.match(
     styles,
     /\.point-legend/u,
+  );
+  assert.match(
+    styles,
+    /\.point-legend-item \{[\s\S]*width: 38px[\s\S]*height: 38px[\s\S]*place-items: center/u,
   );
 });
 
@@ -243,6 +259,10 @@ test('public map timeline is setting-controlled and exposes collapsible one-line
   assert.match(
     styles,
     /\.geometry-timeline\[data-collapsed="true"\] \.geometry-timeline-bar/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-timeline-toggle::before[\s\S]*border-left: 11px solid #fff[\s\S]*translateX\(1px\)/u,
   );
   assert.match(
     styles,
