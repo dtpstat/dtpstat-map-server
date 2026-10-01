@@ -305,3 +305,202 @@ export function ensureAdminSections({
     );
   }
 }
+
+
+function tabAllowed(
+  definition,
+  user,
+) {
+  if (
+    definition.permission ===
+    'superuser'
+  ) {
+    return Boolean(
+      user?.isSuperuser,
+    );
+  }
+
+  return true;
+}
+
+export function setupAdminTabs({
+  tabsHost,
+  panelsHost,
+  definitions,
+  user,
+  readState,
+  writeState,
+  stateKey,
+  defaultId,
+}) {
+  if (
+    !tabsHost ||
+    !panelsHost
+  ) {
+    return null;
+  }
+
+  const ordered =
+    definitions.filter(
+      (definition) =>
+        tabAllowed(
+          definition,
+          user,
+        ),
+    );
+
+  for (const definition of ordered) {
+    const tab =
+      tabsHost.querySelector(
+        `[data-interface-tab="${definition.id}"]`,
+      );
+    const panel =
+      panelsHost.querySelector(
+        `[data-interface-panel="${definition.id}"]`,
+      );
+
+    if (tab) {
+      tabsHost.append(
+        tab,
+      );
+    }
+    if (panel) {
+      panelsHost.append(
+        panel,
+      );
+    }
+  }
+
+  const available =
+    ordered
+      .filter(
+        (definition) =>
+          tabsHost.querySelector(
+            `[data-interface-tab="${definition.id}"]`,
+          ) &&
+          panelsHost.querySelector(
+            `[data-interface-panel="${definition.id}"]`,
+          ),
+      )
+      .map(
+        (definition) =>
+          definition.id,
+      );
+
+  if (
+    available.length === 0
+  ) {
+    return null;
+  }
+
+  const select =
+    (key) => {
+      if (
+        !available.includes(
+          key,
+        )
+      ) {
+        return;
+      }
+
+      writeState(
+        stateKey,
+        key,
+      );
+
+      for (
+        const definition of
+        ordered
+      ) {
+        const tab =
+          tabsHost.querySelector(
+            `[data-interface-tab="${definition.id}"]`,
+          );
+        const panel =
+          panelsHost.querySelector(
+            `[data-interface-panel="${definition.id}"]`,
+          );
+        const active =
+          definition.id === key;
+
+        if (tab) {
+          tab.setAttribute(
+            'aria-selected',
+            String(active),
+          );
+          tab.tabIndex =
+            active
+              ? 0
+              : -1;
+        }
+
+        if (panel) {
+          panel.hidden =
+            !active;
+        }
+      }
+
+      const definition =
+        ordered.find(
+          (item) =>
+            item.id === key,
+        );
+
+      if (
+        definition?.openEvent
+      ) {
+        window.dispatchEvent(
+          new CustomEvent(
+            definition.openEvent,
+          ),
+        );
+      }
+    };
+
+  for (const definition of ordered) {
+    const tab =
+      tabsHost.querySelector(
+        `[data-interface-tab="${definition.id}"]`,
+      );
+
+    if (
+      !tab ||
+      tab.dataset
+        .adminLayoutBound ===
+        'true'
+    ) {
+      continue;
+    }
+
+    tab.dataset
+      .adminLayoutBound =
+      'true';
+    tab.addEventListener(
+      'click',
+      () =>
+        select(
+          definition.id,
+        ),
+    );
+  }
+
+  const fallback =
+    available.includes(
+      defaultId,
+    )
+      ? defaultId
+      : available[0];
+
+  select(
+    readState(
+      stateKey,
+      available,
+      fallback,
+    ),
+  );
+
+  return {
+    available,
+    select,
+  };
+}
