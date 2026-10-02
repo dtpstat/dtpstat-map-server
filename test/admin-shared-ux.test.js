@@ -200,6 +200,10 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
     security,
     /dtpstat:security-refresh[\s\S]*loadSettings[\s\S]*loadIpBlocks/u,
   );
+  assert.match(
+    security,
+    /data-admin-section-panel="security"[\s\S]*!securityPrimaryPanel\.hidden[\s\S]*loadSettings\(\)[\s\S]*loadIpBlocks\(\)/u,
+  );
 });
 
 test('technical settings are collapsed and raw values get human-readable companions', async () => {
