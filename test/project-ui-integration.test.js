@@ -178,7 +178,7 @@ test('admin interface loads editors and helpers explicitly without transitive si
   );
   assert.match(
     editor,
-    /data-project-settings-source="general"/u,
+    /#project-settings-general-host/u,
   );
   assert.match(editor, /id="project-settings-map"/u);
   assert.match(editor, /mapSettings\.removeAttribute\(\s*'data-project-settings-panel'/u);
@@ -192,15 +192,15 @@ test('admin interface loads editors and helpers explicitly without transitive si
   );
   assert.match(
     editor,
-    /data-project-settings-source="metadata"/u,
+    /#project-settings-metadata-host/u,
   );
   assert.match(
     editor,
-    /data-project-settings-source="footer"/u,
+    /#project-settings-footer-host/u,
   );
-  assert.match(
+  assert.doesNotMatch(
     editor,
-    /source\.content/u,
+    /data-project-settings-source=|source\.content/u,
   );
   assert.match(editor, /name="projectName"/);
   assert.match(editor, /name="themePreset" type="radio" value="retro"/);
@@ -291,8 +291,9 @@ test('admin interface loads editors and helpers explicitly without transitive si
   assert.match(downloadEditor, /\/api\/admin\/project-settings\/public-download-name/);
   assert.match(downloadEditor, /#project-settings-editor-host/);
   assert.match(downloadEditor, /#project-settings-metadata/);
+  assert.match(downloadEditor, /#project-settings-metadata-host/);
   assert.match(downloadEditor, /projectMessage\.before\(externalForm\)/);
-  assert.match(downloadEditor, /metadataPanel\.append\(section\)/);
+  assert.match(downloadEditor, /metadataHost\.append\(section\)/);
   assert.match(downloadEditor, /section\.hidden = metadataPanel\.hidden/);
   assert.match(downloadEditor, /attributeFilter: \['hidden'\]/);
   assert.match(downloadEditor, /form="public-download-name-form"/);
