@@ -266,6 +266,35 @@ export const adminInterfaceTabs = [
       'Безопасный конструктор расчётных показателей, колонок публичного рейтинга и статического CSV.',
     panelClass:
       'report-interface-panel',
+    tabs: {
+      stateKey:
+        'report-view',
+      defaultId:
+        'metrics',
+      tabAttribute:
+        'data-report-view-tab',
+      panelAttribute:
+        'data-report-view-panel',
+      items: [
+        {
+          id: 'metrics',
+          title: 'Метрики',
+        },
+        {
+          id: 'table',
+          title:
+            'Публичная таблица',
+        },
+        {
+          id: 'csv',
+          title: 'CSV',
+        },
+        {
+          id: 'rank',
+          title: 'Рейтинг',
+        },
+      ],
+    },
     blocks: [
       {
         id: 'report-config',
