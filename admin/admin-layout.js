@@ -647,6 +647,31 @@ export function ensureAdminTabGroup({
           panel.id =
             `${definition.panelIdPrefix}${item.id}`;
         }
+
+        if (
+          item.blocks?.length
+        ) {
+          const grid =
+            document.createElement(
+              'div',
+            );
+          grid.className =
+            'admin-layout-grid admin-layout-nested-grid';
+          for (
+            const block of
+            item.blocks
+          ) {
+            grid.append(
+              createBlock(
+                block,
+              ),
+            );
+          }
+          panel.append(
+            grid,
+          );
+        }
+
         panelsHost.append(
           panel,
         );
