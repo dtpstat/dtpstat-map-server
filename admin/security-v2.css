@@ -355,8 +355,12 @@ body.security-modal-open { overflow: hidden; }
   .security-user-detail { max-height: none; }
   #security-panel-audit:not([hidden]) { height: auto; }
   .security-audit-filter { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .security-settings-form fieldset { grid-template-columns: 1fr; }
-  .security-ip-block-form { grid-template-columns: 1fr; }
+}
+
+@container admin-layout-block (max-width: 64rem) {
+  .security-settings-form fieldset {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 650px) {
@@ -486,7 +490,7 @@ body.security-modal-open { overflow: hidden; }
   line-height: 1.25;
 }
 
-@media (max-width: 1250px) {
+@container admin-layout-block (max-width: 78rem) {
   .security-password-policy-row {
     flex-wrap: wrap;
   }
@@ -557,7 +561,7 @@ body.security-modal-open { overflow: hidden; }
   margin-top: .45rem;
 }
 
-@media (max-width: 650px) {
+@container admin-layout-block (max-width: 40rem) {
   .security-metrics-heading {
     align-items: flex-start;
     flex-direction: column;
