@@ -1,7 +1,10 @@
 import { publishDerivedDataChange } from './derived-data-events.js';
 import { adminConfirm } from './admin-dialog.js';
 import { trackDirtyForm } from './admin-dirty-state.js';
-import { setupAdminTabGroup } from './admin-layout.js';
+import {
+  ensureAdminTabGroup,
+  setupAdminTabGroup,
+} from './admin-layout.js';
 import { adminInterfaceTabs } from './admin-layout-schema.js';
 import { readTabState, writeTabState } from './admin-tab-state.js';
 
@@ -49,14 +52,6 @@ if (typeof document !== 'undefined') {
           </p>
 
           <form id="project-settings-form">
-            <nav class="project-settings-tabs" role="tablist" aria-label="Разделы настроек проекта">
-              <button type="button" role="tab" data-project-settings-tab="general"
-                      aria-selected="true" aria-controls="project-settings-general">Основное</button>
-              <button type="button" role="tab" data-project-settings-tab="metadata"
-                      aria-selected="false" aria-controls="project-settings-metadata">Метаданные и API</button>
-              <button type="button" role="tab" data-project-settings-tab="footer"
-                      aria-selected="false" aria-controls="project-settings-footer">Подвал</button>
-            </nav>
             <div class="form-fields project-settings-grid">
               <section class="project-settings-page" id="project-settings-general"
                        role="tabpanel" data-project-settings-panel="general">
@@ -356,6 +351,11 @@ if (typeof document !== 'undefined') {
             definition.id ===
             'project',
         );
+      ensureAdminTabGroup({
+        root: form,
+        definition:
+          projectLayout?.tabs,
+      });
       const projectTabs =
         setupAdminTabGroup({
           root: form,
