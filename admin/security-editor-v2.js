@@ -283,7 +283,7 @@ if (
   ) {
     securitySettingsHost.innerHTML = `
 <form id="security-settings-form" class="security-settings-form">
-            <h3>Защита входа и сессии</h3>
+            <h3>Защита</h3>
             <fieldset><legend>Политика паролей</legend>
               <div class="security-password-policy-row">
                 <label class="security-password-minimum">
@@ -380,7 +380,7 @@ if (
                 </fieldset>
               </div>
             </details>
-            <button type="submit">Сохранить параметры</button>
+            <button type="submit">Сохранить защиту</button>
             <p id="security-settings-message" class="security-message" role="status"></p>
           </form>
     `;
@@ -419,6 +419,18 @@ if (
       writeState:
         writeTabState,
     });
+
+    for (
+      const panel of
+      securityControlHost
+        .querySelectorAll(
+          '[data-security-settings-panel]',
+        )
+    ) {
+      panel.dataset
+        .dirtyFormId =
+        'security-settings-form';
+    }
   }
 
   if (
@@ -1848,15 +1860,32 @@ if (
     return [
       ...userById.values(),
     ].filter(
-      (user) =>
-        user.isBlocked ||
-        (
-          user.lockedUntil &&
-          new Date(
-            user.lockedUntil,
-          ).valueOf() >
-            now
-        ),
+      (user) => {
+        const manualActive =
+          Boolean(
+            user.isBlocked &&
+            (
+              !user.manualBlockedUntil ||
+              new Date(
+                user.manualBlockedUntil,
+              ).valueOf() >
+                now
+            ),
+          );
+        const automaticActive =
+          Boolean(
+            user.lockedUntil &&
+            new Date(
+              user.lockedUntil,
+            ).valueOf() >
+              now,
+          );
+
+        return (
+          manualActive ||
+          automaticActive
+        );
+      },
     );
   }
 
