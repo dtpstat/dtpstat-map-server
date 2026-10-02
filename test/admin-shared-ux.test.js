@@ -65,6 +65,7 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
     state,
     shell,
     layout,
+    layoutSchema,
     data,
     project,
     report,
@@ -73,6 +74,7 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
     read('admin/admin-tab-state.js'),
     read('admin/admin-shell.js'),
     read('admin/admin-layout.js'),
+    read('admin/admin-layout-schema.js'),
     read('admin/admin.js'),
     read('admin/project-settings-editor.js'),
     read('admin/report-config-editor.js'),
@@ -94,8 +96,22 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
   );
   assert.match(data, /readTabState\('data-task'/);
   assert.match(data, /data-operation-/);
-  assert.match(project, /'project-settings'/);
-  assert.match(report, /'report-view'/);
+  assert.match(
+    layoutSchema,
+    /id:\s*'project'[\s\S]*stateKey:[\s\S]*'project-settings'/u,
+  );
+  assert.match(
+    layoutSchema,
+    /id:\s*'report'[\s\S]*stateKey:[\s\S]*'report-view'/u,
+  );
+  assert.match(
+    project,
+    /setupAdminTabGroup\([\s\S]*readState:[\s\S]*readTabState[\s\S]*writeState:[\s\S]*writeTabState/u,
+  );
+  assert.match(
+    report,
+    /setupAdminTabGroup\([\s\S]*readState:[\s\S]*readTabState[\s\S]*writeState:[\s\S]*writeTabState/u,
+  );
   assert.match(security, /'security'/);
 });
 
