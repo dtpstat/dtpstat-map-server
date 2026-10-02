@@ -113,6 +113,22 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
     securityCss,
     /@container admin-layout-block \(max-width: 40rem\)[\s\S]*\.security-metrics-heading/u,
   );
+  assert.match(
+    securityCss,
+    /\.security-audit-block > \.admin-layout-block-host[\s\S]*grid-template-rows:\s*auto auto minmax\(0, 1fr\) auto auto/u,
+  );
+  assert.match(
+    securityCss,
+    /@container admin-layout-block \(max-width: 74rem\)[\s\S]*\.security-audit-filter/u,
+  );
+  assert.match(
+    securityCss,
+    /@container admin-layout-block \(max-width: 40rem\)[\s\S]*\.security-audit-filter[\s\S]*\.security-section-heading/u,
+  );
+  assert.doesNotMatch(
+    securityCss,
+    /@media \(max-width:\s*1180px\)[\s\S]*\.security-audit-filter/u,
+  );
   assert.doesNotMatch(
     securityCss,
     /@media \(max-width:\s*1250px\)[\s\S]*\.security-password-policy-row/u,
