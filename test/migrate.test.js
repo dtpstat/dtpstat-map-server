@@ -184,6 +184,77 @@ test('migration runner refuses changed history without executing SQL', async () 
 });
 
 
+test('migration runner accepts an explicitly known legacy checksum only', async () => {
+  const client = createClient([
+    {
+      version: 1,
+      filename: 'V001__base.sql',
+      checksum: 'legacy-checksum-1',
+    },
+  ]);
+  const compatible = [
+    {
+      ...migrations[0],
+      legacyChecksums:
+        new Set([
+          'legacy-checksum-1',
+        ]),
+    },
+    migrations[1],
+  ];
+
+  await applyMigrations(
+    client,
+    compatible,
+  );
+
+  assert.equal(
+    client.queries.some(
+      (query) =>
+        query.text ===
+        'MIGRATION ONE',
+    ),
+    false,
+  );
+  assert.equal(
+    client.queries.some(
+      (query) =>
+        query.text ===
+        'MIGRATION TWO',
+    ),
+    true,
+  );
+});
+
+test('migration runner still rejects an unknown checksum when legacy aliases exist', async () => {
+  const client = createClient([
+    {
+      version: 1,
+      filename: 'V001__base.sql',
+      checksum: 'unknown-checksum',
+    },
+  ]);
+  const compatible = [
+    {
+      ...migrations[0],
+      legacyChecksums:
+        new Set([
+          'legacy-checksum-1',
+        ]),
+    },
+    migrations[1],
+  ];
+
+  await assert.rejects(
+    applyMigrations(
+      client,
+      compatible,
+    ),
+    /Applied migration was modified/,
+  );
+});
+
+
 async function withMigrationDirectory(files, callback) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dtpstat-runner-'));
   try {
