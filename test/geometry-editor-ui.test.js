@@ -1848,6 +1848,18 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
     script,
     /adminAvatarObjectUrl\([\s\S]*avatarUrl/u,
   );
+  assert.match(
+    script,
+    /geometry-discussion-avatar-image/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-discussion-avatar > \[hidden\][\s\S]*display: none/u,
+  );
+  assert.doesNotMatch(
+    script,
+    /fallback\.className =[\s\S]{0,180}className \+[\s\S]{0,180}geometry-discussion-avatar-fallback/u,
+  );
   assert.doesNotMatch(
     script,
     /image\.src\s*=\s*avatarUrl/u,
