@@ -193,7 +193,15 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
   );
   assert.match(
     inbox,
-    /unreadIds[\s\S]*incoming[\s\S]*item\.unreadCount/u,
+    /const incoming =[\s\S]*state\.messages\.filter/u,
+  );
+  assert.match(
+    inbox,
+    /const unreadCount =[\s\S]*item\.unreadCount[\s\S]*incoming\.length/u,
+  );
+  assert.match(
+    inbox,
+    /const unreadIds =[\s\S]*incoming[\s\S]*\.slice\(/u,
   );
   assert.match(
     inbox,
