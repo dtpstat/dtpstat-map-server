@@ -587,6 +587,10 @@ export function ensureAdminTabGroup({
         'button';
       tab.role =
         'tab';
+      appendClassNames(
+        tab,
+        definition.tabClass,
+      );
       tab.setAttribute(
         definition.tabAttribute,
         item.id,
