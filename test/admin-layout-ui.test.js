@@ -90,7 +90,15 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
   );
   assert.match(
     schema,
-    /export const adminSecurityLayout[\s\S]*stateKey:[\s\S]*'security'[\s\S]*tabsHostId:[\s\S]*'security-tabs'[\s\S]*tabsClass:[\s\S]*'security-tabs'[\s\S]*panelsHostId:[\s\S]*'security-panels'[\s\S]*panelClass:[\s\S]*'security-panel'[\s\S]*id:\s*'users'[\s\S]*id:\s*'audit'[\s\S]*id:\s*'security'/u,
+    /export const adminSecurityLayout[\s\S]*stateKey:[\s\S]*'security'[\s\S]*tabsHostId:[\s\S]*'security-tabs'[\s\S]*tabsClass:[\s\S]*'security-tabs'[\s\S]*panelsHostId:[\s\S]*'security-panels'[\s\S]*panelClass:[\s\S]*'security-panel'[\s\S]*id:\s*'users'[\s\S]*id:\s*'audit'/u,
+  );
+  assert.match(
+    schema,
+    /export const adminDynamicSections[\s\S]*id:\s*'users-audit'[\s\S]*title:\s*'Пользователи и аудит'[\s\S]*hostId:[\s\S]*'security-users-audit-host'/u,
+  );
+  assert.match(
+    schema,
+    /export const adminDynamicSections[\s\S]*id:\s*'security'[\s\S]*title:\s*'Безопасность'[\s\S]*hostId:[\s\S]*'security-settings-host'[\s\S]*hostId:[\s\S]*'security-ip-host'/u,
   );
   assert.match(
     schema,
@@ -105,7 +113,7 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
     assert.match(
       schema,
       new RegExp(
-        `export const adminSecurityLayout[\\s\\S]*hostId:[\\s\\S]*['"]${hostId}['"][\\s\\S]*wide:\\s*${wide}`,
+        `export const adminDynamicSections[\\s\\S]*id:\\s*['"]security['"][\\s\\S]*hostId:[\\s\\S]*['"]${hostId}['"][\\s\\S]*wide:\\s*${wide}`,
         'u',
       ),
     );
