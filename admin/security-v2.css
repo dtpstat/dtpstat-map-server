@@ -13,6 +13,27 @@
   flex-direction: column;
 }
 
+#security-control-host {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#security-settings-panels {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.security-settings-panel:not([hidden]) {
+  min-width: 0;
+  min-height: 0;
+}
+
+.security-settings-panel > .admin-layout-grid {
+  min-height: 0;
+}
+
 .security-tabs {
   margin: 1rem 0;
   display: flex;
@@ -665,4 +686,91 @@ body.security-modal-open { overflow: hidden; }
   padding: 0;
   margin: 0;
   flex: 0 0 1rem;
+}
+
+.security-block-policy,
+.security-block-summary {
+  min-width: 0;
+  padding: .75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0d171a;
+}
+
+.security-block-policy {
+  display: grid;
+  gap: .65rem;
+  margin-bottom: .8rem;
+}
+
+.security-block-policy fieldset {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: .6rem;
+}
+
+.security-block-summary {
+  margin-top: .8rem;
+}
+
+.security-block-summary-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.security-block-summary-heading label {
+  width: min(24rem, 100%);
+  display: grid;
+  gap: .3rem;
+}
+
+.security-block-table-wrap {
+  min-width: 0;
+  overflow: auto;
+  margin-top: .6rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.security-block-table {
+  width: 100%;
+  min-width: 48rem;
+  border-collapse: collapse;
+  font-size: .72rem;
+}
+
+.security-block-table th,
+.security-block-table td {
+  padding: .5rem .6rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.security-block-table th {
+  color: var(--muted);
+  background: #0d171a;
+}
+
+.security-block-table td:last-child {
+  width: 1%;
+  white-space: nowrap;
+}
+
+@container admin-layout-block (max-width: 48rem) {
+  .security-block-policy fieldset {
+    grid-template-columns: 1fr;
+  }
+
+  .security-block-summary-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .security-block-summary-heading label {
+    width: 100%;
+  }
 }
