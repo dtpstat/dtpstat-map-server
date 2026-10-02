@@ -243,4 +243,20 @@ test('V063 generalizes geometry discussions in place for geometry and OSM subjec
     sql,
     /FOREIGN KEY \(LAST_READ_MESSAGE_ID, SUBJECT_TYPE, SUBJECT_ID\)/u,
   );
+  assert.match(
+    sql,
+    /CREATE OR REPLACE FUNCTION BUSLANES\.CLEAR_ADMIN_DISCUSSION_READ_STATE_MESSAGE\(\)/u,
+  );
+  assert.match(
+    sql,
+    /BEFORE DELETE ON BUSLANES\.ADMIN_DISCUSSION_MESSAGES/u,
+  );
+  assert.match(
+    sql,
+    /SET LAST_READ_MESSAGE_ID = NULL/u,
+  );
+  assert.doesNotMatch(
+    sql,
+    /ON DELETE SET NULL\s*\(/u,
+  );
 });
