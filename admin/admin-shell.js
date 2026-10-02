@@ -265,10 +265,14 @@ function setupPrimarySections(
     if (connection) {
       connection.hidden = !['data', 'geometries', 'osm-objects'].includes(key);
     }
-    if (
-      key === 'users-audit' ||
-      key === 'security'
-    ) {
+    if (key === 'users-audit') {
+      window.dispatchEvent(
+        new CustomEvent(
+          'dtpstat:users-audit-refresh',
+        ),
+      );
+    }
+    if (key === 'security') {
       window.dispatchEvent(
         new CustomEvent(
           'dtpstat:security-refresh',
