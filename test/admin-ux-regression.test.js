@@ -89,6 +89,10 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
   assert.match(security, /class="security-user-avatar"/);
   assert.match(security, /if \(user\.hasAvatar\)/);
   assert.match(securityCss, /\.security-user-avatar/);
+  assert.match(
+    securityCss,
+    /#security-panels[\s\S]*display:\s*flex[\s\S]*flex-direction:\s*column/u,
+  );
 
   assert.match(securityCss, /\.security-audit-filter-panel/);
   assert.match(securityCss, /\.security-audit-filter[\s\S]*grid-template-columns:\s*repeat\(4/);
