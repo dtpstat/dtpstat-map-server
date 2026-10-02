@@ -241,6 +241,14 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
     /dtpstat:geometry-editor-select[\s\S]*loadWorkspace[\s\S]*selectGeometry/u,
   );
   assert.match(
+    geometry,
+    /workspaceRequestSequence/u,
+  );
+  assert.match(
+    geometry,
+    /requestSequence !==[\s\S]*state\.workspaceRequestSequence[\s\S]*return false/u,
+  );
+  assert.match(
     osm,
     /dtpstat:osm-boundary-editor-select[\s\S]*selectBoundary/u,
   );
