@@ -172,6 +172,7 @@ if (section) {
     discussionLoading: false,
     discussionSending: false,
     discussionRequestSequence: 0,
+    workspaceRequestSequence: 0,
     discussionUnreadByGeometry: new Map(),
     discussionAttentionMessageId: null,
   };
@@ -691,14 +692,10 @@ if (section) {
           'span',
         );
       fallback.className =
-        className +
-        ' ' +
-        (
-          className ===
-            'geometry-edit-actor-avatar'
-            ? 'geometry-edit-actor-fallback'
-            : 'geometry-discussion-avatar-fallback'
-        );
+        className ===
+          'geometry-edit-actor-avatar'
+          ? 'geometry-edit-actor-fallback'
+          : 'geometry-discussion-avatar-fallback';
       fallback.textContent =
         identityInitials(
           identity,
@@ -709,7 +706,10 @@ if (section) {
           'img',
         );
       image.className =
-        className;
+        className ===
+          'geometry-edit-actor-avatar'
+          ? 'geometry-edit-actor-image'
+          : 'geometry-discussion-avatar-image';
       image.alt = '';
       image.hidden = true;
 
@@ -6206,6 +6206,8 @@ if (section) {
   async function loadUnlinked({
     keepSelection = false,
     fit = false,
+    requestSequence =
+      state.workspaceRequestSequence,
   } = {}) {
     const previousId =
       keepSelection
@@ -6214,6 +6216,13 @@ if (section) {
     const payload = await api(
       '/api/admin/geometry-editor/unlinked/geometries',
     );
+
+    if (
+      requestSequence !==
+      state.workspaceRequestSequence
+    ) {
+      return false;
+    }
 
     state.city = null;
     state.workspaceKey = 'unlinked';
@@ -6237,6 +6246,13 @@ if (section) {
       clearSelection();
     }
 
+    if (
+      requestSequence !==
+      state.workspaceRequestSequence
+    ) {
+      return false;
+    }
+
     renderList();
     updateMapSources();
 
@@ -6248,60 +6264,135 @@ if (section) {
         state.geometries[0].geometry,
       );
     }
+
+    return true;
   }
 
-  async function loadCity(cityId, { keepSelection = false, fit = true } = {}) {
+  async function loadCity(
+    cityId,
+    {
+      keepSelection = false,
+      fit = true,
+      requestSequence =
+        state.workspaceRequestSequence,
+    } = {},
+  ) {
     if (!cityId) {
+      if (
+        requestSequence !==
+        state.workspaceRequestSequence
+      ) {
+        return false;
+      }
       state.city = null;
       state.serverGeometries = [];
       state.geometries = [];
       clearSelection();
-      return;
+      return true;
     }
 
-    const previousIds = state.city?.id === cityId
-      ? new Set(state.serverGeometries.map((item) => item.id))
-      : new Set();
-    const previousId = keepSelection ? state.selectedId : null;
+    const previousIds =
+      state.city?.id === cityId
+        ? new Set(
+            state.serverGeometries.map(
+              (item) => item.id,
+            ),
+          )
+        : new Set();
+    const previousId =
+      keepSelection
+        ? state.selectedId
+        : null;
 
     const payload = await api(
       `/api/admin/geometry-editor/cities/${encodeURIComponent(cityId)}/geometries`,
     );
 
+    if (
+      requestSequence !==
+      state.workspaceRequestSequence
+    ) {
+      return false;
+    }
+
     state.city = payload.city;
     state.workspaceKey =
       'city:' + String(payload.city.id);
-    state.serverGeometries = payload.geometries ?? [];
+    state.serverGeometries =
+      payload.geometries ?? [];
     renderImportConflicts();
-    const currentIds = new Set(
-      state.serverGeometries.map((item) => item.id),
+    const currentIds =
+      new Set(
+        state.serverGeometries.map(
+          (item) => item.id,
+        ),
+      );
+    state.selectedSet =
+      new Set(
+        [...state.selectedSet].filter(
+          (id) =>
+            currentIds.has(id),
+        ),
+      );
+    reconcileCurrentCityDrafts(
+      previousIds,
     );
-    state.selectedSet = new Set(
-      [...state.selectedSet].filter((id) => currentIds.has(id)),
-    );
-    reconcileCurrentCityDrafts(previousIds);
     rebuildDraftOverlay();
-    citySelect.value = String(state.city.id);
+    citySelect.value =
+      String(state.city.id);
 
-    const previous = previousId &&
-      state.geometries.find((item) => item.id === previousId);
-    if (previous) await selectGeometry(previous.id, { focus: false });
-    else clearSelection();
+    const previous =
+      previousId &&
+      state.geometries.find(
+        (item) =>
+          item.id === previousId,
+      );
+    if (previous) {
+      await selectGeometry(
+        previous.id,
+        { focus: false },
+      );
+    } else {
+      clearSelection();
+    }
+
+    if (
+      requestSequence !==
+      state.workspaceRequestSequence
+    ) {
+      return false;
+    }
 
     renderList();
     updateMapSources();
 
-    if (fit && Array.isArray(state.city.bounds) && state.map) {
+    if (
+      fit &&
+      Array.isArray(
+        state.city.bounds,
+      ) &&
+      state.map
+    ) {
       state.map.fitBounds(
         [
-          [state.city.bounds[0], state.city.bounds[1]],
-          [state.city.bounds[2], state.city.bounds[3]],
+          [
+            state.city.bounds[0],
+            state.city.bounds[1],
+          ],
+          [
+            state.city.bounds[2],
+            state.city.bounds[3],
+          ],
         ],
-        { padding: 42, duration: 250 },
+        {
+          padding: 42,
+          duration: 250,
+        },
       );
     }
-  }
 
+    return true;
+  }
 
   function loadWorkspace(
     value,
@@ -6310,21 +6401,26 @@ if (section) {
       fit = true,
     } = {},
   ) {
+    const requestSequence =
+      ++state
+        .workspaceRequestSequence;
+
     return value ===
       '__unlinked__'
       ? loadUnlinked({
           keepSelection,
           fit,
+          requestSequence,
         })
       : loadCity(
           Number(value),
           {
             keepSelection,
             fit,
+            requestSequence,
           },
         );
   }
-
 
   async function loadEditLeases() {
     const payload = await api(
