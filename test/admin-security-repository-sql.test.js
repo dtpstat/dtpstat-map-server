@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createAdminAuditRepository } from '../src/db/admin-audit-repository.js';
 import { createAdminUserRepository } from '../src/db/admin-user-repository.js';
+import {
+  createSecurityAccountService,
+} from '../src/modules/security/account-service.js';
 
 test('failed-login SQL avoids PostgreSQL keyword and RETURNING ambiguities', async () => {
   let queryText = '';
@@ -93,6 +96,62 @@ test('user unblock clears manual and automatic lockout state', async () => {
   assert.deepEqual(
     queryValues,
     [7],
+  );
+});
+
+
+test('account unblock delegates to complete repository unblock', async () => {
+  const calls = [];
+  const repository = {
+    async getUser(userId) {
+      calls.push([
+        'getUser',
+        userId,
+      ]);
+      return {
+        id: userId,
+        username: 'operator',
+      };
+    },
+    async unblockUser(userId) {
+      calls.push([
+        'unblockUser',
+        userId,
+      ]);
+      return {
+        id: userId,
+        username: 'operator',
+        isBlocked: false,
+        lockedUntil: null,
+      };
+    },
+  };
+  const service =
+    createSecurityAccountService(
+      repository,
+      {
+        appendAudit:
+          async () => {},
+      },
+    );
+
+  const user =
+    await service.unblockUser(7);
+
+  assert.equal(
+    user.isBlocked,
+    false,
+  );
+  assert.equal(
+    user.lockedUntil,
+    null,
+  );
+  assert.deepEqual(
+    calls,
+    [
+      ['getUser', 7],
+      ['unblockUser', 7],
+    ],
   );
 });
 
