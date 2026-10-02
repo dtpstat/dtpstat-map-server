@@ -210,6 +210,7 @@ h4 { margin-bottom: .35rem; font-size: .92rem; }
 .transfer-mode { padding: .85rem; border: 1px solid var(--line); border-radius: 10px; background: #111c20; }
 .mode-heading { margin-bottom: .75rem; display: flex; align-items: start; justify-content: space-between; gap: .75rem; }
 .mode-heading p { margin: 0; color: var(--muted); font-size: .76rem; line-height: 1.45; }
+.project-transfer-divider { height: 1px; margin: .9rem 0; background: var(--line); }
 .last-success { min-height: 0; margin: 0 0 .85rem; padding: .55rem .65rem; display: flex; justify-content: space-between; gap: .75rem; border: 1px solid var(--line); border-radius: 8px; background: #0b1518; font-size: .72rem; line-height: 1.35; }
 .last-success span { color: var(--muted); }
 .last-success time { color: var(--warning); text-align: right; }
