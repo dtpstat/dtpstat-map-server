@@ -145,9 +145,18 @@ button.danger { background: #51211f; border-color: #8e3a36; color: #ffd0cc; }
 #security-panel-audit:not([hidden]) {
   min-height: 0;
   flex: 1 1 0;
+  overflow: hidden;
+}
+
+.security-audit-block,
+.security-audit-block > .admin-layout-block-host {
+  min-height: 0;
+  height: 100%;
+}
+
+.security-audit-block > .admin-layout-block-host {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
-  overflow: hidden;
 }
 .security-audit-filter-panel {
   margin: .45rem 0;
@@ -354,7 +363,6 @@ body.security-modal-open { overflow: hidden; }
   .security-users-master { max-height: 20rem; border-right: 0; border-bottom: 1px solid var(--line); }
   .security-user-detail { max-height: none; }
   #security-panel-audit:not([hidden]) { height: auto; }
-  .security-audit-filter { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 
 @container admin-layout-block (max-width: 64rem) {
@@ -366,9 +374,19 @@ body.security-modal-open { overflow: hidden; }
 @media (max-width: 650px) {
   .security-audit-detail-dialog { width: 100%; height: 96vh; border-radius: 10px; }
   .security-audit-detail-toolbar-spacer { display: none; }
-  .security-detail-fields,.security-role-grid,.security-audit-filter { grid-template-columns: 1fr; }
+  .security-detail-fields,.security-role-grid { grid-template-columns: 1fr; }
   .security-inline-block-form { grid-template-columns: 1fr; }
-  .security-user-detail-heading,.security-section-heading { flex-direction: column; }
+  .security-user-detail-heading { flex-direction: column; }
+}
+
+@container admin-layout-block (max-width: 40rem) {
+  .security-audit-filter {
+    grid-template-columns: 1fr;
+  }
+
+  .security-section-heading {
+    flex-direction: column;
+  }
 }
 
 
@@ -456,8 +474,10 @@ body.security-modal-open { overflow: hidden; }
   font-size: .7rem;
 }
 
-@media (max-width: 1180px) {
-  .security-audit-filter { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container admin-layout-block (max-width: 74rem) {
+  .security-audit-filter {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .security-password-policy-row {
