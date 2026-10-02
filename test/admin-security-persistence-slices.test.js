@@ -49,6 +49,7 @@ test('admin user repository owns account permissions login state and avatar SQL'
       lockoutSeconds: 1800,
     },
   );
+  await repository.unblockUser(7);
   await repository.saveAvatar(
     7,
     'image/png',
@@ -61,7 +62,11 @@ test('admin user repository owns account permissions login state and avatar SQL'
     calls[1].text,
     /WHERE users\.id = next_state\.user_id/u,
   );
-  assert.match(calls[2].text, /avatar_data=\$3/u);
+  assert.match(
+    calls[2].text,
+    /is_blocked = FALSE[\s\S]*locked_until = NULL/u,
+  );
+  assert.match(calls[3].text, /avatar_data=\$3/u);
 });
 
 test('admin session repository owns session lifecycle SQL', async () => {
