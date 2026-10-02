@@ -124,8 +124,24 @@ test('admin interface loads editors and helpers explicitly without transitive si
   );
   assert.match(
     layoutSchema,
-    /id:\s*'map'[\s\S]*elementId:[\s\S]*'operation-map-settings'[\s\S]*hostId:[\s\S]*'map-settings-editor-host'/u,
+    /id:\s*'map'[\s\S]*elementId:[\s\S]*'operation-map-settings'[\s\S]*hostId:[\s\S]*'map-city-category-host'/u,
   );
+  for (
+    const hostId of [
+      'map-display-host',
+      'map-history-host',
+      'map-city-marker-host',
+      'map-actions-host',
+    ]
+  ) {
+    assert.match(
+      layoutSchema,
+      new RegExp(
+        `id:\\s*['"]map['"][\\s\\S]*hostId:[\\s\\S]*['"]${hostId}['"]`,
+        'u',
+      ),
+    );
+  }
   assert.match(
     layoutSchema,
     /id:\s*'project-transfer'[\s\S]*permission:[\s\S]*'superuser'[\s\S]*hostId:[\s\S]*'project-transfer-editor-host'/u,
@@ -142,10 +158,23 @@ test('admin interface loads editors and helpers explicitly without transitive si
     editor,
     /#project-settings-editor-host/u,
   );
-  assert.match(
-    editor,
-    /#map-settings-editor-host/u,
-  );
+  for (
+    const hostId of [
+      'map-city-category-host',
+      'map-display-host',
+      'map-history-host',
+      'map-city-marker-host',
+      'map-actions-host',
+    ]
+  ) {
+    assert.match(
+      editor,
+      new RegExp(
+        `#${hostId}`,
+        'u',
+      ),
+    );
+  }
   assert.match(
     editor,
     /setupAdminTabGroup\(/u,
@@ -164,7 +193,23 @@ test('admin interface loads editors and helpers explicitly without transitive si
   );
   assert.match(
     editor,
-    /mapHost\.innerHTML/u,
+    /mapHosts\.cityCategory\.innerHTML/u,
+  );
+  assert.match(
+    editor,
+    /mapHosts\.display\.innerHTML/u,
+  );
+  assert.match(
+    editor,
+    /mapHosts\.history\.innerHTML/u,
+  );
+  assert.match(
+    editor,
+    /mapHosts\.cityMarker\.innerHTML/u,
+  );
+  assert.match(
+    editor,
+    /mapHosts\.actions\.innerHTML/u,
   );
   assert.match(editor, /form="project-settings-form"/u);
   assert.match(editor, /Сохранить настройки карты/u);
@@ -180,11 +225,9 @@ test('admin interface loads editors and helpers explicitly without transitive si
     editor,
     /#project-settings-general-host/u,
   );
-  assert.match(editor, /id="project-settings-map"/u);
-  assert.match(editor, /mapSettings\.removeAttribute\(\s*'data-project-settings-panel'/u);
-  assert.match(
+  assert.doesNotMatch(
     editor,
-    /mapSettingsHost\.append\([\s\S]*mapSettings\.childNodes/u,
+    /id="project-settings-map"|mapSettingsHost|mapSettings\.removeAttribute/u,
   );
   assert.match(
     editor,
