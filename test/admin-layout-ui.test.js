@@ -122,6 +122,21 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
     schema,
     /id:\s*'project'[\s\S]*tabs:[\s\S]*stateKey:[\s\S]*'project-settings'[\s\S]*id:\s*'general'[\s\S]*id:\s*'metadata'[\s\S]*id:\s*'footer'/u,
   );
+  for (
+    const hostId of [
+      'project-settings-general-host',
+      'project-settings-metadata-host',
+      'project-settings-footer-host',
+    ]
+  ) {
+    assert.match(
+      schema,
+      new RegExp(
+        `id:\\s*['"]project['"][\\s\\S]*hostId:[\\s\\S]*['"]${hostId}['"]`,
+        'u',
+      ),
+    );
+  }
   assert.match(
     schema,
     /id:\s*'map'[\s\S]*elementId:[\s\S]*'operation-map-settings'/u,
@@ -240,6 +255,10 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
   assert.match(
     engine,
     /definition\.panelAttribute[\s\S]*panel\.setAttribute/u,
+  );
+  assert.match(
+    engine,
+    /item\.blocks\?\.length[\s\S]*createBlock\([\s\S]*block/u,
   );
   assert.match(
     engine,
