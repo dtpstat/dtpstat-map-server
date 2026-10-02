@@ -378,6 +378,28 @@ test('server runtime exposes explicit bootstrap app and admin dependency slices'
       .name,
     'createDiscussionInboxRuntime',
   );
+  const appSource =
+    await import(
+      'node:fs/promises'
+    ).then(
+      ({ readFile }) =>
+        readFile(
+          new URL(
+            '../src/app.js',
+            import.meta.url,
+          ),
+          'utf8',
+        ),
+    );
+
+  assert.match(
+    appSource,
+    /reportConfigService,[\s\S]*discussionInboxService,[\s\S]*geometryEditorService/u,
+  );
+  assert.match(
+    appSource,
+    /installApplicationApiRoutes\([\s\S]*discussionInboxService,[\s\S]*geometryEditorService/u,
+  );
   assert.equal(
     runtime
       .appDependencies
