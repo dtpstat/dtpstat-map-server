@@ -197,10 +197,18 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     `;
   }
 
-  if (securityPanels.security) {
-    securityPanels.security.innerHTML = `
-<div class="security-settings-grid">
-          <form id="security-settings-form" class="security-settings-form">
+  const securitySettingsHost =
+    host.querySelector(
+      '#security-settings-host',
+    );
+  const securityIpHost =
+    host.querySelector(
+      '#security-ip-host',
+    );
+
+  if (securitySettingsHost) {
+    securitySettingsHost.innerHTML = `
+<form id="security-settings-form" class="security-settings-form">
             <h3>Защита входа и сессии</h3>
             <fieldset><legend>Политика паролей</legend>
               <div class="security-password-policy-row">
@@ -301,8 +309,12 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
             <button type="submit">Сохранить параметры</button>
             <p id="security-settings-message" class="security-message" role="status"></p>
           </form>
+    `;
+  }
 
-          <section class="security-ip-panel">
+  if (securityIpHost) {
+    securityIpHost.innerHTML = `
+<section class="security-ip-panel">
             <h3>Ручные блокировки IP</h3>
             <form id="security-ip-block-form" class="security-ip-block-form">
               <label>IP <input name="ipAddress" type="text" required placeholder="203.0.113.10"></label>
@@ -313,7 +325,6 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
             <div id="security-ip-blocks" class="security-ip-blocks"></div>
             <p id="security-ip-message" class="security-message" role="status"></p>
           </section>
-        </div>
     `;
   }
 
