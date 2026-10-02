@@ -30,6 +30,7 @@ import {
  *   projectSettingsRepository?: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
  *   settingsTransferService?: { exportSettings: () => Promise<object>, importSettings: (payload: unknown) => Promise<object> },
  *   reportConfigService?: { get: () => Promise<any>, save: (payload: unknown) => Promise<any> },
+ *   discussionInboxService?: { listInbox: Function },
  *   geometryEditorService?: any,
  *   geometryImportService?: any,
  *   refreshPublicDownloads?: () => Promise<any>,
@@ -62,6 +63,7 @@ export function createApp({
   projectSettingsRepository,
   settingsTransferService,
   reportConfigService,
+  discussionInboxService,
   geometryEditorService,
   geometryImportService,
   refreshPublicDownloads,
@@ -228,6 +230,7 @@ export function createApp({
         effectiveSettingsTransferService,
       reportConfigService:
         effectiveReportConfigService,
+      discussionInboxService,
       geometryEditorService,
       geometryImportService,
       refreshPublicDownloads,
