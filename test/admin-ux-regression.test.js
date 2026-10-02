@@ -27,7 +27,14 @@ test('admin data and project settings are split into meaningful visual groups', 
   assert.doesNotMatch(project, /data-project-settings-tab="map"/);
   assert.match(project, /data-project-settings-tab="metadata"/);
   assert.match(project, /data-project-settings-tab="footer"/);
-  assert.match(project, /readTabState\([\s\S]*'project-settings'/);
+  assert.match(
+    project,
+    /setupAdminTabGroup\([\s\S]*readState:[\s\S]*readTabState[\s\S]*writeState:[\s\S]*writeTabState/u,
+  );
+  assert.match(
+    layoutSchema,
+    /id:\s*'project'[\s\S]*tabs:[\s\S]*stateKey:[\s\S]*'project-settings'/u,
+  );
   assert.match(
     layoutSchema,
     /id:\s*'project'[\s\S]*hostId:[\s\S]*'project-settings-editor-host'/u,
