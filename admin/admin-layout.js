@@ -510,6 +510,161 @@ function tabAllowed(
   return true;
 }
 
+export function setupAdminTabGroup({
+  root,
+  definition,
+  readState,
+  writeState,
+}) {
+  if (
+    !root ||
+    !definition?.items?.length ||
+    !definition.tabAttribute ||
+    !definition.panelAttribute
+  ) {
+    return null;
+  }
+
+  const itemIds =
+    definition.items.map(
+      (item) => item.id,
+    );
+  const tabs =
+    definition.items
+      .map(
+        (item) => ({
+          item,
+          node:
+            root.querySelector(
+              `[${definition.tabAttribute}="${item.id}"]`,
+            ),
+        }),
+      )
+      .filter(
+        ({ node }) =>
+          Boolean(node),
+      );
+  const panels =
+    definition.items
+      .map(
+        (item) => ({
+          item,
+          node:
+            root.querySelector(
+              `[${definition.panelAttribute}="${item.id}"]`,
+            ),
+        }),
+      )
+      .filter(
+        ({ node }) =>
+          Boolean(node),
+      );
+
+  const available =
+    itemIds.filter(
+      (id) =>
+        tabs.some(
+          ({ item }) =>
+            item.id === id,
+        ) &&
+        panels.some(
+          ({ item }) =>
+            item.id === id,
+        ),
+    );
+
+  if (
+    available.length === 0
+  ) {
+    return null;
+  }
+
+  const select =
+    (key) => {
+      if (
+        !available.includes(
+          key,
+        )
+      ) {
+        return;
+      }
+
+      writeState(
+        definition.stateKey,
+        key,
+      );
+
+      for (
+        const { item, node } of
+        tabs
+      ) {
+        const active =
+          item.id === key;
+        node.setAttribute(
+          'aria-selected',
+          String(active),
+        );
+        node.tabIndex =
+          active
+            ? 0
+            : -1;
+      }
+
+      for (
+        const { item, node } of
+        panels
+      ) {
+        node.hidden =
+          item.id !== key;
+      }
+    };
+
+  for (
+    const { item, node } of
+    tabs
+  ) {
+    if (
+      node.dataset
+        .adminLayoutBound ===
+      'true'
+    ) {
+      continue;
+    }
+
+    node.dataset
+      .adminLayoutBound =
+      'true';
+    node.addEventListener(
+      'click',
+      () =>
+        select(
+          item.id,
+        ),
+    );
+  }
+
+  const fallback =
+    available.includes(
+      definition.defaultId,
+    )
+      ? definition.defaultId
+      : available[0];
+
+  select(
+    readState(
+      definition.stateKey,
+      available,
+      fallback,
+    ),
+  );
+
+  return {
+    available,
+    select,
+  };
+}
+
+
 export function setupAdminTabs({
   tabsHost,
   panelsHost,
