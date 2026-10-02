@@ -448,16 +448,8 @@ export function createSecurityAccountService(
     if (!current) return null;
 
     return publicAdminUser(
-      await repository.updateUser(
+      await repository.unblockUser(
         userId,
-        {
-          ...current,
-          isBlocked: false,
-          manualBlockedAt: null,
-          manualBlockedUntil: null,
-          manualBlockReason: null,
-          manualBlockedBy: null,
-        },
       ),
     );
   }
