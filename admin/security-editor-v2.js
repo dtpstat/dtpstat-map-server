@@ -399,7 +399,6 @@ if (
               <label>Причина <input name="reason" type="text" maxlength="500"></label>
               <button type="submit">Заблокировать IP</button>
             </form>
-            <div id="security-ip-blocks" class="security-ip-blocks"></div>
             <p id="security-ip-message" class="security-message" role="status"></p>
           </section>
     `;
@@ -1204,6 +1203,7 @@ if (
         : payload.users[0]?.id ?? null;
       renderUsersList();
       renderDetail(selectedUserId ? userById.get(selectedUserId) : null);
+      renderBlockSummary();
       setMessage(message, `Пользователей: ${payload.users.length}`);
     } catch (error) {
       setMessage(message, error.message, 'error');
