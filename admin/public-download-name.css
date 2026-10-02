@@ -34,7 +34,7 @@
   white-space: nowrap;
 }
 
-@media (max-width: 760px) {
+@container admin-layout-block (max-width: 48rem) {
   .project-download-name-form {
     grid-template-columns: 1fr;
   }
