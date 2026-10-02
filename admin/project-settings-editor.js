@@ -23,10 +23,32 @@ if (typeof document !== 'undefined') {
       document.querySelector(
         '#project-settings-editor-host',
       );
-    const mapHost =
-      document.querySelector(
-        '#map-settings-editor-host',
-      );
+    const mapHosts = {
+      cityCategory:
+        document.querySelector(
+          '#map-city-category-host',
+        ),
+      display:
+        document.querySelector(
+          '#map-display-host',
+        ),
+      history:
+        document.querySelector(
+          '#map-history-host',
+        ),
+      cityMarker:
+        document.querySelector(
+          '#map-city-marker-host',
+        ),
+      actions:
+        document.querySelector(
+          '#map-actions-host',
+        ),
+    };
+    const mapLayoutReady =
+      Object.values(
+        mapHosts,
+      ).every(Boolean);
     const mapPanel =
       document.querySelector(
         '[data-interface-panel="map"]',
@@ -34,7 +56,7 @@ if (typeof document !== 'undefined') {
 
     if (
       projectHost &&
-      mapHost &&
+      mapLayoutReady &&
       !document.querySelector(
         '#project-settings-form',
       )
@@ -56,9 +78,25 @@ if (typeof document !== 'undefined') {
                  id="project-settings-panels">
               
 
-              <section class="project-settings-page" id="project-settings-map"
-                       role="tabpanel" data-project-settings-panel="map" hidden>
-              <section class="project-settings-section" aria-labelledby="project-city-category-title">
+              
+
+              
+
+              
+            </div>
+            <button class="task-action" type="submit" data-project-settings-submit>Сохранить настройки проекта</button>
+          </form>
+          <p class="project-settings-message" id="project-settings-message" role="status"></p>
+`;
+
+      if (mapPanel) {
+        mapPanel.dataset
+          .dirtyFormId =
+          'project-settings-form';
+      }
+
+      mapHosts.cityCategory.innerHTML = `
+<section class="project-settings-section" aria-labelledby="project-city-category-title">
                 <div>
                   <h5 id="project-city-category-title">Разделение больших и малых городов</h5>
                   <p>Если население известно, используется порог населения. При отсутствии населения — порог площади активной OSM-геометрии.</p>
@@ -77,8 +115,10 @@ if (typeof document !== 'undefined') {
                   </label>
                 </div>
               </section>
+      `;
 
-              <section class="project-settings-section"
+      mapHosts.display.innerHTML = `
+<section class="project-settings-section"
                        aria-labelledby="project-geometry-types-title">
                 <div>
                   <h5 id="project-geometry-types-title">Типы геометрий на публичной карте</h5>
@@ -112,8 +152,10 @@ if (typeof document !== 'undefined') {
                 Показывать наименование линии при наведении
                 <small>При наведении указателя на линию показывается popup с KML Placemark/name. Эта настройка независима от постоянных подписей.</small>
               </label>
+      `;
 
-              <section class="project-settings-section project-history-settings"
+      mapHosts.history.innerHTML = `
+<section class="project-settings-section project-history-settings"
                        aria-labelledby="project-history-title">
                 <div>
                   <h5 id="project-history-title">Режим истории</h5>
@@ -138,8 +180,10 @@ if (typeof document !== 'undefined') {
                 <div id="project-history-speeds" class="project-history-speeds"></div>
                 <small>Квант задаёт, насколько сдвигается календарная дата за один такт. Интервал — частота тактов в секундах, допускаются десятые.</small>
               </section>
+      `;
 
-              <section class="project-settings-section" aria-labelledby="project-city-marker-title">
+      mapHosts.cityMarker.innerHTML = `
+<section class="project-settings-section" aria-labelledby="project-city-marker-title">
                 <div>
                   <h5 id="project-city-marker-title">Маркер города на дальнем зуме</h5>
                   <p>Маркер показывается до масштаба, на котором загружаются линии. Загруженное изображение хранится в БД; на карте его ширина нормализуется до 32 px.</p>
@@ -159,87 +203,38 @@ if (typeof document !== 'undefined') {
                   </div>
                 </div>
               </section>
+      `;
 
-              </section>
+      mapHosts.actions.innerHTML = `
+        <p class="project-settings-meta">
+          <span>Последнее изменение</span><time data-project-settings-updated-at>—</time>
+        </p>
+        <button class="task-action" type="submit"
+                form="project-settings-form"
+                data-project-settings-submit>Сохранить настройки карты</button>
+        <p class="project-settings-message"
+           data-project-settings-message role="status"></p>
+      `;
 
-              
-
-              
-            </div>
-            <button class="task-action" type="submit" data-project-settings-submit>Сохранить настройки проекта</button>
-          </form>
-          <p class="project-settings-message" id="project-settings-message" role="status"></p>
-`;
-
-      const mapSettings =
-        projectHost.querySelector(
-          '#project-settings-map',
-        );
-
-      if (mapSettings) {
-        if (mapPanel) {
-          mapPanel.dataset
-            .dirtyFormId =
-            'project-settings-form';
-        }
-
-        mapHost.innerHTML = `
-          <div class="mode-heading">
-            <div>
-              <h4>Настройки карты</h4>
-              <p>Параметры этого раздела управляют только отображением и поведением публичной карты.</p>
-            </div>
-          </div>
-
-          <p class="project-settings-meta">
-            <span>Последнее изменение</span><time data-project-settings-updated-at>—</time>
-          </p>
-
-          <div class="form-fields project-settings-grid"
-               id="map-settings-host"></div>
-          <button class="task-action" type="submit"
-                  form="project-settings-form"
-                  data-project-settings-submit>Сохранить настройки карты</button>
-          <p class="project-settings-message"
-             data-project-settings-message role="status"></p>
-        `;
-
-        const mapSettingsHost =
-          mapHost.querySelector(
-            '#map-settings-host',
-          );
-
-        mapSettings.removeAttribute(
-          'role',
-        );
-        mapSettings.removeAttribute(
-          'data-project-settings-panel',
-        );
-        mapSettings.hidden =
-          false;
-
+      for (
+        const host of [
+          mapHosts.cityCategory,
+          mapHosts.display,
+          mapHosts.history,
+          mapHosts.cityMarker,
+        ]
+      ) {
         for (
           const control of
-          mapSettings.querySelectorAll(
-            'input, select, textarea, button',
+          host.querySelectorAll(
+            'input, select, textarea',
           )
         ) {
-          if (
-            control.matches(
-              'input, select, textarea, button[type="submit"]',
-            )
-          ) {
-            control.setAttribute(
-              'form',
-              'project-settings-form',
-            );
-          }
+          control.setAttribute(
+            'form',
+            'project-settings-form',
+          );
         }
-
-        mapSettingsHost.append(
-          ...mapSettings.childNodes,
-        );
-        mapSettings.remove();
       }
     }
 
