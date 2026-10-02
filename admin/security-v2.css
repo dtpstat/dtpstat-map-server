@@ -329,12 +329,11 @@ body.security-modal-open { overflow: hidden; }
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
-.security-settings-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 1rem; }
 .security-settings-form,.security-ip-panel { padding: 1rem; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
 .security-settings-form { display: grid; gap: .8rem; }
 .security-settings-form fieldset { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: .6rem; }
 .security-settings-form label,.security-ip-block-form label { display: grid; gap: .3rem; }
-.security-ip-block-form { display: grid; grid-template-columns: minmax(0,1fr) 10rem minmax(0,1fr) auto; gap: .5rem; align-items: end; }
+.security-ip-block-form { display: grid; grid-template-columns: minmax(0,1fr); gap: .5rem; align-items: end; }
 .security-ip-blocks { margin-top: .8rem; }
 .security-ip-block-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: .5rem; align-items: center; padding: .65rem 0; border-bottom: 1px solid var(--line); }
 .security-message { min-height: 1.2rem; flex: 0 0 auto; color: var(--muted); font-size: .78rem; }
@@ -356,7 +355,6 @@ body.security-modal-open { overflow: hidden; }
   .security-user-detail { max-height: none; }
   #security-panel-audit:not([hidden]) { height: auto; }
   .security-audit-filter { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .security-settings-grid { grid-template-columns: 1fr; }
   .security-settings-form fieldset { grid-template-columns: 1fr; }
   .security-ip-block-form { grid-template-columns: 1fr; }
 }
