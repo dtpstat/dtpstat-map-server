@@ -103,6 +103,7 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
       'report-config-editor-host',
       'line-types-editor-host',
       'point-types-editor-host',
+      'project-transfer-editor-host',
     ]
   ) {
     assert.match(
@@ -124,6 +125,10 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
   assert.match(
     schema,
     /id:\s*'report'[\s\S]*panelClass:[\s\S]*'report-interface-panel'/u,
+  );
+  assert.match(
+    schema,
+    /id:\s*'project-transfer'[\s\S]*permission:[\s\S]*'superuser'[\s\S]*hostId:[\s\S]*'project-transfer-editor-host'/u,
   );
   assert.match(
     schema,
