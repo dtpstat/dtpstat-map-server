@@ -1,5 +1,8 @@
 import { trackDirtyForm } from './admin-dirty-state.js';
-import { setupAdminTabGroup } from './admin-layout.js';
+import {
+  ensureAdminTabGroup,
+  setupAdminTabGroup,
+} from './admin-layout.js';
 import { adminInterfaceTabs } from './admin-layout-schema.js';
 import { readTabState, writeTabState } from './admin-tab-state.js';
 
@@ -20,83 +23,112 @@ if (
   )
 ) {
   host.innerHTML = `
-      <div class="mode-heading">
-        <div>
-          <h4>Материализованный отчёт по городам</h4>
-          <p>После сохранения значения пересчитываются в CITY_REPORT_VALUES. Публичная таблица и CSV используют подготовленные значения.</p>
-        </div>
+    <div class="mode-heading">
+      <div>
+        <h4>Материализованный отчёт по городам</h4>
+        <p>После сохранения значения пересчитываются в CITY_REPORT_VALUES. Публичная таблица и CSV используют подготовленные значения.</p>
       </div>
+    </div>
 
-      <p class="report-config-meta">
-        <span>Последнее изменение</span><time id="report-config-updated-at">—</time>
-      </p>
+    <p class="report-config-meta">
+      <span>Последнее изменение</span><time id="report-config-updated-at">—</time>
+    </p>
 
-      <nav class="report-view-tabs" role="tablist" aria-label="Разделы конструктора расчётов">
-        <button class="report-view-tab is-active" type="button" role="tab" aria-selected="true"
-                aria-controls="report-view-metrics" data-report-view-tab="metrics">Метрики</button>
-        <button class="report-view-tab" type="button" role="tab" aria-selected="false"
-                aria-controls="report-view-table" data-report-view-tab="table">Публичная таблица</button>
-        <button class="report-view-tab" type="button" role="tab" aria-selected="false"
-                aria-controls="report-view-csv" data-report-view-tab="csv">CSV</button>
-        <button class="report-view-tab" type="button" role="tab" aria-selected="false"
-                aria-controls="report-view-rank" data-report-view-tab="rank">Рейтинг</button>
-      </nav>
+    <div id="report-view-tabs-slot"></div>
 
-      <form id="report-config-form">
-        <div class="report-config-sections">
-          <section class="report-builder-section report-view-panel" id="report-view-metrics"
-                   role="tabpanel" data-report-view-panel="metrics">
-            <div class="report-section-heading">
-              <div>
-                <h5>Расчётные метрики</h5>
-                <p>Метрика может использовать поля города, агрегаты геометрий и уже определённые метрики. Зависимости пересчитываются автоматически; циклы запрещены. Карточки и операции можно переставлять ↑/↓.</p>
-              </div>
-              <button class="secondary report-add-button" id="report-add-metric" type="button">Добавить метрику</button>
-            </div>
-            <div id="report-metrics"></div>
-          </section>
+    <form id="report-config-form">
+      <div class="report-config-sections"
+           id="report-config-sections"></div>
+      <button class="task-action report-save-button"
+              type="submit">Сохранить и пересчитать</button>
+    </form>
+    <p class="report-config-message"
+       id="report-config-message"
+       role="status"></p>
+    <p class="notice"
+       data-task-notice="report"
+       role="status"></p>
+  `;
 
-          <section class="report-builder-section report-view-panel" id="report-view-table"
-                   role="tabpanel" data-report-view-panel="table" hidden>
-            <div class="report-section-heading">
-              <div>
-                <h5>Публичная таблица</h5>
-                <p>Порядок, подписи, формат чисел и условное оформление диапазонов. Диапазоны задаются в отображаемых единицах после масштаба.</p>
-              </div>
-              <button class="secondary report-add-button" id="report-add-table-column" type="button">Добавить колонку</button>
-            </div>
-            <div class="report-column-list" id="report-table-columns"></div>
-          </section>
 
-          <section class="report-builder-section report-view-panel" id="report-view-csv"
-                   role="tabpanel" data-report-view-panel="csv" hidden>
-            <div class="report-section-heading">
-              <div>
-                <h5>CSV</h5>
-                <p>Независимый набор колонок статического /bus-lanes.csv. Экранное условное форматирование в CSV не переносится.</p>
-              </div>
-              <button class="secondary report-add-button" id="report-add-csv-column" type="button">Добавить колонку</button>
-            </div>
-            <div class="report-column-list" id="report-csv-columns"></div>
-          </section>
+  ensureAdminTabGroup({
+    root: host,
+    definition:
+      reportLayout?.tabs,
+  });
 
-          <section class="report-builder-section report-view-panel" id="report-view-rank"
-                   role="tabpanel" data-report-view-panel="rank" hidden>
-            <div class="report-section-heading">
-              <div>
-                <h5>Рейтинг</h5>
-                <p>Критерии применяются последовательно сверху вниз внутри каждой категории городов: сначала первый, при равенстве — второй и так далее. Последний резервный критерий всегда — название города.</p>
-              </div>
-              <button class="secondary report-add-button" id="report-add-rank-sort" type="button">Добавить критерий</button>
-            </div>
-            <div class="report-column-list" id="report-rank-sort"></div>
-          </section>
-        </div>
-        <button class="task-action report-save-button" type="submit">Сохранить и пересчитать</button>
-      </form>
-      <p class="report-config-message" id="report-config-message" role="status"></p>
+  const viewHosts = {
+    metrics:
+      host.querySelector(
+        '#report-metrics-view-host',
+      ),
+    table:
+      host.querySelector(
+        '#report-table-view-host',
+      ),
+    csv:
+      host.querySelector(
+        '#report-csv-view-host',
+      ),
+    rank:
+      host.querySelector(
+        '#report-rank-view-host',
+      ),
+  };
 
-    <p class="notice" data-task-notice="report" role="status"></p>
+  viewHosts.metrics.innerHTML = `
+    <div class="report-section-heading">
+      <div>
+        <h5>Расчётные метрики</h5>
+        <p>Метрика может использовать поля города, агрегаты геометрий и уже определённые метрики. Зависимости пересчитываются автоматически; циклы запрещены. Карточки и операции можно переставлять ↑/↓.</p>
+      </div>
+      <button class="secondary report-add-button"
+              id="report-add-metric"
+              type="button">Добавить метрику</button>
+    </div>
+    <div id="report-metrics"></div>
+  `;
+
+  viewHosts.table.innerHTML = `
+    <div class="report-section-heading">
+      <div>
+        <h5>Публичная таблица</h5>
+        <p>Порядок, подписи, формат чисел и условное оформление диапазонов. Диапазоны задаются в отображаемых единицах после масштаба.</p>
+      </div>
+      <button class="secondary report-add-button"
+              id="report-add-table-column"
+              type="button">Добавить колонку</button>
+    </div>
+    <div class="report-column-list"
+         id="report-table-columns"></div>
+  `;
+
+  viewHosts.csv.innerHTML = `
+    <div class="report-section-heading">
+      <div>
+        <h5>CSV</h5>
+        <p>Независимый набор колонок статического /bus-lanes.csv. Экранное условное форматирование в CSV не переносится.</p>
+      </div>
+      <button class="secondary report-add-button"
+              id="report-add-csv-column"
+              type="button">Добавить колонку</button>
+    </div>
+    <div class="report-column-list"
+         id="report-csv-columns"></div>
+  `;
+
+  viewHosts.rank.innerHTML = `
+    <div class="report-section-heading">
+      <div>
+        <h5>Рейтинг</h5>
+        <p>Критерии применяются последовательно сверху вниз внутри каждой категории городов: сначала первый, при равенстве — второй и так далее. Последний резервный критерий всегда — название города.</p>
+      </div>
+      <button class="secondary report-add-button"
+              id="report-add-rank-sort"
+              type="button">Добавить критерий</button>
+    </div>
+    <div class="report-column-list"
+         id="report-rank-sort"></div>
   `;
 }
 
