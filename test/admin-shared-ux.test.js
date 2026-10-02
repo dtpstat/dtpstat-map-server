@@ -128,6 +128,26 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
     security,
     /<nav class="security-tabs"/u,
   );
+  assert.match(
+    security,
+    /id="security-panels"/u,
+  );
+  assert.match(
+    security,
+    /securityPanels\.users\.innerHTML/u,
+  );
+  assert.match(
+    security,
+    /securityPanels\.audit\.innerHTML/u,
+  );
+  assert.match(
+    security,
+    /securityPanels\.security\.innerHTML/u,
+  );
+  assert.doesNotMatch(
+    security,
+    /<section class="security-panel" id="security-panel-/u,
+  );
 });
 
 test('technical settings are collapsed and raw values get human-readable companions', async () => {
