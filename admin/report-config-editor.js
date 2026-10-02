@@ -15,6 +15,12 @@ const host =
   document.querySelector(
     '#report-config-editor-host',
   );
+const reportLayout =
+  adminInterfaceTabs.find(
+    (definition) =>
+      definition.id ===
+      'report',
+  );
 
 if (
   host &&
@@ -150,12 +156,6 @@ if (form) {
   const addRankSort = document.querySelector('#report-add-rank-sort');
   const updatedAt = document.querySelector('#report-config-updated-at');
   const message = document.querySelector('#report-config-message');
-  const reportLayout =
-    adminInterfaceTabs.find(
-      (definition) =>
-        definition.id ===
-        'report',
-    );
   const reportTabs =
     setupAdminTabGroup({
       root: host,
