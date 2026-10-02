@@ -1583,6 +1583,22 @@ if (
   if (canManageUsers) await loadUsers();
   if (canViewAudit) await loadAuditFacets();
 
+  const securityPrimaryPanel =
+    document.querySelector(
+      '[data-admin-section-panel="security"]',
+    );
+
+  if (
+    canManageSecurity &&
+    securityPrimaryPanel &&
+    !securityPrimaryPanel.hidden
+  ) {
+    await Promise.all([
+      loadSettings(),
+      loadIpBlocks(),
+    ]);
+  }
+
   window.addEventListener(
     'dtpstat:users-audit-refresh',
     () => {
