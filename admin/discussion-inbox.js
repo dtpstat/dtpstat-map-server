@@ -708,6 +708,31 @@ if (
         return;
       }
 
+      const targetDetail = {
+        id:
+          item.subjectId,
+        cityId:
+          item.subjectCityId ??
+          null,
+        openDiscussion:
+          true,
+      };
+
+      if (
+        item.subjectType ===
+        'geometry'
+      ) {
+        window.dispatchEvent(
+          new CustomEvent(
+            'dtpstat:geometry-editor-navigation-pending',
+            {
+              detail:
+                targetDetail,
+            },
+          ),
+        );
+      }
+
       tab.click();
 
       queueMicrotask(
@@ -715,19 +740,12 @@ if (
           window.dispatchEvent(
             new CustomEvent(
               item.subjectType ===
-              'geometry'
+                'geometry'
                 ? 'dtpstat:geometry-editor-select'
                 : 'dtpstat:osm-boundary-editor-select',
               {
-                detail: {
-                  id:
-                    item.subjectId,
-                  cityId:
-                    item.subjectCityId ??
-                    null,
-                  openDiscussion:
-                    true,
-                },
+                detail:
+                  targetDetail,
               },
             ),
           );
