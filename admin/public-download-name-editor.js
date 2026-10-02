@@ -10,9 +10,18 @@ if (typeof document !== 'undefined') {
     const projectForm = document.querySelector('#project-settings-form');
     const projectHost = document.querySelector('#project-settings-editor-host');
     const metadataPanel = document.querySelector('#project-settings-metadata');
+    const metadataHost = document.querySelector('#project-settings-metadata-host');
     const projectMessage = document.querySelector('#project-settings-message');
 
-    if (!projectForm || !projectHost || !metadataPanel || !projectMessage) return false;
+    if (
+      !projectForm ||
+      !projectHost ||
+      !metadataPanel ||
+      !metadataHost ||
+      !projectMessage
+    ) {
+      return false;
+    }
     if (document.querySelector('#public-download-name-form')) return true;
 
     const externalForm = document.createElement('form');
@@ -44,7 +53,7 @@ if (typeof document !== 'undefined') {
       </div>
       <p class="project-settings-message" id="public-download-name-message" role="status"></p>
     `;
-    metadataPanel.append(section);
+    metadataHost.append(section);
 
     const syncVisibility = () => {
       section.hidden = metadataPanel.hidden;
