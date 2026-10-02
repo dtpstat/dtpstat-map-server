@@ -1,6 +1,8 @@
 import { publishDerivedDataChange } from './derived-data-events.js';
 import { adminConfirm } from './admin-dialog.js';
 import { trackDirtyForm } from './admin-dirty-state.js';
+import { setupAdminTabGroup } from './admin-layout.js';
+import { adminInterfaceTabs } from './admin-layout-schema.js';
 import { readTabState, writeTabState } from './admin-tab-state.js';
 
 if (typeof document !== 'undefined') {
@@ -348,32 +350,40 @@ if (typeof document !== 'undefined') {
     const form = document.querySelector('#project-settings-form');
 
     if (form) {
-      const projectTabs = [...form.querySelectorAll('[data-project-settings-tab]')];
-      const projectPanels = [...form.querySelectorAll('[data-project-settings-panel]')];
-      const selectProjectPanel = (key) => {
-        writeTabState('project-settings', key);
-        for (const tab of projectTabs) {
-          const active = tab.dataset.projectSettingsTab === key;
-          tab.setAttribute('aria-selected', String(active));
-          tab.tabIndex = active ? 0 : -1;
-        }
-        for (const panel of projectPanels) {
-          panel.hidden = panel.dataset.projectSettingsPanel !== key;
-        }
-      };
-      for (const tab of projectTabs) {
-        tab.addEventListener('click', () => selectProjectPanel(tab.dataset.projectSettingsTab));
-      }
-      form.addEventListener('invalid', (event) => {
-        const panel = event.target.closest('[data-project-settings-panel]');
-        if (panel) selectProjectPanel(panel.dataset.projectSettingsPanel);
-      }, true);
-      const availableProjectTabs = projectTabs.map((tab) => tab.dataset.projectSettingsTab);
-      selectProjectPanel(readTabState(
-        'project-settings',
-        availableProjectTabs,
-        'general',
-      ));
+      const projectLayout =
+        adminInterfaceTabs.find(
+          (definition) =>
+            definition.id ===
+            'project',
+        );
+      const projectTabs =
+        setupAdminTabGroup({
+          root: form,
+          definition:
+            projectLayout?.tabs,
+          readState:
+            readTabState,
+          writeState:
+            writeTabState,
+        });
+
+      form.addEventListener(
+        'invalid',
+        (event) => {
+          const panel =
+            event.target.closest(
+              '[data-project-settings-panel]',
+            );
+          if (panel) {
+            projectTabs?.select(
+              panel.getAttribute(
+                'data-project-settings-panel',
+              ),
+            );
+          }
+        },
+        true,
+      );
 
       const dirtyState = trackDirtyForm(
         form,
