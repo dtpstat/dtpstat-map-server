@@ -445,6 +445,11 @@ if (
     );
   }
 
+  const securitySettingsForm =
+    document.querySelector(
+      '#security-settings-form',
+    );
+
   const securityMetricsPanel =
     document.querySelector(
       '.security-metrics-panel',
@@ -650,7 +655,6 @@ if (
     );
   }
 
-  const securitySettingsForm = document.querySelector('#security-settings-form');
   const securitySettingsDirty = trackDirtyForm(
     securitySettingsForm,
     { label: 'Параметры безопасности' },
