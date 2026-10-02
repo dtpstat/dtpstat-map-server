@@ -157,8 +157,13 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     `;
   }
 
-  if (securityPanels.audit) {
-    securityPanels.audit.innerHTML = `
+  const securityAuditHost =
+    host.querySelector(
+      '#security-audit-host',
+    );
+
+  if (securityAuditHost) {
+    securityAuditHost.innerHTML = `
 <div class="security-section-heading">
           <div><h3>Аудит</h3><p>Входы и административные операции с фильтрацией и быстрыми реакциями.</p></div>
           <a class="secondary-link" id="security-audit-export" href="/api/admin/security/audit/export.csv" download>Экспорт CSV</a>
