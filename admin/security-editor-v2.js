@@ -79,9 +79,69 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   };
 
   host.innerHTML = `
-    ${canManageUsers ? `
-      <section class="security-panel" id="security-panel-users" data-security-panel="users">
-        <div class="security-master-detail">
+    <div id="security-panels"></div>
+    <div id="security-secret-overlay" class="security-secret-overlay" hidden></div>
+    <div id="security-audit-detail-overlay" class="security-audit-detail-overlay" hidden>
+      <section class="security-audit-detail-dialog"
+               role="dialog"
+               aria-modal="true"
+               aria-labelledby="security-audit-detail-title">
+        <header class="security-audit-detail-header">
+          <div>
+            <p class="security-audit-detail-eyebrow">ДЕТАЛИ АУДИТА</p>
+            <h3 id="security-audit-detail-title">—</h3>
+            <p id="security-audit-detail-meta" class="security-muted"></p>
+          </div>
+          <button type="button"
+                  class="secondary security-audit-detail-close"
+                  aria-label="Закрыть">×</button>
+        </header>
+        <div class="security-audit-detail-toolbar">
+          <button type="button" class="secondary" data-audit-view="tree"
+                  aria-pressed="true">Tree</button>
+          <button type="button" class="secondary" data-audit-view="raw"
+                  aria-pressed="false">Raw</button>
+          <span class="security-audit-detail-toolbar-spacer"></span>
+          <button type="button" class="secondary" id="security-audit-expand-all">
+            Развернуть всё
+          </button>
+          <button type="button" class="secondary" id="security-audit-collapse-all">
+            Свернуть всё
+          </button>
+          <button type="button" id="security-audit-copy-json">Копировать JSON</button>
+        </div>
+        <div class="security-audit-detail-body">
+          <div id="security-audit-json-tree" class="security-json-tree"></div>
+          <pre id="security-audit-json-raw" class="security-json-raw" hidden></pre>
+        </div>
+      </section>
+    </div>
+  `;
+
+  ensureAdminTabGroup({
+    root: host,
+    definition:
+      securityTabDefinition,
+  });
+
+  const securityPanels = {
+    users:
+      host.querySelector(
+        '#security-panel-users',
+      ),
+    audit:
+      host.querySelector(
+        '#security-panel-audit',
+      ),
+    security:
+      host.querySelector(
+        '#security-panel-security',
+      ),
+  };
+
+  if (securityPanels.users) {
+    securityPanels.users.innerHTML = `
+<div class="security-master-detail">
           <aside class="security-users-master">
             <div class="security-master-toolbar">
               <input id="security-user-search" type="search" placeholder="Поиск пользователя…" aria-label="Поиск пользователя">
@@ -94,11 +154,12 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           </section>
         </div>
         <p id="security-users-message" class="security-message" role="status"></p>
-      </section>
-    ` : ''}
-    ${canViewAudit ? `
-      <section class="security-panel" id="security-panel-audit" data-security-panel="audit" hidden>
-        <div class="security-section-heading">
+    `;
+  }
+
+  if (securityPanels.audit) {
+    securityPanels.audit.innerHTML = `
+<div class="security-section-heading">
           <div><h3>Аудит</h3><p>Входы и административные операции с фильтрацией и быстрыми реакциями.</p></div>
           <a class="secondary-link" id="security-audit-export" href="/api/admin/security/audit/export.csv" download>Экспорт CSV</a>
         </div>
@@ -133,11 +194,12 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           <button type="button" class="secondary" id="security-audit-next">Вперёд →</button>
         </div>
         <p id="security-audit-message" class="security-message" role="status"></p>
-      </section>
-    ` : ''}
-    ${canManageSecurity ? `
-      <section class="security-panel" id="security-panel-security" data-security-panel="security" hidden>
-        <div class="security-settings-grid">
+    `;
+  }
+
+  if (securityPanels.security) {
+    securityPanels.security.innerHTML = `
+<div class="security-settings-grid">
           <form id="security-settings-form" class="security-settings-form">
             <h3>Защита входа и сессии</h3>
             <fieldset><legend>Политика паролей</legend>
@@ -252,45 +314,8 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
             <p id="security-ip-message" class="security-message" role="status"></p>
           </section>
         </div>
-      </section>
-    ` : ''}
-    <div id="security-secret-overlay" class="security-secret-overlay" hidden></div>
-    <div id="security-audit-detail-overlay" class="security-audit-detail-overlay" hidden>
-      <section class="security-audit-detail-dialog"
-               role="dialog"
-               aria-modal="true"
-               aria-labelledby="security-audit-detail-title">
-        <header class="security-audit-detail-header">
-          <div>
-            <p class="security-audit-detail-eyebrow">ДЕТАЛИ АУДИТА</p>
-            <h3 id="security-audit-detail-title">—</h3>
-            <p id="security-audit-detail-meta" class="security-muted"></p>
-          </div>
-          <button type="button"
-                  class="secondary security-audit-detail-close"
-                  aria-label="Закрыть">×</button>
-        </header>
-        <div class="security-audit-detail-toolbar">
-          <button type="button" class="secondary" data-audit-view="tree"
-                  aria-pressed="true">Tree</button>
-          <button type="button" class="secondary" data-audit-view="raw"
-                  aria-pressed="false">Raw</button>
-          <span class="security-audit-detail-toolbar-spacer"></span>
-          <button type="button" class="secondary" id="security-audit-expand-all">
-            Развернуть всё
-          </button>
-          <button type="button" class="secondary" id="security-audit-collapse-all">
-            Свернуть всё
-          </button>
-          <button type="button" id="security-audit-copy-json">Копировать JSON</button>
-        </div>
-        <div class="security-audit-detail-body">
-          <div id="security-audit-json-tree" class="security-json-tree"></div>
-          <pre id="security-audit-json-raw" class="security-json-raw" hidden></pre>
-        </div>
-      </section>
-    </div>
-  `;
+    `;
+  }
 
   const securitySettingsForm = host.querySelector('#security-settings-form');
   const securitySettingsDirty = trackDirtyForm(
@@ -371,12 +396,6 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   let auditDetailEntry = null;
   let auditDetailMode = 'tree';
   const jsonBranchRenderers = new WeakMap();
-
-  ensureAdminTabGroup({
-    root: host,
-    definition:
-      securityTabDefinition,
-  });
 
   setupAdminTabGroup({
     root: host,
