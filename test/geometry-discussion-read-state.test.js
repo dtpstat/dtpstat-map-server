@@ -264,3 +264,40 @@ test('V063 generalizes geometry discussions in place for geometry and OSM subjec
     /ON DELETE SET NULL\s*\(/u,
   );
 });
+
+test('V064 normalizes legacy and portable V063 read-state deletion semantics', async () => {
+  const sql =
+    await readFile(
+      new URL(
+        '../db/migrations/V064__normalize_admin_discussion_read_state_fk.sql',
+        import.meta.url,
+      ),
+      'utf8',
+    );
+
+  assert.match(
+    sql,
+    /DROP CONSTRAINT IF EXISTS ADMIN_DISCUSSION_READ_STATE_MESSAGE_FKEY/u,
+  );
+  assert.match(
+    sql,
+    /CREATE OR REPLACE FUNCTION BUSLANES\.CLEAR_ADMIN_DISCUSSION_READ_STATE_MESSAGE\(\)/u,
+  );
+  assert.match(
+    sql,
+    /BEFORE DELETE ON BUSLANES\.ADMIN_DISCUSSION_MESSAGES/u,
+  );
+  assert.match(
+    sql,
+    /SET LAST_READ_MESSAGE_ID = NULL/u,
+  );
+  assert.match(
+    sql,
+    /FOREIGN KEY \(LAST_READ_MESSAGE_ID, SUBJECT_TYPE, SUBJECT_ID\)/u,
+  );
+  assert.doesNotMatch(
+    sql,
+    /ON DELETE SET NULL\s*\(/u,
+  );
+});
+
