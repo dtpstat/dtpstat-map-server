@@ -93,6 +93,19 @@ if (
     });
   }
 
+  const securitySettingsHost =
+    document.querySelector(
+      '#security-protection-host',
+    );
+  const securityMetricsTimingsHost =
+    document.querySelector(
+      '#security-metrics-timings-host',
+    );
+  const securityIpHost =
+    document.querySelector(
+      '#security-blocks-host',
+    );
+
   const securityTabDefinition = {
     ...adminSecurityLayout.tabs,
     items:
@@ -390,6 +403,23 @@ if (
             <p id="security-ip-message" class="security-message" role="status"></p>
           </section>
     `;
+  }
+
+  if (
+    canManageSecurity &&
+    securityControlHost
+  ) {
+    setupAdminTabGroup({
+      root:
+        securityControlHost,
+      definition:
+        adminSecuritySettingsLayout
+          .tabs,
+      readState:
+        readTabState,
+      writeState:
+        writeTabState,
+    });
   }
 
   const securitySettingsForm = document.querySelector('#security-settings-form');
