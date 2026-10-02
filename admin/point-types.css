@@ -167,7 +167,7 @@
   line-height: 1.35;
 }
 
-@media (max-width: 1100px) {
+@container admin-layout-block (max-width: 68rem) {
   .point-type-settings-grid {
     grid-template-columns: 1fr 1fr 1fr;
   }
@@ -179,7 +179,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@container admin-layout-block (max-width: 48rem) {
   .point-type-create-form,
   .point-type-row,
   .point-type-icon-controls {
@@ -206,7 +206,7 @@
   }
 }
 
-@media (max-width: 480px) {
+@container admin-layout-block (max-width: 30rem) {
   .point-type-settings-grid {
     grid-template-columns: 1fr;
   }
