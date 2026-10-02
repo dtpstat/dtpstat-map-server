@@ -476,6 +476,28 @@ export const adminSecurityLayout = {
       {
         id: 'security',
         title: 'Защита',
+        blocks: [
+          {
+            id:
+              'security-settings',
+            hostId:
+              'security-settings-host',
+            span: {
+              base: 12,
+              wide: 8,
+            },
+          },
+          {
+            id:
+              'security-ip-blocks',
+            hostId:
+              'security-ip-host',
+            span: {
+              base: 12,
+              wide: 4,
+            },
+          },
+        ],
       },
     ],
   },
