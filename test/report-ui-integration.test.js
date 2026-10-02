@@ -51,13 +51,41 @@ test('admin report builder is catalog-driven, four-tabbed and has no free-form e
   );
   assert.match(
     editor,
+    /ensureAdminTabGroup\([\s\S]*reportLayout\?\.tabs/u,
+  );
+  for (
+    const hostId of [
+      'report-metrics-view-host',
+      'report-table-view-host',
+      'report-csv-view-host',
+      'report-rank-view-host',
+    ]
+  ) {
+    assert.match(
+      editor,
+      new RegExp(
+        `#${hostId}`,
+        'u',
+      ),
+    );
+  }
+  assert.doesNotMatch(
+    editor,
+    /<nav class="report-view-tabs"|data-report-view-panel="/u,
+  );
+  assert.match(
+    editor,
     /onSelect:[\s\S]*state\.view = view/u,
   );
   assert.doesNotMatch(
     editor,
     /const viewTabs|const viewPanels|dataset\.reportViewTab/u,
   );
-  assert.match(editor, />Метрики</);
+  assert.match(
+    layoutSchema,
+    /id:\s*'report'[\s\S]*title:\s*'Метрики'[\s\S]*title:[\s\S]*'Публичная таблица'[\s\S]*title:\s*'CSV'[\s\S]*title:\s*'Рейтинг'/u,
+  );
+  assert.match(editor, />Расчётные метрики</);
   assert.match(editor, />Публичная таблица</);
   assert.match(editor, />CSV</);
   assert.match(editor, />Рейтинг</);
