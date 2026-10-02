@@ -120,6 +120,10 @@ test('admin interface loads editors and helpers explicitly without transitive si
   );
   assert.match(
     layoutSchema,
+    /id:\s*'project'[\s\S]*panelsHostId:[\s\S]*'project-settings-panels'[\s\S]*panelClass:[\s\S]*'project-settings-page'/u,
+  );
+  assert.match(
+    layoutSchema,
     /id:\s*'map'[\s\S]*elementId:[\s\S]*'operation-map-settings'[\s\S]*hostId:[\s\S]*'map-settings-editor-host'/u,
   );
   assert.match(
@@ -172,7 +176,10 @@ test('admin interface loads editors and helpers explicitly without transitive si
     editor,
     /<nav class="project-settings-tabs"|data-project-settings-tab="/u,
   );
-  assert.match(editor, /data-project-settings-panel="general"/);
+  assert.match(
+    editor,
+    /data-project-settings-source="general"/u,
+  );
   assert.match(editor, /id="project-settings-map"/u);
   assert.match(editor, /mapSettings\.removeAttribute\(\s*'data-project-settings-panel'/u);
   assert.match(
@@ -183,8 +190,18 @@ test('admin interface loads editors and helpers explicitly without transitive si
     editor,
     /control\.setAttribute\([\s\S]*'form',[\s\S]*'project-settings-form'/u,
   );
-  assert.match(editor, /data-project-settings-panel="metadata"/);
-  assert.match(editor, /data-project-settings-panel="footer"/);
+  assert.match(
+    editor,
+    /data-project-settings-source="metadata"/u,
+  );
+  assert.match(
+    editor,
+    /data-project-settings-source="footer"/u,
+  );
+  assert.match(
+    editor,
+    /source\.content/u,
+  );
   assert.match(editor, /name="projectName"/);
   assert.match(editor, /name="themePreset" type="radio" value="retro"/);
   assert.match(editor, /name="themePreset" type="radio" value="classic"/);
