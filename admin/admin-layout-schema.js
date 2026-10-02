@@ -440,3 +440,31 @@ export const adminInterfaceTabs = [
     ],
   },
 ];
+
+
+export const adminSecurityLayout = {
+  tabs: {
+    stateKey:
+      'security',
+    defaultId:
+      'users',
+    tabAttribute:
+      'data-security-tab',
+    panelAttribute:
+      'data-security-panel',
+    items: [
+      {
+        id: 'users',
+        title: 'Пользователи',
+      },
+      {
+        id: 'audit',
+        title: 'Аудит',
+      },
+      {
+        id: 'security',
+        title: 'Защита',
+      },
+    ],
+  },
+};
