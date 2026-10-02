@@ -33,6 +33,10 @@ test('admin report builder is catalog-driven, four-tabbed and has no free-form e
     /id:\s*'report'[\s\S]*hostId:[\s\S]*'report-config-editor-host'/u,
   );
   assert.match(
+    layoutSchema,
+    /id:\s*'report'[\s\S]*tabs:[\s\S]*stateKey:[\s\S]*'report-view'[\s\S]*id:\s*'metrics'[\s\S]*id:\s*'table'[\s\S]*id:\s*'csv'[\s\S]*id:\s*'rank'/u,
+  );
+  assert.match(
     editor,
     /#report-config-editor-host/u,
   );
@@ -41,10 +45,18 @@ test('admin report builder is catalog-driven, four-tabbed and has no free-form e
     /dataset\.taskTab|data-task-form="report"/u,
   );
   assert.match(editor, /\/api\/admin\/report-config/);
-  assert.match(editor, /data-report-view-tab="metrics"/);
-  assert.match(editor, /data-report-view-tab="table"/);
-  assert.match(editor, /data-report-view-tab="csv"/);
-  assert.match(editor, /data-report-view-tab="rank"/);
+  assert.match(
+    editor,
+    /setupAdminTabGroup\([\s\S]*reportLayout\?\.tabs/u,
+  );
+  assert.match(
+    editor,
+    /onSelect:[\s\S]*state\.view = view/u,
+  );
+  assert.doesNotMatch(
+    editor,
+    /const viewTabs|const viewPanels|dataset\.reportViewTab/u,
+  );
   assert.match(editor, />Метрики</);
   assert.match(editor, />Публичная таблица</);
   assert.match(editor, />CSV</);
