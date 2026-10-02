@@ -118,11 +118,15 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
   );
   assert.match(
     security,
-    /ensureAdminTabGroup\([\s\S]*securityTabDefinition/u,
+    /#security-users-audit-host/u,
   );
   assert.match(
     security,
-    /setupAdminTabGroup\([\s\S]*securityTabDefinition[\s\S]*readState:[\s\S]*readTabState[\s\S]*writeState:[\s\S]*writeTabState/u,
+    /ensureAdminTabGroup\([\s\S]*usersAuditHost[\s\S]*securityTabDefinition/u,
+  );
+  assert.match(
+    security,
+    /setupAdminTabGroup\([\s\S]*usersAuditHost[\s\S]*securityTabDefinition[\s\S]*readState:[\s\S]*readTabState[\s\S]*writeState:[\s\S]*writeTabState/u,
   );
   assert.doesNotMatch(
     security,
@@ -171,6 +175,30 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
   assert.doesNotMatch(
     security,
     /<section class="security-panel" id="security-panel-/u,
+  );
+  assert.match(
+    shell,
+    /'users-audit':[\s\S]*canAccessUsersAudit/u,
+  );
+  assert.match(
+    shell,
+    /security:[\s\S]*canManageSecuritySettings/u,
+  );
+  assert.match(
+    shell,
+    /dtpstat:users-audit-refresh/u,
+  );
+  assert.match(
+    shell,
+    /dtpstat:security-refresh/u,
+  );
+  assert.match(
+    security,
+    /dtpstat:users-audit-refresh[\s\S]*loadUsers[\s\S]*loadAudit/u,
+  );
+  assert.match(
+    security,
+    /dtpstat:security-refresh[\s\S]*loadSettings[\s\S]*loadIpBlocks/u,
   );
 });
 
