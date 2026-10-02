@@ -97,6 +97,14 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
   assert.match(profileCss, /\.profile-avatar-actions[\s\S]*grid-template-columns:\s*repeat\(2/);
   assert.match(profileCss, /\.profile-avatar-action/);
   assert.match(
+    profileCss,
+    /@container admin-layout-block \(max-width: 52rem\)/u,
+  );
+  assert.doesNotMatch(
+    profileCss,
+    /@media \(max-width:\s*850px\)/u,
+  );
+  assert.match(
     profile,
     /\[data-admin-section-panel="profile"\]/u,
   );
