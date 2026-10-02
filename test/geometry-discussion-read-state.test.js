@@ -249,6 +249,10 @@ test('V063 generalizes geometry discussions in place for geometry and OSM subjec
   );
   assert.match(
     sql,
+    /AS \$admin_discussion_read_state\$[\s\S]*\$admin_discussion_read_state\$;/u,
+  );
+  assert.match(
+    sql,
     /BEFORE DELETE ON BUSLANES\.ADMIN_DISCUSSION_MESSAGES/u,
   );
   assert.match(
