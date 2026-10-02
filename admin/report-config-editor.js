@@ -1,4 +1,6 @@
 import { trackDirtyForm } from './admin-dirty-state.js';
+import { setupAdminTabGroup } from './admin-layout.js';
+import { adminInterfaceTabs } from './admin-layout-schema.js';
 import { readTabState, writeTabState } from './admin-tab-state.js';
 
 const stylesheet = document.createElement('link');
@@ -105,11 +107,7 @@ if (form) {
     config: null,
     catalog: null,
     lineTypes: [],
-    view: readTabState(
-      'report-view',
-      ['metrics', 'table', 'csv', 'rank'],
-      'metrics',
-    ),
+    view: 'metrics',
   };
   let keyCounter = 0;
 
@@ -120,8 +118,26 @@ if (form) {
   const addRankSort = document.querySelector('#report-add-rank-sort');
   const updatedAt = document.querySelector('#report-config-updated-at');
   const message = document.querySelector('#report-config-message');
-  const viewTabs = [...document.querySelectorAll('[data-report-view-tab]')];
-  const viewPanels = [...document.querySelectorAll('[data-report-view-panel]')];
+  const reportLayout =
+    adminInterfaceTabs.find(
+      (definition) =>
+        definition.id ===
+        'report',
+    );
+  const reportTabs =
+    setupAdminTabGroup({
+      root: host,
+      definition:
+        reportLayout?.tabs,
+      readState:
+        readTabState,
+      writeState:
+        writeTabState,
+      onSelect:
+        (view) => {
+          state.view = view;
+        },
+    });
   const dirtyState = trackDirtyForm(form, { label: 'Расчёты и публичная таблица' });
   form.addEventListener('click', (event) => {
     const button = event.target.closest('button[type="button"]');
@@ -134,20 +150,9 @@ if (form) {
   }
 
   function setView(view) {
-    state.view = view;
-    writeTabState('report-view', view);
-    for (const tab of viewTabs) {
-      const active = tab.dataset.reportViewTab === view;
-      tab.classList.toggle('is-active', active);
-      tab.setAttribute('aria-selected', String(active));
-    }
-    for (const panel of viewPanels) {
-      panel.hidden = panel.dataset.reportViewPanel !== view;
-    }
-  }
-
-  for (const tab of viewTabs) {
-    tab.addEventListener('click', () => setView(tab.dataset.reportViewTab));
+    reportTabs?.select(
+      view,
+    );
   }
 
   function formatUpdatedAt(value) {
