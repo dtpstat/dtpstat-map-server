@@ -86,6 +86,22 @@ const UPDATE_USER_SQL = `
   RETURNING ${USER_FIELDS_SQL}
 `;
 
+const UNBLOCK_USER_SQL = `
+  UPDATE admin_users
+  SET
+    is_blocked = FALSE,
+    manual_blocked_at = NULL,
+    manual_blocked_until = NULL,
+    manual_block_reason = NULL,
+    manual_blocked_by = NULL,
+    failed_login_count = 0,
+    failed_login_window_started_at = NULL,
+    locked_until = NULL,
+    updated_at = NOW()
+  WHERE id = $1::bigint
+  RETURNING ${USER_FIELDS_SQL}
+`;
+
 const UPDATE_PROFILE_SQL = `
   UPDATE admin_users
   SET display_name = $2::text, email = $3::text, updated_at = NOW()
@@ -224,6 +240,15 @@ export function createAdminUserRepository(database) {
         user.manualBlockReason ?? null,
         user.manualBlockedBy ?? null,
       ]);
+      return result.rows[0] ?? null;
+    },
+
+    async unblockUser(userId) {
+      const result =
+        await database.query(
+          UNBLOCK_USER_SQL,
+          [userId],
+        );
       return result.rows[0] ?? null;
     },
 
