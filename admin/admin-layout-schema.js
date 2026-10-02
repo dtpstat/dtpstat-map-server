@@ -130,15 +130,51 @@ export const adminInterfaceTabs = [
         {
           id: 'general',
           title: 'Основное',
+          blocks: [
+            {
+              id:
+                'project-general',
+              hostId:
+                'project-settings-general-host',
+              span: {
+                base: 12,
+                wide: 12,
+              },
+            },
+          ],
         },
         {
           id: 'metadata',
           title:
             'Метаданные и API',
+          blocks: [
+            {
+              id:
+                'project-metadata',
+              hostId:
+                'project-settings-metadata-host',
+              span: {
+                base: 12,
+                wide: 12,
+              },
+            },
+          ],
         },
         {
           id: 'footer',
           title: 'Подвал',
+          blocks: [
+            {
+              id:
+                'project-footer',
+              hostId:
+                'project-settings-footer-host',
+              span: {
+                base: 12,
+                wide: 12,
+              },
+            },
+          ],
         },
       ],
     },
