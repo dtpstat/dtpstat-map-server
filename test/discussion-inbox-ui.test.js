@@ -185,6 +185,26 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
   );
   assert.match(
     inbox,
+    /new IntersectionObserver\(/u,
+  );
+  assert.match(
+    inbox,
+    /threshold:\s*\[0\.6\]/u,
+  );
+  assert.match(
+    inbox,
+    /unreadIds[\s\S]*incoming[\s\S]*item\.unreadCount/u,
+  );
+  assert.match(
+    inbox,
+    /firstUnread[\s\S]*messages\.scrollTop/u,
+  );
+  assert.doesNotMatch(
+    inbox,
+    /const last =[\s\S]*markRead\([\s\S]*last\.id/u,
+  );
+  assert.match(
+    inbox,
     /threadRequestSequence/u,
   );
   assert.match(
