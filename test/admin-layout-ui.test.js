@@ -90,6 +90,10 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
   );
   assert.match(
     schema,
+    /export const adminSecurityLayout[\s\S]*stateKey:[\s\S]*'security'[\s\S]*id:\s*'users'[\s\S]*id:\s*'audit'[\s\S]*id:\s*'security'/u,
+  );
+  assert.match(
+    schema,
     /openEvent:[\s\S]*'dtpstat:line-types-changed'/u,
   );
   assert.match(
