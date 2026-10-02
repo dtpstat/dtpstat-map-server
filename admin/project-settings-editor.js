@@ -54,47 +54,7 @@ if (typeof document !== 'undefined') {
           <form id="project-settings-form">
             <div class="form-fields project-settings-grid"
                  id="project-settings-panels">
-              <template data-project-settings-source="general">
-              <label>Название проекта
-                <input name="projectName" type="text" maxlength="160" required
-                       placeholder="Например: Выделенные полосы в России">
-                <small>Одно значение используется в видимом заголовке и служебных title/meta/PWA-тегах.</small>
-              </label>
-
-              <section class="project-settings-section" aria-labelledby="project-theme-title">
-                <div>
-                  <h5 id="project-theme-title">Стиль публичного сайта</h5>
-                  <p>Три встроенных адаптивных оформления используют одну и ту же разметку и данные. Меняется только CSS публичной страницы.</p>
-                </div>
-                <div class="project-theme-grid">
-                  <label class="project-theme-option" data-theme-preview="retro">
-                    <input name="themePreset" type="radio" value="retro" required>
-                    <span class="project-theme-copy">
-                      <strong>Стиль 90-х</strong>
-                      <small>Строгая плотная таблица, квадратные элементы, обычные ссылки и минимум декоративного оформления.</small>
-                      <span class="project-theme-swatch" aria-hidden="true"></span>
-                    </span>
-                  </label>
-                  <label class="project-theme-option" data-theme-preview="classic">
-                    <input name="themePreset" type="radio" value="classic" required checked>
-                    <span class="project-theme-copy">
-                      <strong>Классический</strong>
-                      <small>Текущее оформление: простое, компактное и современное ровно настолько, чтобы не мешать данным.</small>
-                      <span class="project-theme-swatch" aria-hidden="true"></span>
-                    </span>
-                  </label>
-                  <label class="project-theme-option" data-theme-preview="modern">
-                    <input name="themePreset" type="radio" value="modern" required>
-                    <span class="project-theme-copy">
-                      <strong>Современный</strong>
-                      <small>Мягкие блоки, заметные скругления и спокойные цветовые акценты без яркой декоративности.</small>
-                      <span class="project-theme-swatch" aria-hidden="true"></span>
-                    </span>
-                  </label>
-                </div>
-              </section>
-
-              </template>
+              
 
               <section class="project-settings-page" id="project-settings-map"
                        role="tabpanel" data-project-settings-panel="map" hidden>
@@ -202,66 +162,9 @@ if (typeof document !== 'undefined') {
 
               </section>
 
-              <template data-project-settings-source="metadata">
-              <label>Ключевые слова
-                <textarea name="keywords" rows="5"
-                          placeholder="выделенные полосы\nобщественный транспорт\nрейтинг городов"></textarea>
-                <small>По одному на строку или через запятую. Используются в meta keywords; дубликаты удаляются.</small>
-              </label>
+              
 
-              <section class="project-settings-section" aria-labelledby="project-identifiers-title">
-                <div>
-                  <h5 id="project-identifiers-title">Идентификаторы и API</h5>
-                  <p>Идентификаторы аналитики можно оставить пустыми. Mapbox token хранится в БД и никогда не читается обратно в админку открытым текстом.</p>
-                </div>
-                <div class="project-metrics-grid">
-                  <label>Yandex Metrica ID
-                    <input name="yandexMetrikaId" type="text" inputmode="numeric"
-                           maxlength="15" pattern="[1-9][0-9]{0,14}"
-                           placeholder="Например: 12345678">
-                    <small>Числовой ID счётчика Яндекс Метрики.</small>
-                  </label>
-                  <label>Google Analytics 4 Measurement ID
-                    <input name="googleAnalyticsId" type="text" maxlength="34"
-                           pattern="[Gg]-[A-Za-z0-9]{4,32}"
-                           placeholder="Например: G-XXXXXXXXXX">
-                    <small>Measurement ID GA4 вида G-….</small>
-                  </label>
-                  <label>Mapbox public access token
-                    <input name="mapboxAccessToken" type="password" maxlength="2048"
-                           autocomplete="new-password" spellcheck="false"
-                           placeholder="pk.…">
-                    <small>Если ключ уже задан, показывается *****. Оставь поле без изменений, чтобы сохранить текущий ключ; введённый новый pk.* заменит его.</small>
-                  </label>
-                </div>
-              </section>
-
-              </template>
-
-              <template data-project-settings-source="footer">
-              <label>Информационный блок / подвал — HTML
-                <div class="project-settings-toolbar" id="project-html-toolbar" aria-label="Готовые HTML-стили">
-                  <button type="button" data-project-snippet="h2">H2</button>
-                  <button type="button" data-project-snippet="paragraph">Абзац</button>
-                  <button type="button" data-project-snippet="link">Ссылка</button>
-                  <button type="button" data-project-snippet="strong">Жирный</button>
-                  <button type="button" data-project-snippet="list">Список</button>
-                  <button type="button" data-project-snippet="lead">Лид</button>
-                  <button type="button" data-project-snippet="muted">Приглушённый</button>
-                  <button type="button" data-project-snippet="callout">Акцент-блок</button>
-                  <button type="button" data-project-snippet="columns">2 колонки</button>
-                  <button type="button" data-project-snippet="button">Кнопка-ссылка</button>
-                </div>
-                <textarea name="footerHtml" rows="18" required spellcheck="false"
-                          placeholder="<h2>О проекте</h2>\n<p>Описание проекта…</p>"></textarea>
-              </label>
-
-              <div class="project-settings-help">
-                <div><strong>Разрешённые теги:</strong> <code id="project-allowed-tags">загрузка…</code></div>
-                <div><strong>Стили проекта:</strong> <code id="project-allowed-classes">загрузка…</code></div>
-                <div>Inline style, script, iframe, обработчики событий и неизвестные классы сервер не принимает.</div>
-              </div>
-              </template>
+              
             </div>
             <button class="task-action" type="submit" data-project-settings-submit>Сохранить настройки проекта</button>
           </form>
@@ -355,26 +258,119 @@ if (typeof document !== 'undefined') {
           projectLayout?.tabs,
       });
 
-      for (
-        const source of
-        form.querySelectorAll(
-          'template[data-project-settings-source]',
-        )
-      ) {
-        const key =
-          source.dataset
-            .projectSettingsSource;
-        const target =
+      const projectContentHosts = {
+        general:
           form.querySelector(
-            `[data-project-settings-panel="${key}"]`,
-          );
-        if (target) {
-          target.append(
-            source.content,
-          );
-        }
-        source.remove();
-      }
+            '#project-settings-general-host',
+          ),
+        metadata:
+          form.querySelector(
+            '#project-settings-metadata-host',
+          ),
+        footer:
+          form.querySelector(
+            '#project-settings-footer-host',
+          ),
+      };
+
+      projectContentHosts.general.innerHTML = `
+<label>Название проекта
+                <input name="projectName" type="text" maxlength="160" required
+                       placeholder="Например: Выделенные полосы в России">
+                <small>Одно значение используется в видимом заголовке и служебных title/meta/PWA-тегах.</small>
+              </label>
+
+              <section class="project-settings-section" aria-labelledby="project-theme-title">
+                <div>
+                  <h5 id="project-theme-title">Стиль публичного сайта</h5>
+                  <p>Три встроенных адаптивных оформления используют одну и ту же разметку и данные. Меняется только CSS публичной страницы.</p>
+                </div>
+                <div class="project-theme-grid">
+                  <label class="project-theme-option" data-theme-preview="retro">
+                    <input name="themePreset" type="radio" value="retro" required>
+                    <span class="project-theme-copy">
+                      <strong>Стиль 90-х</strong>
+                      <small>Строгая плотная таблица, квадратные элементы, обычные ссылки и минимум декоративного оформления.</small>
+                      <span class="project-theme-swatch" aria-hidden="true"></span>
+                    </span>
+                  </label>
+                  <label class="project-theme-option" data-theme-preview="classic">
+                    <input name="themePreset" type="radio" value="classic" required checked>
+                    <span class="project-theme-copy">
+                      <strong>Классический</strong>
+                      <small>Текущее оформление: простое, компактное и современное ровно настолько, чтобы не мешать данным.</small>
+                      <span class="project-theme-swatch" aria-hidden="true"></span>
+                    </span>
+                  </label>
+                  <label class="project-theme-option" data-theme-preview="modern">
+                    <input name="themePreset" type="radio" value="modern" required>
+                    <span class="project-theme-copy">
+                      <strong>Современный</strong>
+                      <small>Мягкие блоки, заметные скругления и спокойные цветовые акценты без яркой декоративности.</small>
+                      <span class="project-theme-swatch" aria-hidden="true"></span>
+                    </span>
+                  </label>
+                </div>
+              </section>
+      `;
+      projectContentHosts.metadata.innerHTML = `
+<label>Ключевые слова
+                <textarea name="keywords" rows="5"
+                          placeholder="выделенные полосы\nобщественный транспорт\nрейтинг городов"></textarea>
+                <small>По одному на строку или через запятую. Используются в meta keywords; дубликаты удаляются.</small>
+              </label>
+
+              <section class="project-settings-section" aria-labelledby="project-identifiers-title">
+                <div>
+                  <h5 id="project-identifiers-title">Идентификаторы и API</h5>
+                  <p>Идентификаторы аналитики можно оставить пустыми. Mapbox token хранится в БД и никогда не читается обратно в админку открытым текстом.</p>
+                </div>
+                <div class="project-metrics-grid">
+                  <label>Yandex Metrica ID
+                    <input name="yandexMetrikaId" type="text" inputmode="numeric"
+                           maxlength="15" pattern="[1-9][0-9]{0,14}"
+                           placeholder="Например: 12345678">
+                    <small>Числовой ID счётчика Яндекс Метрики.</small>
+                  </label>
+                  <label>Google Analytics 4 Measurement ID
+                    <input name="googleAnalyticsId" type="text" maxlength="34"
+                           pattern="[Gg]-[A-Za-z0-9]{4,32}"
+                           placeholder="Например: G-XXXXXXXXXX">
+                    <small>Measurement ID GA4 вида G-….</small>
+                  </label>
+                  <label>Mapbox public access token
+                    <input name="mapboxAccessToken" type="password" maxlength="2048"
+                           autocomplete="new-password" spellcheck="false"
+                           placeholder="pk.…">
+                    <small>Если ключ уже задан, показывается *****. Оставь поле без изменений, чтобы сохранить текущий ключ; введённый новый pk.* заменит его.</small>
+                  </label>
+                </div>
+              </section>
+      `;
+      projectContentHosts.footer.innerHTML = `
+<label>Информационный блок / подвал — HTML
+                <div class="project-settings-toolbar" id="project-html-toolbar" aria-label="Готовые HTML-стили">
+                  <button type="button" data-project-snippet="h2">H2</button>
+                  <button type="button" data-project-snippet="paragraph">Абзац</button>
+                  <button type="button" data-project-snippet="link">Ссылка</button>
+                  <button type="button" data-project-snippet="strong">Жирный</button>
+                  <button type="button" data-project-snippet="list">Список</button>
+                  <button type="button" data-project-snippet="lead">Лид</button>
+                  <button type="button" data-project-snippet="muted">Приглушённый</button>
+                  <button type="button" data-project-snippet="callout">Акцент-блок</button>
+                  <button type="button" data-project-snippet="columns">2 колонки</button>
+                  <button type="button" data-project-snippet="button">Кнопка-ссылка</button>
+                </div>
+                <textarea name="footerHtml" rows="18" required spellcheck="false"
+                          placeholder="<h2>О проекте</h2>\n<p>Описание проекта…</p>"></textarea>
+              </label>
+
+              <div class="project-settings-help">
+                <div><strong>Разрешённые теги:</strong> <code id="project-allowed-tags">загрузка…</code></div>
+                <div><strong>Стили проекта:</strong> <code id="project-allowed-classes">загрузка…</code></div>
+                <div>Inline style, script, iframe, обработчики событий и неизвестные классы сервер не принимает.</div>
+              </div>
+      `;
 
       const projectTabs =
         setupAdminTabGroup({
