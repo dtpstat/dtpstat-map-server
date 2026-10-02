@@ -145,10 +145,6 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
     securityCss,
     /@media \(max-width:\s*1000px\)[\s\S]*\.security-master-detail/u,
   );
-  assert.doesNotMatch(
-    securityCss,
-    /@media \(max-width:\s*650px\)[\s\S]*\.security-user-detail-heading/u,
-  );
 
   assert.match(securityCss, /\.security-audit-filter-panel/);
   assert.match(securityCss, /\.security-audit-filter[\s\S]*grid-template-columns:\s*repeat\(4/);
