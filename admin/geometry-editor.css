@@ -1173,19 +1173,36 @@
   width: 1.8rem;
   height: 1.8rem;
   flex: 0 0 1.8rem;
+  display: inline-grid;
+  place-items: center;
+  overflow: hidden;
   border: 1px solid #38515a;
   border-radius: 50%;
-  object-fit: cover;
   background: #142329;
+}
+
+.geometry-edit-actor-image,
+.geometry-discussion-avatar-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
 .geometry-edit-actor-fallback,
 .geometry-discussion-avatar-fallback {
+  width: 100%;
+  height: 100%;
   display: inline-grid;
   place-items: center;
   font-size: .62rem;
   font-weight: 800;
   color: var(--text);
+}
+
+.geometry-edit-actor-avatar > [hidden],
+.geometry-discussion-avatar > [hidden] {
+  display: none;
 }
 
 .geometry-edit-actor-name {
