@@ -10,6 +10,15 @@ import {
 const MIGRATION_FILE = /^V(\d{3})__([a-z0-9][a-z0-9_-]*)\.sql$/i;
 const LEGACY_HISTORY_TABLE = 'public.buslanes_schema_versions';
 
+const LEGACY_MIGRATION_CHECKSUMS = new Map([
+  [
+    'V063__admin_discussion_subjects.sql',
+    new Set([
+      'f362b31e2c01575e02ccaadbc1cb69869e02ce45fcffb885d0334bb2a4c53a64',
+    ]),
+  ],
+]);
+
 export function parseMigrationFileName(fileName) {
   const match = MIGRATION_FILE.exec(fileName);
   if (!match) return null;
@@ -51,6 +60,10 @@ export async function loadMigrations(directory) {
         ...migration,
         sql,
         checksum: crypto.createHash('sha256').update(sql).digest('hex'),
+        legacyChecksums:
+          LEGACY_MIGRATION_CHECKSUMS.get(
+            migration.fileName,
+          ) ?? new Set(),
       };
     }),
   );
@@ -134,8 +147,23 @@ export async function applyMigrations(client, migrations, options = {}) {
         `Database schema version ${row.version} is newer than this application`,
       );
     }
-    if (row.filename !== migration.fileName || row.checksum !== migration.checksum) {
-      throw new Error(`Applied migration was modified: ${row.filename}`);
+    const checksumMatches =
+      row.checksum ===
+        migration.checksum ||
+      migration
+        .legacyChecksums
+        ?.has(
+          row.checksum,
+        );
+
+    if (
+      row.filename !==
+        migration.fileName ||
+      !checksumMatches
+    ) {
+      throw new Error(
+        `Applied migration was modified: ${row.filename}`,
+      );
     }
   }
 
