@@ -335,6 +335,18 @@ test('admin interface loads editors and helpers explicitly without transitive si
   assert.match(downloadEditor, /#project-settings-editor-host/);
   assert.match(downloadEditor, /#project-settings-metadata/);
   assert.match(downloadEditor, /#project-settings-metadata-host/);
+  const downloadStyles = await fs.readFile(
+    path.join(projectRoot, 'admin/public-download-name.css'),
+    'utf8',
+  );
+  assert.match(
+    downloadStyles,
+    /@container admin-layout-block \(max-width: 48rem\)/u,
+  );
+  assert.doesNotMatch(
+    downloadStyles,
+    /@media \(max-width:\s*760px\)/u,
+  );
   assert.match(downloadEditor, /projectMessage\.before\(externalForm\)/);
   assert.match(downloadEditor, /metadataHost\.append\(section\)/);
   assert.match(downloadEditor, /section\.hidden = metadataPanel\.hidden/);
