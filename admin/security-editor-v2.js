@@ -2,7 +2,10 @@ import { adminAvatarObjectUrl } from './admin-avatar.js';
 import { adminAlert, adminConfirm } from './admin-dialog.js';
 import { trackDirtyForm } from './admin-dirty-state.js';
 import { bindHumanUnits } from './admin-human-units.js';
-import { setupAdminTabGroup } from './admin-layout.js';
+import {
+  ensureAdminTabGroup,
+  setupAdminTabGroup,
+} from './admin-layout.js';
 import { adminSecurityLayout } from './admin-layout-schema.js';
 import { readTabState, writeTabState } from './admin-tab-state.js';
 
@@ -54,19 +57,28 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   stylesheet.href = '/admin/security-v2.css';
   document.head.append(stylesheet);
 
-  const visibleTabs = [
-    canManageUsers ? ['users', 'Пользователи'] : null,
-    canViewAudit ? ['audit', 'Аудит'] : null,
-    canManageSecurity ? ['security', 'Защита'] : null,
-  ].filter(Boolean);
+  const securityTabDefinition = {
+    ...adminSecurityLayout.tabs,
+    items:
+      adminSecurityLayout.tabs
+        .items.filter(
+          (item) =>
+            (
+              item.id === 'users' &&
+              canManageUsers
+            ) ||
+            (
+              item.id === 'audit' &&
+              canViewAudit
+            ) ||
+            (
+              item.id === 'security' &&
+              canManageSecurity
+            ),
+        ),
+  };
 
   host.innerHTML = `
-    <nav class="security-tabs" role="tablist" aria-label="Безопасность">
-      ${visibleTabs.map(([key, title], index) => `
-        <button type="button" role="tab" data-security-tab="${key}"
-                aria-selected="${index === 0}" aria-controls="security-panel-${key}">${title}</button>
-      `).join('')}
-    </nav>
     ${canManageUsers ? `
       <section class="security-panel" id="security-panel-users" data-security-panel="users">
         <div class="security-master-detail">
@@ -360,10 +372,16 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   let auditDetailMode = 'tree';
   const jsonBranchRenderers = new WeakMap();
 
+  ensureAdminTabGroup({
+    root: host,
+    definition:
+      securityTabDefinition,
+  });
+
   setupAdminTabGroup({
     root: host,
     definition:
-      adminSecurityLayout.tabs,
+      securityTabDefinition,
     readState:
       readTabState,
     writeState:
