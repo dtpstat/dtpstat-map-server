@@ -6,6 +6,13 @@
   overflow: hidden;
 }
 
+#security-panels {
+  min-height: 0;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .security-tabs {
   margin: 1rem 0;
   display: flex;
