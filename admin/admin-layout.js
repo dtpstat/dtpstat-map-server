@@ -688,6 +688,7 @@ export function setupAdminTabGroup({
   definition,
   readState,
   writeState,
+  onSelect,
 }) {
   if (
     !root ||
@@ -764,6 +765,10 @@ export function setupAdminTabGroup({
 
       writeState(
         definition.stateKey,
+        key,
+      );
+
+      onSelect?.(
         key,
       );
 
