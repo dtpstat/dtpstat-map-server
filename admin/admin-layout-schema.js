@@ -472,6 +472,23 @@ export const adminSecurityLayout = {
       {
         id: 'audit',
         title: 'Аудит',
+        blocks: [
+          {
+            id:
+              'security-audit',
+            hostId:
+              'security-audit-host',
+            className:
+              'security-audit-block',
+            span: {
+              base: 12,
+              wide: 12,
+            },
+            capabilities: {
+              fill: true,
+            },
+          },
+        ],
       },
       {
         id: 'security',
