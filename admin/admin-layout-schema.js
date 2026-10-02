@@ -275,6 +275,8 @@ export const adminInterfaceTabs = [
         'data-report-view-tab',
       panelAttribute:
         'data-report-view-panel',
+      activeClass:
+        'is-active',
       items: [
         {
           id: 'metrics',
