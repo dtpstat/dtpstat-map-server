@@ -138,6 +138,14 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
   );
   assert.match(
     security,
+    /#security-audit-host/u,
+  );
+  assert.match(
+    security,
+    /securityAuditHost\.innerHTML/u,
+  );
+  assert.doesNotMatch(
+    security,
     /securityPanels\.audit\.innerHTML/u,
   );
   assert.match(
