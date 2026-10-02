@@ -173,6 +173,7 @@ if (section) {
     discussionSending: false,
     discussionRequestSequence: 0,
     workspaceRequestSequence: 0,
+    pendingTargetNavigation: false,
     discussionUnreadByGeometry: new Map(),
     discussionAttentionMessageId: null,
   };
@@ -9713,15 +9714,34 @@ if (section) {
     },
   );
 
+  window.addEventListener(
+    'dtpstat:geometry-editor-navigation-pending',
+    () => {
+      state.pendingTargetNavigation =
+        true;
+      state.workspaceRequestSequence +=
+        1;
+    },
+  );
+
   window.addEventListener('dtpstat:geometry-editor-open', () => {
-    void Promise.all([
+    const tasks = [
       ensurePointTypes(),
       loadDiscussionUnread(),
-      refresh({
-        keepSelection: true,
-        fit: false,
-      }),
-    ]);
+    ];
+
+    if (
+      !state.pendingTargetNavigation
+    ) {
+      tasks.push(
+        refresh({
+          keepSelection: true,
+          fit: false,
+        }),
+      );
+    }
+
+    void Promise.all(tasks);
     window.setTimeout(() => state.map?.resize(), 0);
   });
 
@@ -9793,6 +9813,9 @@ if (section) {
                 error.message,
               'error',
             );
+          } finally {
+            state.pendingTargetNavigation =
+              false;
           }
         }
       )();
