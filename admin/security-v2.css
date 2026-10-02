@@ -1,4 +1,4 @@
-#security-editor-host {
+#security-users-audit-host {
   min-height: 0;
   flex: 1 1 0;
   display: flex;
@@ -350,11 +350,9 @@ body.security-modal-open { overflow: hidden; }
 .security-message.is-error { color: var(--danger); }
 
 @media (max-width: 1050px) {
-  #security-editor-host { flex: 0 0 auto; overflow: visible; }
+  #security-users-audit-host { flex: 0 0 auto; overflow: visible; }
   .security-panel:not([hidden]) { flex: none; }
-  #security-panel-users:not([hidden]),
-  #security-panel-security:not([hidden]) { overflow: visible; }
-  #security-panel-security:not([hidden]) { scrollbar-gutter: auto; }
+  #security-panel-users:not([hidden]) { overflow: visible; }
   .security-audit-table-wrap { height: auto; max-height: 55vh; }
 }
 
