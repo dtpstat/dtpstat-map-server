@@ -112,7 +112,14 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
     report,
     /setupAdminTabGroup\([\s\S]*readState:[\s\S]*readTabState[\s\S]*writeState:[\s\S]*writeTabState/u,
   );
-  assert.match(security, /'security'/);
+  assert.match(
+    layoutSchema,
+    /export const adminSecurityLayout[\s\S]*stateKey:[\s\S]*'security'/u,
+  );
+  assert.match(
+    security,
+    /setupAdminTabGroup\([\s\S]*adminSecurityLayout\.tabs[\s\S]*readState:[\s\S]*readTabState[\s\S]*writeState:[\s\S]*writeTabState/u,
+  );
 });
 
 test('technical settings are collapsed and raw values get human-readable companions', async () => {
