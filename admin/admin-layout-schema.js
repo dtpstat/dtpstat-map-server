@@ -201,11 +201,55 @@ export const adminInterfaceTabs = [
       'Отображение публичной карты, геометрии, история, маркеры и параметры классификации городов.',
     blocks: [
       {
-        id: 'map-settings',
+        id: 'map-city-category',
         elementId:
           'operation-map-settings',
         hostId:
-          'map-settings-editor-host',
+          'map-city-category-host',
+        className:
+          'operation-panel transfer-mode',
+        span: {
+          base: 12,
+          wide: 6,
+        },
+      },
+      {
+        id: 'map-display',
+        hostId:
+          'map-display-host',
+        className:
+          'operation-panel transfer-mode',
+        span: {
+          base: 12,
+          wide: 6,
+        },
+      },
+      {
+        id: 'map-history',
+        hostId:
+          'map-history-host',
+        className:
+          'operation-panel transfer-mode',
+        span: {
+          base: 12,
+          wide: 7,
+        },
+      },
+      {
+        id: 'map-city-marker',
+        hostId:
+          'map-city-marker-host',
+        className:
+          'operation-panel transfer-mode',
+        span: {
+          base: 12,
+          wide: 5,
+        },
+      },
+      {
+        id: 'map-actions',
+        hostId:
+          'map-actions-host',
         className:
           'operation-panel transfer-mode',
         span: {
