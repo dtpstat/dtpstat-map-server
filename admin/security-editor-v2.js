@@ -381,7 +381,6 @@ if (
               </div>
             </details>
             <button type="submit">Сохранить защиту</button>
-            <p id="security-settings-message" class="security-message" role="status"></p>
           </form>
     `;
   }
