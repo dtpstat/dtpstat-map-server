@@ -105,6 +105,31 @@ export const adminInterfaceTabs = [
     title: 'Проект',
     description:
       'Название, оформление, метаданные, аналитика и информационный блок проекта.',
+    tabs: {
+      stateKey:
+        'project-settings',
+      defaultId:
+        'general',
+      tabAttribute:
+        'data-project-settings-tab',
+      panelAttribute:
+        'data-project-settings-panel',
+      items: [
+        {
+          id: 'general',
+          title: 'Основное',
+        },
+        {
+          id: 'metadata',
+          title:
+            'Метаданные и API',
+        },
+        {
+          id: 'footer',
+          title: 'Подвал',
+        },
+      ],
+    },
     blocks: [
       {
         id: 'project-settings',
