@@ -118,7 +118,15 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
   );
   assert.match(
     security,
-    /setupAdminTabGroup\([\s\S]*adminSecurityLayout\.tabs[\s\S]*readState:[\s\S]*readTabState[\s\S]*writeState:[\s\S]*writeTabState/u,
+    /ensureAdminTabGroup\([\s\S]*securityTabDefinition/u,
+  );
+  assert.match(
+    security,
+    /setupAdminTabGroup\([\s\S]*securityTabDefinition[\s\S]*readState:[\s\S]*readTabState[\s\S]*writeState:[\s\S]*writeTabState/u,
+  );
+  assert.doesNotMatch(
+    security,
+    /<nav class="security-tabs"/u,
   );
 });
 
