@@ -92,6 +92,10 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
     schema,
     /export const adminSecurityLayout[\s\S]*stateKey:[\s\S]*'security'[\s\S]*tabsHostId:[\s\S]*'security-tabs'[\s\S]*tabsClass:[\s\S]*'security-tabs'[\s\S]*panelsHostId:[\s\S]*'security-panels'[\s\S]*panelClass:[\s\S]*'security-panel'[\s\S]*id:\s*'users'[\s\S]*id:\s*'audit'[\s\S]*id:\s*'security'/u,
   );
+  assert.match(
+    schema,
+    /export const adminSecurityLayout[\s\S]*id:\s*'audit'[\s\S]*hostId:[\s\S]*'security-audit-host'[\s\S]*fill:\s*true/u,
+  );
   for (
     const [hostId, wide] of [
       ['security-settings-host', 8],
