@@ -782,6 +782,14 @@ export function setupAdminTabGroup({
           'aria-selected',
           String(active),
         );
+        if (
+          definition.activeClass
+        ) {
+          node.classList.toggle(
+            definition.activeClass,
+            active,
+          );
+        }
         node.tabIndex =
           active
             ? 0
