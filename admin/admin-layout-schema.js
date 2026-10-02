@@ -34,21 +34,15 @@ export const adminDynamicSections = [
       'security-card',
     blocks: [
       {
-        id: 'security-settings',
+        id: 'security-control',
         hostId:
-          'security-settings-host',
+          'security-control-host',
         span: {
           base: 12,
-          wide: 8,
+          wide: 12,
         },
-      },
-      {
-        id: 'security-ip-blocks',
-        hostId:
-          'security-ip-host',
-        span: {
-          base: 12,
-          wide: 4,
+        capabilities: {
+          fill: true,
         },
       },
     ],
@@ -494,6 +488,85 @@ export const adminInterfaceTabs = [
     ],
   },
 ];
+
+
+export const adminSecuritySettingsLayout = {
+  tabs: {
+    stateKey:
+      'security-settings',
+    defaultId:
+      'protection',
+    tabAttribute:
+      'data-security-settings-tab',
+    panelAttribute:
+      'data-security-settings-panel',
+    tabsHostId:
+      'security-settings-tabs',
+    tabsClass:
+      'security-tabs',
+    panelsHostId:
+      'security-settings-panels',
+    panelClass:
+      'security-panel security-settings-panel',
+    ariaLabel:
+      'Разделы безопасности',
+    panelIdPrefix:
+      'security-settings-panel-',
+    items: [
+      {
+        id: 'protection',
+        title: 'Защита',
+        blocks: [
+          {
+            id:
+              'security-protection',
+            hostId:
+              'security-protection-host',
+            span: {
+              base: 12,
+              wide: 12,
+            },
+          },
+        ],
+      },
+      {
+        id: 'metrics-timings',
+        title: 'Метрики и тайминги',
+        blocks: [
+          {
+            id:
+              'security-metrics-timings',
+            hostId:
+              'security-metrics-timings-host',
+            span: {
+              base: 12,
+              wide: 12,
+            },
+          },
+        ],
+      },
+      {
+        id: 'blocks',
+        title: 'Блокировки',
+        blocks: [
+          {
+            id:
+              'security-blocks',
+            hostId:
+              'security-blocks-host',
+            span: {
+              base: 12,
+              wide: 12,
+            },
+            capabilities: {
+              fill: true,
+            },
+          },
+        ],
+      },
+    ],
+  },
+};
 
 
 export const adminSecurityLayout = {
