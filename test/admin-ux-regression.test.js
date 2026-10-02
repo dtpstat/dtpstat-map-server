@@ -23,10 +23,14 @@ test('admin data and project settings are split into meaningful visual groups', 
   assert.match(adminCss, /\.osm-config-group/);
   assert.match(adminCss, /\.export-link/);
 
-  assert.match(project, /data-project-settings-tab="general"/);
-  assert.doesNotMatch(project, /data-project-settings-tab="map"/);
-  assert.match(project, /data-project-settings-tab="metadata"/);
-  assert.match(project, /data-project-settings-tab="footer"/);
+  assert.doesNotMatch(
+    project,
+    /data-project-settings-tab="/u,
+  );
+  assert.match(
+    layoutSchema,
+    /id:\s*'project'[\s\S]*tabs:[\s\S]*id:\s*'general'[\s\S]*id:\s*'metadata'[\s\S]*id:\s*'footer'/u,
+  );
   assert.match(
     project,
     /setupAdminTabGroup\([\s\S]*readState:[\s\S]*readTabState[\s\S]*writeState:[\s\S]*writeTabState/u,
