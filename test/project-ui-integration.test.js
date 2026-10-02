@@ -116,6 +116,10 @@ test('admin interface loads editors and helpers explicitly without transitive si
   );
   assert.match(
     layoutSchema,
+    /id:\s*'project'[\s\S]*tabsHostId:[\s\S]*'project-settings-tabs'[\s\S]*tabsClass:[\s\S]*'project-settings-tabs'/u,
+  );
+  assert.match(
+    layoutSchema,
     /id:\s*'map'[\s\S]*elementId:[\s\S]*'operation-map-settings'[\s\S]*hostId:[\s\S]*'map-settings-editor-host'/u,
   );
   assert.match(
@@ -160,10 +164,14 @@ test('admin interface loads editors and helpers explicitly without transitive si
   );
   assert.match(editor, /form="project-settings-form"/u);
   assert.match(editor, /Сохранить настройки карты/u);
-  assert.match(editor, /data-project-settings-tab="general"/);
-  assert.doesNotMatch(editor, /data-project-settings-tab="map"/);
-  assert.match(editor, /data-project-settings-tab="metadata"/);
-  assert.match(editor, /data-project-settings-tab="footer"/);
+  assert.match(
+    editor,
+    /ensureAdminTabGroup\([\s\S]*projectLayout\?\.tabs/u,
+  );
+  assert.doesNotMatch(
+    editor,
+    /<nav class="project-settings-tabs"|data-project-settings-tab="/u,
+  );
   assert.match(editor, /data-project-settings-panel="general"/);
   assert.match(editor, /id="project-settings-map"/u);
   assert.match(editor, /mapSettings\.removeAttribute\(\s*'data-project-settings-panel'/u);
