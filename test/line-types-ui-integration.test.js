@@ -141,6 +141,19 @@ test('admin line type editor keeps CODE and NAME read-only and edits TITLE/style
   assert.match(editor, /\['solid', 'Сплошная'\]/);
   assert.match(editor, /widthInput\.min = '0\.5'/);
   assert.match(editor, /fetch\('\/api\/admin\/line-types'/);
+  const styles = await source('admin/line-types.css');
+  assert.match(
+    styles,
+    /@container admin-layout-block \(max-width: 56rem\)/u,
+  );
+  assert.match(
+    styles,
+    /@container admin-layout-block \(max-width: 34rem\)/u,
+  );
+  assert.doesNotMatch(
+    styles,
+    /@media \(max-width:\s*(900|540)px\)/u,
+  );
 });
 
 test('public client uses TITLE in legend, hides unused styles, and uses numeric businessTypeCode for layers', async () => {
