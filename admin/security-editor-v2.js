@@ -574,11 +574,97 @@ if (
   securityAdvancedSettings
     ?.remove();
 
+  if (
+    canManageSecurity &&
+    securityIpHost
+  ) {
+    const summary =
+      document.createElement(
+        'section',
+      );
+    summary.className =
+      'security-block-summary';
+    summary.innerHTML = `
+      <div class="security-block-summary-heading">
+        <div>
+          <h3>Текущие блокировки</h3>
+          <p class="security-info">
+            Активные блокировки пользователей и IP в одной таблице.
+          </p>
+        </div>
+        <label>
+          Фильтр
+          <input id="security-block-filter"
+                 type="search"
+                 placeholder="USER, IP, причина…">
+        </label>
+      </div>
+      <p id="security-block-role-note"
+         class="security-info"
+         ${canManageUsers ? 'hidden' : ''}>
+        USER-блокировки доступны только роли управления пользователями.
+      </p>
+      <div class="security-block-table-wrap">
+        <table class="security-block-table">
+          <thead>
+            <tr>
+              <th>Тип</th>
+              <th>Объект</th>
+              <th>До</th>
+              <th>Причина</th>
+              <th>Действие</th>
+            </tr>
+          </thead>
+          <tbody id="security-blocks-body"></tbody>
+        </table>
+      </div>
+      <p id="security-blocks-message"
+         class="security-message"
+         role="status"></p>
+    `;
+    securityIpHost.append(
+      summary,
+    );
+  }
+
   const securitySettingsForm = document.querySelector('#security-settings-form');
   const securitySettingsDirty = trackDirtyForm(
     securitySettingsForm,
     { label: 'Параметры безопасности' },
   );
+  for (
+    const movedHost of [
+      securityMetricsTimingsHost,
+      securityIpHost,
+    ]
+  ) {
+    movedHost?.addEventListener(
+      'input',
+      (event) => {
+        if (
+          event.target
+            ?.getAttribute?.('form') ===
+          'security-settings-form'
+        ) {
+          securitySettingsDirty
+            ?.markDirty();
+        }
+      },
+    );
+    movedHost?.addEventListener(
+      'change',
+      (event) => {
+        if (
+          event.target
+            ?.getAttribute?.('form') ===
+          'security-settings-form'
+        ) {
+          securitySettingsDirty
+            ?.markDirty();
+        }
+      },
+    );
+  }
   bindHumanUnits(document);
   const userById = new Map();
   const avatarRequestByElement =
