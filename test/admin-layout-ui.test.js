@@ -120,6 +120,10 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
   );
   assert.match(
     schema,
+    /id:\s*'project'[\s\S]*tabs:[\s\S]*stateKey:[\s\S]*'project-settings'[\s\S]*id:\s*'general'[\s\S]*id:\s*'metadata'[\s\S]*id:\s*'footer'/u,
+  );
+  assert.match(
+    schema,
     /id:\s*'map'[\s\S]*elementId:[\s\S]*'operation-map-settings'/u,
   );
   assert.match(
@@ -216,6 +220,18 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
   assert.match(
     engine,
     /createInterfaceBlock/u,
+  );
+  assert.match(
+    engine,
+    /export function setupAdminTabGroup/u,
+  );
+  assert.match(
+    engine,
+    /definition\.tabAttribute[\s\S]*definition\.panelAttribute/u,
+  );
+  assert.match(
+    engine,
+    /definition\.stateKey[\s\S]*readState/u,
   );
   assert.match(
     engine,
