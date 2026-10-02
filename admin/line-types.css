@@ -54,13 +54,13 @@
 .line-types-message.is-success { color: var(--success); }
 .line-types-message.is-error { color: var(--danger); }
 
-@media (max-width: 900px) {
+@container admin-layout-block (max-width: 56rem) {
   .line-type-row {
     grid-template-columns: 1fr 1fr;
   }
 }
 
-@media (max-width: 540px) {
+@container admin-layout-block (max-width: 34rem) {
   .line-type-row {
     grid-template-columns: 1fr;
   }
