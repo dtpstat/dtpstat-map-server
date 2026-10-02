@@ -43,9 +43,26 @@ test('admin data and project settings are split into meaningful visual groups', 
     layoutSchema,
     /id:\s*'project'[\s\S]*hostId:[\s\S]*'project-settings-editor-host'/u,
   );
-  assert.match(
+  for (
+    const hostId of [
+      'map-city-category-host',
+      'map-display-host',
+      'map-history-host',
+      'map-city-marker-host',
+      'map-actions-host',
+    ]
+  ) {
+    assert.match(
+      layoutSchema,
+      new RegExp(
+        `id:\\s*['"]map['"][\\s\\S]*hostId:[\\s\\S]*['"]${hostId}['"]`,
+        'u',
+      ),
+    );
+  }
+  assert.doesNotMatch(
     layoutSchema,
-    /id:\s*'map'[\s\S]*hostId:[\s\S]*'map-settings-editor-host'/u,
+    /map-settings-editor-host/u,
   );
   assert.doesNotMatch(
     project,
