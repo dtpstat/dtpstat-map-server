@@ -183,6 +183,22 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
     inbox,
     /readByOthersCount/u,
   );
+  assert.match(
+    inbox,
+    /threadRequestSequence/u,
+  );
+  assert.match(
+    inbox,
+    /requestSequence !==[\s\S]*state\.threadRequestSequence[\s\S]*state\.selectedKey !==[\s\S]*itemKey/u,
+  );
+  assert.match(
+    inbox,
+    /change\?\.action ===[\s\S]*'read'[\s\S]*change\.readerUserId[\s\S]*currentUser\.id/u,
+  );
+  assert.doesNotMatch(
+    inbox,
+    /state\.loadingThread \|\|[\s\S]*!item/u,
+  );
 
   assert.match(
     inbox,
