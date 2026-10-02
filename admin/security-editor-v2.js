@@ -6,7 +6,10 @@ import {
   ensureAdminTabGroup,
   setupAdminTabGroup,
 } from './admin-layout.js';
-import { adminSecurityLayout } from './admin-layout-schema.js';
+import {
+  adminSecurityLayout,
+  adminSecuritySettingsLayout,
+} from './admin-layout-schema.js';
 import { readTabState, writeTabState } from './admin-tab-state.js';
 
 const session = await globalThis.dtpstatAdminSession?.catch(() => null);
@@ -15,13 +18,9 @@ const usersAuditHost =
   document.querySelector(
     '#security-users-audit-host',
   );
-const securitySettingsHost =
+const securityControlHost =
   document.querySelector(
-    '#security-settings-host',
-  );
-const securityIpHost =
-  document.querySelector(
-    '#security-ip-host',
+    '#security-control-host',
   );
 
 const canManageUsers = Boolean(currentUser?.isSuperuser || currentUser?.canManageUsers);
@@ -65,8 +64,7 @@ function durationOptions(includeIndefinite = true) {
 if (
   (
     usersAuditHost ||
-    securitySettingsHost ||
-    securityIpHost
+    securityControlHost
   ) &&
   (
     canManageUsers ||
@@ -78,6 +76,22 @@ if (
   stylesheet.rel = 'stylesheet';
   stylesheet.href = '/admin/security-v2.css';
   document.head.append(stylesheet);
+
+  if (
+    canManageSecurity &&
+    securityControlHost
+  ) {
+    securityControlHost.innerHTML =
+      '<div id="security-settings-panels"></div>';
+
+    ensureAdminTabGroup({
+      root:
+        securityControlHost,
+      definition:
+        adminSecuritySettingsLayout
+          .tabs,
+    });
+  }
 
   const securityTabDefinition = {
     ...adminSecurityLayout.tabs,
