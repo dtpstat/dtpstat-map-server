@@ -140,6 +140,18 @@ test('admin interface loads editors and helpers explicitly without transitive si
   );
   assert.match(
     editor,
+    /setupAdminTabGroup\(/u,
+  );
+  assert.match(
+    editor,
+    /adminInterfaceTabs\.find\([\s\S]*definition\.id ===[\s\S]*'project'/u,
+  );
+  assert.doesNotMatch(
+    editor,
+    /const selectProjectPanel|availableProjectTabs|projectTabs\.map/u,
+  );
+  assert.match(
+    editor,
     /projectHost\.innerHTML/u,
   );
   assert.match(
