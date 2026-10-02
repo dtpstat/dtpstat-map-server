@@ -2,6 +2,8 @@ import { adminAvatarObjectUrl } from './admin-avatar.js';
 import { adminAlert, adminConfirm } from './admin-dialog.js';
 import { trackDirtyForm } from './admin-dirty-state.js';
 import { bindHumanUnits } from './admin-human-units.js';
+import { setupAdminTabGroup } from './admin-layout.js';
+import { adminSecurityLayout } from './admin-layout-schema.js';
 import { readTabState, writeTabState } from './admin-tab-state.js';
 
 const session = await globalThis.dtpstatAdminSession?.catch(() => null);
@@ -278,8 +280,6 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     </div>
   `;
 
-  const tabs = [...host.querySelectorAll('[data-security-tab]')];
-  const panels = [...host.querySelectorAll('[data-security-panel]')];
   const securitySettingsForm = host.querySelector('#security-settings-form');
   const securitySettingsDirty = trackDirtyForm(
     securitySettingsForm,
@@ -360,20 +360,34 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   let auditDetailMode = 'tree';
   const jsonBranchRenderers = new WeakMap();
 
+  const securityTabs =
+    setupAdminTabGroup({
+      root: host,
+      definition:
+        adminSecurityLayout.tabs,
+      readState:
+        readTabState,
+      writeState:
+        writeTabState,
+      onSelect:
+        (key) => {
+          if (key === 'audit') {
+            void loadAudit();
+          }
+          if (key === 'security') {
+            void Promise.all([
+              loadSettings(),
+              loadIpBlocks(),
+            ]);
+          }
+        },
+    });
+
   function selectTab(key) {
-    writeTabState('security', key);
-    for (const tab of tabs) {
-      const active = tab.dataset.securityTab === key;
-      tab.setAttribute('aria-selected', String(active));
-      tab.tabIndex = active ? 0 : -1;
-    }
-    for (const panel of panels) panel.hidden = panel.dataset.securityPanel !== key;
-    if (key === 'audit') void loadAudit();
-    if (key === 'security') void Promise.all([loadSettings(), loadIpBlocks()]);
+    securityTabs?.select(
+      key,
+    );
   }
-  for (const tab of tabs) tab.addEventListener('click', () => selectTab(tab.dataset.securityTab));
-  const securityTabKeys = tabs.map((tab) => tab.dataset.securityTab);
-  selectTab(readTabState('security', securityTabKeys, securityTabKeys[0]));
 
   function showTemporaryPassword(password, username) {
     const overlay = host.querySelector('#security-secret-overlay');
