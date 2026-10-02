@@ -172,6 +172,10 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
   );
   assert.match(
     schema,
+    /id:\s*'report'[\s\S]*tabs:[\s\S]*stateKey:[\s\S]*'report-view'[\s\S]*activeClass:[\s\S]*'is-active'/u,
+  );
+  assert.match(
+    schema,
     /id:\s*'project-transfer'[\s\S]*permission:[\s\S]*'superuser'[\s\S]*hostId:[\s\S]*'project-transfer-editor-host'/u,
   );
   assert.match(
@@ -296,6 +300,14 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
   assert.match(
     engine,
     /definition\.stateKey[\s\S]*readState/u,
+  );
+  assert.match(
+    engine,
+    /definition\.activeClass[\s\S]*classList\.toggle/u,
+  );
+  assert.match(
+    engine,
+    /onSelect\?\.\([\s\S]*key/u,
   );
   assert.match(
     engine,
