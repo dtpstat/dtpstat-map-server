@@ -209,7 +209,22 @@ export const adminInterfaceTabs = [
     id: 'project-transfer',
     title:
       'Импорт / экспорт проекта',
+    description:
+      'Суперадминский перенос настроек интерфейса, аналитики, типов линий и политики безопасности.',
     permission:
       'superuser',
+    blocks: [
+      {
+        id: 'project-transfer-editor',
+        hostId:
+          'project-transfer-editor-host',
+        className:
+          'operation-panel transfer-mode',
+        span: {
+          base: 12,
+          wide: 12,
+        },
+      },
+    ],
   },
 ];
