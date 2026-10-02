@@ -456,6 +456,10 @@ export const adminSecurityLayout = {
       'security-tabs',
     tabsClass:
       'security-tabs',
+    panelsHostId:
+      'security-panels',
+    panelClass:
+      'security-panel',
     ariaLabel:
       'Безопасность',
     panelIdPrefix:
