@@ -11,7 +11,18 @@ import { readTabState, writeTabState } from './admin-tab-state.js';
 
 const session = await globalThis.dtpstatAdminSession?.catch(() => null);
 const currentUser = session?.user;
-const host = document.querySelector('#security-editor-host');
+const usersAuditHost =
+  document.querySelector(
+    '#security-users-audit-host',
+  );
+const securitySettingsHost =
+  document.querySelector(
+    '#security-settings-host',
+  );
+const securityIpHost =
+  document.querySelector(
+    '#security-ip-host',
+  );
 
 const canManageUsers = Boolean(currentUser?.isSuperuser || currentUser?.canManageUsers);
 const canViewAudit = Boolean(currentUser?.isSuperuser || currentUser?.canViewAudit);
@@ -51,7 +62,18 @@ function durationOptions(includeIndefinite = true) {
   `;
 }
 
-if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
+if (
+  (
+    usersAuditHost ||
+    securitySettingsHost ||
+    securityIpHost
+  ) &&
+  (
+    canManageUsers ||
+    canViewAudit ||
+    canManageSecurity
+  )
+) {
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
   stylesheet.href = '/admin/security-v2.css';
@@ -70,16 +92,39 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
             (
               item.id === 'audit' &&
               canViewAudit
-            ) ||
-            (
-              item.id === 'security' &&
-              canManageSecurity
             ),
         ),
   };
 
-  host.innerHTML = `
-    <div id="security-panels"></div>
+  if (
+    usersAuditHost &&
+    (
+      canManageUsers ||
+      canViewAudit
+    )
+  ) {
+    usersAuditHost.innerHTML =
+      '<div id="security-panels"></div>';
+  }
+
+  let overlaysHost =
+    document.querySelector(
+      '#security-overlays-host',
+    );
+
+  if (!overlaysHost) {
+    overlaysHost =
+      document.createElement(
+        'div',
+      );
+    overlaysHost.id =
+      'security-overlays-host';
+    document.body.append(
+      overlaysHost,
+    );
+  }
+
+  overlaysHost.innerHTML = `
     <div id="security-secret-overlay" class="security-secret-overlay" hidden></div>
     <div id="security-audit-detail-overlay" class="security-audit-detail-overlay" hidden>
       <section class="security-audit-detail-dialog"
@@ -118,24 +163,27 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     </div>
   `;
 
-  ensureAdminTabGroup({
-    root: host,
-    definition:
-      securityTabDefinition,
-  });
+  if (
+    usersAuditHost &&
+    securityTabDefinition
+      .items.length
+  ) {
+    ensureAdminTabGroup({
+      root:
+        usersAuditHost,
+      definition:
+        securityTabDefinition,
+    });
+  }
 
   const securityPanels = {
     users:
-      host.querySelector(
+      document.querySelector(
         '#security-panel-users',
       ),
     audit:
-      host.querySelector(
+      document.querySelector(
         '#security-panel-audit',
-      ),
-    security:
-      host.querySelector(
-        '#security-panel-security',
       ),
   };
 
@@ -158,7 +206,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   }
 
   const securityAuditHost =
-    host.querySelector(
+    document.querySelector(
       '#security-audit-host',
     );
 
@@ -202,16 +250,10 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     `;
   }
 
-  const securitySettingsHost =
-    host.querySelector(
-      '#security-settings-host',
-    );
-  const securityIpHost =
-    host.querySelector(
-      '#security-ip-host',
-    );
-
-  if (securitySettingsHost) {
+  if (
+    canManageSecurity &&
+    securitySettingsHost
+  ) {
     securitySettingsHost.innerHTML = `
 <form id="security-settings-form" class="security-settings-form">
             <h3>Защита входа и сессии</h3>
@@ -317,7 +359,10 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     `;
   }
 
-  if (securityIpHost) {
+  if (
+    canManageSecurity &&
+    securityIpHost
+  ) {
     securityIpHost.innerHTML = `
 <section class="security-ip-panel">
             <h3>Ручные блокировки IP</h3>
@@ -333,12 +378,12 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     `;
   }
 
-  const securitySettingsForm = host.querySelector('#security-settings-form');
+  const securitySettingsForm = document.querySelector('#security-settings-form');
   const securitySettingsDirty = trackDirtyForm(
     securitySettingsForm,
     { label: 'Параметры безопасности' },
   );
-  bindHumanUnits(host);
+  bindHumanUnits(document);
   const userById = new Map();
   const avatarRequestByElement =
     new WeakMap();
@@ -413,10 +458,16 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   let auditDetailMode = 'tree';
   const jsonBranchRenderers = new WeakMap();
 
-  setupAdminTabGroup({
-    root: host,
-    definition:
-      securityTabDefinition,
+  if (
+    usersAuditHost &&
+    securityTabDefinition
+      .items.length
+  ) {
+    setupAdminTabGroup({
+      root:
+        usersAuditHost,
+      definition:
+        securityTabDefinition,
     readState:
       readTabState,
     writeState:
@@ -433,10 +484,11 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           ]);
         }
       },
-  });
+    });
+  }
 
   function showTemporaryPassword(password, username) {
-    const overlay = host.querySelector('#security-secret-overlay');
+    const overlay = document.querySelector('#security-secret-overlay');
     if (secretTimer) clearTimeout(secretTimer);
     overlay.hidden = false;
     overlay.innerHTML = `
@@ -468,7 +520,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   }
 
   function showMetricsBearerToken(token) {
-    const overlay = host.querySelector('#security-secret-overlay');
+    const overlay = document.querySelector('#security-secret-overlay');
     if (secretTimer) clearTimeout(secretTimer);
     overlay.hidden = false;
     overlay.innerHTML = `
@@ -506,7 +558,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
 
   function renderDetail(user) {
     selectedUserId = user?.id ?? null;
-    const detail = host.querySelector('#security-user-detail');
+    const detail = document.querySelector('#security-user-detail');
     if (!user) {
       detail.innerHTML = '<p class="empty-state">Выберите пользователя слева.</p>';
       return;
@@ -602,14 +654,14 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           user.id,
         );
         setMessage(
-          host.querySelector(
+          document.querySelector(
             '#security-users-message',
           ),
           'Пользователь сохранён.',
           'success',
         );
       } catch (error) {
-        setMessage(host.querySelector('#security-users-message'), error.message, 'error');
+        setMessage(document.querySelector('#security-users-message'), error.message, 'error');
       }
     });
 
@@ -627,7 +679,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         showTemporaryPassword(payload.temporaryPassword, user.username);
         await loadUsers(user.id);
       } catch (error) {
-        setMessage(host.querySelector('#security-users-message'), error.message, 'error');
+        setMessage(document.querySelector('#security-users-message'), error.message, 'error');
       }
     });
 
@@ -658,7 +710,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
             user.id,
           );
           setMessage(
-            host.querySelector(
+            document.querySelector(
               '#security-users-message',
             ),
             'MFA пользователя сброшена; активные сессии завершены.',
@@ -666,7 +718,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
           );
         } catch (error) {
           setMessage(
-            host.querySelector(
+            document.querySelector(
               '#security-users-message',
             ),
             error.message,
@@ -691,14 +743,14 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         });
         await loadUsers(user.id);
         setMessage(
-          host.querySelector(
+          document.querySelector(
             '#security-users-message',
           ),
           'Пользователь заблокирован.',
           'success',
         );
       } catch (error) {
-        setMessage(host.querySelector('#security-users-message'), error.message, 'error');
+        setMessage(document.querySelector('#security-users-message'), error.message, 'error');
       }
     });
     detail.querySelector('#security-user-unblock')?.addEventListener('click', async () => {
@@ -706,14 +758,14 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         await api(`/api/admin/security/users/${user.id}/unblock`, { method: 'POST' });
         await loadUsers(user.id);
         setMessage(
-          host.querySelector(
+          document.querySelector(
             '#security-users-message',
           ),
           'Пользователь разблокирован.',
           'success',
         );
       } catch (error) {
-        setMessage(host.querySelector('#security-users-message'), error.message, 'error');
+        setMessage(document.querySelector('#security-users-message'), error.message, 'error');
       }
     });
     detail.querySelector('#security-user-delete').addEventListener('click', async () => {
@@ -730,13 +782,13 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         selectedUserId = null;
         await loadUsers();
       } catch (error) {
-        setMessage(host.querySelector('#security-users-message'), error.message, 'error');
+        setMessage(document.querySelector('#security-users-message'), error.message, 'error');
       }
     });
   }
 
   function renderNewUser() {
-    const detail = host.querySelector('#security-user-detail');
+    const detail = document.querySelector('#security-user-detail');
     selectedUserId = null;
     detail.innerHTML = `
       <h3>Новый пользователь</h3>
@@ -787,7 +839,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         showTemporaryPassword(payload.temporaryPassword, payload.user.username);
         await loadUsers(payload.user.id);
       } catch (error) {
-        setMessage(host.querySelector('#security-users-message'), error.message, 'error');
+        setMessage(document.querySelector('#security-users-message'), error.message, 'error');
       }
     });
   }
@@ -820,7 +872,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     button.classList.toggle('is-selected', user.id === selectedUserId);
     button.addEventListener('click', () => {
       selectedUserId = user.id;
-      for (const row of host.querySelectorAll('.security-user-row')) {
+      for (const row of document.querySelectorAll('.security-user-row')) {
         row.classList.toggle('is-selected', row.dataset.userId === String(user.id));
       }
       renderDetail(user);
@@ -829,19 +881,19 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   }
 
   function renderUsersList() {
-    const query = host.querySelector('#security-user-search')?.value.trim().toLocaleLowerCase('ru-RU') ?? '';
+    const query = document.querySelector('#security-user-search')?.value.trim().toLocaleLowerCase('ru-RU') ?? '';
     const users = [...userById.values()].filter((user) => {
       if (!query) return true;
       return [user.username, user.displayName, user.email]
         .filter(Boolean)
         .some((value) => String(value).toLocaleLowerCase('ru-RU').includes(query));
     });
-    host.querySelector('#security-users-list')?.replaceChildren(...users.map(userListRow));
+    document.querySelector('#security-users-list')?.replaceChildren(...users.map(userListRow));
   }
 
   async function loadUsers(selectId = selectedUserId) {
     if (!canManageUsers) return;
-    const message = host.querySelector('#security-users-message');
+    const message = document.querySelector('#security-users-message');
     setMessage(message, 'Загружаем пользователей…');
     try {
       const payload = await api('/api/admin/security/users');
@@ -858,11 +910,11 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     }
   }
 
-  host.querySelector('#security-user-search')?.addEventListener('input', renderUsersList);
-  host.querySelector('#security-user-add')?.addEventListener('click', renderNewUser);
+  document.querySelector('#security-user-search')?.addEventListener('input', renderUsersList);
+  document.querySelector('#security-user-add')?.addEventListener('click', renderNewUser);
 
   function auditQuery({ exportMode = false } = {}) {
-    const form = host.querySelector('#security-audit-filter');
+    const form = document.querySelector('#security-audit-filter');
     const data = new FormData(form);
     const params = new URLSearchParams();
     for (const key of ['from','to','eventType','operationType','status','username','ipAddress']) {
@@ -991,7 +1043,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   }
 
   function renderAuditJsonTree(value) {
-    const tree = host.querySelector('#security-audit-json-tree');
+    const tree = document.querySelector('#security-audit-json-tree');
     tree.replaceChildren();
     const root = jsonTreeNode(null, value);
     tree.append(root);
@@ -1003,37 +1055,37 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
 
   function setAuditDetailMode(mode) {
     auditDetailMode = mode === 'raw' ? 'raw' : 'tree';
-    const tree = host.querySelector('#security-audit-json-tree');
-    const raw = host.querySelector('#security-audit-json-raw');
+    const tree = document.querySelector('#security-audit-json-tree');
+    const raw = document.querySelector('#security-audit-json-raw');
     tree.hidden = auditDetailMode !== 'tree';
     raw.hidden = auditDetailMode !== 'raw';
-    for (const button of host.querySelectorAll('[data-audit-view]')) {
+    for (const button of document.querySelectorAll('[data-audit-view]')) {
       button.setAttribute(
         'aria-pressed',
         String(button.dataset.auditView === auditDetailMode),
       );
     }
-    host.querySelector('#security-audit-expand-all').disabled =
+    document.querySelector('#security-audit-expand-all').disabled =
       auditDetailMode !== 'tree';
-    host.querySelector('#security-audit-collapse-all').disabled =
+    document.querySelector('#security-audit-collapse-all').disabled =
       auditDetailMode !== 'tree';
   }
 
   function closeAuditDetails() {
-    const overlay = host.querySelector('#security-audit-detail-overlay');
+    const overlay = document.querySelector('#security-audit-detail-overlay');
     overlay.hidden = true;
     document.body.classList.remove('security-modal-open');
-    host.querySelector('#security-audit-json-tree').replaceChildren();
-    host.querySelector('#security-audit-json-raw').textContent = '';
+    document.querySelector('#security-audit-json-tree').replaceChildren();
+    document.querySelector('#security-audit-json-raw').textContent = '';
     auditDetailEntry = null;
   }
 
   function openAuditDetails(entry) {
     auditDetailEntry = entry;
-    const overlay = host.querySelector('#security-audit-detail-overlay');
-    const title = host.querySelector('#security-audit-detail-title');
-    const meta = host.querySelector('#security-audit-detail-meta');
-    const raw = host.querySelector('#security-audit-json-raw');
+    const overlay = document.querySelector('#security-audit-detail-overlay');
+    const title = document.querySelector('#security-audit-detail-title');
+    const meta = document.querySelector('#security-audit-detail-meta');
+    const raw = document.querySelector('#security-audit-json-raw');
     const details = entry.details ?? {};
 
     title.textContent = entry.operationType || entry.eventType || `Аудит #${entry.id}`;
@@ -1053,7 +1105,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   }
 
   function expandAuditJsonTree() {
-    const tree = host.querySelector('#security-audit-json-tree');
+    const tree = document.querySelector('#security-audit-json-tree');
     const queue = [...tree.querySelectorAll('details.security-json-branch')];
     for (let index = 0; index < queue.length; index += 1) {
       const details = queue[index];
@@ -1069,7 +1121,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   }
 
   function collapseAuditJsonTree() {
-    for (const details of host.querySelectorAll(
+    for (const details of document.querySelectorAll(
       '#security-audit-json-tree details.security-json-branch',
     )) {
       details.open = false;
@@ -1078,7 +1130,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
 
   async function copyAuditJson() {
     if (!auditDetailEntry) return;
-    const button = host.querySelector('#security-audit-copy-json');
+    const button = document.querySelector('#security-audit-copy-json');
     await navigator.clipboard.writeText(
       JSON.stringify(auditDetailEntry.details ?? {}, null, 2),
     );
@@ -1169,7 +1221,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       button.addEventListener('click', () => void quickBlockUser(entry)
         .then(loadAudit)
         .catch((error) => setMessage(
-          host.querySelector('#security-audit-message'),
+          document.querySelector('#security-audit-message'),
           error.message,
           'error',
         )));
@@ -1183,7 +1235,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       button.addEventListener('click', () => void quickBlockIp(entry)
         .then(loadAudit)
         .catch((error) => setMessage(
-          host.querySelector('#security-audit-message'),
+          document.querySelector('#security-audit-message'),
           error.message,
           'error',
         )));
@@ -1214,15 +1266,15 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
 
   async function loadAudit() {
     if (!canViewAudit) return;
-    const message = host.querySelector('#security-audit-message');
+    const message = document.querySelector('#security-audit-message');
     try {
       const params = auditQuery();
       const payload = await api(`/api/admin/security/audit?${params}`);
-      host.querySelector('#security-audit-body').replaceChildren(...payload.entries.map(auditRow));
-      host.querySelector('#security-audit-page').textContent = String(Math.floor(auditOffset / auditLimit) + 1);
-      host.querySelector('#security-audit-prev').disabled = auditOffset === 0;
-      host.querySelector('#security-audit-next').disabled = payload.entries.length < auditLimit;
-      host.querySelector('#security-audit-export').href = `/api/admin/security/audit/export.csv?${auditQuery({ exportMode: true })}`;
+      document.querySelector('#security-audit-body').replaceChildren(...payload.entries.map(auditRow));
+      document.querySelector('#security-audit-page').textContent = String(Math.floor(auditOffset / auditLimit) + 1);
+      document.querySelector('#security-audit-prev').disabled = auditOffset === 0;
+      document.querySelector('#security-audit-next').disabled = payload.entries.length < auditLimit;
+      document.querySelector('#security-audit-export').href = `/api/admin/security/audit/export.csv?${auditQuery({ exportMode: true })}`;
       setMessage(message, `Показано записей: ${payload.entries.length}`);
     } catch (error) {
       setMessage(message, error.message, 'error');
@@ -1233,7 +1285,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     if (!canViewAudit) return;
     try {
       const facets = await api('/api/admin/security/audit/facets');
-      const form = host.querySelector('#security-audit-filter');
+      const form = document.querySelector('#security-audit-filter');
       for (const [name, values] of [
         ['eventType', facets.eventTypes],
         ['operationType', facets.operationTypes],
@@ -1250,38 +1302,38 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     } catch { /* filters still work as text-free all-values selectors */ }
   }
 
-  host.querySelector('#security-audit-filter')?.addEventListener('submit', (event) => {
+  document.querySelector('#security-audit-filter')?.addEventListener('submit', (event) => {
     event.preventDefault();
     auditOffset = 0;
     void loadAudit();
   });
-  host.querySelector('#security-audit-reset')?.addEventListener('click', () => {
-    host.querySelector('#security-audit-filter').reset();
+  document.querySelector('#security-audit-reset')?.addEventListener('click', () => {
+    document.querySelector('#security-audit-filter').reset();
     auditOffset = 0;
     void loadAudit();
   });
-  host.querySelector('#security-audit-prev')?.addEventListener('click', () => {
+  document.querySelector('#security-audit-prev')?.addEventListener('click', () => {
     auditOffset = Math.max(0, auditOffset - auditLimit);
     void loadAudit();
   });
-  host.querySelector('#security-audit-next')?.addEventListener('click', () => {
+  document.querySelector('#security-audit-next')?.addEventListener('click', () => {
     auditOffset += auditLimit;
     void loadAudit();
   });
 
-  const auditOverlay = host.querySelector('#security-audit-detail-overlay');
+  const auditOverlay = document.querySelector('#security-audit-detail-overlay');
   auditOverlay?.querySelector('.security-audit-detail-close')
     ?.addEventListener('click', closeAuditDetails);
   auditOverlay?.addEventListener('click', (event) => {
     if (event.target === auditOverlay) closeAuditDetails();
   });
-  host.querySelector('#security-audit-expand-all')
+  document.querySelector('#security-audit-expand-all')
     ?.addEventListener('click', expandAuditJsonTree);
-  host.querySelector('#security-audit-collapse-all')
+  document.querySelector('#security-audit-collapse-all')
     ?.addEventListener('click', collapseAuditJsonTree);
-  host.querySelector('#security-audit-copy-json')
+  document.querySelector('#security-audit-copy-json')
     ?.addEventListener('click', () => void copyAuditJson());
-  for (const button of host.querySelectorAll('[data-audit-view]')) {
+  for (const button of document.querySelectorAll('[data-audit-view]')) {
     button.addEventListener('click', () => setAuditDetailMode(button.dataset.auditView));
   }
   document.addEventListener('keydown', (event) => {
@@ -1289,9 +1341,9 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   });
 
   function setMetricsControlsEnabled(enabled) {
-    const body = host.querySelector('.security-metrics-body');
-    const rotate = host.querySelector('#security-metrics-token-rotate');
-    const clear = host.querySelector('#security-metrics-token-clear');
+    const body = document.querySelector('.security-metrics-body');
+    const rotate = document.querySelector('#security-metrics-token-rotate');
+    const clear = document.querySelector('#security-metrics-token-clear');
 
     body?.classList.toggle(
       'is-disabled',
@@ -1314,9 +1366,9 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
 
   function renderMetricsSettings(settings) {
     metricsTokenConfigured = Boolean(settings.metricsTokenConfigured);
-    const status = host.querySelector('#security-metrics-token-status');
-    const rotate = host.querySelector('#security-metrics-token-rotate');
-    const form = host.querySelector('#security-settings-form');
+    const status = document.querySelector('#security-metrics-token-status');
+    const rotate = document.querySelector('#security-metrics-token-rotate');
+    const form = document.querySelector('#security-settings-form');
     const enabled = Boolean(
       form?.elements.metricsEnabled?.checked,
     );
@@ -1339,8 +1391,8 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
 
   async function loadSettings() {
     if (!canManageSecurity) return;
-    const form = host.querySelector('#security-settings-form');
-    const message = host.querySelector('#security-settings-message');
+    const form = document.querySelector('#security-settings-form');
+    const message = document.querySelector('#security-settings-message');
     try {
       const payload = await api('/api/admin/security/settings');
       for (const [key, value] of Object.entries(payload.settings)) {
@@ -1358,7 +1410,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     }
   }
 
-  host.querySelector('#security-settings-form')
+  document.querySelector('#security-settings-form')
     ?.elements.metricsEnabled
     ?.addEventListener(
       'change',
@@ -1369,7 +1421,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       },
     );
 
-  host.querySelector('#security-settings-form')?.addEventListener('submit', async (event) => {
+  document.querySelector('#security-settings-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
     if (!form.reportValidity()) return;
@@ -1391,7 +1443,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     ]);
     if (settings.metricsEnabled && !metricsTokenConfigured) {
       setMessage(
-        host.querySelector('#security-settings-message'),
+        document.querySelector('#security-settings-message'),
         'Сначала сгенерируйте Prometheus bearer token.',
         'error',
       );
@@ -1405,13 +1457,13 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       });
       renderMetricsSettings(payload.settings);
       securitySettingsDirty?.markClean();
-      setMessage(host.querySelector('#security-settings-message'), 'Параметры сохранены.', 'success');
+      setMessage(document.querySelector('#security-settings-message'), 'Параметры сохранены.', 'success');
     } catch (error) {
-      setMessage(host.querySelector('#security-settings-message'), error.message, 'error');
+      setMessage(document.querySelector('#security-settings-message'), error.message, 'error');
     }
   });
 
-  host.querySelector('#security-metrics-token-rotate')
+  document.querySelector('#security-metrics-token-rotate')
     ?.addEventListener('click', async () => {
       const confirmed = await adminConfirm({
         title: metricsTokenConfigured
@@ -1436,14 +1488,14 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         showMetricsBearerToken(payload.token);
       } catch (error) {
         setMessage(
-          host.querySelector('#security-settings-message'),
+          document.querySelector('#security-settings-message'),
           error.message,
           'error',
         );
       }
     });
 
-  host.querySelector('#security-metrics-token-clear')
+  document.querySelector('#security-metrics-token-clear')
     ?.addEventListener('click', async () => {
       if (!metricsTokenConfigured) return;
       const confirmed = await adminConfirm({
@@ -1459,20 +1511,20 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         const payload = await api('/api/admin/security/metrics-token', {
           method: 'DELETE',
         });
-        const form = host.querySelector('#security-settings-form');
+        const form = document.querySelector('#security-settings-form');
         if (form?.elements.metricsEnabled) {
           form.elements.metricsEnabled.checked = false;
         }
         renderMetricsSettings(payload.settings);
         securitySettingsDirty?.markClean();
         setMessage(
-          host.querySelector('#security-settings-message'),
+          document.querySelector('#security-settings-message'),
           'Prometheus token очищен; metrics выключены.',
           'success',
         );
       } catch (error) {
         setMessage(
-          host.querySelector('#security-settings-message'),
+          document.querySelector('#security-settings-message'),
           error.message,
           'error',
         );
@@ -1496,7 +1548,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
         await api(`/api/admin/security/ip-blocks/${block.id}`, { method: 'DELETE' });
         await loadIpBlocks();
       } catch (error) {
-        setMessage(host.querySelector('#security-ip-message'), error.message, 'error');
+        setMessage(document.querySelector('#security-ip-message'), error.message, 'error');
       }
     });
     return row;
@@ -1506,14 +1558,14 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
     if (!canManageSecurity) return;
     try {
       const payload = await api('/api/admin/security/ip-blocks');
-      host.querySelector('#security-ip-blocks').replaceChildren(...payload.blocks.map(ipBlockCard));
-      setMessage(host.querySelector('#security-ip-message'), `Активных блокировок: ${payload.blocks.length}`);
+      document.querySelector('#security-ip-blocks').replaceChildren(...payload.blocks.map(ipBlockCard));
+      setMessage(document.querySelector('#security-ip-message'), `Активных блокировок: ${payload.blocks.length}`);
     } catch (error) {
-      setMessage(host.querySelector('#security-ip-message'), error.message, 'error');
+      setMessage(document.querySelector('#security-ip-message'), error.message, 'error');
     }
   }
 
-  host.querySelector('#security-ip-block-form')?.addEventListener('submit', async (event) => {
+  document.querySelector('#security-ip-block-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
     if (!form.reportValidity()) return;
@@ -1530,7 +1582,7 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
       form.reset();
       await loadIpBlocks();
     } catch (error) {
-      setMessage(host.querySelector('#security-ip-message'), error.message, 'error');
+      setMessage(document.querySelector('#security-ip-message'), error.message, 'error');
     }
   });
 
