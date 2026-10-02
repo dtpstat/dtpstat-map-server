@@ -154,19 +154,27 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
   );
   assert.match(
     security,
-    /#security-settings-host/u,
+    /#security-control-host/u,
   );
   assert.match(
     security,
-    /#security-ip-host/u,
+    /adminSecuritySettingsLayout/u,
   );
   assert.match(
     security,
-    /securitySettingsHost\.innerHTML/u,
+    /#security-protection-host/u,
   );
   assert.match(
     security,
-    /securityIpHost\.innerHTML/u,
+    /#security-metrics-timings-host/u,
+  );
+  assert.match(
+    security,
+    /#security-blocks-host/u,
+  );
+  assert.match(
+    security,
+    /setupAdminTabGroup\([\s\S]*securityControlHost[\s\S]*adminSecuritySettingsLayout/u,
   );
   assert.doesNotMatch(
     security,
@@ -204,6 +212,18 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
     security,
     /data-admin-section-panel="security"[\s\S]*!securityPrimaryPanel\.hidden[\s\S]*loadSettings\(\)[\s\S]*loadIpBlocks\(\)/u,
   );
+  assert.match(
+    security,
+    /security-blocks-body/u,
+  );
+  assert.match(
+    security,
+    /USER-блокировки доступны только роли управления пользователями/u,
+  );
+  assert.match(
+    security,
+    /canManageUsers[\s\S]*activeUserBlocks/u,
+  );
 });
 
 test('technical settings are collapsed and raw values get human-readable companions', async () => {
@@ -217,7 +237,14 @@ test('technical settings are collapsed and raw values get human-readable compani
   assert.match(html, /<summary>Тонкая настройка загрузки<\/summary>/);
   assert.match(html, /<summary>Тонкая настройка источника<\/summary>/);
   assert.match(html, /<summary>Вставить JSON вручную<\/summary>/);
-  assert.match(security, /Тонкая настройка блокировок, сессий и аудита/);
+  assert.match(
+    security,
+    /Метрики и тайминги/u,
+  );
+  assert.match(
+    security,
+    /Политика блокировок/u,
+  );
 
   assert.match(html, /data-human-unit="bytes"/);
   assert.match(html, /data-human-unit="milliseconds"/);
