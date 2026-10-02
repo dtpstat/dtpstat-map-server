@@ -52,9 +52,9 @@ if (typeof document !== 'undefined') {
           </p>
 
           <form id="project-settings-form">
-            <div class="form-fields project-settings-grid">
-              <section class="project-settings-page" id="project-settings-general"
-                       role="tabpanel" data-project-settings-panel="general">
+            <div class="form-fields project-settings-grid"
+                 id="project-settings-panels">
+              <template data-project-settings-source="general">
               <label>Название проекта
                 <input name="projectName" type="text" maxlength="160" required
                        placeholder="Например: Выделенные полосы в России">
@@ -94,7 +94,7 @@ if (typeof document !== 'undefined') {
                 </div>
               </section>
 
-              </section>
+              </template>
 
               <section class="project-settings-page" id="project-settings-map"
                        role="tabpanel" data-project-settings-panel="map" hidden>
@@ -202,8 +202,7 @@ if (typeof document !== 'undefined') {
 
               </section>
 
-              <section class="project-settings-page" id="project-settings-metadata"
-                       role="tabpanel" data-project-settings-panel="metadata" hidden>
+              <template data-project-settings-source="metadata">
               <label>Ключевые слова
                 <textarea name="keywords" rows="5"
                           placeholder="выделенные полосы\nобщественный транспорт\nрейтинг городов"></textarea>
@@ -237,10 +236,9 @@ if (typeof document !== 'undefined') {
                 </div>
               </section>
 
-              </section>
+              </template>
 
-              <section class="project-settings-page" id="project-settings-footer"
-                       role="tabpanel" data-project-settings-panel="footer" hidden>
+              <template data-project-settings-source="footer">
               <label>Информационный блок / подвал — HTML
                 <div class="project-settings-toolbar" id="project-html-toolbar" aria-label="Готовые HTML-стили">
                   <button type="button" data-project-snippet="h2">H2</button>
@@ -263,7 +261,7 @@ if (typeof document !== 'undefined') {
                 <div><strong>Стили проекта:</strong> <code id="project-allowed-classes">загрузка…</code></div>
                 <div>Inline style, script, iframe, обработчики событий и неизвестные классы сервер не принимает.</div>
               </div>
-              </section>
+              </template>
             </div>
             <button class="task-action" type="submit" data-project-settings-submit>Сохранить настройки проекта</button>
           </form>
@@ -356,6 +354,28 @@ if (typeof document !== 'undefined') {
         definition:
           projectLayout?.tabs,
       });
+
+      for (
+        const source of
+        form.querySelectorAll(
+          'template[data-project-settings-source]',
+        )
+      ) {
+        const key =
+          source.dataset
+            .projectSettingsSource;
+        const target =
+          form.querySelector(
+            `[data-project-settings-panel="${key}"]`,
+          );
+        if (target) {
+          target.append(
+            source.content,
+          );
+        }
+        source.remove();
+      }
+
       const projectTabs =
         setupAdminTabGroup({
           root: form,
