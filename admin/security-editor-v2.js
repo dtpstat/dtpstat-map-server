@@ -360,34 +360,27 @@ if (host && (canManageUsers || canViewAudit || canManageSecurity)) {
   let auditDetailMode = 'tree';
   const jsonBranchRenderers = new WeakMap();
 
-  const securityTabs =
-    setupAdminTabGroup({
-      root: host,
-      definition:
-        adminSecurityLayout.tabs,
-      readState:
-        readTabState,
-      writeState:
-        writeTabState,
-      onSelect:
-        (key) => {
-          if (key === 'audit') {
-            void loadAudit();
-          }
-          if (key === 'security') {
-            void Promise.all([
-              loadSettings(),
-              loadIpBlocks(),
-            ]);
-          }
-        },
-    });
-
-  function selectTab(key) {
-    securityTabs?.select(
-      key,
-    );
-  }
+  setupAdminTabGroup({
+    root: host,
+    definition:
+      adminSecurityLayout.tabs,
+    readState:
+      readTabState,
+    writeState:
+      writeTabState,
+    onSelect:
+      (key) => {
+        if (key === 'audit') {
+          void loadAudit();
+        }
+        if (key === 'security') {
+          void Promise.all([
+            loadSettings(),
+            loadIpBlocks(),
+          ]);
+        }
+      },
+  });
 
   function showTemporaryPassword(password, username) {
     const overlay = host.querySelector('#security-secret-overlay');
