@@ -73,6 +73,7 @@ test('admin interface loads editors and helpers explicitly without transitive si
     layout,
     layoutSchema,
     editor,
+    transferEditor,
     downloadEditor,
     notices,
     branding,
@@ -83,6 +84,7 @@ test('admin interface loads editors and helpers explicitly without transitive si
     source('admin/admin-layout.js'),
     source('admin/admin-layout-schema.js'),
     source('admin/project-settings-editor.js'),
+    source('admin/project-transfer-editor.js'),
     source('admin/public-download-name-editor.js'),
     source('admin/task-notices.js'),
     source('admin/project-branding.js'),
@@ -115,6 +117,18 @@ test('admin interface loads editors and helpers explicitly without transitive si
   assert.match(
     layoutSchema,
     /id:\s*'map'[\s\S]*elementId:[\s\S]*'operation-map-settings'[\s\S]*hostId:[\s\S]*'map-settings-editor-host'/u,
+  );
+  assert.match(
+    layoutSchema,
+    /id:\s*'project-transfer'[\s\S]*permission:[\s\S]*'superuser'[\s\S]*hostId:[\s\S]*'project-transfer-editor-host'/u,
+  );
+  assert.match(
+    transferEditor,
+    /#project-transfer-editor-host/u,
+  );
+  assert.doesNotMatch(
+    transferEditor,
+    /interface-tabs|interface-panels|dataset\.interfaceTab|dataset\.interfacePanel/u,
   );
   assert.match(
     editor,
