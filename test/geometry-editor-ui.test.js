@@ -1856,13 +1856,40 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
     styles,
     /\.geometry-discussion-avatar > \[hidden\][\s\S]*display: none/u,
   );
+  const avatarUrlBranchStart =
+    script.indexOf(
+      'if (avatarUrl) {',
+    );
+  const avatarUrlBranchEnd =
+    script.indexOf(
+      'return wrapper;',
+      avatarUrlBranchStart,
+    );
+  assert.ok(
+    avatarUrlBranchStart >= 0 &&
+    avatarUrlBranchEnd >
+      avatarUrlBranchStart,
+  );
+  const avatarUrlBranch =
+    script.slice(
+      avatarUrlBranchStart,
+      avatarUrlBranchEnd,
+    );
   assert.match(
-    script,
-    /if \(avatarUrl\) \{[\s\S]*wrapper\.className =[\s\S]*className[\s\S]*fallback\.className =[\s\S]*geometry-discussion-avatar-fallback[\s\S]*image\.className =[\s\S]*geometry-discussion-avatar-image/u,
+    avatarUrlBranch,
+    /wrapper\.className =[\s\S]*className/u,
+  );
+  assert.match(
+    avatarUrlBranch,
+    /fallback\.className =[\s\S]*geometry-discussion-avatar-fallback/u,
+  );
+  assert.match(
+    avatarUrlBranch,
+    /image\.className =[\s\S]*geometry-discussion-avatar-image/u,
   );
   assert.doesNotMatch(
-    script,
-    /if \(avatarUrl\) \{[\s\S]{0,1400}fallback\.className =[\s\S]{0,180}className \+/u,
+    avatarUrlBranch,
+    /fallback\.className =[\s\S]{0,180}className \+/u,
   );
   assert.doesNotMatch(
     script,
