@@ -201,6 +201,22 @@ test('interface settings expose point type CRUD and safe icon controls', async (
     styles,
     /\.point-type-settings-grid/u,
   );
+  assert.match(
+    styles,
+    /@container admin-layout-block \(max-width: 68rem\)/u,
+  );
+  assert.match(
+    styles,
+    /@container admin-layout-block \(max-width: 48rem\)/u,
+  );
+  assert.match(
+    styles,
+    /@container admin-layout-block \(max-width: 30rem\)/u,
+  );
+  assert.doesNotMatch(
+    styles,
+    /@media \(max-width:\s*(1100|760|480)px\)/u,
+  );
 });
 
 test('geometry editor assigns point types through the existing local draft flow', async () => {
