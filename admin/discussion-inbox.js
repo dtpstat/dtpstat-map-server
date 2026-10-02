@@ -345,6 +345,7 @@ if (
       messages: [],
       loadingInbox: false,
       loadingThread: false,
+      threadRequestSequence: 0,
       refreshTimer: null,
     };
 
@@ -955,18 +956,30 @@ if (
             true,
       } = {},
     ) {
-      if (
-        state.loadingThread ||
-        !item
-      ) {
+      if (!item) {
         return;
       }
+
+      const itemKey =
+        keyFor(item);
+      const requestSequence =
+        ++state
+          .threadRequestSequence;
 
       state.loadingThread =
         true;
 
       try {
         if (!item.subjectExists) {
+          if (
+            requestSequence !==
+              state.threadRequestSequence ||
+            state.selectedKey !==
+              itemKey
+          ) {
+            return;
+          }
+
           state.messages = [];
           renderThread(
             item,
@@ -980,6 +993,15 @@ if (
               item,
             ),
           );
+
+        if (
+          requestSequence !==
+            state.threadRequestSequence ||
+          state.selectedKey !==
+            itemKey
+        ) {
+          return;
+        }
 
         state.messages =
           Array.isArray(
@@ -1003,19 +1025,41 @@ if (
             item,
             last.id,
           );
+
+          if (
+            requestSequence !==
+              state.threadRequestSequence ||
+            state.selectedKey !==
+              itemKey
+          ) {
+            return;
+          }
+
           await loadInbox({
             keepSelection:
               true,
           });
         }
       } catch (error) {
-        setStatus(
-          error.message,
-          'error',
-        );
+        if (
+          requestSequence ===
+            state.threadRequestSequence &&
+          state.selectedKey ===
+            itemKey
+        ) {
+          setStatus(
+            error.message,
+            'error',
+          );
+        }
       } finally {
-        state.loadingThread =
-          false;
+        if (
+          requestSequence ===
+          state.threadRequestSequence
+        ) {
+          state.loadingThread =
+            false;
+        }
       }
     }
 
@@ -1103,6 +1147,19 @@ if (
           'osm-boundary-discussions';
 
       if (!relevant) return;
+
+      if (
+        change?.action ===
+          'read' &&
+        Number(
+          change.readerUserId,
+        ) ===
+        Number(
+          currentUser.id,
+        )
+      ) {
+        return;
+      }
 
       clearTimeout(
         state.refreshTimer,
