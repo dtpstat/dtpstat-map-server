@@ -452,6 +452,14 @@ export const adminSecurityLayout = {
       'data-security-tab',
     panelAttribute:
       'data-security-panel',
+    tabsHostId:
+      'security-tabs',
+    tabsClass:
+      'security-tabs',
+    ariaLabel:
+      'Безопасность',
+    panelIdPrefix:
+      'security-panel-',
     items: [
       {
         id: 'users',
