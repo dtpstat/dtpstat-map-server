@@ -146,6 +146,18 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
     /@media \(max-width:\s*1000px\)[\s\S]*\.security-master-detail/u,
   );
 
+  assert.match(
+    securityCss,
+    /#security-settings-panels[\s\S]*flex:\s*1 1 auto/u,
+  );
+  assert.match(
+    securityCss,
+    /\.security-block-table[\s\S]*min-width:\s*48rem/u,
+  );
+  assert.match(
+    securityCss,
+    /@container admin-layout-block \(max-width: 48rem\)[\s\S]*\.security-block-policy fieldset[\s\S]*\.security-block-summary-heading/u,
+  );
   assert.match(securityCss, /\.security-audit-filter-panel/);
   assert.match(securityCss, /\.security-audit-filter[\s\S]*grid-template-columns:\s*repeat\(4/);
   assert.match(profile, /profile-avatar-upload-label/);
