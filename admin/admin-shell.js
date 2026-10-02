@@ -31,9 +31,25 @@ function canEditGeometries(user) {
   return Boolean(user?.isSuperuser || user?.canEditGeometries);
 }
 
+function canAccessUsersAudit(user) {
+  return Boolean(
+    user?.isSuperuser ||
+    user?.canManageUsers ||
+    user?.canViewAudit,
+  );
+}
+
 function canAccessSecurity(user) {
   return Boolean(
-    user?.isSuperuser || user?.canManageUsers || user?.canViewAudit || user?.canManageSecurity,
+    canAccessUsersAudit(user) ||
+    user?.canManageSecurity,
+  );
+}
+
+function canManageSecuritySettings(user) {
+  return Boolean(
+    user?.isSuperuser ||
+    user?.canManageSecurity,
   );
 }
 
@@ -202,7 +218,12 @@ function setupPrimarySections(
     geometries: !restricted && canEditGeometries(user),
     'osm-objects': !restricted && canEditOsm(user),
     interface: !restricted && canManageInterface(user),
-    security: !restricted && canAccessSecurity(user),
+    'users-audit':
+      !restricted &&
+      canAccessUsersAudit(user),
+    security:
+      !restricted &&
+      canManageSecuritySettings(user),
     messages:
       !restricted &&
       (
@@ -225,6 +246,7 @@ function setupPrimarySections(
     'geometries',
     'osm-objects',
     'interface',
+    'users-audit',
     'security',
     'messages',
     'profile',
@@ -243,7 +265,16 @@ function setupPrimarySections(
     if (connection) {
       connection.hidden = !['data', 'geometries', 'osm-objects'].includes(key);
     }
-    if (key === 'security') window.dispatchEvent(new CustomEvent('dtpstat:security-refresh'));
+    if (
+      key === 'users-audit' ||
+      key === 'security'
+    ) {
+      window.dispatchEvent(
+        new CustomEvent(
+          'dtpstat:security-refresh',
+        ),
+      );
+    }
     if (key === 'geometries') {
       window.dispatchEvent(new CustomEvent('dtpstat:geometry-editor-open'));
     }
