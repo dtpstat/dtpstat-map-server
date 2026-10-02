@@ -4,7 +4,7 @@ import {
   createServerRuntime,
 } from '../src/application/server-runtime.js';
 
-test('server runtime exposes explicit bootstrap app and admin dependency slices', () => {
+test('server runtime exposes explicit bootstrap app and admin dependency slices', async () => {
   const calls = [];
   const pool = {
     name: 'pool',
