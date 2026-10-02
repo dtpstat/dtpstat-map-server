@@ -356,11 +356,26 @@ body.security-modal-open { overflow: hidden; }
   .security-audit-table-wrap { height: auto; max-height: 55vh; }
 }
 
+@container admin-layout-block (max-width: 62rem) {
+  .security-master-detail {
+    grid-template-columns: 1fr;
+  }
+
+  .security-users-master {
+    max-height: 20rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .security-user-detail {
+    max-height: none;
+  }
+}
+
 @media (max-width: 1000px) {
-  .security-master-detail { grid-template-columns: 1fr; }
-  .security-users-master { max-height: 20rem; border-right: 0; border-bottom: 1px solid var(--line); }
-  .security-user-detail { max-height: none; }
-  #security-panel-audit:not([hidden]) { height: auto; }
+  #security-panel-audit:not([hidden]) {
+    height: auto;
+  }
 }
 
 @container admin-layout-block (max-width: 64rem) {
@@ -372,9 +387,21 @@ body.security-modal-open { overflow: hidden; }
 @media (max-width: 650px) {
   .security-audit-detail-dialog { width: 100%; height: 96vh; border-radius: 10px; }
   .security-audit-detail-toolbar-spacer { display: none; }
-  .security-detail-fields,.security-role-grid { grid-template-columns: 1fr; }
-  .security-inline-block-form { grid-template-columns: 1fr; }
-  .security-user-detail-heading { flex-direction: column; }
+}
+
+@container admin-layout-block (max-width: 40rem) {
+  .security-detail-fields,
+  .security-role-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .security-inline-block-form {
+    grid-template-columns: 1fr;
+  }
+
+  .security-user-detail-heading {
+    flex-direction: column;
+  }
 }
 
 @container admin-layout-block (max-width: 40rem) {
