@@ -3,61 +3,53 @@ import { adminConfirm } from './admin-dialog.js';
 const session = await globalThis.dtpstatAdminSession?.catch(() => null);
 
 if (session?.user?.isSuperuser) {
-  const tabs = document.querySelector('#interface-tabs');
-  const panels = document.querySelector('#interface-panels');
-  if (tabs && panels && !document.querySelector('[data-interface-tab="project-transfer"]')) {
-    const tab = document.createElement('button');
-    tab.className = 'task-tab';
-    tab.type = 'button';
-    tab.role = 'tab';
-    tab.dataset.interfaceTab = 'project-transfer';
-    tab.id = 'interface-tab-project-transfer';
-    tab.setAttribute('aria-selected', 'false');
-    tab.setAttribute('aria-controls', 'interface-panel-project-transfer');
-    tab.textContent = 'Импорт / экспорт проекта';
-    tabs.append(tab);
+  const host =
+    document.querySelector(
+      '#project-transfer-editor-host',
+    );
 
-    const panel = document.createElement('article');
-    panel.className = 'task-panel interface-task-panel';
-    panel.id = 'interface-panel-project-transfer';
-    panel.role = 'tabpanel';
-    panel.dataset.interfacePanel = 'project-transfer';
-    panel.setAttribute('aria-labelledby', tab.id);
-    panel.hidden = true;
-    panel.innerHTML = `
-      <h3>Импорт / экспорт настроек проекта</h3>
-      <p class="panel-description">Суперадминский перенос настроек интерфейса, аналитики, типов линий и политики безопасности. Пользователи, пароли, сессии, аудит, данные городов и секреты ENV не переносятся.</p>
-      <section class="operation-panel transfer-mode">
-        <div class="mode-heading">
-          <div>
-            <h4>Экспорт</h4>
-            <p>Versioned JSON для переноса конфигурации между экземплярами.</p>
-          </div>
-          <a class="secondary-link" href="/api/admin/settings/export" download="project-settings.json">Выгрузить настройки</a>
+  if (
+    host &&
+    !host.querySelector(
+      '#project-settings-transfer-form',
+    )
+  ) {
+    host.innerHTML = `
+      <div class="mode-heading">
+        <div>
+          <h4>Экспорт</h4>
+          <p>Versioned JSON для переноса конфигурации между экземплярами.</p>
         </div>
-      </section>
-      <section class="operation-panel transfer-mode">
-        <div class="mode-heading">
-          <div>
-            <h4>Импорт</h4>
-            <p>Файл полностью валидируется до commit. REPORT_CONFIG пересчитывается на данных принимающего экземпляра.</p>
-          </div>
+        <a class="secondary-link" href="/api/admin/settings/export" download="project-settings.json">Выгрузить настройки</a>
+      </div>
+
+      <div class="project-transfer-divider"></div>
+
+      <div class="mode-heading">
+        <div>
+          <h4>Импорт</h4>
+          <p>Файл полностью валидируется до commit. REPORT_CONFIG пересчитывается на данных принимающего экземпляра.</p>
         </div>
-        <form id="project-settings-transfer-form">
-          <div class="form-fields">
-            <label>Файл настроек проекта
-              <input name="file" type="file" accept=".json,application/json" required>
-            </label>
-          </div>
-          <button type="submit">Импортировать настройки</button>
-        </form>
-        <p class="notice" id="project-settings-transfer-message" role="status"></p>
-      </section>
+      </div>
+      <form id="project-settings-transfer-form">
+        <div class="form-fields">
+          <label>Файл настроек проекта
+            <input name="file" type="file" accept=".json,application/json" required>
+          </label>
+        </div>
+        <button type="submit">Импортировать настройки</button>
+      </form>
+      <p class="notice" id="project-settings-transfer-message" role="status"></p>
     `;
-    panels.append(panel);
 
-    const form = panel.querySelector('#project-settings-transfer-form');
-    const message = panel.querySelector('#project-settings-transfer-message');
+    const form =
+      host.querySelector(
+        '#project-settings-transfer-form',
+      );
+    const message =
+      host.querySelector(
+        '#project-settings-transfer-message',
+      );
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!form.reportValidity()) return;
