@@ -346,6 +346,7 @@ if (
       loadingInbox: false,
       loadingThread: false,
       threadRequestSequence: 0,
+      readObserver: null,
       refreshTimer: null,
     };
 
@@ -585,6 +586,11 @@ if (
           own
             ? 'is-own'
             : 'is-incoming'
+        );
+
+      article.dataset.messageId =
+        String(
+          entry.id,
         );
 
       const body =
@@ -873,10 +879,6 @@ if (
             await Promise.all([
               loadThread(
                 item,
-                {
-                  markRead:
-                    false,
-                },
               ),
               loadInbox({
                 keepSelection:
@@ -912,14 +914,253 @@ if (
         },
       );
 
+      state.readObserver
+        ?.disconnect();
+      state.readObserver =
+        null;
+
       threadHost.replaceChildren(
         header,
         messages,
         form,
       );
 
-      messages.scrollTop =
-        messages.scrollHeight;
+      const incoming =
+        state.messages.filter(
+          (entry) =>
+            Number(
+              entry.author?.userId,
+            ) !==
+            Number(
+              currentUser.id,
+            ),
+        );
+      const unreadCount =
+        Math.max(
+          0,
+          Math.min(
+            Number(
+              item.unreadCount ??
+              0,
+            ),
+            incoming.length,
+          ),
+        );
+      const unreadIds =
+        incoming
+          .slice(
+            incoming.length -
+            unreadCount,
+          )
+          .map(
+            (entry) =>
+              Number(
+                entry.id,
+              ),
+          )
+          .filter(
+            Number.isSafeInteger,
+          );
+
+      if (
+        unreadIds.length ===
+        0
+      ) {
+        messages.scrollTop =
+          messages.scrollHeight;
+        return;
+      }
+
+      const unreadSet =
+        new Set(
+          unreadIds,
+        );
+      const seen =
+        new Set();
+      let committedIndex =
+        -1;
+      let requestedIndex =
+        -1;
+      let committing =
+        false;
+
+      const flushReadState =
+        async () => {
+          if (committing) {
+            return;
+          }
+
+          let contiguous =
+            committedIndex;
+          while (
+            contiguous + 1 <
+              unreadIds.length &&
+            seen.has(
+              unreadIds[
+                contiguous + 1
+              ],
+            )
+          ) {
+            contiguous += 1;
+          }
+
+          if (
+            contiguous <=
+            committedIndex
+          ) {
+            return;
+          }
+
+          requestedIndex =
+            Math.max(
+              requestedIndex,
+              contiguous,
+            );
+          committing =
+            true;
+
+          try {
+            while (
+              requestedIndex >
+              committedIndex
+            ) {
+              const targetIndex =
+                requestedIndex;
+              await markRead(
+                item,
+                unreadIds[
+                  targetIndex
+                ],
+              );
+              committedIndex =
+                targetIndex;
+
+              let next =
+                committedIndex;
+              while (
+                next + 1 <
+                  unreadIds.length &&
+                seen.has(
+                  unreadIds[
+                    next + 1
+                  ],
+                )
+              ) {
+                next += 1;
+              }
+              requestedIndex =
+                Math.max(
+                  requestedIndex,
+                  next,
+                );
+            }
+
+            await loadInbox({
+              keepSelection:
+                true,
+            });
+          } catch (error) {
+            setStatus(
+              error.message,
+              'error',
+            );
+          } finally {
+            committing =
+              false;
+          }
+        };
+
+      state.readObserver =
+        new IntersectionObserver(
+          (entries) => {
+            let changed =
+              false;
+
+            for (
+              const observed of
+              entries
+            ) {
+              if (
+                !observed.isIntersecting ||
+                observed.intersectionRatio <
+                  0.6
+              ) {
+                continue;
+              }
+
+              const messageId =
+                Number(
+                  observed.target
+                    .dataset
+                    .messageId,
+                );
+              if (
+                !unreadSet.has(
+                  messageId,
+                ) ||
+                seen.has(
+                  messageId,
+                )
+              ) {
+                continue;
+              }
+
+              seen.add(
+                messageId,
+              );
+              changed =
+                true;
+            }
+
+            if (changed) {
+              void flushReadState();
+            }
+          },
+          {
+            root: messages,
+            threshold: [0.6],
+          },
+        );
+
+      for (
+        const article of
+        messages.querySelectorAll(
+          '.profile-discussion-message.is-incoming',
+        )
+      ) {
+        const messageId =
+          Number(
+            article.dataset
+              .messageId,
+          );
+        if (
+          unreadSet.has(
+            messageId,
+          )
+        ) {
+          state.readObserver
+            .observe(
+              article,
+            );
+        }
+      }
+
+      const firstUnread =
+        messages.querySelector(
+          '[data-message-id="' +
+          unreadIds[0] +
+          '"]',
+        );
+
+      if (firstUnread) {
+        messages.scrollTop =
+          Math.max(
+            0,
+            firstUnread.offsetTop -
+              messages.offsetTop -
+              8,
+          );
+      }
     }
 
     async function markRead(
@@ -1014,32 +1255,7 @@ if (
           item,
         );
 
-        const last =
-          state.messages.at(-1);
-
-        if (
-          shouldMarkRead &&
-          last?.id
-        ) {
-          await markRead(
-            item,
-            last.id,
-          );
-
-          if (
-            requestSequence !==
-              state.threadRequestSequence ||
-            state.selectedKey !==
-              itemKey
-          ) {
-            return;
-          }
-
-          await loadInbox({
-            keepSelection:
-              true,
-          });
-        }
+        void shouldMarkRead;
       } catch (error) {
         if (
           requestSequence ===
