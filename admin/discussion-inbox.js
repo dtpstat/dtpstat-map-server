@@ -1191,11 +1191,6 @@ if (
 
     async function loadThread(
       item,
-      {
-        markRead:
-          shouldMarkRead =
-            true,
-      } = {},
     ) {
       if (!item) {
         return;
@@ -1254,8 +1249,6 @@ if (
         renderThread(
           item,
         );
-
-        void shouldMarkRead;
       } catch (error) {
         if (
           requestSequence ===
