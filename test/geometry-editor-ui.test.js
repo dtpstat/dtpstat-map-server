@@ -1856,9 +1856,13 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
     styles,
     /\.geometry-discussion-avatar > \[hidden\][\s\S]*display: none/u,
   );
+  assert.match(
+    script,
+    /if \(avatarUrl\) \{[\s\S]*wrapper\.className =[\s\S]*className[\s\S]*fallback\.className =[\s\S]*geometry-discussion-avatar-fallback[\s\S]*image\.className =[\s\S]*geometry-discussion-avatar-image/u,
+  );
   assert.doesNotMatch(
     script,
-    /fallback\.className =[\s\S]{0,180}className \+[\s\S]{0,180}geometry-discussion-avatar-fallback/u,
+    /if \(avatarUrl\) \{[\s\S]{0,1400}fallback\.className =[\s\S]{0,180}className \+/u,
   );
   assert.doesNotMatch(
     script,
