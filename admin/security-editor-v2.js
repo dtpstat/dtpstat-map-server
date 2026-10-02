@@ -1831,39 +1831,313 @@ if (
       }
     });
 
-  function ipBlockCard(block) {
-    const row = document.createElement('article');
-    row.className = 'security-ip-block-row';
-    row.innerHTML = `
-      <div><strong></strong><div class="security-muted"></div></div>
-      <button type="button" class="secondary">Разблокировать</button>
-    `;
-    row.querySelector('strong').textContent = block.ipAddress;
-    row.querySelector('.security-muted').textContent = [
-      block.expiresAt ? `до ${formatDate(block.expiresAt)}` : 'бессрочно',
-      block.reason ?? '',
-    ].filter(Boolean).join(' · ');
-    row.querySelector('button').addEventListener('click', async () => {
-      try {
-        await api(`/api/admin/security/ip-blocks/${block.id}`, { method: 'DELETE' });
-        await loadIpBlocks();
-      } catch (error) {
-        setMessage(document.querySelector('#security-ip-message'), error.message, 'error');
-      }
-    });
+  let activeIpBlocks = [];
+
+  function activeUserBlocks() {
+    if (!canManageUsers) {
+      return [];
+    }
+
+    const now =
+      Date.now();
+
+    return [
+      ...userById.values(),
+    ].filter(
+      (user) =>
+        user.isBlocked ||
+        (
+          user.lockedUntil &&
+          new Date(
+            user.lockedUntil,
+          ).valueOf() >
+            now
+        ),
+    );
+  }
+
+  function blockFilterValue() {
+    return String(
+      document.querySelector(
+        '#security-block-filter',
+      )?.value ??
+      '',
+    )
+      .trim()
+      .toLocaleLowerCase(
+        'ru-RU',
+      );
+  }
+
+  function blockRow({
+    type,
+    object,
+    until,
+    reason,
+    onUnblock,
+  }) {
+    const row =
+      document.createElement(
+        'tr',
+      );
+    const values = [
+      type,
+      object,
+      until,
+      reason,
+    ];
+    for (const value of values) {
+      const cell =
+        document.createElement(
+          'td',
+        );
+      cell.textContent =
+        value || '—';
+      row.append(cell);
+    }
+
+    const action =
+      document.createElement(
+        'td',
+      );
+    const button =
+      document.createElement(
+        'button',
+      );
+    button.type =
+      'button';
+    button.className =
+      'secondary';
+    button.textContent =
+      'Разблокировать';
+    button.addEventListener(
+      'click',
+      () =>
+        void onUnblock(),
+    );
+    action.append(
+      button,
+    );
+    row.append(
+      action,
+    );
     return row;
   }
 
+  function renderBlockSummary() {
+    const body =
+      document.querySelector(
+        '#security-blocks-body',
+      );
+    if (!body) return;
+
+    const query =
+      blockFilterValue();
+    const rows = [];
+
+    for (
+      const user of
+      activeUserBlocks()
+    ) {
+      const until =
+        user.manualBlockedUntil ??
+        user.lockedUntil ??
+        null;
+      const reason =
+        user.manualBlockReason ??
+        (
+          user.isBlocked
+            ? 'Ручная блокировка пользователя'
+            : 'Автоматическая блокировка входа'
+        );
+      const search =
+        [
+          'user',
+          user.username,
+          user.displayName,
+          user.email,
+          reason,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLocaleLowerCase(
+            'ru-RU',
+          );
+      if (
+        query &&
+        !search.includes(
+          query,
+        )
+      ) {
+        continue;
+      }
+
+      rows.push(
+        blockRow({
+          type: 'USER',
+          object:
+            user.displayName &&
+            user.displayName !==
+              user.username
+              ? user.displayName +
+                ' (@' +
+                user.username +
+                ')'
+              : '@' +
+                user.username,
+          until:
+            until
+              ? formatDate(
+                until,
+              )
+              : 'бессрочно',
+          reason,
+          onUnblock:
+            async () => {
+              try {
+                await api(
+                  '/api/admin/security/users/' +
+                  encodeURIComponent(
+                    user.id,
+                  ) +
+                  '/unblock',
+                  {
+                    method:
+                      'POST',
+                  },
+                );
+                await loadUsers(
+                  selectedUserId,
+                );
+                renderBlockSummary();
+              } catch (error) {
+                setMessage(
+                  document.querySelector(
+                    '#security-blocks-message',
+                  ),
+                  error.message,
+                  'error',
+                );
+              }
+            },
+        }),
+      );
+    }
+
+    for (
+      const block of
+      activeIpBlocks
+    ) {
+      const search =
+        [
+          'ip',
+          block.ipAddress,
+          block.reason,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLocaleLowerCase(
+            'ru-RU',
+          );
+      if (
+        query &&
+        !search.includes(
+          query,
+        )
+      ) {
+        continue;
+      }
+
+      rows.push(
+        blockRow({
+          type: 'IP',
+          object:
+            block.ipAddress,
+          until:
+            block.expiresAt
+              ? formatDate(
+                block.expiresAt,
+              )
+              : 'бессрочно',
+          reason:
+            block.reason,
+          onUnblock:
+            async () => {
+              try {
+                await api(
+                  '/api/admin/security/ip-blocks/' +
+                  encodeURIComponent(
+                    block.id,
+                  ),
+                  {
+                    method:
+                      'DELETE',
+                  },
+                );
+                await loadIpBlocks();
+              } catch (error) {
+                setMessage(
+                  document.querySelector(
+                    '#security-blocks-message',
+                  ),
+                  error.message,
+                  'error',
+                );
+              }
+            },
+        }),
+      );
+    }
+
+    body.replaceChildren(
+      ...rows,
+    );
+    setMessage(
+      document.querySelector(
+        '#security-blocks-message',
+      ),
+      'Активных блокировок: ' +
+      rows.length,
+    );
+  }
+
   async function loadIpBlocks() {
-    if (!canManageSecurity) return;
+    if (!canManageSecurity) {
+      return;
+    }
+
     try {
-      const payload = await api('/api/admin/security/ip-blocks');
-      document.querySelector('#security-ip-blocks').replaceChildren(...payload.blocks.map(ipBlockCard));
-      setMessage(document.querySelector('#security-ip-message'), `Активных блокировок: ${payload.blocks.length}`);
+      const payload =
+        await api(
+          '/api/admin/security/ip-blocks',
+        );
+      activeIpBlocks =
+        payload.blocks ?? [];
+      setMessage(
+        document.querySelector(
+          '#security-ip-message',
+        ),
+        'Активных IP-блокировок: ' +
+        activeIpBlocks.length,
+      );
+      renderBlockSummary();
     } catch (error) {
-      setMessage(document.querySelector('#security-ip-message'), error.message, 'error');
+      setMessage(
+        document.querySelector(
+          '#security-ip-message',
+        ),
+        error.message,
+        'error',
+      );
     }
   }
+
+  document.querySelector(
+    '#security-block-filter',
+  )?.addEventListener(
+    'input',
+    renderBlockSummary,
+  );
 
   document.querySelector('#security-ip-block-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
