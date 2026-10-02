@@ -597,6 +597,63 @@ export function ensureAdminTabGroup({
     }
   }
 
+  if (
+    definition.panelsHostId &&
+    definition.panelAttribute
+  ) {
+    const panelsHost =
+      root.querySelector(
+        `#${definition.panelsHostId}`,
+      );
+
+    if (panelsHost) {
+      for (
+        const item of
+        definition.items
+      ) {
+        const selector =
+          `[${definition.panelAttribute}="${item.id}"]`;
+        if (
+          panelsHost.querySelector(
+            selector,
+          )
+        ) {
+          continue;
+        }
+
+        const panel =
+          document.createElement(
+            'section',
+          );
+        panel.role =
+          'tabpanel';
+        panel.hidden =
+          true;
+        panel.setAttribute(
+          definition.panelAttribute,
+          item.id,
+        );
+        if (
+          definition.panelClass
+        ) {
+          appendClassNames(
+            panel,
+            definition.panelClass,
+          );
+        }
+        if (
+          definition.panelIdPrefix
+        ) {
+          panel.id =
+            `${definition.panelIdPrefix}${item.id}`;
+        }
+        panelsHost.append(
+          panel,
+        );
+      }
+    }
+  }
+
   return host;
 }
 
