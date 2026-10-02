@@ -174,6 +174,10 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
     schema,
     /id:\s*'report'[\s\S]*tabs:[\s\S]*stateKey:[\s\S]*'report-view'[\s\S]*activeClass:[\s\S]*'is-active'/u,
   );
+  assert.match(
+    schema,
+    /id:\s*'report'[\s\S]*tabClass:[\s\S]*'report-view-tab'/u,
+  );
   for (
     const hostId of [
       'report-metrics-view-host',
@@ -300,6 +304,10 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
   assert.match(
     engine,
     /definition\.items[\s\S]*document\.createElement\([\s\S]*'button'/u,
+  );
+  assert.match(
+    engine,
+    /definition\.tabClass[\s\S]*appendClassNames/u,
   );
   assert.match(
     engine,
