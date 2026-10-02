@@ -468,22 +468,16 @@ if (
         usersAuditHost,
       definition:
         securityTabDefinition,
-    readState:
-      readTabState,
-    writeState:
-      writeTabState,
-    onSelect:
-      (key) => {
-        if (key === 'audit') {
-          void loadAudit();
-        }
-        if (key === 'security') {
-          void Promise.all([
-            loadSettings(),
-            loadIpBlocks(),
-          ]);
-        }
-      },
+      readState:
+        readTabState,
+      writeState:
+        writeTabState,
+      onSelect:
+        (key) => {
+          if (key === 'audit') {
+            void loadAudit();
+          }
+        },
     });
   }
 
@@ -1588,9 +1582,32 @@ if (
 
   if (canManageUsers) await loadUsers();
   if (canViewAudit) await loadAuditFacets();
-  window.addEventListener('dtpstat:security-refresh', () => {
-    if (canManageUsers) void loadUsers(selectedUserId);
-    if (canViewAudit) void loadAudit();
-    if (canManageSecurity) void loadIpBlocks();
-  });
+
+  window.addEventListener(
+    'dtpstat:users-audit-refresh',
+    () => {
+      if (canManageUsers) {
+        void loadUsers(
+          selectedUserId,
+        );
+      }
+      if (canViewAudit) {
+        void loadAudit();
+      }
+    },
+  );
+
+  window.addEventListener(
+    'dtpstat:security-refresh',
+    () => {
+      if (!canManageSecurity) {
+        return;
+      }
+
+      void Promise.all([
+        loadSettings(),
+        loadIpBlocks(),
+      ]);
+    },
+  );
 }
