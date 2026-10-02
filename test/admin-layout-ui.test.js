@@ -99,7 +99,11 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
   for (
     const hostId of [
       'project-settings-editor-host',
-      'map-settings-editor-host',
+      'map-city-category-host',
+      'map-display-host',
+      'map-history-host',
+      'map-city-marker-host',
+      'map-actions-host',
       'report-config-editor-host',
       'line-types-editor-host',
       'point-types-editor-host',
@@ -140,6 +144,27 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
   assert.match(
     schema,
     /id:\s*'map'[\s\S]*elementId:[\s\S]*'operation-map-settings'/u,
+  );
+  for (
+    const [id, wide] of [
+      ['map-city-category', 6],
+      ['map-display', 6],
+      ['map-history', 7],
+      ['map-city-marker', 5],
+      ['map-actions', 12],
+    ]
+  ) {
+    assert.match(
+      schema,
+      new RegExp(
+        `id:\\s*['"]${id}['"][\\s\\S]*wide:\\s*${wide}`,
+        'u',
+      ),
+    );
+  }
+  assert.doesNotMatch(
+    schema,
+    /map-settings-editor-host/u,
   );
   assert.match(
     schema,
