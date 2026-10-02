@@ -1,5 +1,59 @@
 export const adminDynamicSections = [
   {
+    id: 'users-audit',
+    title: 'Пользователи и аудит',
+    eyebrow: 'ДОСТУП И АУДИТ',
+    sectionClass:
+      'admin-security-users-audit-section',
+    cardClass:
+      'security-card',
+    blocks: [
+      {
+        id: 'security-users-audit',
+        hostId:
+          'security-users-audit-host',
+        span: {
+          base: 12,
+          wide: 12,
+        },
+        capabilities: {
+          fill: true,
+        },
+        placeholder:
+          'Загружаем пользователей и журнал…',
+      },
+    ],
+  },
+  {
+    id: 'security',
+    title: 'Безопасность',
+    eyebrow: 'ЗАЩИТА И ПОЛИТИКИ',
+    sectionClass:
+      'admin-security-settings-section',
+    cardClass:
+      'security-card',
+    blocks: [
+      {
+        id: 'security-settings',
+        hostId:
+          'security-settings-host',
+        span: {
+          base: 12,
+          wide: 8,
+        },
+      },
+      {
+        id: 'security-ip-blocks',
+        hostId:
+          'security-ip-host',
+        span: {
+          base: 12,
+          wide: 4,
+        },
+      },
+    ],
+  },
+  {
     id: 'messages',
     title: 'Сообщения',
     eyebrow: 'ОБСУЖДЕНИЯ',
@@ -486,32 +540,6 @@ export const adminSecurityLayout = {
             },
             capabilities: {
               fill: true,
-            },
-          },
-        ],
-      },
-      {
-        id: 'security',
-        title: 'Защита',
-        blocks: [
-          {
-            id:
-              'security-settings',
-            hostId:
-              'security-settings-host',
-            span: {
-              base: 12,
-              wide: 8,
-            },
-          },
-          {
-            id:
-              'security-ip-blocks',
-            hostId:
-              'security-ip-host',
-            span: {
-              base: 12,
-              wide: 4,
             },
           },
         ],
