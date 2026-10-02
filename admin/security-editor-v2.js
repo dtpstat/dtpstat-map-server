@@ -422,6 +422,30 @@ if (
     });
   }
 
+  if (
+    canManageSecurity &&
+    securityControlHost &&
+    !document.querySelector(
+      '#security-settings-status',
+    )
+  ) {
+    const status =
+      document.createElement(
+        'p',
+      );
+    status.id =
+      'security-settings-status';
+    status.className =
+      'security-message';
+    status.setAttribute(
+      'role',
+      'status',
+    );
+    securityControlHost.append(
+      status,
+    );
+  }
+
   const securityMetricsPanel =
     document.querySelector(
       '.security-metrics-panel',
@@ -1668,7 +1692,7 @@ if (
   async function loadSettings() {
     if (!canManageSecurity) return;
     const form = document.querySelector('#security-settings-form');
-    const message = document.querySelector('#security-settings-message');
+    const message = document.querySelector('#security-settings-status');
     try {
       const payload = await api('/api/admin/security/settings');
       for (const [key, value] of Object.entries(payload.settings)) {
@@ -1719,7 +1743,7 @@ if (
     ]);
     if (settings.metricsEnabled && !metricsTokenConfigured) {
       setMessage(
-        document.querySelector('#security-settings-message'),
+        document.querySelector('#security-settings-status'),
         'Сначала сгенерируйте Prometheus bearer token.',
         'error',
       );
@@ -1733,9 +1757,9 @@ if (
       });
       renderMetricsSettings(payload.settings);
       securitySettingsDirty?.markClean();
-      setMessage(document.querySelector('#security-settings-message'), 'Параметры сохранены.', 'success');
+      setMessage(document.querySelector('#security-settings-status'), 'Параметры сохранены.', 'success');
     } catch (error) {
-      setMessage(document.querySelector('#security-settings-message'), error.message, 'error');
+      setMessage(document.querySelector('#security-settings-status'), error.message, 'error');
     }
   });
 
@@ -1764,7 +1788,7 @@ if (
         showMetricsBearerToken(payload.token);
       } catch (error) {
         setMessage(
-          document.querySelector('#security-settings-message'),
+          document.querySelector('#security-settings-status'),
           error.message,
           'error',
         );
@@ -1794,13 +1818,13 @@ if (
         renderMetricsSettings(payload.settings);
         securitySettingsDirty?.markClean();
         setMessage(
-          document.querySelector('#security-settings-message'),
+          document.querySelector('#security-settings-status'),
           'Prometheus token очищен; metrics выключены.',
           'success',
         );
       } catch (error) {
         setMessage(
-          document.querySelector('#security-settings-message'),
+          document.querySelector('#security-settings-status'),
           error.message,
           'error',
         );
