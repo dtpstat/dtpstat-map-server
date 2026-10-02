@@ -114,6 +114,14 @@ export const adminInterfaceTabs = [
         'data-project-settings-tab',
       panelAttribute:
         'data-project-settings-panel',
+      tabsHostId:
+        'project-settings-tabs',
+      tabsClass:
+        'project-settings-tabs',
+      ariaLabel:
+        'Разделы настроек проекта',
+      panelIdPrefix:
+        'project-settings-',
       items: [
         {
           id: 'general',
