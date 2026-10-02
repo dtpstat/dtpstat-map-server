@@ -553,9 +553,23 @@ export function ensureAdminTabGroup({
         definition.ariaLabel,
       );
     }
-    root.prepend(
-      host,
-    );
+
+    const parent =
+      definition.tabsParentId
+        ? root.querySelector(
+            `#${definition.tabsParentId}`,
+          )
+        : null;
+
+    if (parent) {
+      parent.append(
+        host,
+      );
+    } else {
+      root.prepend(
+        host,
+      );
+    }
   }
 
   if (
