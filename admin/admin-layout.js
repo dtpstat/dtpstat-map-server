@@ -510,6 +510,97 @@ function tabAllowed(
   return true;
 }
 
+export function ensureAdminTabGroup({
+  root,
+  definition,
+}) {
+  if (
+    !root ||
+    !definition?.items?.length ||
+    !definition.tabsHostId ||
+    !definition.tabAttribute
+  ) {
+    return null;
+  }
+
+  let host =
+    root.querySelector(
+      `#${definition.tabsHostId}`,
+    );
+
+  if (!host) {
+    host =
+      document.createElement(
+        'nav',
+      );
+    host.id =
+      definition.tabsHostId;
+    host.role =
+      'tablist';
+    if (
+      definition.tabsClass
+    ) {
+      appendClassNames(
+        host,
+        definition.tabsClass,
+      );
+    }
+    if (
+      definition.ariaLabel
+    ) {
+      host.setAttribute(
+        'aria-label',
+        definition.ariaLabel,
+      );
+    }
+    root.prepend(
+      host,
+    );
+  }
+
+  if (
+    !host.hasChildNodes()
+  ) {
+    for (
+      const item of
+      definition.items
+    ) {
+      const tab =
+        document.createElement(
+          'button',
+        );
+      tab.type =
+        'button';
+      tab.role =
+        'tab';
+      tab.setAttribute(
+        definition.tabAttribute,
+        item.id,
+      );
+      tab.setAttribute(
+        'aria-selected',
+        'false',
+      );
+      if (
+        definition.panelIdPrefix
+      ) {
+        tab.setAttribute(
+          'aria-controls',
+          `${definition.panelIdPrefix}${item.id}`,
+        );
+      }
+      tab.textContent =
+        item.title;
+      host.append(
+        tab,
+      );
+    }
+  }
+
+  return host;
+}
+
+
 export function setupAdminTabGroup({
   root,
   definition,
