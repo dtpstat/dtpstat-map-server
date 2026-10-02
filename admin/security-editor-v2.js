@@ -1718,7 +1718,7 @@ if (
         else control.value = value;
       }
       renderMetricsSettings(payload.settings);
-      bindHumanUnits(form);
+      bindHumanUnits(document);
       securitySettingsDirty?.markClean();
       setMessage(message, 'Параметры загружены.');
     } catch (error) {
@@ -1849,36 +1849,52 @@ if (
 
   let activeIpBlocks = [];
 
+  function userBlockState(
+    user,
+  ) {
+    const now =
+      Date.now();
+    const manualActive =
+      Boolean(
+        user.isBlocked &&
+        (
+          !user.manualBlockedUntil ||
+          new Date(
+            user.manualBlockedUntil,
+          ).valueOf() >
+            now
+        ),
+      );
+    const automaticActive =
+      Boolean(
+        user.lockedUntil &&
+        new Date(
+          user.lockedUntil,
+        ).valueOf() >
+          now,
+      );
+
+    return {
+      manualActive,
+      automaticActive,
+    };
+  }
+
   function activeUserBlocks() {
     if (!canManageUsers) {
       return [];
     }
 
-    const now =
-      Date.now();
-
     return [
       ...userById.values(),
     ].filter(
       (user) => {
-        const manualActive =
-          Boolean(
-            user.isBlocked &&
-            (
-              !user.manualBlockedUntil ||
-              new Date(
-                user.manualBlockedUntil,
-              ).valueOf() >
-                now
-            ),
-          );
-        const automaticActive =
-          Boolean(
-            user.lockedUntil &&
-            new Date(
-              user.lockedUntil,
-            ).valueOf() >
-              now,
+        const {
+          manualActive,
+          automaticActive,
+        } =
+          userBlockState(
+            user,
           );
 
         return (
@@ -1972,17 +1988,29 @@ if (
       const user of
       activeUserBlocks()
     ) {
-      const until =
-        user.manualBlockedUntil ??
-        user.lockedUntil ??
-        null;
-      const reason =
-        user.manualBlockReason ??
-        (
-          user.isBlocked
-            ? 'Ручная блокировка пользователя'
-            : 'Автоматическая блокировка входа'
+      const {
+        manualActive,
+      } =
+        userBlockState(
+          user,
         );
+      const until =
+        manualActive
+          ? (
+            user.manualBlockedUntil ??
+            null
+          )
+          : (
+            user.lockedUntil ??
+            null
+          );
+      const reason =
+        manualActive
+          ? (
+            user.manualBlockReason ??
+            'Ручная блокировка пользователя'
+          )
+          : 'Автоматическая блокировка входа';
       const search =
         [
           'user',
