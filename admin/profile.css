@@ -97,7 +97,7 @@
   border-color: #8e3a36;
   color: #ffd0cc;
 }
-@media (max-width: 850px) {
+@container admin-layout-block (max-width: 52rem) {
   .profile-section-heading { flex-direction: column; }
 }
 
