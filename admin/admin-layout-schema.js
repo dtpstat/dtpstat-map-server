@@ -277,23 +277,85 @@ export const adminInterfaceTabs = [
         'data-report-view-panel',
       activeClass:
         'is-active',
+      tabsHostId:
+        'report-view-tabs',
+      tabsClass:
+        'report-view-tabs',
+      tabsParentId:
+        'report-view-tabs-slot',
+      panelsHostId:
+        'report-config-sections',
+      panelClass:
+        'report-builder-section report-view-panel',
+      ariaLabel:
+        'Разделы конструктора расчётов',
+      panelIdPrefix:
+        'report-view-',
       items: [
         {
           id: 'metrics',
           title: 'Метрики',
+          blocks: [
+            {
+              id:
+                'report-metrics-view',
+              hostId:
+                'report-metrics-view-host',
+              span: {
+                base: 12,
+                wide: 12,
+              },
+            },
+          ],
         },
         {
           id: 'table',
           title:
             'Публичная таблица',
+          blocks: [
+            {
+              id:
+                'report-table-view',
+              hostId:
+                'report-table-view-host',
+              span: {
+                base: 12,
+                wide: 12,
+              },
+            },
+          ],
         },
         {
           id: 'csv',
           title: 'CSV',
+          blocks: [
+            {
+              id:
+                'report-csv-view',
+              hostId:
+                'report-csv-view-host',
+              span: {
+                base: 12,
+                wide: 12,
+              },
+            },
+          ],
         },
         {
           id: 'rank',
           title: 'Рейтинг',
+          blocks: [
+            {
+              id:
+                'report-rank-view',
+              hostId:
+                'report-rank-view-host',
+              span: {
+                base: 12,
+                wide: 12,
+              },
+            },
+          ],
         },
       ],
     },
