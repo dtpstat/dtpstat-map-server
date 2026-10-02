@@ -358,22 +358,22 @@ if (
               <summary>Тонкая настройка блокировок, сессий и аудита</summary>
               <div class="admin-advanced-settings-body">
                 <p class="admin-advanced-settings-note">Эти параметры обычно меняет технический администратор. Рядом с секундами показывается привычное время.</p>
-                <fieldset><legend>Учётная запись</legend>
+                <fieldset id="security-lockout-user-settings"><legend>Учётная запись</legend>
                   <label>Попыток до блокировки <input name="maxFailedAttempts" type="number" min="1" max="100" required></label>
                   <label>Окно попыток, сек. <input name="failureWindowSeconds" type="number" min="10" max="86400" required data-human-unit="seconds"></label>
                   <label>Блокировка, сек. <input name="lockoutSeconds" type="number" min="10" max="604800" required data-human-unit="seconds"></label>
                 </fieldset>
-                <fieldset><legend>IP</legend>
+                <fieldset id="security-lockout-ip-settings"><legend>IP</legend>
                   <label>Попыток до IP lockout <input name="ipMaxFailedAttempts" type="number" min="1" max="1000" required></label>
                   <label>Окно IP, сек. <input name="ipFailureWindowSeconds" type="number" min="10" max="86400" required data-human-unit="seconds"></label>
                   <label>IP lockout, сек. <input name="ipLockoutSeconds" type="number" min="10" max="604800" required data-human-unit="seconds"></label>
                 </fieldset>
-                <fieldset><legend>HTTP rate limit</legend>
+                <fieldset id="security-rate-limit-settings"><legend>HTTP rate limit</legend>
                   <label>На пользователя, запросов/мин <input name="requestRateLimitUserPerMinute" type="number" min="10" max="60000" required></label>
                   <label>Суммарно, запросов/мин <input name="requestRateLimitGlobalPerMinute" type="number" min="10" max="1000000" required></label>
                   <p class="security-info">Лимиты применяются к успешно аутентифицированным HTTP-запросам админки. Глобальный лимит должен быть не меньше пользовательского.</p>
                 </fieldset>
-                <fieldset><legend>Сессии и аудит</legend>
+                <fieldset id="security-timing-settings"><legend>Сессии и аудит</legend>
                   <label>Idle timeout, сек. <input name="sessionIdleSeconds" type="number" min="60" max="86400" required data-human-unit="seconds"></label>
                   <label>Максимальная жизнь сессии, сек. <input name="sessionAbsoluteSeconds" type="number" min="300" max="2592000" required data-human-unit="seconds"></label>
                   <label>Хранить аудит, дней (0 = бессрочно) <input name="auditRetentionDays" type="number" min="0" max="3650" required data-human-unit="days"></label>
@@ -421,6 +421,158 @@ if (
         writeTabState,
     });
   }
+
+  const securityMetricsPanel =
+    document.querySelector(
+      '.security-metrics-panel',
+    );
+  const securityTimingSettings =
+    document.querySelector(
+      '#security-timing-settings',
+    );
+  const securityRateLimitSettings =
+    document.querySelector(
+      '#security-rate-limit-settings',
+    );
+  const securityLockoutUserSettings =
+    document.querySelector(
+      '#security-lockout-user-settings',
+    );
+  const securityLockoutIpSettings =
+    document.querySelector(
+      '#security-lockout-ip-settings',
+    );
+  const securityAdvancedSettings =
+    document.querySelector(
+      '.admin-advanced-settings',
+    );
+
+  function attachSecuritySettingsForm(
+    node,
+  ) {
+    if (!node) return;
+    for (
+      const control of
+      node.querySelectorAll(
+        'input,select,textarea,button',
+      )
+    ) {
+      if (
+        control.type ===
+          'button' ||
+        control.hasAttribute(
+          'data-dirty-ignore',
+        )
+      ) {
+        continue;
+      }
+      control.setAttribute(
+        'form',
+        'security-settings-form',
+      );
+    }
+  }
+
+  if (
+    securityMetricsTimingsHost &&
+    securitySettingsForm
+  ) {
+    const heading =
+      document.createElement(
+        'h3',
+      );
+    heading.textContent =
+      'Метрики и тайминги';
+    securityMetricsTimingsHost.append(
+      heading,
+    );
+    for (
+      const node of [
+        securityMetricsPanel,
+        securityTimingSettings,
+        securityRateLimitSettings,
+      ]
+    ) {
+      if (!node) continue;
+      attachSecuritySettingsForm(
+        node,
+      );
+      securityMetricsTimingsHost.append(
+        node,
+      );
+    }
+    const save =
+      document.createElement(
+        'button',
+      );
+    save.type =
+      'submit';
+    save.setAttribute(
+      'form',
+      'security-settings-form',
+    );
+    save.textContent =
+      'Сохранить метрики и тайминги';
+    securityMetricsTimingsHost.append(
+      save,
+    );
+  }
+
+  if (
+    securityIpHost &&
+    securitySettingsForm
+  ) {
+    const policy =
+      document.createElement(
+        'section',
+      );
+    policy.className =
+      'security-block-policy';
+    const heading =
+      document.createElement(
+        'h3',
+      );
+    heading.textContent =
+      'Политика блокировок';
+    policy.append(
+      heading,
+    );
+    for (
+      const node of [
+        securityLockoutUserSettings,
+        securityLockoutIpSettings,
+      ]
+    ) {
+      if (!node) continue;
+      attachSecuritySettingsForm(
+        node,
+      );
+      policy.append(
+        node,
+      );
+    }
+    const save =
+      document.createElement(
+        'button',
+      );
+    save.type =
+      'submit';
+    save.setAttribute(
+      'form',
+      'security-settings-form',
+    );
+    save.textContent =
+      'Сохранить политику блокировок';
+    policy.append(
+      save,
+    );
+    securityIpHost.prepend(
+      policy,
+    );
+  }
+
+  securityAdvancedSettings
+    ?.remove();
 
   const securitySettingsForm = document.querySelector('#security-settings-form');
   const securitySettingsDirty = trackDirtyForm(
