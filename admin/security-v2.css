@@ -405,11 +405,6 @@ body.security-modal-open { overflow: hidden; }
   }
 }
 
-@media (max-width: 650px) {
-  .security-audit-detail-dialog { width: 100%; height: 96vh; border-radius: 10px; }
-  .security-audit-detail-toolbar-spacer { display: none; }
-}
-
 @container admin-layout-block (max-width: 40rem) {
   .security-detail-fields,
   .security-role-grid {
@@ -773,4 +768,9 @@ body.security-modal-open { overflow: hidden; }
   .security-block-summary-heading label {
     width: 100%;
   }
+}
+
+@media (max-width: 650px) {
+  .security-audit-detail-dialog { width: 100%; height: 96vh; border-radius: 10px; }
+  .security-audit-detail-toolbar-spacer { display: none; }
 }
