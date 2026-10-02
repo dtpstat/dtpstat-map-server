@@ -281,6 +281,8 @@ export const adminInterfaceTabs = [
         'report-view-tabs',
       tabsClass:
         'report-view-tabs',
+      tabClass:
+        'report-view-tab',
       tabsParentId:
         'report-view-tabs-slot',
       panelsHostId:
