@@ -37,6 +37,66 @@ test('failed-login SQL avoids PostgreSQL keyword and RETURNING ambiguities', asy
 });
 
 
+test('user unblock clears manual and automatic lockout state', async () => {
+  let queryText = '';
+  let queryValues = null;
+  const database = {
+    async query(text, values) {
+      queryText = text;
+      queryValues = values;
+      return {
+        rows: [{
+          id: 7,
+          isBlocked: false,
+          lockedUntil: null,
+        }],
+      };
+    },
+  };
+
+  const repository =
+    createAdminUserRepository(
+      database,
+    );
+
+  const user =
+    await repository.unblockUser(7);
+
+  assert.equal(
+    user.id,
+    7,
+  );
+  assert.match(
+    queryText,
+    /is_blocked = FALSE/u,
+  );
+  assert.match(
+    queryText,
+    /manual_blocked_until = NULL/u,
+  );
+  assert.match(
+    queryText,
+    /failed_login_count = 0/u,
+  );
+  assert.match(
+    queryText,
+    /failed_login_window_started_at = NULL/u,
+  );
+  assert.match(
+    queryText,
+    /locked_until = NULL/u,
+  );
+  assert.match(
+    queryText,
+    /WHERE id = \$1::bigint/u,
+  );
+  assert.deepEqual(
+    queryValues,
+    [7],
+  );
+});
+
+
 test('audit listing exposes avatar availability without changing historical username', async () => {
   let queryText = '';
   const database = {
