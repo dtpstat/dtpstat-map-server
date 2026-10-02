@@ -223,6 +223,18 @@ test('admin layout schema owns dynamic sections and nested interface tab order',
   );
   assert.match(
     engine,
+    /export function ensureAdminTabGroup/u,
+  );
+  assert.match(
+    engine,
+    /definition\.tabsHostId[\s\S]*document\.createElement\([\s\S]*'nav'/u,
+  );
+  assert.match(
+    engine,
+    /definition\.items[\s\S]*document\.createElement\([\s\S]*'button'/u,
+  );
+  assert.match(
+    engine,
     /export function setupAdminTabGroup/u,
   );
   assert.match(
