@@ -40,15 +40,13 @@ export function createSecurityAuthService(
     }
 
     const allowlistMatch =
-      (
-        await repository
-          .findIpAllowlistMatch
-          ? await repository
-              .findIpAllowlistMatch(
-                ip,
-              )
-          : null
-      );
+      repository
+        .findIpAllowlistMatch
+        ? await repository
+            .findIpAllowlistMatch(
+              ip,
+            )
+        : null;
     if (allowlistMatch) {
       return {
         status: 'ok',
