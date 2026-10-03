@@ -1067,3 +1067,120 @@ body.security-modal-open { overflow: hidden; }
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Reusable toggle-style filter state. */
+.security-user-blocked-filter {
+  min-width: 11.5rem;
+  justify-content: flex-start;
+  border-color: #365158;
+  background: #172328;
+}
+
+.security-toggle-indicator {
+  width: 1.7rem;
+  height: 1rem;
+  position: relative;
+  display: inline-block;
+  flex: 0 0 1.7rem;
+  border: 1px solid #486168;
+  border-radius: 999px;
+  background: #0c1417;
+}
+
+.security-toggle-indicator::after {
+  content: '';
+  width: .68rem;
+  height: .68rem;
+  position: absolute;
+  top: .1rem;
+  left: .12rem;
+  border-radius: 50%;
+  background: #799097;
+  transition: transform 140ms ease, background 140ms ease;
+}
+
+.security-user-blocked-filter[aria-pressed="true"]
+  .security-toggle-indicator {
+  border-color: #52d7c6;
+  background: rgb(82 215 198 / 14%);
+}
+
+.security-user-blocked-filter[aria-pressed="true"]
+  .security-toggle-indicator::after {
+  transform: translateX(.66rem);
+  background: #52d7c6;
+}
+
+.security-user-blocked-filter[aria-pressed="true"] {
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgb(82 215 198 / 28%);
+}
+
+.security-audit-actions {
+  display: flex;
+  gap: .28rem;
+  align-items: center;
+  white-space: nowrap;
+}
+
+/* Audit owns its scroll region; paging always remains visible below it. */
+#security-audit-host {
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows:
+    auto
+    auto
+    minmax(0, 1fr)
+    auto
+    auto;
+  overflow: hidden;
+}
+
+.security-audit-table-wrap {
+  flex: none;
+  max-height: 100%;
+}
+
+.security-pagination {
+  flex: 0 0 auto;
+  margin-top: .45rem;
+  padding-top: .15rem;
+}
+
+/* Blocks screen: the active-IP table consumes every remaining pixel on desktop. */
+#security-blocks-host {
+  min-height: 0;
+  height: 100%;
+}
+
+#security-blocks-host > .security-blocks-layout {
+  min-height: 0;
+  height: 100%;
+  align-items: stretch;
+}
+
+.security-blocks-column-ip {
+  min-height: 0;
+  height: 100%;
+}
+
+.security-ip-blocks-panel {
+  min-height: 0;
+  height: 100%;
+}
+
+.security-ip-blocks-panel .security-block-table-wrap {
+  min-height: 0;
+  height: auto;
+}
+
+@container admin-layout-block (max-width: 66rem) {
+  #security-blocks-host,
+  #security-blocks-host > .security-blocks-layout,
+  .security-blocks-column-ip,
+  .security-ip-blocks-panel {
+    height: auto;
+  }
+}
