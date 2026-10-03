@@ -1029,7 +1029,16 @@ if (
           <div class="security-detail-fields">
             <label>Логин <input name="username" value="${user.username}" readonly></label>
             <label>Имя <input name="displayName" maxlength="160" required></label>
-            <label>Email <input name="email" type="email" maxlength="320"></label>
+            <label>Email
+              <input name="email"
+                     type="email"
+                     maxlength="320"
+                     autocomplete="email"
+                     aria-describedby="security-user-email-status">
+              <small id="security-user-email-status"
+                     class="security-inline-validation"
+                     aria-live="polite"></small>
+            </label>
             <label>Последний вход <input value="${formatDate(user.lastLoginAt)}" readonly></label>
             <label>Создан <input value="${formatDate(user.createdAt)}" readonly></label>
           </div>
@@ -1074,8 +1083,71 @@ if (
     const form = detail.querySelector('#security-user-detail-form');
     form.elements.displayName.value = user.displayName ?? user.username;
     form.elements.email.value = user.email ?? '';
+
+    const emailInput =
+      form.elements.email;
+    const emailStatus =
+      form.querySelector(
+        '#security-user-email-status',
+      );
+    const validateEmail =
+      () => {
+        const value =
+          emailInput.value.trim();
+
+        if (!value) {
+          emailInput
+            .setCustomValidity(
+              '',
+            );
+          if (emailStatus) {
+            emailStatus.textContent =
+              'Необязательно';
+            emailStatus.className =
+              'security-inline-validation';
+          }
+          return true;
+        }
+
+        if (
+          emailInput.validity
+            .typeMismatch
+        ) {
+          emailInput
+            .setCustomValidity(
+              'Введите корректный email',
+            );
+          if (emailStatus) {
+            emailStatus.textContent =
+              'Некорректный email';
+            emailStatus.className =
+              'security-inline-validation is-error';
+          }
+          return false;
+        }
+
+        emailInput
+          .setCustomValidity(
+            '',
+          );
+        if (emailStatus) {
+          emailStatus.textContent =
+            'Формат корректен';
+          emailStatus.className =
+            'security-inline-validation is-valid';
+        }
+        return true;
+      };
+
+    emailInput.addEventListener(
+      'input',
+      validateEmail,
+    );
+    validateEmail();
+
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
+      validateEmail();
       if (!form.reportValidity()) return;
       try {
         const payload = await api(`/api/admin/security/users/${user.id}`, {
