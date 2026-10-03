@@ -40,10 +40,15 @@ export function createSecurityAuthService(
     }
 
     const allowlistMatch =
-      await repository
-        .findIpAllowlistMatch(
-          ip,
-        );
+      (
+        await repository
+          .findIpAllowlistMatch
+          ? await repository
+              .findIpAllowlistMatch(
+                ip,
+              )
+          : null
+      );
     if (allowlistMatch) {
       return {
         status: 'ok',
@@ -118,10 +123,15 @@ export function createSecurityAuthService(
     }
 
     if (
-      await repository
-        .findIpAllowlistMatch(
-          ip,
-        )
+      (
+        repository
+          .findIpAllowlistMatch
+          ? await repository
+              .findIpAllowlistMatch(
+                ip,
+              )
+          : null
+      )
     ) {
       return null;
     }
@@ -183,10 +193,15 @@ export function createSecurityAuthService(
     }
 
     const allowlistMatch =
-      await repository
-        .findIpAllowlistMatch(
-          ip,
-        );
+      (
+        await repository
+          .findIpAllowlistMatch
+          ? await repository
+              .findIpAllowlistMatch(
+                ip,
+              )
+          : null
+      );
     if (allowlistMatch) {
       return {
         locked: false,
