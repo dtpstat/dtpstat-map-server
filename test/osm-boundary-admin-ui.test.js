@@ -334,3 +334,24 @@ test('OSM discussion supports mention highlighting and autocomplete', async () =
     /'osm-boundary'/u,
   );
 });
+
+
+test('OSM discussion refreshes unread badges from realtime and notifications', async () => {
+  const script =
+    await read(
+      'admin/osm-boundary-editor.js',
+    );
+
+  assert.match(
+    script,
+    /dtpstat:discussion-unread-refresh[\s\S]*subjectType !==[\s\S]*'osm-boundary'/u,
+  );
+  assert.match(
+    script,
+    /detail\.source ===[\s\S]*'notification'[\s\S]*loadDiscussion\(/u,
+  );
+  assert.match(
+    script,
+    /loadDiscussionState\(\)[\s\S]*OSM discussion unread refresh failed/u,
+  );
+});
