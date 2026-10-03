@@ -175,6 +175,8 @@ if (section) {
     workspaceRequestSequence: 0,
     pendingTargetNavigation: false,
     discussionUnreadByGeometry: new Map(),
+    discussionMessageCountByGeometry:
+      new Map(),
     discussionAttentionMessageId: null,
   };
 
@@ -811,6 +813,65 @@ if (section) {
     );
   }
 
+  function discussionMessageCount(
+    geometryId,
+  ) {
+    return Number(
+      state
+        .discussionMessageCountByGeometry
+        .get(
+          Number(
+            geometryId,
+          ),
+        ) ??
+      0,
+    );
+  }
+
+  function setDiscussionMessageCount(
+    geometryId,
+    count,
+  ) {
+    const id =
+      Number(
+        geometryId,
+      );
+    if (
+      !Number.isSafeInteger(
+        id,
+      ) ||
+      id <= 0
+    ) {
+      return;
+    }
+
+    const normalized =
+      Math.max(
+        0,
+        Number(
+          count ??
+          0,
+        ),
+      );
+
+    if (normalized > 0) {
+      state
+        .discussionMessageCountByGeometry
+        .set(
+          id,
+          normalized,
+        );
+    } else {
+      state
+        .discussionMessageCountByGeometry
+        .delete(
+          id,
+        );
+    }
+
+    renderDiscussionUnreadBadge();
+  }
+
   function setDiscussionUnread(
     geometryId,
     count,
@@ -861,12 +922,20 @@ if (section) {
       Number(
         state.current?.id,
       );
-    const count =
+    const validGeometry =
       Number.isSafeInteger(
         geometryId,
       ) &&
-      geometryId > 0
+      geometryId > 0;
+    const count =
+      validGeometry
         ? discussionUnreadCount(
+            geometryId,
+          )
+        : 0;
+    const messageCount =
+      validGeometry
+        ? discussionMessageCount(
             geometryId,
           )
         : 0;
@@ -878,9 +947,22 @@ if (section) {
         ? '99+'
         : String(count);
     discussionOpenButton.classList.toggle(
+      'has-thread',
+      messageCount > 0,
+    );
+    discussionOpenButton.classList.toggle(
       'has-unread',
       count > 0,
     );
+    discussionOpenButton.title =
+      !validGeometry
+        ? 'Выберите геометрию'
+        : count > 0
+          ? 'Обсуждение · непрочитанных: ' +
+            count
+          : messageCount > 0
+            ? 'Открыть обсуждение · есть сообщения'
+            : 'Открыть обсуждение · сообщений ещё нет';
   }
 
   function markDiscussionRead(
@@ -898,16 +980,22 @@ if (section) {
         '/api/admin/geometry-editor/discussions/unread',
       );
 
+    const items =
+      (payload.items ?? [])
+        .filter(
+          (item) =>
+            Number.isSafeInteger(
+              Number(
+                item.geometryId,
+              ),
+            ),
+        );
+
     state.discussionUnreadByGeometry =
       new Map(
-        (payload.items ?? [])
+        items
           .filter(
             (item) =>
-              Number.isSafeInteger(
-                Number(
-                  item.geometryId,
-                ),
-              ) &&
               Number(
                 item.unreadCount,
               ) > 0,
@@ -919,6 +1007,27 @@ if (section) {
               ),
               Number(
                 item.unreadCount,
+              ),
+            ],
+          ),
+      );
+    state
+      .discussionMessageCountByGeometry =
+      new Map(
+        items
+          .filter(
+            (item) =>
+              Number(
+                item.messageCount,
+              ) > 0,
+          )
+          .map(
+            (item) => [
+              Number(
+                item.geometryId,
+              ),
+              Number(
+                item.messageCount,
               ),
             ],
           ),
@@ -1379,6 +1488,11 @@ if (section) {
       state.discussionMessages =
         payload.messages ??
         [];
+      setDiscussionMessageCount(
+        id,
+        state.discussionMessages
+          .length,
+      );
       state.discussionLoading =
         false;
       markDiscussionRead(
@@ -1485,6 +1599,12 @@ if (section) {
       ) {
         appendDiscussionMessage(
           payload.message,
+        );
+        setDiscussionMessageCount(
+          geometryId,
+          discussionMessageCount(
+            geometryId,
+          ) + 1,
         );
       }
 
@@ -9155,9 +9275,14 @@ if (section) {
         return;
       }
 
+      const discussionSource =
+        change.source ??
+        {};
       const geometryId =
         Number(
           change.geometryId ??
+          discussionSource
+            .geometryId ??
           change.entityIds?.[0],
         );
 
@@ -9176,16 +9301,24 @@ if (section) {
       ) {
         if (
           Number(
-            change.readerUserId,
+            change.readerUserId ??
+            discussionSource
+              .readerUserId,
           ) !==
             Number(
               currentUser?.id,
             ) &&
-          change.lastReadMessageId
+          (
+            change.lastReadMessageId ??
+            discussionSource
+              .lastReadMessageId
+          )
         ) {
           markOwnMessagesReadThrough(
             geometryId,
-            change.lastReadMessageId,
+            change.lastReadMessageId ??
+            discussionSource
+              .lastReadMessageId,
           );
         }
         return;
@@ -9193,11 +9326,20 @@ if (section) {
 
       const incoming =
         change.discussionMessage ??
+        discussionSource
+          .discussionMessage ??
         null;
 
       if (!incoming) {
         return;
       }
+
+      setDiscussionMessageCount(
+        geometryId,
+        discussionMessageCount(
+          geometryId,
+        ) + 1,
+      );
 
       if (
         discussionIsOpenFor(
@@ -9711,6 +9853,20 @@ if (section) {
             'error',
           ),
       );
+    },
+  );
+
+  window.addEventListener(
+    'dtpstat:discussion-read-all',
+    () => {
+      void loadDiscussionUnread()
+        .catch(
+          (error) =>
+            console.warn(
+              'Geometry discussion state refresh failed',
+              error,
+            ),
+        );
     },
   );
 
