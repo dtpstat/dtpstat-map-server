@@ -1350,7 +1350,7 @@ if (
         : payload.users[0]?.id ?? null;
       renderUsersList();
       renderDetail(selectedUserId ? userById.get(selectedUserId) : null);
-      renderBlockSummary();
+      renderUserBlocks();
       setMessage(message, `Пользователей: ${payload.users.length}`);
     } catch (error) {
       setMessage(message, error.message, 'error');
@@ -1979,6 +1979,11 @@ if (
     });
 
   let activeIpBlocks = [];
+  let activeIpAllowlist = [];
+  let ipBlockSort = {
+    key: 'ip',
+    direction: 'asc',
+  };
 
   function userBlockState(
     user,
@@ -2036,47 +2041,11 @@ if (
     );
   }
 
-  function blockFilterValue() {
-    return String(
-      document.querySelector(
-        '#security-block-filter',
-      )?.value ??
-      '',
-    )
-      .trim()
-      .toLocaleLowerCase(
-        'ru-RU',
-      );
-  }
-
-  function blockRow({
-    type,
-    object,
-    until,
-    reason,
-    onUnblock,
-  }) {
-    const row =
-      document.createElement(
-        'tr',
-      );
-    const values = [
-      type,
-      object,
-      until,
-      reason,
-    ];
-    for (const value of values) {
-      const cell =
-        document.createElement(
-          'td',
-        );
-      cell.textContent =
-        value || '—';
-      row.append(cell);
-    }
-
-    const action =
+  function actionCell(
+    label,
+    handler,
+  ) {
+    const cell =
       document.createElement(
         'td',
       );
@@ -2087,208 +2056,454 @@ if (
     button.type =
       'button';
     button.className =
-      'secondary';
+      'secondary mini-button';
     button.textContent =
-      'Разблокировать';
+      label;
     button.addEventListener(
       'click',
       () =>
-        void onUnblock(),
+        void handler(),
     );
-    action.append(
+    cell.append(
       button,
     );
-    row.append(
-      action,
-    );
-    return row;
+    return cell;
   }
 
-  function renderBlockSummary() {
+  function renderUserBlocks() {
     const body =
       document.querySelector(
-        '#security-blocks-body',
+        '#security-user-blocks-body',
       );
     if (!body) return;
 
-    const query =
-      blockFilterValue();
-    const rows = [];
-
-    for (
-      const user of
+    const rows =
       activeUserBlocks()
-    ) {
-      const {
-        manualActive,
-      } =
-        userBlockState(
-          user,
+        .map(
+          (user) => {
+            const {
+              manualActive,
+            } =
+              userBlockState(
+                user,
+              );
+            const until =
+              manualActive
+                ? user.manualBlockedUntil
+                : user.lockedUntil;
+            const reason =
+              manualActive
+                ? (
+                  user.manualBlockReason ??
+                  'Ручная блокировка пользователя'
+                )
+                : 'Автоматическая блокировка входа';
+
+            const row =
+              document.createElement(
+                'tr',
+              );
+            for (
+              const value of [
+                user.displayName &&
+                user.displayName !==
+                  user.username
+                  ? user.displayName +
+                    ' (@' +
+                    user.username +
+                    ')'
+                  : '@' +
+                    user.username,
+                until
+                  ? formatDate(
+                    until,
+                  )
+                  : 'бессрочно',
+                reason,
+              ]
+            ) {
+              const cell =
+                document.createElement(
+                  'td',
+                );
+              cell.textContent =
+                value || '—';
+              row.append(
+                cell,
+              );
+            }
+
+            row.append(
+              actionCell(
+                'Разблокировать',
+                async () => {
+                  try {
+                    await api(
+                      '/api/admin/security/users/' +
+                      encodeURIComponent(
+                        user.id,
+                      ) +
+                      '/unblock',
+                      {
+                        method:
+                          'POST',
+                      },
+                    );
+                    await loadUsers(
+                      selectedUserId,
+                    );
+                  } catch (error) {
+                    setMessage(
+                      document.querySelector(
+                        '#security-user-blocks-message',
+                      ),
+                      error.message,
+                      'error',
+                    );
+                  }
+                },
+              ),
+            );
+
+            return row;
+          },
         );
-      const until =
-        manualActive
-          ? (
-            user.manualBlockedUntil ??
-            null
-          )
-          : (
-            user.lockedUntil ??
-            null
-          );
-      const reason =
-        manualActive
-          ? (
-            user.manualBlockReason ??
-            'Ручная блокировка пользователя'
-          )
-          : 'Автоматическая блокировка входа';
-      const search =
-        [
-          'user',
-          user.username,
-          user.displayName,
-          user.email,
-          reason,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLocaleLowerCase(
-            'ru-RU',
-          );
-      if (
-        query &&
-        !search.includes(
-          query,
-        )
-      ) {
-        continue;
-      }
-
-      rows.push(
-        blockRow({
-          type: 'USER',
-          object:
-            user.displayName &&
-            user.displayName !==
-              user.username
-              ? user.displayName +
-                ' (@' +
-                user.username +
-                ')'
-              : '@' +
-                user.username,
-          until:
-            until
-              ? formatDate(
-                until,
-              )
-              : 'бессрочно',
-          reason,
-          onUnblock:
-            async () => {
-              try {
-                await api(
-                  '/api/admin/security/users/' +
-                  encodeURIComponent(
-                    user.id,
-                  ) +
-                  '/unblock',
-                  {
-                    method:
-                      'POST',
-                  },
-                );
-                await loadUsers(
-                  selectedUserId,
-                );
-                renderBlockSummary();
-              } catch (error) {
-                setMessage(
-                  document.querySelector(
-                    '#security-blocks-message',
-                  ),
-                  error.message,
-                  'error',
-                );
-              }
-            },
-        }),
-      );
-    }
-
-    for (
-      const block of
-      activeIpBlocks
-    ) {
-      const search =
-        [
-          'ip',
-          block.ipAddress,
-          block.reason,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLocaleLowerCase(
-            'ru-RU',
-          );
-      if (
-        query &&
-        !search.includes(
-          query,
-        )
-      ) {
-        continue;
-      }
-
-      rows.push(
-        blockRow({
-          type: 'IP',
-          object:
-            block.ipAddress,
-          until:
-            block.expiresAt
-              ? formatDate(
-                block.expiresAt,
-              )
-              : 'бессрочно',
-          reason:
-            block.reason,
-          onUnblock:
-            async () => {
-              try {
-                await api(
-                  '/api/admin/security/ip-blocks/' +
-                  encodeURIComponent(
-                    block.id,
-                  ),
-                  {
-                    method:
-                      'DELETE',
-                  },
-                );
-                await loadIpBlocks();
-              } catch (error) {
-                setMessage(
-                  document.querySelector(
-                    '#security-blocks-message',
-                  ),
-                  error.message,
-                  'error',
-                );
-              }
-            },
-        }),
-      );
-    }
 
     body.replaceChildren(
       ...rows,
     );
     setMessage(
       document.querySelector(
-        '#security-blocks-message',
+        '#security-user-blocks-message',
       ),
-      'Активных блокировок: ' +
+      'Активных USER-блокировок: ' +
+      rows.length,
+    );
+  }
+
+  function remainingSeconds(
+    block,
+  ) {
+    if (!block.expiresAt) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    return Math.max(
+      0,
+      Math.ceil(
+        (
+          new Date(
+            block.expiresAt,
+          ).valueOf() -
+          Date.now()
+        ) /
+        1000,
+      ),
+    );
+  }
+
+  function formatRemaining(
+    block,
+  ) {
+    const seconds =
+      remainingSeconds(
+        block,
+      );
+
+    if (
+      !Number.isFinite(
+        seconds,
+      )
+    ) {
+      return 'бессрочно';
+    }
+
+    if (seconds < 60) {
+      return seconds + ' сек.';
+    }
+
+    if (seconds < 3600) {
+      return (
+        Math.ceil(
+          seconds / 60,
+        ) +
+        ' мин.'
+      );
+    }
+
+    if (seconds < 86400) {
+      return (
+        Math.ceil(
+          seconds / 3600,
+        ) +
+        ' ч.'
+      );
+    }
+
+    return (
+      Math.ceil(
+        seconds / 86400,
+      ) +
+      ' дн.'
+    );
+  }
+
+  function ipBlockFilterValue() {
+    return String(
+      document.querySelector(
+        '#security-ip-block-search',
+      )?.value ??
+      '',
+    )
+      .trim()
+      .toLocaleLowerCase(
+        'ru-RU',
+      );
+  }
+
+  function sortedIpBlocks() {
+    const query =
+      ipBlockFilterValue();
+
+    const blocks =
+      activeIpBlocks.filter(
+        (block) =>
+          !query ||
+          String(
+            block.ipAddress ??
+            '',
+          )
+            .toLocaleLowerCase(
+              'ru-RU',
+            )
+            .includes(
+              query,
+            ),
+      );
+
+    const direction =
+      ipBlockSort
+        .direction ===
+        'desc'
+        ? -1
+        : 1;
+
+    blocks.sort(
+      (left, right) => {
+        if (
+          ipBlockSort.key ===
+          'remaining'
+        ) {
+          return (
+            (
+              remainingSeconds(
+                left,
+              ) -
+              remainingSeconds(
+                right,
+              )
+            ) *
+            direction
+          );
+        }
+
+        return (
+          String(
+            left.ipAddress,
+          ).localeCompare(
+            String(
+              right.ipAddress,
+            ),
+            undefined,
+            {
+              numeric: true,
+              sensitivity: 'base',
+            },
+          ) *
+          direction
+        );
+      },
+    );
+
+    return blocks;
+  }
+
+  function renderIpBlocks() {
+    const body =
+      document.querySelector(
+        '#security-ip-blocks-body',
+      );
+    if (!body) return;
+
+    const rows =
+      sortedIpBlocks()
+        .map(
+          (block) => {
+            const row =
+              document.createElement(
+                'tr',
+              );
+
+            for (
+              const value of [
+                block.ipAddress,
+                formatRemaining(
+                  block,
+                ),
+                block.reason,
+              ]
+            ) {
+              const cell =
+                document.createElement(
+                  'td',
+                );
+              cell.textContent =
+                value || '—';
+              row.append(
+                cell,
+              );
+            }
+
+            row.append(
+              actionCell(
+                'Разблокировать',
+                async () => {
+                  try {
+                    await api(
+                      '/api/admin/security/ip-blocks/' +
+                      encodeURIComponent(
+                        block.id,
+                      ),
+                      {
+                        method:
+                          'DELETE',
+                      },
+                    );
+                    await loadIpBlocks();
+                  } catch (error) {
+                    setMessage(
+                      document.querySelector(
+                        '#security-ip-blocks-message',
+                      ),
+                      error.message,
+                      'error',
+                    );
+                  }
+                },
+              ),
+            );
+
+            return row;
+          },
+        );
+
+    body.replaceChildren(
+      ...rows,
+    );
+    setMessage(
+      document.querySelector(
+        '#security-ip-blocks-message',
+      ),
+      'Показано IP-блокировок: ' +
+      rows.length +
+      ' из ' +
+      activeIpBlocks.length,
+    );
+
+    for (
+      const button of
+      document.querySelectorAll(
+        '[data-ip-block-sort]',
+      )
+    ) {
+      const active =
+        button.dataset
+          .ipBlockSort ===
+        ipBlockSort.key;
+      button.classList.toggle(
+        'is-active',
+        active,
+      );
+      button.dataset.direction =
+        active
+          ? ipBlockSort.direction
+          : '';
+    }
+  }
+
+  function renderIpAllowlist() {
+    const body =
+      document.querySelector(
+        '#security-ip-allowlist-body',
+      );
+    if (!body) return;
+
+    const rows =
+      activeIpAllowlist.map(
+        (entry) => {
+          const row =
+            document.createElement(
+              'tr',
+            );
+
+          for (
+            const value of [
+              entry.network,
+              entry.reason,
+            ]
+          ) {
+            const cell =
+              document.createElement(
+                'td',
+              );
+            cell.textContent =
+              value || '—';
+            row.append(
+              cell,
+            );
+          }
+
+          row.append(
+            actionCell(
+              'Удалить',
+              async () => {
+                try {
+                  await api(
+                    '/api/admin/security/ip-allowlist/' +
+                    encodeURIComponent(
+                      entry.id,
+                    ),
+                    {
+                      method:
+                        'DELETE',
+                    },
+                  );
+                  await loadIpAllowlist();
+                } catch (error) {
+                  setMessage(
+                    document.querySelector(
+                      '#security-ip-allowlist-message',
+                    ),
+                    error.message,
+                    'error',
+                  );
+                }
+              },
+            ),
+          );
+
+          return row;
+        },
+      );
+
+    body.replaceChildren(
+      ...rows,
+    );
+    setMessage(
+      document.querySelector(
+        '#security-ip-allowlist-message',
+      ),
+      'White-list сетей: ' +
       rows.length,
     );
   }
@@ -2312,7 +2527,7 @@ if (
         'Активных IP-блокировок: ' +
         activeIpBlocks.length,
       );
-      renderBlockSummary();
+      renderIpBlocks();
     } catch (error) {
       setMessage(
         document.querySelector(
@@ -2324,33 +2539,177 @@ if (
     }
   }
 
+  async function loadIpAllowlist() {
+    if (!canManageSecurity) {
+      return;
+    }
+
+    try {
+      const payload =
+        await api(
+          '/api/admin/security/ip-allowlist',
+        );
+      activeIpAllowlist =
+        payload.entries ?? [];
+      renderIpAllowlist();
+    } catch (error) {
+      setMessage(
+        document.querySelector(
+          '#security-ip-allowlist-message',
+        ),
+        error.message,
+        'error',
+      );
+    }
+  }
+
   document.querySelector(
-    '#security-block-filter',
+    '#security-ip-block-search',
   )?.addEventListener(
     'input',
-    renderBlockSummary,
+    renderIpBlocks,
   );
 
-  document.querySelector('#security-ip-block-form')?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    if (!form.reportValidity()) return;
-    try {
-      await api('/api/admin/security/ip-blocks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ipAddress: form.elements.ipAddress.value.trim(),
-          durationSeconds: Number(form.elements.durationSeconds.value),
-          reason: form.elements.reason.value.trim() || null,
-        }),
-      });
-      form.reset();
-      await loadIpBlocks();
-    } catch (error) {
-      setMessage(document.querySelector('#security-ip-message'), error.message, 'error');
-    }
-  });
+  for (
+    const button of
+    document.querySelectorAll(
+      '[data-ip-block-sort]',
+    )
+  ) {
+    button.addEventListener(
+      'click',
+      () => {
+        const key =
+          button.dataset
+            .ipBlockSort;
+        if (
+          ipBlockSort.key ===
+          key
+        ) {
+          ipBlockSort.direction =
+            ipBlockSort
+              .direction ===
+              'asc'
+              ? 'desc'
+              : 'asc';
+        } else {
+          ipBlockSort = {
+            key,
+            direction:
+              'asc',
+          };
+        }
+        renderIpBlocks();
+      },
+    );
+  }
+
+  document.querySelector(
+    '#security-ip-block-form',
+  )?.addEventListener(
+    'submit',
+    async (event) => {
+      event.preventDefault();
+      const form =
+        event.currentTarget;
+      if (!form.reportValidity()) {
+        return;
+      }
+
+      try {
+        await api(
+          '/api/admin/security/ip-blocks',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body:
+              JSON.stringify({
+                ipAddress:
+                  form.elements
+                    .ipAddress
+                    .value.trim(),
+                durationSeconds:
+                  Number(
+                    form.elements
+                      .durationSeconds
+                      .value,
+                  ),
+                reason:
+                  form.elements
+                    .reason
+                    .value.trim() ||
+                  null,
+              }),
+          },
+        );
+        form.reset();
+        await loadIpBlocks();
+      } catch (error) {
+        setMessage(
+          document.querySelector(
+            '#security-ip-message',
+          ),
+          error.message,
+          'error',
+        );
+      }
+    },
+  );
+
+  document.querySelector(
+    '#security-ip-allowlist-form',
+  )?.addEventListener(
+    'submit',
+    async (event) => {
+      event.preventDefault();
+      const form =
+        event.currentTarget;
+      if (!form.reportValidity()) {
+        return;
+      }
+
+      try {
+        await api(
+          '/api/admin/security/ip-allowlist',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body:
+              JSON.stringify({
+                network:
+                  form.elements
+                    .network
+                    .value.trim(),
+                reason:
+                  form.elements
+                    .reason
+                    .value.trim() ||
+                  null,
+              }),
+          },
+        );
+        form.reset();
+        await Promise.all([
+          loadIpAllowlist(),
+          loadIpBlocks(),
+        ]);
+      } catch (error) {
+        setMessage(
+          document.querySelector(
+            '#security-ip-allowlist-message',
+          ),
+          error.message,
+          'error',
+        );
+      }
+    },
+  );
 
   if (canManageUsers) await loadUsers();
   if (canViewAudit) await loadAuditFacets();
@@ -2368,6 +2727,7 @@ if (
     await Promise.all([
       loadSettings(),
       loadIpBlocks(),
+      loadIpAllowlist(),
     ]);
   }
 
