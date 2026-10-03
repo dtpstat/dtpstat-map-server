@@ -83,6 +83,19 @@
   box-shadow: inset 3px 0 #52d7c6;
 }
 
+.profile-discussion-row.has-unread {
+  background: rgb(82 215 198 / 7%);
+}
+
+.profile-discussion-row.has-unread
+.profile-discussion-row-body strong {
+  color: #d8fffa;
+}
+
+.profile-discussion-row.has-unread:not([aria-selected="true"]) {
+  box-shadow: inset 3px 0 rgb(82 215 198 / 48%);
+}
+
 .profile-discussion-row-body {
   min-width: 0;
   display: grid;
@@ -272,9 +285,18 @@
 }
 
 #admin-messages-total {
+  margin-left: auto;
   white-space: nowrap;
   color: #d9f7f3;
   font-size: .82rem;
+}
+
+.admin-messages-read-all {
+  width: auto;
+  min-height: 2rem;
+  padding: .4rem .65rem;
+  white-space: nowrap;
+  font-size: .72rem;
 }
 
 .admin-messages-section .settings-card {
