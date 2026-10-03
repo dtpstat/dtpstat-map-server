@@ -268,6 +268,8 @@ export function createOsmBoundaryAdminService(
                 row.boundaryId,
               unreadCount:
                 row.unreadCount,
+              messageCount:
+                row.messageCount,
             }),
           ),
       };
