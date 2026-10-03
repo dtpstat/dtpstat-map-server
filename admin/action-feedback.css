@@ -32,6 +32,25 @@
 .admin-feedback-toast.is-warn { border-left-color: #d59b32; }
 .admin-feedback-toast.is-error { border-left-color: var(--danger); }
 
+.admin-feedback-toast.is-actionable {
+  cursor: pointer;
+}
+
+.admin-feedback-toast.is-actionable:hover,
+.admin-feedback-toast.is-actionable:focus-visible {
+  border-color: var(--accent);
+  outline: 1px solid rgb(82 215 198 / 35%);
+  background: #13272a;
+}
+
+.admin-feedback-toast.is-mention {
+  border-left-width: 6px;
+  border-left-color: #ffe27a;
+  box-shadow:
+    0 0 0 1px rgb(255 226 122 / 28%),
+    0 .8rem 2.5rem rgb(0 0 0 / 45%);
+}
+
 .admin-feedback-toast span {
   min-width: 0;
   overflow-wrap: anywhere;
