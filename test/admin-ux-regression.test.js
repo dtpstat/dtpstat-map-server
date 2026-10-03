@@ -362,6 +362,18 @@ test('desktop admin layout minimizes nested scrolling and exposes compact empty 
     profileCss,
     /#profile-sessions[\s\S]*overflow-y:\s*auto/u,
   );
+  assert.match(
+    profile,
+    /PROFILE_SESSION_PAGE_SIZE = 8/u,
+  );
+  assert.match(
+    profile,
+    /profile-sessions-prev[\s\S]*profile-sessions-next/u,
+  );
+  assert.match(
+    profileCss,
+    /\.profile-session-pagination/u,
+  );
 
   assert.doesNotMatch(
     security,
