@@ -1,3 +1,7 @@
+import {
+  discussionMentionLogins,
+} from './policy.js';
+
 function allowedSubjectTypes(
   user,
 ) {
@@ -163,6 +167,96 @@ export function createDiscussionInboxService(
             0,
           ),
       };
+    },
+
+    async markAllRead(
+      user,
+    ) {
+      const userId =
+        Number(
+          user?.id,
+        );
+      if (
+        !Number.isSafeInteger(
+          userId,
+        ) ||
+        userId <= 0
+      ) {
+        throw new TypeError(
+          'Authenticated user id is required',
+        );
+      }
+
+      const subjectTypes =
+        allowedSubjectTypes(
+          user,
+        );
+
+      if (
+        subjectTypes.length ===
+        0
+      ) {
+        return {
+          items: [],
+        };
+      }
+
+      return {
+        items:
+          await storage
+            .markAllRead(
+              userId,
+              subjectTypes,
+            ),
+      };
+    },
+
+    async notificationTargets(
+      user,
+      {
+        subjectType,
+        subjectId,
+        message,
+      },
+    ) {
+      const userId =
+        Number(
+          user?.id,
+        );
+      if (
+        !Number.isSafeInteger(
+          userId,
+        ) ||
+        userId <= 0
+      ) {
+        throw new TypeError(
+          'Authenticated user id is required',
+        );
+      }
+
+      if (
+        !allowedSubjectTypes(
+          user,
+        ).includes(
+          subjectType,
+        )
+      ) {
+        return {
+          subject: null,
+          participantUserIds: [],
+          mentionedUsers: [],
+        };
+      }
+
+      return storage
+        .notificationTargets(
+          subjectType,
+          Number(subjectId),
+          userId,
+          discussionMentionLogins(
+            message,
+          ),
+        );
     },
   };
 }
