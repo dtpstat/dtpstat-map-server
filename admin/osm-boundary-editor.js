@@ -105,6 +105,8 @@ if (typeof document !== 'undefined') {
       discussionLoading: false,
       discussionSending: false,
       discussionRequestSequence: 0,
+      discussionUnreadRefreshTimer:
+        null,
       discussionUnreadByBoundary:
         new Map(),
       discussionMessageCountByBoundary:
@@ -2024,6 +2026,90 @@ if (typeof document !== 'undefined') {
                 'OSM discussion state refresh failed',
                 error,
               ),
+          );
+      },
+    );
+
+    window.addEventListener(
+      'dtpstat:discussion-unread-refresh',
+      (event) => {
+        if (
+          event.detail?.subjectType !==
+          'osm-boundary'
+        ) {
+          return;
+        }
+
+        const boundaryId =
+          Number(
+            event.detail?.subjectId,
+          );
+        if (
+          !Number.isSafeInteger(
+            boundaryId,
+          ) ||
+          boundaryId <= 0
+        ) {
+          return;
+        }
+
+        if (
+          state.discussionUnreadRefreshTimer !==
+          null
+        ) {
+          window.clearTimeout(
+            state.discussionUnreadRefreshTimer,
+          );
+        }
+
+        const detail = {
+          ...event.detail,
+        };
+        state.discussionUnreadRefreshTimer =
+          window.setTimeout(
+            () => {
+              state.discussionUnreadRefreshTimer =
+                null;
+
+              const openForBoundary =
+                discussionPanel &&
+                !discussionPanel.hidden &&
+                Number(
+                  state.discussionBoundaryId,
+                ) ===
+                  boundaryId;
+
+              if (
+                detail.source ===
+                  'notification' &&
+                openForBoundary
+              ) {
+                void loadDiscussion(
+                  boundaryId,
+                ).catch(
+                  (error) =>
+                    console.warn(
+                      'OSM discussion notification refresh failed',
+                      error,
+                    ),
+                );
+                return;
+              }
+
+              if (openForBoundary) {
+                return;
+              }
+
+              void loadDiscussionState()
+                .catch(
+                  (error) =>
+                    console.warn(
+                      'OSM discussion unread refresh failed',
+                      error,
+                    ),
+                );
+            },
+            60,
           );
       },
     );
