@@ -214,11 +214,15 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
   );
   assert.match(
     security,
-    /security-blocks-body/u,
+    /security-user-blocks-body/u,
   );
   assert.match(
     security,
-    /USER-блокировки доступны только роли управления пользователями/u,
+    /security-ip-blocks-body/u,
+  );
+  assert.match(
+    security,
+    /security-ip-allowlist-body/u,
   );
   assert.match(
     security,
