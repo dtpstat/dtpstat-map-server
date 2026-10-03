@@ -115,23 +115,18 @@ if (
     const definitions = [
       {
         id: 'profile',
-        title: 'Профиль',
+        title:
+          'Профиль и безопасность',
         blocks: [
           'profile',
-        ],
-      },
-      {
-        id: 'security',
-        title:
-          'Пароль и MFA',
-        blocks: [
           'password',
           'mfa',
         ],
       },
       {
         id: 'sessions',
-        title: 'Сессии',
+        title:
+          'Активные сессии',
         blocks: [
           'sessions',
         ],
@@ -179,11 +174,16 @@ if (
           }
         }
 
-        if (id === 'security') {
-          profileBlocks.password
+        if (id === 'profile') {
+          profileBlocks.profile
             ?.style.setProperty(
               '--admin-block-span-wide',
               '5',
+            );
+          profileBlocks.password
+            ?.style.setProperty(
+              '--admin-block-span-wide',
+              '7',
             );
           profileBlocks.mfa
             ?.style.setProperty(
