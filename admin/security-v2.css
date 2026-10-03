@@ -867,6 +867,31 @@ body.security-modal-open { overflow: hidden; }
   min-width: 28rem;
 }
 
+.security-ip-allowlist-table tr.is-system {
+  background: rgb(82 215 198 / 6%);
+}
+
+.security-ip-allowlist-system-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: .35rem;
+  padding: .08rem .35rem;
+  border: 1px solid rgb(82 215 198 / 35%);
+  border-radius: 999px;
+  color: #bffaf2;
+  background: rgb(82 215 198 / 10%);
+  font-size: .58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.security-ip-allowlist-system-action {
+  color: var(--muted);
+  font-size: .68rem;
+  white-space: nowrap;
+}
+
 .security-block-table th,
 .security-block-table td {
   padding: .5rem .6rem;
