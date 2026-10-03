@@ -339,7 +339,7 @@ test('desktop admin layout minimizes nested scrolling and exposes compact empty 
   );
   assert.match(
     projectCss,
-    /admin-layout-tab-grid[\s\S]*grid-auto-rows:\s*max-content/u,
+    /admin-layout-grid[\s\S]*grid-auto-rows:\s*max-content/u,
   );
   assert.match(
     projectCss,
