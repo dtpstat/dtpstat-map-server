@@ -526,14 +526,14 @@ if (form) {
           'details',
         );
       card.className =
-        'report-metric-card';
+        'report-metric-card admin-config-block';
 
       const summary =
         document.createElement(
           'summary',
         );
       summary.className =
-        'report-metric-summary';
+        'report-metric-summary admin-config-summary';
 
       const summaryTitle =
         document.createElement(
@@ -827,7 +827,7 @@ if (form) {
         'details',
       );
     box.className =
-      'report-formatting-box';
+      'report-formatting-box admin-config-block';
     box.open =
       openFormatColumns.has(
         column,
@@ -838,7 +838,7 @@ if (form) {
         'summary',
       );
     summary.className =
-      'report-formatting-summary';
+      'report-formatting-summary admin-config-summary';
 
     const title =
       document.createElement(
