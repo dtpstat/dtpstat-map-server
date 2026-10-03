@@ -267,6 +267,7 @@ export function createDiscussionInboxService(
             .mentionSuggestions(
               subjectType,
               normalizedQuery,
+              userId,
               8,
             ),
       };
