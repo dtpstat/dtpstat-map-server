@@ -775,11 +775,14 @@ if (
           <tbody id="security-ip-allowlist-body"></tbody>
         </table>
       </div>
+      <p id="security-ip-allowlist-preview"
+         class="security-info security-ip-allowlist-preview"
+         role="status"></p>
       <p id="security-ip-allowlist-message"
          class="security-message"
          role="status"></p>
     `;
-    right.append(
+    left.append(
       allowlist,
     );
 
@@ -2308,6 +2311,7 @@ if (
       ' из ' +
       activeIpBlocks.length,
     );
+    updateIpAllowlistPreview();
 
     for (
       const button of
@@ -2328,6 +2332,442 @@ if (
           ? ipBlockSort.direction
           : '';
     }
+  }
+
+  function parseIpv4(
+    value,
+  ) {
+    const parts =
+      String(value)
+        .split('.');
+
+    if (
+      parts.length !==
+      4 ||
+      !parts.every(
+        (part) =>
+          /^\d{1,3}$/u.test(
+            part,
+          ) &&
+          Number(part) >= 0 &&
+          Number(part) <= 255,
+      )
+    ) {
+      return null;
+    }
+
+    return parts.reduce(
+      (result, part) =>
+        (
+          result << 8n
+        ) +
+        BigInt(
+          Number(part),
+        ),
+      0n,
+    );
+  }
+
+  function parseIpv6(
+    value,
+  ) {
+    let address =
+      String(value)
+        .trim()
+        .toLocaleLowerCase(
+          'en-US',
+        );
+
+    if (
+      !address ||
+      /\s|\[/u.test(
+        address,
+      ) ||
+      address.includes(']')
+    ) {
+      return null;
+    }
+
+    const embeddedIpv4 =
+      address.match(
+        /(?:^|:)(\d{1,3}(?:\.\d{1,3}){3})$/u,
+      );
+
+    if (embeddedIpv4) {
+      const ipv4 =
+        parseIpv4(
+          embeddedIpv4[1],
+        );
+      if (ipv4 === null) {
+        return null;
+      }
+
+      const high =
+        Number(
+          (
+            ipv4 >>
+            16n
+          ) &
+          0xffffn,
+        )
+          .toString(16);
+      const low =
+        Number(
+          ipv4 &
+          0xffffn,
+        )
+          .toString(16);
+
+      address =
+        address.slice(
+          0,
+          address.length -
+            embeddedIpv4[1].length,
+        ) +
+        high +
+        ':' +
+        low;
+    }
+
+    if (
+      address.split('::')
+        .length > 2
+    ) {
+      return null;
+    }
+
+    const compressed =
+      address.includes(
+        '::',
+      );
+    const [
+      leftPart,
+      rightPart = '',
+    ] =
+      address.split(
+        '::',
+      );
+    const left =
+      leftPart
+        ? leftPart.split(':')
+        : [];
+    const right =
+      rightPart
+        ? rightPart.split(':')
+        : [];
+
+    const validHextet =
+      (part) =>
+        /^[0-9a-f]{1,4}$/u.test(
+          part,
+        );
+
+    if (
+      !left.every(
+        validHextet,
+      ) ||
+      !right.every(
+        validHextet,
+      )
+    ) {
+      return null;
+    }
+
+    const missing =
+      8 -
+      left.length -
+      right.length;
+
+    if (
+      compressed
+        ? missing < 1
+        : missing !== 0
+    ) {
+      return null;
+    }
+
+    const parts = [
+      ...left,
+      ...Array.from(
+        {
+          length:
+            compressed
+              ? missing
+              : 0,
+        },
+        () => '0',
+      ),
+      ...right,
+    ];
+
+    if (parts.length !== 8) {
+      return null;
+    }
+
+    return parts.reduce(
+      (result, part) =>
+        (
+          result << 16n
+        ) +
+        BigInt(
+          Number.parseInt(
+            part,
+            16,
+          ),
+        ),
+      0n,
+    );
+  }
+
+  function parseIpValue(
+    value,
+  ) {
+    const ipv4 =
+      parseIpv4(
+        value,
+      );
+
+    if (ipv4 !== null) {
+      return {
+        version: 4,
+        bits: 32,
+        value: ipv4,
+      };
+    }
+
+    const ipv6 =
+      parseIpv6(
+        value,
+      );
+
+    if (ipv6 !== null) {
+      return {
+        version: 6,
+        bits: 128,
+        value: ipv6,
+      };
+    }
+
+    return null;
+  }
+
+  function parseIpNetwork(
+    value,
+  ) {
+    const text =
+      String(value)
+        .trim();
+    if (!text) {
+      return {
+        valid: false,
+        empty: true,
+      };
+    }
+
+    const parts =
+      text.split('/');
+    if (parts.length > 2) {
+      return {
+        valid: false,
+        error:
+          'Введите IP или CIDR в формате address/prefix',
+      };
+    }
+
+    const parsed =
+      parseIpValue(
+        parts[0],
+      );
+    if (!parsed) {
+      return {
+        valid: false,
+        error:
+          'Некорректный IPv4 или IPv6 адрес',
+      };
+    }
+
+    const prefix =
+      parts.length === 1
+        ? parsed.bits
+        : Number(
+            parts[1],
+          );
+
+    if (
+      !Number.isInteger(
+        prefix,
+      ) ||
+      prefix < 0 ||
+      prefix > parsed.bits
+    ) {
+      return {
+        valid: false,
+        error:
+          'Некорректная длина CIDR-маски',
+      };
+    }
+
+    const hostBits =
+      BigInt(
+        parsed.bits -
+        prefix,
+      );
+    const fullMask =
+      (
+        1n <<
+        BigInt(
+          parsed.bits,
+        )
+      ) -
+      1n;
+    const hostMask =
+      hostBits === 0n
+        ? 0n
+        : (
+            1n <<
+            hostBits
+          ) -
+          1n;
+    const networkMask =
+      fullMask ^
+      hostMask;
+    const network =
+      parsed.value &
+      networkMask;
+
+    if (
+      parts.length === 2 &&
+      network !==
+        parsed.value
+    ) {
+      return {
+        valid: false,
+        error:
+          'Для CIDR укажите адрес сети без host bits',
+      };
+    }
+
+    return {
+      valid: true,
+      version:
+        parsed.version,
+      bits:
+        parsed.bits,
+      prefix,
+      network,
+      mask:
+        networkMask,
+      addressCount:
+        1n <<
+        hostBits,
+    };
+  }
+
+  function ipMatchesNetwork(
+    ipAddress,
+    network,
+  ) {
+    const parsed =
+      parseIpValue(
+        ipAddress,
+      );
+
+    return Boolean(
+      parsed &&
+      parsed.version ===
+        network.version &&
+      (
+        parsed.value &
+        network.mask
+      ) ===
+        network.network
+    );
+  }
+
+  function formatAddressCount(
+    value,
+  ) {
+    const text =
+      value.toString();
+
+    if (text.length <= 12) {
+      return Number(
+        value,
+      )
+        .toLocaleString(
+          'ru-RU',
+        );
+    }
+
+    return text;
+  }
+
+  function updateIpAllowlistPreview() {
+    const form =
+      document.querySelector(
+        '#security-ip-allowlist-form',
+      );
+    const input =
+      form?.elements
+        ?.network;
+    const preview =
+      document.querySelector(
+        '#security-ip-allowlist-preview',
+      );
+
+    if (
+      !input ||
+      !preview
+    ) {
+      return false;
+    }
+
+    const parsed =
+      parseIpNetwork(
+        input.value,
+      );
+
+    if (parsed.empty) {
+      input.setCustomValidity(
+        '',
+      );
+      preview.textContent =
+        '';
+      return false;
+    }
+
+    if (!parsed.valid) {
+      input.setCustomValidity(
+        parsed.error,
+      );
+      preview.textContent =
+        parsed.error;
+      return false;
+    }
+
+    input.setCustomValidity(
+      '',
+    );
+
+    const blockedCount =
+      activeIpBlocks.filter(
+        (block) =>
+          ipMatchesNetwork(
+            block.ipAddress,
+            parsed,
+          ),
+      ).length;
+
+    preview.textContent =
+      'Диапазон: ' +
+      formatAddressCount(
+        parsed.addressCount,
+      ) +
+      ' IP; активных ручных блокировок будет снято: ' +
+      blockedCount +
+      '.';
+
+    return true;
   }
 
   function renderIpAllowlist() {
@@ -2666,6 +3106,13 @@ if (
   );
 
   document.querySelector(
+    '#security-ip-allowlist-form input[name="network"]',
+  )?.addEventListener(
+    'input',
+    updateIpAllowlistPreview,
+  );
+
+  document.querySelector(
     '#security-ip-allowlist-form',
   )?.addEventListener(
     'submit',
@@ -2673,6 +3120,7 @@ if (
       event.preventDefault();
       const form =
         event.currentTarget;
+      updateIpAllowlistPreview();
       if (!form.reportValidity()) {
         return;
       }
