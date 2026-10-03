@@ -177,6 +177,7 @@ if (section) {
     discussionSending: false,
     discussionRequestSequence: 0,
     workspaceRequestSequence: 0,
+    discussionUnreadRefreshTimer: null,
     pendingTargetNavigation: false,
     discussionUnreadByGeometry: new Map(),
     discussionMessageCountByGeometry:
@@ -9906,6 +9907,88 @@ if (section) {
               'Geometry discussion state refresh failed',
               error,
             ),
+        );
+    },
+  );
+
+  window.addEventListener(
+    'dtpstat:discussion-unread-refresh',
+    (event) => {
+      if (
+        event.detail?.subjectType !==
+        'geometry'
+      ) {
+        return;
+      }
+
+      const geometryId =
+        Number(
+          event.detail?.subjectId,
+        );
+      if (
+        !Number.isSafeInteger(
+          geometryId,
+        ) ||
+        geometryId <= 0
+      ) {
+        return;
+      }
+
+      if (
+        state.discussionUnreadRefreshTimer !==
+        null
+      ) {
+        window.clearTimeout(
+          state.discussionUnreadRefreshTimer,
+        );
+      }
+
+      const detail = {
+        ...event.detail,
+      };
+      state.discussionUnreadRefreshTimer =
+        window.setTimeout(
+          () => {
+            state.discussionUnreadRefreshTimer =
+              null;
+
+            if (
+              detail.source ===
+                'notification' &&
+              discussionIsOpenFor(
+                geometryId,
+              )
+            ) {
+              void loadDiscussion(
+                geometryId,
+              ).catch(
+                (error) =>
+                  console.warn(
+                    'Geometry discussion notification refresh failed',
+                    error,
+                  ),
+              );
+              return;
+            }
+
+            if (
+              discussionIsOpenFor(
+                geometryId,
+              )
+            ) {
+              return;
+            }
+
+            void loadDiscussionState()
+              .catch(
+                (error) =>
+                  console.warn(
+                    'Geometry discussion unread refresh failed',
+                    error,
+                  ),
+              );
+          },
+          60,
         );
     },
   );
