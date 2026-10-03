@@ -1914,6 +1914,23 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
   );
   assert.match(
     script,
+    /discussionMessageCountByGeometry:[\s\S]*new Map\(\)/u,
+  );
+  assert.match(
+    script,
+    /classList\.toggle\([\s\S]*'has-thread'[\s\S]*messageCount > 0/u,
+  );
+  assert.match(
+    html,
+    /geometry-discussion-thread-mark/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-discussion-open\.has-thread:not\(\.has-unread\)/u,
+  );
+
+  assert.match(
+    script,
     /function incrementDiscussionUnread\(/u,
   );
   assert.match(
@@ -1922,7 +1939,7 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
   );
   assert.match(
     script,
-    /async function loadDiscussionUnread\([\s\S]*\/api\/admin\/geometry-editor\/discussions\/unread/u,
+    /async function loadDiscussionState\([\s\S]*\/api\/admin\/geometry-editor\/discussions\/state/u,
   );
   assert.match(
     script,
