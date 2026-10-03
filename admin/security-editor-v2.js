@@ -271,7 +271,7 @@ if (
           <table class="security-audit-table">
             <thead><tr>
               <th>Время</th><th>Пользователь</th><th>IP</th><th>Событие</th>
-              <th>Операция</th><th>Статус</th><th>мс</th><th>Реакция</th><th>Детали</th>
+              <th>Операция</th><th>Статус</th><th>мс</th><th>Детали</th>
             </tr></thead>
             <tbody id="security-audit-body"></tbody>
           </table>
@@ -1797,39 +1797,6 @@ if (
       cell.textContent = String(value);
       row.append(cell);
     }
-
-    const actions = document.createElement('td');
-    actions.className = 'security-audit-actions';
-    if (canManageUsers && entry.userId) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'mini-button';
-      button.textContent = 'Блок. учётку';
-      button.addEventListener('click', () => void quickBlockUser(entry)
-        .then(loadAudit)
-        .catch((error) => setMessage(
-          document.querySelector('#security-audit-message'),
-          error.message,
-          'error',
-        )));
-      actions.append(button);
-    }
-    if (canManageSecurity && entry.ipAddress) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'mini-button';
-      button.textContent = 'Блок. IP';
-      button.addEventListener('click', () => void quickBlockIp(entry)
-        .then(loadAudit)
-        .catch((error) => setMessage(
-          document.querySelector('#security-audit-message'),
-          error.message,
-          'error',
-        )));
-      actions.append(button);
-    }
-    if (!actions.childElementCount) actions.textContent = '—';
-    row.append(actions);
 
     const detailsCell = document.createElement('td');
     const changeCount = Array.isArray(entry.details?.changes)
