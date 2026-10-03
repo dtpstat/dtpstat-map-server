@@ -1,5 +1,5 @@
 import { adminAvatarObjectUrl } from './admin-avatar.js';
-import { adminAlert, adminConfirm } from './admin-dialog.js';
+import { adminConfirm } from './admin-dialog.js';
 import { trackDirtyForm } from './admin-dirty-state.js';
 import { bindHumanUnits } from './admin-human-units.js';
 import {
