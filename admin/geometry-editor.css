@@ -885,6 +885,33 @@
   stroke-linejoin: round;
 }
 
+.geometry-discussion-thread-mark {
+  opacity: 0;
+  transition: opacity .14s ease;
+}
+
+.geometry-discussion-open:not(.has-thread) {
+  color: var(--muted);
+  opacity: .72;
+}
+
+.geometry-discussion-open.has-thread:not(.has-unread) {
+  color: #cfe7e4;
+  border-color: #486268;
+  background: #142329;
+}
+
+.geometry-discussion-open.has-thread
+.geometry-discussion-thread-mark {
+  opacity: 1;
+}
+
+.geometry-discussion-open.has-unread
+.geometry-discussion-thread-mark {
+  opacity: 1;
+  stroke-width: 2.2;
+}
+
 .geometry-discussion-open.has-unread {
   color: #061719;
   border-color: #52d7c6;
