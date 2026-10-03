@@ -66,6 +66,175 @@ if (
   stylesheet.href = '/admin/profile.css';
   document.head.append(stylesheet);
 
+  const profileGrid =
+    profileRoot.querySelector(
+      '.admin-layout-grid',
+    );
+  const profileCard =
+    profileRoot.querySelector(
+      '.admin-layout-card',
+    );
+  const profileBlocks = {
+    profile:
+      accountHost.closest(
+        '.admin-layout-block',
+      ),
+    password:
+      passwordHost.closest(
+        '.admin-layout-block',
+      ),
+    mfa:
+      mfaHost.closest(
+        '.admin-layout-block',
+      ),
+    sessions:
+      profileSessionsHost.closest(
+        '.admin-layout-block',
+      ),
+  };
+
+  if (
+    profileGrid &&
+    profileCard
+  ) {
+    const tabs =
+      document.createElement(
+        'nav',
+      );
+    tabs.className =
+      'profile-tabs';
+    tabs.setAttribute(
+      'role',
+      'tablist',
+    );
+    tabs.setAttribute(
+      'aria-label',
+      'Разделы профиля',
+    );
+
+    const definitions = [
+      {
+        id: 'profile',
+        title: 'Профиль',
+        blocks: [
+          'profile',
+        ],
+      },
+      {
+        id: 'security',
+        title:
+          'Пароль и MFA',
+        blocks: [
+          'password',
+          'mfa',
+        ],
+      },
+      {
+        id: 'sessions',
+        title: 'Сессии',
+        blocks: [
+          'sessions',
+        ],
+      },
+    ];
+
+    const selectProfileTab =
+      (id) => {
+        for (
+          const definition of
+          definitions
+        ) {
+          const active =
+            definition.id ===
+            id;
+          const button =
+            tabs.querySelector(
+              '[data-profile-tab="' +
+              definition.id +
+              '"]',
+            );
+          button?.setAttribute(
+            'aria-selected',
+            String(active),
+          );
+          if (button) {
+            button.tabIndex =
+              active
+                ? 0
+                : -1;
+          }
+
+          for (
+            const blockName of
+            definition.blocks
+          ) {
+            const block =
+              profileBlocks[
+                blockName
+              ];
+            if (block) {
+              block.hidden =
+                !active;
+            }
+          }
+        }
+
+        if (id === 'security') {
+          profileBlocks.password
+            ?.style.setProperty(
+              '--admin-block-span-wide',
+              '5',
+            );
+          profileBlocks.mfa
+            ?.style.setProperty(
+              '--admin-block-span-wide',
+              '7',
+            );
+        }
+      };
+
+    for (
+      const definition of
+      definitions
+    ) {
+      const button =
+        document.createElement(
+          'button',
+        );
+      button.type =
+        'button';
+      button.role =
+        'tab';
+      button.dataset
+        .profileTab =
+        definition.id;
+      button.textContent =
+        definition.title;
+      button.setAttribute(
+        'aria-selected',
+        'false',
+      );
+      button.addEventListener(
+        'click',
+        () =>
+          selectProfileTab(
+            definition.id,
+          ),
+      );
+      tabs.append(
+        button,
+      );
+    }
+
+    profileCard.insertBefore(
+      tabs,
+      profileGrid,
+    );
+    selectProfileTab(
+      'profile',
+    );
+  }
+
   accountHost.innerHTML = `
     <section class="profile-panel">
         <h3>Профиль</h3>
