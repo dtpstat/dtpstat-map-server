@@ -115,6 +115,36 @@
   background: #0c1417;
 }
 
+.geometry-editor-details.is-empty {
+  display: grid;
+  place-items: center;
+}
+
+.geometry-editor-details.is-empty #geometry-editor-form {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+}
+
+.geometry-editor-details.is-empty #geometry-editor-form > :not(
+  #geometry-editor-selected-title
+) {
+  display: none !important;
+}
+
+.geometry-editor-details.is-empty
+  .geometry-editor-selected-title {
+  margin: 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+
 .geometry-editor-list-panel {
   display: flex;
   flex-direction: column;
