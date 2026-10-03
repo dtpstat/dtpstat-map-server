@@ -156,6 +156,7 @@ function publishChange(
  *     listEditLeases: Function,
  *     listDiscussion: Function,
  *     listDiscussionUnread: Function,
+ *     listDiscussionState: Function,
  *     markDiscussionRead: Function,
  *     postDiscussionMessage: Function,
  *     beginEdit: Function,
@@ -458,6 +459,33 @@ export function createGeometryEditorRouter({
           .json(
             await geometryEditorService
               .listDiscussionUnread(
+                request.adminUser,
+              ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.get(
+    '/admin/geometry-editor/discussions/state',
+    adminAuth
+      .requireGeometryEditor,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json(
+            await geometryEditorService
+              .listDiscussionState(
                 request.adminUser,
               ),
           );
