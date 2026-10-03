@@ -175,8 +175,41 @@
   gap: .35rem;
   white-space: nowrap;
 }
-.security-detail-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .7rem; }
-.security-role-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .55rem; }
+.security-detail-fields {
+  display: grid;
+  grid-template-columns:
+    minmax(9rem, .7fr)
+    minmax(12rem, 1.2fr)
+    minmax(14rem, 1.35fr);
+  gap: .6rem;
+  align-items: end;
+}
+
+.security-detail-fields label:nth-child(4),
+.security-detail-fields label:nth-child(5) {
+  grid-column: span 1;
+}
+
+.security-role-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: .45rem .7rem;
+}
+
+.security-inline-validation {
+  min-height: .9rem;
+  color: var(--muted);
+  font-size: .62rem;
+}
+
+.security-inline-validation.is-valid {
+  color: var(--success);
+}
+
+.security-inline-validation.is-error {
+  color: var(--danger);
+}
 .security-access-section { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
 .security-access-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .security-inline-block-form { margin-top: .7rem; display: grid; grid-template-columns: 12rem minmax(0,1fr) auto; gap: .5rem; align-items: end; }
@@ -972,4 +1005,20 @@ body.security-modal-open { overflow: hidden; }
 @media (max-width: 650px) {
   .security-audit-detail-dialog { width: 100%; height: 96vh; border-radius: 10px; }
   .security-audit-detail-toolbar-spacer { display: none; }
+}
+
+
+@container admin-layout-block (max-width: 58rem) {
+  .security-detail-fields,
+  .security-role-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container admin-layout-block (max-width: 38rem) {
+  .security-detail-fields,
+  .security-role-grid {
+    grid-template-columns: 1fr;
+  }
 }
