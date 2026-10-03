@@ -211,6 +211,67 @@ export function createDiscussionInboxService(
       };
     },
 
+    async mentionSuggestions(
+      user,
+      {
+        subjectType,
+        query,
+      },
+    ) {
+      const userId =
+        Number(
+          user?.id,
+        );
+      if (
+        !Number.isSafeInteger(
+          userId,
+        ) ||
+        userId <= 0
+      ) {
+        throw new TypeError(
+          'Authenticated user id is required',
+        );
+      }
+
+      if (
+        !allowedSubjectTypes(
+          user,
+        ).includes(
+          subjectType,
+        )
+      ) {
+        return {
+          users: [],
+        };
+      }
+
+      const normalizedQuery =
+        String(
+          query ??
+          '',
+        )
+          .normalize('NFC')
+          .trim()
+          .replace(
+            /^@/u,
+            '',
+          )
+          .slice(
+            0,
+            64,
+          );
+
+      return {
+        users:
+          await storage
+            .mentionSuggestions(
+              subjectType,
+              normalizedQuery,
+              8,
+            ),
+      };
+    },
+
     async notificationTargets(
       user,
       {
