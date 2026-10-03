@@ -877,6 +877,16 @@ export const API_REQUEST_CONTRACTS =
       '/admin/profile/discussions',
     ),
     c(
+      'GET',
+      '/admin/profile/discussions/mentions',
+      {
+        query: [
+          'subjectType',
+          'q',
+        ],
+      },
+    ),
+    c(
       'POST',
       '/admin/profile/discussions/read-all',
     ),
