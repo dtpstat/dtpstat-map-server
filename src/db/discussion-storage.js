@@ -371,29 +371,12 @@ export function createDiscussionStorage(
     ) {
       const [
         subject,
-        participants,
         mentionedUsers,
       ] =
         await Promise.all([
           this.getSubject(
             subjectType,
             subjectId,
-          ),
-          database.query(
-            `SELECT DISTINCT
-               message.author_user_id::integer AS "userId"
-             FROM admin_discussion_messages AS message
-             WHERE message.subject_type = $1::text
-               AND message.subject_id = $2::bigint
-               AND message.deleted_at IS NULL
-               AND message.author_user_id IS NOT NULL
-               AND message.author_user_id <> $3::bigint
-             ORDER BY "userId"`,
-            [
-              subjectType,
-              subjectId,
-              authorUserId,
-            ],
           ),
           mentionLogins.length
             ? database.query(
@@ -416,10 +399,7 @@ export function createDiscussionStorage(
 
       return {
         subject,
-        participantUserIds:
-          participants.rows.map(
-            (row) => row.userId,
-          ),
+        participantUserIds: [],
         mentionedUsers:
           mentionedUsers.rows,
       };
