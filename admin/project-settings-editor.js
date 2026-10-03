@@ -139,19 +139,19 @@ if (typeof document !== 'undefined') {
                   <input name="showPolygonGeometries" type="checkbox" checked>
                   Показывать полигоны
                 </label>
+
+                <label class="check project-setting-check">
+                  <input name="showLineLabels" type="checkbox">
+                  Постоянно отображать наименования линий
+                  <small>Для линий с KML Placemark/name подпись размещается вдоль геометрии и остаётся видимой без наведения.</small>
+                </label>
+
+                <label class="check project-setting-check">
+                  <input name="showLinePopups" type="checkbox" checked>
+                  Показывать наименование линии при наведении
+                  <small>При наведении указателя на линию показывается popup с KML Placemark/name. Эта настройка независима от постоянных подписей.</small>
+                </label>
               </section>
-
-              <label class="check project-setting-check">
-                <input name="showLineLabels" type="checkbox">
-                Постоянно отображать наименования линий
-                <small>Для линий с KML Placemark/name подпись размещается вдоль геометрии и остаётся видимой без наведения.</small>
-              </label>
-
-              <label class="check project-setting-check">
-                <input name="showLinePopups" type="checkbox" checked>
-                Показывать наименование линии при наведении
-                <small>При наведении указателя на линию показывается popup с KML Placemark/name. Эта настройка независима от постоянных подписей.</small>
-              </label>
       `;
 
       mapHosts.history.innerHTML = `

@@ -360,6 +360,14 @@ test('desktop admin layout minimizes nested scrolling and exposes compact empty 
     projectCss,
     /map-actions[\s\S]*grid-column:\s*1 \/ -1/u,
   );
+  assert.doesNotMatch(
+    adminCss,
+    /\.admin-layout-block-host\s*\{[\s\S]*height:\s*100%/u,
+  );
+  assert.match(
+    project,
+    /showPolygonGeometries[\s\S]*showLineLabels[\s\S]*showLinePopups[\s\S]*<\/section>/u,
+  );
 
   assert.match(
     profile,
@@ -413,6 +421,22 @@ test('desktop admin layout minimizes nested scrolling and exposes compact empty 
   assert.match(
     securityCss,
     /\.security-ip-block-pagination/u,
+  );
+  assert.match(
+    securityCss,
+    /#security-panel-audit:not\(\[hidden\]\)[\s\S]*display:\s*flex[\s\S]*flex-direction:\s*column/u,
+  );
+  assert.match(
+    securityCss,
+    /\[data-security-settings-panel="blocks"\]:not\(\[hidden\]\)[\s\S]*display:\s*flex[\s\S]*overflow:\s*hidden/u,
+  );
+  assert.match(
+    securityCss,
+    /#security-timing-settings[\s\S]*repeat\(3[\s\S]*#security-rate-limit-settings[\s\S]*repeat\(2/u,
+  );
+  assert.match(
+    security,
+    /<details class="admin-advanced-settings" hidden>/u,
   );
   assert.match(
     securityCss,

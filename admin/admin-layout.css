@@ -35,7 +35,7 @@
 .admin-layout-block-host {
   min-width: 0;
   min-height: 0;
-  height: 100%;
+  height: auto;
 }
 
 .admin-layout-fill,

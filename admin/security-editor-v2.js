@@ -364,7 +364,7 @@ if (
               </div>
             </section>
 
-            <details class="admin-advanced-settings">
+            <details class="admin-advanced-settings" hidden>
               <summary>Тонкая настройка блокировок, сессий и аудита</summary>
               <div class="admin-advanced-settings-body">
                 <p class="admin-advanced-settings-note">Эти параметры обычно меняет технический администратор. Рядом с секундами показывается привычное время.</p>

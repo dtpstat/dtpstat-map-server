@@ -30,6 +30,23 @@
   min-height: 0;
 }
 
+[data-security-settings-panel="blocks"]:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+[data-security-settings-panel="blocks"]:not([hidden])
+  > .admin-layout-grid {
+  min-height: 0;
+  flex: 1 1 0;
+}
+
+[data-admin-layout-block="security-blocks"],
+#security-blocks-host {
+  min-height: 0;
+}
+
 .security-settings-panel > .admin-layout-grid {
   min-height: 0;
 }
@@ -226,7 +243,15 @@ button.danger { background: #51211f; border-color: #8e3a36; color: #ffd0cc; }
 #security-panel-audit:not([hidden]) {
   min-height: 0;
   flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+}
+
+#security-panel-audit:not([hidden])
+  > .admin-layout-grid {
+  min-height: 0;
+  flex: 1 1 0;
 }
 
 .security-audit-block,
@@ -682,6 +707,62 @@ body.security-modal-open { overflow: hidden; }
   border-top: 1px solid var(--line);
 }
 
+#security-metrics-timings-host {
+  display: grid;
+  gap: .65rem;
+  align-content: start;
+}
+
+#security-metrics-timings-host > h3 {
+  margin: 0;
+}
+
+#security-timing-settings,
+#security-rate-limit-settings {
+  min-width: 0;
+  margin: 0;
+  padding: .58rem .65rem;
+  display: grid;
+  gap: .55rem .7rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+#security-timing-settings {
+  grid-template-columns:
+    repeat(3, minmax(11rem, 1fr));
+}
+
+#security-rate-limit-settings {
+  grid-template-columns:
+    repeat(2, minmax(13rem, 1fr));
+}
+
+#security-timing-settings label,
+#security-rate-limit-settings label {
+  min-width: 0;
+  display: grid;
+  gap: .28rem;
+}
+
+#security-timing-settings .security-info,
+#security-rate-limit-settings .security-info {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+#security-metrics-timings-host > button {
+  width: fit-content;
+  min-width: 15rem;
+}
+
+@container admin-layout-block (max-width: 52rem) {
+  #security-timing-settings,
+  #security-rate-limit-settings {
+    grid-template-columns: 1fr;
+  }
+}
+
 .security-metrics-actions {
   display: flex;
   flex-wrap: wrap;
@@ -752,12 +833,14 @@ body.security-modal-open { overflow: hidden; }
 }
 
 .security-blocks-layout {
+  min-height: 0;
+  height: 100%;
   display: grid;
   grid-template-columns:
     minmax(18rem, .72fr)
     minmax(0, 1.28fr);
   gap: .8rem;
-  align-items: start;
+  align-items: stretch;
 }
 
 .security-blocks-column {
@@ -781,7 +864,7 @@ body.security-modal-open { overflow: hidden; }
 
 .security-ip-blocks-panel
   .security-block-table-wrap {
-  min-height: 8rem;
+  min-height: 0;
   flex: 1 1 auto;
 }
 
