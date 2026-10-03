@@ -73,6 +73,26 @@ async function withServer(
         }],
       };
     },
+    async mentionSuggestions(
+      user,
+      request,
+    ) {
+      calls.push({
+        mentionUser:
+          user,
+        mentionRequest:
+          request,
+      });
+      return {
+        users: [{
+          userId: 2,
+          username:
+            'alex',
+          displayName:
+            'Alex',
+        }],
+      };
+    },
   };
 
   app.use(
@@ -260,6 +280,77 @@ test('read-all marks all accessible discussion threads and publishes refresh sta
           .source
           .readerUserId,
         7,
+      );
+    },
+  );
+});
+
+
+test('discussion mention suggestions expose only the minimal profile shape', async () => {
+  await withServer(
+    async (
+      baseUrl,
+      calls,
+    ) => {
+      const invalid =
+        await fetch(
+          baseUrl +
+            '/api/admin/profile/discussions/mentions?subjectType=bad&q=a',
+          {
+            headers: {
+              Cookie:
+                cookie,
+            },
+          },
+        );
+      assert.equal(
+        invalid.status,
+        400,
+      );
+
+      const response =
+        await fetch(
+          baseUrl +
+            '/api/admin/profile/discussions/mentions?subjectType=geometry&q=Al',
+          {
+            headers: {
+              Cookie:
+                cookie,
+            },
+          },
+        );
+
+      assert.equal(
+        response.status,
+        200,
+      );
+      assert.equal(
+        response.headers.get(
+          'cache-control',
+        ),
+        'no-store',
+      );
+      assert.deepEqual(
+        await response.json(),
+        {
+          users: [{
+            userId: 2,
+            username:
+              'alex',
+            displayName:
+              'Alex',
+          }],
+        },
+      );
+      assert.deepEqual(
+        calls.at(-1)
+          .mentionRequest,
+        {
+          subjectType:
+            'geometry',
+          query:
+            'Al',
+        },
       );
     },
   );
