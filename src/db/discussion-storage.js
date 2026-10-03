@@ -253,6 +253,43 @@ export function createDiscussionStorage(
           `SELECT
              message.subject_type AS "subjectType",
              message.subject_id::integer AS "subjectId",
+             COUNT(*)::integer AS "unreadCount"
+           FROM admin_discussion_messages AS message
+           LEFT JOIN admin_discussion_read_state AS read_state
+             ON read_state.subject_type = message.subject_type
+            AND read_state.subject_id = message.subject_id
+            AND read_state.user_id = $1::bigint
+           WHERE message.deleted_at IS NULL
+             AND message.author_user_id IS DISTINCT FROM $1::bigint
+             AND message.subject_type = ANY($2::text[])
+             AND (
+               read_state.last_read_message_id IS NULL
+               OR message.id > read_state.last_read_message_id
+             )
+           GROUP BY
+             message.subject_type,
+             message.subject_id
+           ORDER BY
+             message.subject_type,
+             message.subject_id`,
+          [
+            userId,
+            subjectTypes,
+          ],
+        );
+
+      return result.rows;
+    },
+
+    async threadStates(
+      userId,
+      subjectTypes,
+    ) {
+      const result =
+        await database.query(
+          `SELECT
+             message.subject_type AS "subjectType",
+             message.subject_id::integer AS "subjectId",
              COUNT(*)::integer AS "messageCount",
              COUNT(*) FILTER (
                WHERE
