@@ -62,9 +62,11 @@ export function createDiscussionInboxRouter({
           permission:
             'profile',
           entityIds: [],
-          readerUserId:
-            request.adminUser?.id ??
-            null,
+          source: {
+            readerUserId:
+              request.adminUser?.id ??
+              null,
+          },
           message:
             'Все доступные обсуждения отмечены прочитанными.',
         });
