@@ -533,6 +533,10 @@ export const API_REQUEST_CONTRACTS =
     ),
     c(
       'GET',
+      '/admin/osm-boundaries/discussions/state',
+    ),
+    c(
+      'GET',
       '/admin/osm-boundaries/:boundaryId/discussion',
     ),
     c(
@@ -648,6 +652,10 @@ export const API_REQUEST_CONTRACTS =
     c(
       'GET',
       '/admin/geometry-editor/discussions/unread',
+    ),
+    c(
+      'GET',
+      '/admin/geometry-editor/discussions/state',
     ),
     c(
       'GET',
@@ -867,6 +875,10 @@ export const API_REQUEST_CONTRACTS =
     c(
       'GET',
       '/admin/profile/discussions',
+    ),
+    c(
+      'POST',
+      '/admin/profile/discussions/read-all',
     ),
     c(
       'GET',
