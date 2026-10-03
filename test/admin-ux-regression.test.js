@@ -99,7 +99,7 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
   );
   assert.match(
     securityCss,
-    /\.security-ip-block-form[\s\S]*grid-template-columns:\s*minmax\(0,1fr\)/u,
+    /\.security-ip-block-form[\s\S]*grid-template-columns:[\s\S]*15rem[\s\S]*9rem[\s\S]*auto/u,
   );
   assert.match(
     securityCss,
@@ -169,6 +169,22 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
   assert.match(
     security,
     /security-ip-allowlist-form[\s\S]*192\.168\.0\.0\/24/u,
+  );
+  assert.match(
+    security,
+    /function validIpv4Address\([\s\S]*function validIpv6Address\([\s\S]*validateIpInput/u,
+  );
+  assert.match(
+    security,
+    /security-user-blocked-filter[\s\S]*aria-pressed/u,
+  );
+  assert.match(
+    security,
+    /userCurrentlyBlocked[\s\S]*security-user-row-lock/u,
+  );
+  assert.doesNotMatch(
+    security,
+    /Заблокированные пользователи/u,
   );
   assert.match(securityCss, /\.security-audit-filter-panel/);
   assert.match(securityCss, /\.security-audit-filter[\s\S]*grid-template-columns:\s*repeat\(4/);
