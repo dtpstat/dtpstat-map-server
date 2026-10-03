@@ -4416,7 +4416,39 @@ if (section) {
         state.editLeases.get(
           Number(item.id),
         );
+      const rowLeaseIsMine =
+        Boolean(
+          rowLease &&
+          (
+            rowLease.clientId ===
+              realtimeClientId() ||
+            (
+              rowLease.userId !==
+                null &&
+              rowLease.userId !==
+                undefined &&
+              currentUser?.id !==
+                null &&
+              currentUser?.id !==
+                undefined &&
+              String(
+                rowLease.userId,
+              ) ===
+                String(
+                  currentUser.id,
+                )
+            )
+          ),
+        );
       row.classList.toggle('is-selected', item.id === state.selectedId);
+      row.classList.toggle(
+        'is-leased',
+        Boolean(rowLease),
+      );
+      row.classList.toggle(
+        'is-leased-by-me',
+        rowLeaseIsMine,
+      );
       row.classList.toggle('is-hidden', item.isVisible === false);
       row.classList.toggle(
         'is-edited',
@@ -4511,9 +4543,13 @@ if (section) {
         item._draft ? 'черновик' : null,
         item._conflict ? 'конфликт' : null,
         rowLease
-          ? 'редактирует: ' +
-            identityName(
-              rowLease,
+          ? (
+              rowLeaseIsMine
+                ? 'редактируете вы'
+                : 'редактирует: ' +
+                  identityName(
+                    rowLease,
+                  )
             )
           : null,
         !item.boundaryId ? 'без привязки' : null,
@@ -4525,7 +4561,37 @@ if (section) {
       type.className = 'geometry-editor-row-type';
       type.textContent = typeLabel(item);
 
-      open.append(copy, type);
+      const leaseMarker =
+        rowLease
+          ? document.createElement(
+              'span',
+            )
+          : null;
+      if (leaseMarker) {
+        leaseMarker.className =
+          'geometry-editor-row-lease-marker';
+        leaseMarker.textContent =
+          '✎';
+        leaseMarker.title =
+          rowLeaseIsMine
+            ? 'Редактируете вы'
+            : 'Редактирует: ' +
+              identityName(
+                rowLease,
+              );
+        leaseMarker.setAttribute(
+          'aria-label',
+          leaseMarker.title,
+        );
+      }
+
+      open.append(
+        copy,
+        ...(leaseMarker
+          ? [leaseMarker]
+          : []),
+        type,
+      );
       open.addEventListener(
         'click',
         () => {

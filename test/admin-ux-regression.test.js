@@ -226,6 +226,18 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
     /\.geometry-editor-city-options[\s\S]*overflow-y:\s*auto/u,
   );
   assert.match(
+    geometryEditor,
+    /rowLeaseIsMine[\s\S]*is-leased[\s\S]*редактируете вы[\s\S]*geometry-editor-row-lease-marker/u,
+  );
+  assert.match(
+    geometryCss,
+    /\.geometry-discussion-open[\s\S]*position:\s*absolute[\s\S]*top:\s*0[\s\S]*right:\s*0/u,
+  );
+  assert.match(
+    geometryCss,
+    /\.geometry-editor-row\.is-leased:not\(\.is-selected\)[\s\S]*background:/u,
+  );
+  assert.match(
     security,
     /userCurrentlyBlocked[\s\S]*security-user-row-lock/u,
   );
@@ -428,7 +440,11 @@ test('desktop admin layout minimizes nested scrolling and exposes compact empty 
   );
   assert.match(
     securityCss,
-    /\[data-security-settings-panel="blocks"\]:not\(\[hidden\]\)[\s\S]*display:\s*flex[\s\S]*overflow:\s*hidden/u,
+    /#security-settings-panels[\s\S]*display:\s*flex[\s\S]*flex-direction:\s*column/u,
+  );
+  assert.match(
+    securityCss,
+    /\[data-security-settings-panel="blocks"\]:not\(\[hidden\]\)[\s\S]*display:\s*flex[\s\S]*overflow:\s*hidden[\s\S]*grid-template-rows:[\s\S]*minmax\(0, 1fr\)/u,
   );
   assert.match(
     securityCss,

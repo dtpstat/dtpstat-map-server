@@ -23,11 +23,14 @@
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .security-settings-panel:not([hidden]) {
   min-width: 0;
   min-height: 0;
+  flex: 1 1 0;
 }
 
 [data-security-settings-panel="blocks"]:not([hidden]) {
@@ -40,6 +43,8 @@
   > .admin-layout-grid {
   min-height: 0;
   flex: 1 1 0;
+  grid-template-rows:
+    minmax(0, 1fr);
 }
 
 [data-admin-layout-block="security-blocks"],
