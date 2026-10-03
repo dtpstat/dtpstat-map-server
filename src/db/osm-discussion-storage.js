@@ -93,6 +93,8 @@ export function createOsmDiscussionStorage(
             item.subjectId,
           unreadCount:
             item.unreadCount,
+          messageCount:
+            item.messageCount,
         }),
       );
     },
