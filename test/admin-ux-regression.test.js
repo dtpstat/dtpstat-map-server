@@ -183,6 +183,10 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
     /\.security-ip-allowlist-system-badge/u,
   );
   assert.match(
+    securityCss,
+    /\.security-ip-allowlist-form[\s\S]*grid-template-columns:[\s\S]*13rem[\s\S]*auto/u,
+  );
+  assert.match(
     security,
     /left\.append\([\s\S]*allowlist/u,
   );
