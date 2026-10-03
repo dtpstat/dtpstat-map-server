@@ -104,6 +104,22 @@ test('admin report builder is catalog-driven, four-tabbed and has no free-form e
   assert.match(editor, /ОПЗ/);
   assert.match(editor, /generatedMetricKey/);
   assert.match(editor, /Поднять метрику/);
+  assert.match(
+    editor,
+    /document\.createElement\([\s\S]*'details'[\s\S]*report-metric-summary/u,
+  );
+  assert.match(
+    editor,
+    /querySelectorAll\([\s\S]*\.report-metric-card\[open\][\s\S]*sibling\.open/u,
+  );
+  assert.match(
+    css,
+    /\.report-metric-summary/u,
+  );
+  assert.match(
+    css,
+    /\.report-metric-body/u,
+  );
   assert.match(editor, /Опустить метрику/);
   assert.match(editor, /Поднять операцию/);
   assert.match(editor, /Опустить операцию/);
