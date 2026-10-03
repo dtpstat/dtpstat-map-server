@@ -113,6 +113,10 @@ if (typeof document !== 'undefined') {
         new Map(),
     };
 
+    const detailsPanel =
+      form.closest(
+        '.osm-boundary-details',
+      );
     const field = (name) => form.elements.namedItem(name);
     const active = field('active');
     const displayName = field('displayName');
@@ -422,6 +426,8 @@ if (typeof document !== 'undefined') {
     ) {
       if (!discussionOpen) return;
 
+      discussionOpen.hidden =
+        !item;
       discussionOpen.disabled =
         !item;
 
@@ -1189,6 +1195,11 @@ if (typeof document !== 'undefined') {
 
     function applySelection(item) {
       state.selectedId = item?.id ?? null;
+      detailsPanel?.classList
+        .toggle(
+          'is-empty',
+          !item,
+        );
       const localDraft = item ? draftFor(item.id) : null;
       const enabled = Boolean(item);
       for (const control of [
@@ -1217,6 +1228,7 @@ if (typeof document !== 'undefined') {
         geometryMeta?.replaceChildren();
         updateBranchActions(null);
         updateDiscussionControl(null);
+        void showEmptyMap();
         renderTree();
         return;
       }
@@ -1374,6 +1386,40 @@ if (typeof document !== 'undefined') {
         state.map?.remove();
         state.map = null;
         throw error;
+      }
+    }
+
+    async function showEmptyMap() {
+      try {
+        const map =
+          await ensureMap();
+        map
+          .getSource(
+            MAP_SOURCE_ID,
+          )
+          ?.setData({
+            type:
+              'FeatureCollection',
+            features: [],
+          });
+        map.easeTo({
+          center: [
+            20,
+            30,
+          ],
+          zoom: 3,
+          duration: 0,
+        });
+        window.setTimeout(
+          () =>
+            map.resize(),
+          0,
+        );
+      } catch (error) {
+        console.warn(
+          'OSM empty map failed',
+          error,
+        );
       }
     }
 
