@@ -39,6 +39,21 @@ export function createSecurityAuthService(
       };
     }
 
+    const allowlistMatch =
+      await repository
+        .findIpAllowlistMatch(
+          ip,
+        );
+    if (allowlistMatch) {
+      return {
+        status: 'ok',
+        ipAddress: ip,
+        allowlisted: true,
+        allowlist:
+          allowlistMatch,
+      };
+    }
+
     const manualBlock = await repository.isIpBlocked(ip);
     if (manualBlock) {
       return {
