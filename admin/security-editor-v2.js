@@ -220,6 +220,14 @@ if (
           <aside class="security-users-master">
             <div class="security-master-toolbar">
               <input id="security-user-search" type="search" placeholder="Поиск пользователя…" aria-label="Поиск пользователя">
+              <button type="button"
+                      class="secondary security-user-blocked-filter"
+                      id="security-user-blocked-filter"
+                      aria-pressed="false"
+                      title="Показать только заблокированных пользователей">
+                <span aria-hidden="true">🔒</span>
+                Заблокированные
+              </button>
               <button type="button" id="security-user-add">Добавить</button>
             </div>
             <div id="security-users-list" class="security-users-list" role="listbox"></div>
@@ -393,10 +401,27 @@ if (
 <section class="security-ip-panel">
             <h3>Ручные блокировки IP</h3>
             <form id="security-ip-block-form" class="security-ip-block-form">
-              <label>IP <input name="ipAddress" type="text" required placeholder="203.0.113.10"></label>
-              <label>Срок <select name="durationSeconds">${durationOptions()}</select></label>
-              <label>Причина <input name="reason" type="text" maxlength="500"></label>
+              <label class="security-ip-address-field">IP
+                <input name="ipAddress"
+                       type="text"
+                       required
+                       inputmode="text"
+                       autocomplete="off"
+                       maxlength="45"
+                       placeholder="203.0.113.10"
+                       aria-describedby="security-ip-validation-hint">
+              </label>
+              <label class="security-ip-duration-field">Срок
+                <select name="durationSeconds">${durationOptions()}</select>
+              </label>
+              <label class="security-ip-reason-field">Причина
+                <input name="reason" type="text" maxlength="500">
+              </label>
               <button type="submit">Заблокировать IP</button>
+              <small id="security-ip-validation-hint"
+                     class="security-ip-validation-hint">
+                IPv4 или IPv6
+              </small>
             </form>
             <p id="security-ip-message" class="security-message" role="status"></p>
           </section>
@@ -649,37 +674,6 @@ if (
 
     if (policy) {
       left.append(policy);
-    }
-
-    if (canManageUsers) {
-      const userBlocks =
-        document.createElement(
-          'section',
-        );
-      userBlocks.className =
-        'security-user-blocks-panel';
-      userBlocks.innerHTML = `
-        <h3>Заблокированные пользователи</h3>
-        <div class="security-block-table-wrap">
-          <table class="security-block-table security-user-block-table">
-            <thead>
-              <tr>
-                <th>Пользователь</th>
-                <th>До</th>
-                <th>Причина</th>
-                <th>Действие</th>
-              </tr>
-            </thead>
-            <tbody id="security-user-blocks-body"></tbody>
-          </table>
-        </div>
-        <p id="security-user-blocks-message"
-           class="security-message"
-           role="status"></p>
-      `;
-      left.append(
-        userBlocks,
-      );
     }
 
     if (manualIp) {
@@ -1290,18 +1284,57 @@ if (
     });
   }
 
+  let showBlockedUsersOnly = false;
+
+  function userCurrentlyBlocked(
+    user,
+  ) {
+    const now =
+      Date.now();
+
+    return Boolean(
+      user?.isBlocked ||
+      (
+        user?.lockedUntil &&
+        new Date(
+          user.lockedUntil,
+        ).valueOf() >
+          now
+      ) ||
+      (
+        user?.manualBlockedUntil &&
+        new Date(
+          user.manualBlockedUntil,
+        ).valueOf() >
+          now
+      )
+    );
+  }
+
   function userListRow(user) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'security-user-row';
     button.dataset.userId = String(user.id);
     button.setAttribute('role', 'option');
-    const state = user.isBlocked ? 'BLOCKED' : user.mustChangePassword ? 'TEMP' : 'ACTIVE';
+    const blocked =
+      userCurrentlyBlocked(
+        user,
+      );
+    const state =
+      blocked
+        ? 'BLOCKED'
+        : user.mustChangePassword
+          ? 'TEMP'
+          : 'ACTIVE';
     button.innerHTML = `
       <span class="security-user-avatar" aria-hidden="true">
         <span class="security-user-avatar-fallback"></span>
       </span>
       <span class="security-user-row-main"><strong></strong><small></small></span>
+      ${blocked
+        ? '<span class="security-user-row-lock" aria-label="Заблокирован" title="Пользователь заблокирован">🔒</span>'
+        : ''}
       <span class="security-user-row-state is-${state.toLowerCase()}">${state}</span>
     `;
     const avatar = button.querySelector('.security-user-avatar');
@@ -1328,12 +1361,21 @@ if (
 
   function renderUsersList() {
     const query = document.querySelector('#security-user-search')?.value.trim().toLocaleLowerCase('ru-RU') ?? '';
-    const users = [...userById.values()].filter((user) => {
-      if (!query) return true;
-      return [user.username, user.displayName, user.email]
-        .filter(Boolean)
-        .some((value) => String(value).toLocaleLowerCase('ru-RU').includes(query));
-    });
+    const users =
+      [...userById.values()]
+        .filter(
+          (user) =>
+            !showBlockedUsersOnly ||
+            userCurrentlyBlocked(
+              user,
+            ),
+        )
+        .filter((user) => {
+          if (!query) return true;
+          return [user.username, user.displayName, user.email]
+            .filter(Boolean)
+            .some((value) => String(value).toLocaleLowerCase('ru-RU').includes(query));
+        });
     document.querySelector('#security-users-list')?.replaceChildren(...users.map(userListRow));
   }
 
@@ -1350,7 +1392,6 @@ if (
         : payload.users[0]?.id ?? null;
       renderUsersList();
       renderDetail(selectedUserId ? userById.get(selectedUserId) : null);
-      renderUserBlocks();
       setMessage(message, `Пользователей: ${payload.users.length}`);
     } catch (error) {
       setMessage(message, error.message, 'error');
@@ -1358,6 +1399,26 @@ if (
   }
 
   document.querySelector('#security-user-search')?.addEventListener('input', renderUsersList);
+  document.querySelector('#security-user-blocked-filter')?.addEventListener(
+    'click',
+    (event) => {
+      showBlockedUsersOnly =
+        !showBlockedUsersOnly;
+      event.currentTarget
+        .setAttribute(
+          'aria-pressed',
+          String(
+            showBlockedUsersOnly,
+          ),
+        );
+      event.currentTarget
+        .classList.toggle(
+          'is-active',
+          showBlockedUsersOnly,
+        );
+      renderUsersList();
+    },
+  );
   document.querySelector('#security-user-add')?.addEventListener('click', renderNewUser);
 
   function auditQuery({ exportMode = false } = {}) {
@@ -1985,62 +2046,6 @@ if (
     direction: 'asc',
   };
 
-  function userBlockState(
-    user,
-  ) {
-    const now =
-      Date.now();
-    const manualActive =
-      Boolean(
-        user.isBlocked &&
-        (
-          !user.manualBlockedUntil ||
-          new Date(
-            user.manualBlockedUntil,
-          ).valueOf() >
-            now
-        ),
-      );
-    const automaticActive =
-      Boolean(
-        user.lockedUntil &&
-        new Date(
-          user.lockedUntil,
-        ).valueOf() >
-          now,
-      );
-
-    return {
-      manualActive,
-      automaticActive,
-    };
-  }
-
-  function activeUserBlocks() {
-    if (!canManageUsers) {
-      return [];
-    }
-
-    return [
-      ...userById.values(),
-    ].filter(
-      (user) => {
-        const {
-          manualActive,
-          automaticActive,
-        } =
-          userBlockState(
-            user,
-          );
-
-        return (
-          manualActive ||
-          automaticActive
-        );
-      },
-    );
-  }
-
   function actionCell(
     label,
     handler,
@@ -2604,6 +2609,109 @@ if (
     );
   }
 
+  function validIpv4Address(
+    value,
+  ) {
+    const parts =
+      String(value)
+        .split('.');
+
+    return (
+      parts.length === 4 &&
+      parts.every(
+        (part) =>
+          /^\d{1,3}$/u.test(
+            part,
+          ) &&
+          Number(part) >= 0 &&
+          Number(part) <= 255
+      )
+    );
+  }
+
+  function validIpv6Address(
+    value,
+  ) {
+    const address =
+      String(value)
+        .trim();
+
+    if (
+      !address.includes(':') ||
+      /\s|\//u.test(
+        address,
+      )
+    ) {
+      return false;
+    }
+
+    try {
+      const parsed =
+        new URL(
+          'http://[' +
+          address +
+          ']/',
+        );
+      return (
+        parsed.hostname
+          .startsWith('[') &&
+        parsed.hostname
+          .endsWith(']')
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function validateIpInput(
+    input,
+  ) {
+    if (!input) {
+      return false;
+    }
+
+    const value =
+      input.value.trim();
+    const valid =
+      validIpv4Address(
+        value,
+      ) ||
+      validIpv6Address(
+        value,
+      );
+
+    input.setCustomValidity(
+      valid
+        ? ''
+        : 'Введите корректный IPv4 или IPv6 адрес',
+    );
+
+    return valid;
+  }
+
+  const manualIpInput =
+    document.querySelector(
+      '#security-ip-block-form input[name="ipAddress"]',
+    );
+  manualIpInput?.addEventListener(
+    'input',
+    () => {
+      if (
+        manualIpInput.value
+          .trim()
+      ) {
+        validateIpInput(
+          manualIpInput,
+        );
+      } else {
+        manualIpInput
+          .setCustomValidity(
+            '',
+          );
+      }
+    },
+  );
+
   document.querySelector(
     '#security-ip-block-form',
   )?.addEventListener(
@@ -2612,6 +2720,10 @@ if (
       event.preventDefault();
       const form =
         event.currentTarget;
+      validateIpInput(
+        form.elements
+          .ipAddress,
+      );
       if (!form.reportValidity()) {
         return;
       }
