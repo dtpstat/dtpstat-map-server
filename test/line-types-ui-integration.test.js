@@ -149,11 +149,11 @@ test('admin line type editor keeps CODE and NAME read-only and edits TITLE/style
     editor,
     /querySelectorAll\([\s\S]*\.line-type-row\[open\][\s\S]*sibling\.open/u,
   );
+  const styles = await source('admin/line-types.css');
   assert.match(
     styles,
     /\.line-type-row-body/u,
   );
-  const styles = await source('admin/line-types.css');
   assert.match(
     styles,
     /@container admin-layout-block \(max-width: 56rem\)/u,
