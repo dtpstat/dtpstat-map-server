@@ -974,7 +974,7 @@ if (section) {
     );
   }
 
-  async function loadDiscussionUnread() {
+  async function loadDiscussionState() {
     const payload =
       await api(
         '/api/admin/geometry-editor/discussions/state',
@@ -9859,7 +9859,7 @@ if (section) {
   window.addEventListener(
     'dtpstat:discussion-read-all',
     () => {
-      void loadDiscussionUnread()
+      void loadDiscussionState()
         .catch(
           (error) =>
             console.warn(
@@ -9883,7 +9883,7 @@ if (section) {
   window.addEventListener('dtpstat:geometry-editor-open', () => {
     const tasks = [
       ensurePointTypes(),
-      loadDiscussionUnread(),
+      loadDiscussionState(),
     ];
 
     if (
@@ -10052,7 +10052,7 @@ if (section) {
       () =>
         void Promise.all([
           ensurePointTypes(),
-          loadDiscussionUnread(),
+          loadDiscussionState(),
           refresh({
             keepSelection: false,
             fit: true,
