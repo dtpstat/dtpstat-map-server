@@ -236,6 +236,14 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
     security,
     /Не удаляется/u,
   );
+  const securityCss =
+    await read(
+      'admin/security-v2.css',
+    );
+  assert.match(
+    securityCss,
+    /\.security-ip-allowlist-form[\s\S]*grid-template-columns:[\s\S]*auto/u,
+  );
   assert.match(
     security,
     /parseIpNetwork[\s\S]*updateIpAllowlistPreview/u,
