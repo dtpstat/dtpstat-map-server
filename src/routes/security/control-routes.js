@@ -125,6 +125,119 @@ export function registerAdminSecurityControlRoutes(
   );
 
   router.get(
+    '/admin/security/ip-allowlist',
+    adminAuth.requireSecurity,
+    async (
+      _request,
+      response,
+      next,
+    ) => {
+      try {
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json({
+            entries:
+              await securityService
+                .listIpAllowlist(),
+          });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    '/admin/security/ip-allowlist',
+    adminAuth.requireSecurity,
+    operationAudit(
+      'security.ip.allowlist.add',
+    ),
+    jsonBody,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const entry =
+          await securityService
+            .createIpAllowlistEntry(
+              request.body,
+              request.adminUser,
+            );
+
+        response
+          .status(201)
+          .json({ entry });
+      } catch (error) {
+        if (
+          handleAdminSecurityValidation(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.delete(
+    '/admin/security/ip-allowlist/:entryId',
+    adminAuth.requireSecurity,
+    operationAudit(
+      'security.ip.allowlist.delete',
+    ),
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      const entryId =
+        parsePositiveInteger(
+          request.params.entryId,
+        );
+
+      if (!entryId) {
+        response
+          .status(400)
+          .json({
+            error:
+              'entryId must be a positive integer',
+          });
+        return;
+      }
+
+      try {
+        if (
+          !await securityService
+            .deleteIpAllowlistEntry(
+              entryId,
+            )
+        ) {
+          response
+            .status(404)
+            .json({
+              error:
+                'IP allowlist entry not found',
+            });
+          return;
+        }
+
+        response.json({
+          deleted: true,
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.get(
     '/admin/security/ip-blocks',
     adminAuth.requireSecurity,
     async (
