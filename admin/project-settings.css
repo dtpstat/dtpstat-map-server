@@ -404,3 +404,68 @@
     text-align: left;
   }
 }
+
+
+/* Map settings use one scroll owner and natural-height grid rows. */
+[data-interface-panel="map"] {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+[data-interface-panel="map"]
+  > .admin-layout-grid {
+  min-height: auto;
+  flex: 0 0 auto;
+  grid-auto-rows: max-content;
+  align-content: start;
+  align-items: start;
+}
+
+[data-interface-panel="map"]
+  .admin-layout-block,
+[data-interface-panel="map"]
+  .admin-layout-block-host {
+  min-height: 0;
+  height: auto;
+}
+
+[data-interface-panel="map"]
+  .project-settings-section {
+  gap: .58rem;
+  padding: .68rem;
+}
+
+[data-interface-panel="map"]
+  .project-history-speed-row {
+  grid-template-columns:
+    minmax(6.5rem, 1.15fr)
+    minmax(6.5rem, .9fr)
+    minmax(6.5rem, .8fr)
+    auto
+    auto
+    auto;
+  gap: .4rem;
+  padding: .5rem;
+}
+
+[data-interface-panel="map"]
+  .project-city-marker-editor {
+  gap: .6rem;
+}
+
+[data-interface-panel="map"]
+  [data-admin-layout-block="map-actions"] {
+  grid-column: 1 / -1;
+}
+
+[data-interface-panel="map"]
+  [data-admin-layout-block="map-actions"]
+  .project-settings-meta {
+  margin-bottom: .45rem;
+}
+
+[data-interface-panel="map"]
+  [data-admin-layout-block="map-actions"]
+  .task-action {
+  margin-top: 0;
+}
