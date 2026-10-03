@@ -2067,4 +2067,20 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
     styles,
     /\.geometry-edit-actor-avatar/u,
   );
+  assert.match(
+    script,
+    /detailsPanel\?\.classList[\s\S]*'is-empty'[\s\S]*!draft/u,
+  );
+  assert.match(
+    script,
+    /discussionOpenButton\.hidden =[\s\S]*!item\?\.id/u,
+  );
+  assert.match(
+    styles,
+    /\.geometry-editor-details\.is-empty[\s\S]*place-items:\s*center/u,
+  );
+  assert.match(
+    styles,
+    /#geometry-editor-form > :not\([\s\S]*#geometry-editor-selected-title[\s\S]*display:\s*none/u,
+  );
 });
