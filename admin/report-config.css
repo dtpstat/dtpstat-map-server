@@ -125,12 +125,48 @@
 
 .report-metric-card {
   min-width: 0;
-  display: grid;
-  gap: .8rem;
-  padding: .8rem;
   border: 1px solid #294047;
   border-radius: 9px;
   background: #111c20;
+  overflow: clip;
+}
+
+.report-metric-summary {
+  min-width: 0;
+  padding: .62rem .72rem;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    auto;
+  align-items: center;
+  gap: .75rem;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.report-metric-summary strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-metric-summary code {
+  color: var(--muted);
+  font-size: .66rem;
+  white-space: nowrap;
+}
+
+.report-metric-card[open]
+  > .report-metric-summary {
+  border-bottom: 1px solid #294047;
+  background: rgb(53 198 180 / 7%);
+}
+
+.report-metric-body {
+  display: grid;
+  gap: .8rem;
+  padding: .8rem;
 }
 
 .report-metric-card + .report-metric-card {
