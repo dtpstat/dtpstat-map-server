@@ -197,6 +197,23 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
   );
   assert.match(
     inbox,
+    /createMentionAutocomplete/u,
+  );
+  assert.match(
+    inbox,
+    /renderMentionText/u,
+  );
+  assert.match(
+    inbox,
+    /\/api\/admin\/profile\/discussions\/mentions/u,
+  );
+  assert.match(
+    inbox,
+    /event\.defaultPrevented/u,
+  );
+
+  assert.match(
+    inbox,
     /classList\.toggle\([\s\S]*'has-unread'/u,
   );
 
@@ -330,6 +347,23 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
     styles,
     /\.admin-messages-read-all/u,
   );
+  const mentionStyles =
+    await fs.readFile(
+      path.join(
+        root,
+        'admin/discussion-mentions.css',
+      ),
+      'utf8',
+    );
+  assert.match(
+    mentionStyles,
+    /\.discussion-mention/u,
+  );
+  assert.match(
+    mentionStyles,
+    /\.discussion-mention-suggestions/u,
+  );
+
 
   assert.match(
     styles,
