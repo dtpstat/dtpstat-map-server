@@ -1529,7 +1529,7 @@ if (
   document.querySelector('#security-user-search')?.addEventListener('input', renderUsersList);
   document.querySelector('#security-user-blocked-filter')?.addEventListener(
     'click',
-    (event) => {
+    () => {
       showBlockedUsersOnly =
         !showBlockedUsersOnly;
       renderBlockedUserFilterState();
