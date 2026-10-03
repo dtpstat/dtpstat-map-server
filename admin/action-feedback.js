@@ -248,9 +248,24 @@ function renderNotification(
           return;
         }
 
-        messagesTab.click();
-        queueMicrotask(
-          () =>
+        let completed =
+          false;
+        let observer =
+          null;
+
+        const completeOpen =
+          () => {
+            if (
+              completed ||
+              messagesTab.getAttribute(
+                'aria-selected',
+              ) !== 'true'
+            ) {
+              return false;
+            }
+
+            completed = true;
+            observer?.disconnect();
             window.dispatchEvent(
               new CustomEvent(
                 'dtpstat:discussion-inbox-open',
@@ -261,10 +276,36 @@ function renderNotification(
                   },
                 },
               ),
-            ),
+            );
+            dismissAdminNotification(
+              notification.id,
+            );
+            return true;
+          };
+
+        messagesTab.click();
+
+        if (completeOpen()) {
+          return;
+        }
+
+        observer =
+          new MutationObserver(
+            completeOpen,
+          );
+        observer.observe(
+          messagesTab,
+          {
+            attributes: true,
+            attributeFilter: [
+              'aria-selected',
+            ],
+          },
         );
-        dismissAdminNotification(
-          notification.id,
+        window.setTimeout(
+          () =>
+            observer?.disconnect(),
+          30_000,
         );
       };
 
