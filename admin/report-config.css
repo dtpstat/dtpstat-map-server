@@ -333,12 +333,69 @@
 
 .report-formatting-box {
   min-width: 0;
-  display: grid;
-  gap: .5rem;
-  padding: .6rem;
   border: 1px solid #294047;
   border-radius: 8px;
   background: #0b1518;
+  overflow: clip;
+}
+
+.report-formatting-summary {
+  min-width: 0;
+  padding: .55rem .65rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .7rem;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.report-formatting-summary strong {
+  color: var(--text);
+}
+
+.report-formatting-status {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  white-space: nowrap;
+  font-size: .65rem;
+}
+
+.report-formatting-status::before {
+  content: '';
+  width: .48rem;
+  height: .48rem;
+  flex: 0 0 .48rem;
+  border-radius: 50%;
+  background: #536970;
+}
+
+.report-formatting-status.is-active::before {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px rgb(53 198 180 / 12%);
+}
+
+.report-formatting-box[open]
+  > .report-formatting-summary {
+  border-bottom: 1px solid #294047;
+  background: rgb(53 198 180 / 6%);
+}
+
+.report-formatting-box
+  > :not(summary) {
+  margin-left: .6rem;
+  margin-right: .6rem;
+}
+
+.report-formatting-box
+  > .report-subheading {
+  margin-top: .6rem;
+}
+
+.report-formatting-box
+  > .report-format-rule-list {
+  margin-bottom: .6rem;
 }
 
 .report-format-rule-list {
