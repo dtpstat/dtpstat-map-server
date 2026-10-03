@@ -62,6 +62,18 @@ test('admin realtime client owns the single websocket connection and mutation cl
     client,
     /dedicatedNotificationResource[\s\S]*geometry-discussions[\s\S]*osm-boundary-discussions[\s\S]*discussion-inbox/u,
   );
+  assert.match(
+    client,
+    /function discussionRefreshDetail\(/u,
+  );
+  assert.match(
+    client,
+    /discussion-thread[\s\S]*message\.notification[\s\S]*source\.id/u,
+  );
+  assert.match(
+    client,
+    /dtpstat:discussion-unread-refresh/u,
+  );
 
   assert.match(
     client,
