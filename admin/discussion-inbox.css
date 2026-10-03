@@ -181,6 +181,13 @@
 .profile-discussion-thread > .empty-state {
   align-self: center;
   justify-self: center;
+  max-width: 28rem;
+  padding: 1rem 1.25rem;
+  color: var(--muted, #8ca2a7);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: center;
 }
 
 .profile-discussion-thread-head {
@@ -300,8 +307,8 @@
 }
 
 .admin-messages-section .settings-card {
-  height: calc(100vh - 15rem);
-  min-height: 34rem;
+  height: 100%;
+  min-height: 0;
 }
 
 .admin-messages-section .profile-message {
