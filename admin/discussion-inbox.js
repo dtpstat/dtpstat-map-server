@@ -5,6 +5,10 @@ import {
   realtimeMutationHeaders,
   subscribeAdminRealtime,
 } from './realtime-client.js';
+import {
+  createMentionAutocomplete,
+  renderMentionText,
+} from './discussion-mentions.js';
 
 const inboxListMount =
   document.querySelector(
@@ -100,6 +104,23 @@ async function api(
   }
 
   return payload;
+}
+
+async function loadMentionUsers(
+  subjectType,
+  query,
+) {
+  const params =
+    new URLSearchParams({
+      subjectType,
+      q: query,
+    });
+  const payload =
+    await api(
+      '/api/admin/profile/discussions/mentions?' +
+      params.toString(),
+    );
+  return payload.users ?? [];
 }
 
 function formatDate(
@@ -365,6 +386,7 @@ if (
       loadingThread: false,
       threadRequestSequence: 0,
       readObserver: null,
+      mentionAutocomplete: null,
       pendingOpenKey: null,
       refreshTimer: null,
     };
@@ -696,9 +718,11 @@ if (
         document.createElement(
           'p',
         );
-      text.textContent =
+      renderMentionText(
+        text,
         entry.message ??
-        '';
+          '',
+      );
 
       head.append(
         author,
@@ -818,6 +842,10 @@ if (
     function renderThread(
       item,
     ) {
+      state.mentionAutocomplete
+        ?.destroy();
+      state.mentionAutocomplete =
+        null;
       const header =
         document.createElement(
           'header',
@@ -921,6 +949,15 @@ if (
         send,
       );
 
+      state.mentionAutocomplete =
+        createMentionAutocomplete({
+          input,
+          subjectType:
+            item.subjectType,
+          loadUsers:
+            loadMentionUsers,
+        });
+
       if (!item.subjectExists) {
         form.hidden = true;
       }
@@ -983,6 +1020,12 @@ if (
       input.addEventListener(
         'keydown',
         (event) => {
+          if (
+            event.defaultPrevented
+          ) {
+            return;
+          }
+
           if (
             event.key ===
               'Enter' &&
