@@ -1,0 +1,56 @@
+.discussion-mention {
+  display: inline;
+  padding: .04em .24em;
+  border-radius: .35em;
+  color: #bffaf2;
+  background: rgb(82 215 198 / 15%);
+  font-weight: 700;
+}
+
+.discussion-mention-suggestions {
+  position: fixed;
+  z-index: 10080;
+  max-height: min(16rem, 40vh);
+  overflow: auto;
+  padding: .25rem;
+  border: 1px solid #3a545c;
+  border-radius: .65rem;
+  background: #101c20;
+  box-shadow: 0 .7rem 2rem rgb(0 0 0 / 42%);
+}
+
+.discussion-mention-suggestion {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, auto) 1fr;
+  gap: .5rem;
+  align-items: center;
+  padding: .45rem .55rem;
+  border: 0;
+  border-radius: .45rem;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.discussion-mention-suggestion strong {
+  color: #bffaf2;
+  font-size: .78rem;
+}
+
+.discussion-mention-suggestion span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: .74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discussion-mention-suggestion:is(:hover, .is-active) {
+  background: rgb(82 215 198 / 13%);
+}
+
+.discussion-mention-suggestion.is-active {
+  outline: 1px solid rgb(82 215 198 / 35%);
+}
