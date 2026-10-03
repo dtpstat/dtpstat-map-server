@@ -59,4 +59,24 @@ test('admin action feedback renders the shared typed notification pool', async (
     styles,
     /\.admin-feedback-toast\.is-warn/u,
   );
+  assert.match(
+    feedback,
+    /discussion-thread/u,
+  );
+  assert.match(
+    feedback,
+    /dtpstat:discussion-inbox-open/u,
+  );
+  assert.match(
+    feedback,
+    /discussion-mention[\s\S]*is-mention/u,
+  );
+  assert.match(
+    styles,
+    /\.admin-feedback-toast\.is-actionable/u,
+  );
+  assert.match(
+    styles,
+    /\.admin-feedback-toast\.is-mention/u,
+  );
 });
