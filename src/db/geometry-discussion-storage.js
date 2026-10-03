@@ -93,6 +93,8 @@ export function createGeometryDiscussionStorage(
             item.subjectId,
           unreadCount:
             item.unreadCount,
+          messageCount:
+            item.messageCount,
         }),
       );
     },
