@@ -93,6 +93,26 @@ export function createOsmDiscussionStorage(
             item.subjectId,
           unreadCount:
             item.unreadCount,
+        }),
+      );
+    },
+
+    async threadStates(
+      userId,
+    ) {
+      const items =
+        await discussions
+          .threadStates(
+            userId,
+            [SUBJECT_TYPE],
+          );
+
+      return items.map(
+        (item) => ({
+          boundaryId:
+            item.subjectId,
+          unreadCount:
+            item.unreadCount,
           messageCount:
             item.messageCount,
         }),
