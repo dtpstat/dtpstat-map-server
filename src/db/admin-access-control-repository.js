@@ -385,6 +385,48 @@ export function createAdminAccessControlRepository(database) {
       );
     },
 
+    async findIpAllowlistMatch(
+      ipAddress,
+    ) {
+      if (!ipAddress) return null;
+      const result =
+        await database.query(
+          `SELECT
+             id::integer AS id,
+             network::text AS network,
+             created_at AS "createdAt",
+             created_by::integer AS "createdBy",
+             reason
+           FROM admin_ip_allowlist
+           WHERE $1::inet <<= network
+           ORDER BY
+             masklen(network) DESC,
+             created_at DESC
+           LIMIT 1`,
+          [ipAddress],
+        );
+      return result.rows[0] ?? null;
+    },
+
+    async listIpAllowlist() {
+      const result =
+        await database.query(
+          `SELECT
+             id::integer AS id,
+             network::text AS network,
+             created_at AS "createdAt",
+             created_by::integer AS "createdBy",
+             reason
+           FROM admin_ip_allowlist
+           ORDER BY
+             family(network),
+             network,
+             masklen(network) DESC,
+             id`,
+        );
+      return result.rows;
+    },
+
     async isIpBlocked(ipAddress) {
       if (!ipAddress) return null;
       const result = await database.query(
