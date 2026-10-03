@@ -3,7 +3,7 @@
   padding: .3rem;
   display: grid;
   grid-template-columns:
-    repeat(3, minmax(0, 1fr));
+    repeat(2, minmax(0, 1fr));
   gap: .4rem;
   flex: 0 0 auto;
   border: 1px solid var(--line);
@@ -200,5 +200,45 @@
 @container admin-layout-block (max-width: 42rem) {
   .profile-tabs {
     grid-template-columns: 1fr;
+  }
+}
+
+
+/* Desktop profile: identity stays left while password/MFA stack on the right. */
+[data-admin-section-panel="profile"]
+  [data-admin-layout-block="profile-account"]:not([hidden]) {
+  grid-row: span 2;
+}
+
+[data-admin-section-panel="profile"]
+  [data-admin-layout-block="profile-account"] .profile-panel {
+  height: 100%;
+}
+
+[data-admin-section-panel="profile"]
+  [data-admin-layout-block="profile-password"],
+[data-admin-section-panel="profile"]
+  [data-admin-layout-block="profile-mfa"] {
+  align-self: start;
+}
+
+.profile-panel {
+  padding: .8rem;
+}
+
+.profile-form {
+  gap: .55rem;
+  margin-top: .7rem;
+}
+
+.profile-password-policy {
+  margin-top: .55rem;
+  padding: .55rem .65rem;
+}
+
+@container admin-layout-block (max-width: 58rem) {
+  [data-admin-section-panel="profile"]
+    [data-admin-layout-block="profile-account"]:not([hidden]) {
+    grid-row: auto;
   }
 }
