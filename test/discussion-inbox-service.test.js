@@ -358,3 +358,93 @@ test('discussion notifications separate participants from accented mentions', ()
       ordinary.timeoutMs,
   );
 });
+
+
+test('discussion mention suggestions stay role-scoped and exclude the current user', async () => {
+  const calls = [];
+  const service =
+    createDiscussionInboxService({
+      async mentionSuggestions(
+        subjectType,
+        query,
+        userId,
+        limit,
+      ) {
+        calls.push({
+          subjectType,
+          query,
+          userId,
+          limit,
+        });
+        return [{
+          userId: 2,
+          username: 'alex',
+          displayName: 'Alex',
+        }];
+      },
+    });
+
+  assert.deepEqual(
+    await service
+      .mentionSuggestions(
+        {
+          id: 7,
+          canEditGeometries:
+            true,
+          canEditOsm:
+            false,
+        },
+        {
+          subjectType:
+            'geometry',
+          query:
+            '@Al',
+        },
+      ),
+    {
+      users: [{
+        userId: 2,
+        username: 'alex',
+        displayName: 'Alex',
+      }],
+    },
+  );
+
+  assert.deepEqual(
+    calls,
+    [{
+      subjectType:
+        'geometry',
+      query:
+        'Al',
+      userId: 7,
+      limit: 8,
+    }],
+  );
+
+  assert.deepEqual(
+    await service
+      .mentionSuggestions(
+        {
+          id: 7,
+          canEditGeometries:
+            true,
+          canEditOsm:
+            false,
+        },
+        {
+          subjectType:
+            'osm-boundary',
+          query:
+            'a',
+        },
+      ),
+    {
+      users: [],
+    },
+  );
+  assert.equal(
+    calls.length,
+    1,
+  );
+});
