@@ -1642,6 +1642,30 @@ export function createGeometryEditorService(
                 row.geometryId,
               unreadCount:
                 row.unreadCount,
+            }),
+          ),
+      };
+    },
+
+    async listDiscussionState(
+      actor,
+    ) {
+      const userId =
+        actorId(actor);
+      const rows =
+        await discussionStorage
+          .threadStates(
+            userId,
+          );
+
+      return {
+        items:
+          rows.map(
+            (row) => ({
+              geometryId:
+                row.geometryId,
+              unreadCount:
+                row.unreadCount,
               messageCount:
                 row.messageCount,
             }),
