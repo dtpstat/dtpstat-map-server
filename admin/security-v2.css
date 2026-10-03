@@ -89,6 +89,33 @@
   background: transparent;
   color: var(--text);
 }
+
+.security-user-blocked-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  white-space: nowrap;
+}
+
+.security-user-blocked-filter.is-active,
+.security-user-blocked-filter[aria-pressed="true"] {
+  border-color: #52d7c6;
+  color: #bffaf2;
+  background: rgb(82 215 198 / 14%);
+}
+
+.security-user-row-lock {
+  display: inline-grid;
+  place-items: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 999px;
+  color: #ffd6d6;
+  background: rgb(216 79 87 / 18%);
+  font-size: .72rem;
+  line-height: 1;
+}
+
 .security-user-row:hover,
 .security-user-row.is-selected { background: #13262a; }
 .security-user-avatar {
@@ -699,7 +726,6 @@ body.security-modal-open { overflow: hidden; }
 }
 
 .security-block-policy,
-.security-user-blocks-panel,
 .security-ip-panel,
 .security-ip-blocks-panel,
 .security-ip-allowlist-panel {
@@ -742,20 +768,34 @@ body.security-modal-open { overflow: hidden; }
 .security-ip-block-form {
   display: grid;
   grid-template-columns:
-    minmax(10rem, 1fr)
-    minmax(8rem, .45fr);
-  gap: .55rem .65rem;
+    minmax(11rem, 15rem)
+    minmax(7.5rem, 9rem)
+    minmax(12rem, 1fr)
+    auto;
+  gap: .45rem .55rem;
   align-items: end;
 }
 
-.security-ip-block-form label:last-of-type,
-.security-ip-block-form button {
-  grid-column: 1 / -1;
+.security-ip-block-form label {
+  min-width: 0;
+}
+
+.security-ip-block-form input,
+.security-ip-block-form select {
+  width: 100%;
 }
 
 .security-ip-block-form button {
-  width: fit-content;
-  min-width: 11rem;
+  width: auto;
+  min-width: 9.5rem;
+  white-space: nowrap;
+}
+
+.security-ip-validation-hint {
+  grid-column: 1 / -1;
+  margin-top: -.2rem;
+  color: var(--muted);
+  font-size: .62rem;
 }
 
 .security-ip-allowlist-form {
@@ -805,10 +845,6 @@ body.security-modal-open { overflow: hidden; }
   min-width: 34rem;
   border-collapse: collapse;
   font-size: .72rem;
-}
-
-.security-user-block-table {
-  min-width: 30rem;
 }
 
 .security-ip-block-table {
@@ -882,11 +918,6 @@ body.security-modal-open { overflow: hidden; }
 
   .security-block-policy fieldset input[type="number"] {
     width: 7ch;
-  }
-
-  .security-ip-block-form label:last-of-type,
-  .security-ip-block-form button {
-    grid-column: auto;
   }
 
   .security-block-summary-heading {
