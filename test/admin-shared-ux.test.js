@@ -212,7 +212,7 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
     security,
     /data-admin-section-panel="security"[\s\S]*!securityPrimaryPanel\.hidden[\s\S]*loadSettings\(\)[\s\S]*loadIpBlocks\(\)/u,
   );
-  assert.match(
+  assert.doesNotMatch(
     security,
     /security-user-blocks-body/u,
   );
@@ -226,7 +226,11 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
   );
   assert.match(
     security,
-    /canManageUsers[\s\S]*activeUserBlocks/u,
+    /security-user-blocked-filter[\s\S]*showBlockedUsersOnly/u,
+  );
+  assert.match(
+    security,
+    /security-user-row-lock/u,
   );
 });
 
