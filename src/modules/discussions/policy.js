@@ -63,3 +63,36 @@ export function normalizeDiscussionMessage(
     message,
   };
 }
+
+
+export function discussionMentionLogins(
+  message,
+) {
+  const source =
+    String(
+      message ??
+      '',
+    ).normalize('NFC');
+  const result = [];
+  const seen = new Set();
+  const pattern =
+    /(^|[^\p{L}\p{N}_.-])@([\p{L}\p{N}][\p{L}\p{N}_.-]{0,63})/gu;
+
+  for (
+    const match of
+    source.matchAll(pattern)
+  ) {
+    const login =
+      match[2]
+        .toLocaleLowerCase(
+          'en-US',
+        );
+    if (seen.has(login)) {
+      continue;
+    }
+    seen.add(login);
+    result.push(login);
+  }
+
+  return result;
+}
