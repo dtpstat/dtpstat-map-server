@@ -705,37 +705,44 @@ export function createGeometryEditorRouter({
           discussionInboxService
             ?.notificationTargets
         ) {
-          const targets =
-            await discussionInboxService
-              .notificationTargets(
-                request.adminUser,
-                {
-                  subjectType:
-                    'geometry',
-                  subjectId:
-                    discussionMessage
-                      .geometryId,
-                  message:
-                    discussionMessage
-                      .message,
-                },
-              );
-
-          publishDiscussionNotifications(
-            notificationEvents,
-            {
-              permission:
-                'geometry-editor',
-              actor:
-                request.adminUser,
-              subjectType:
-                'geometry',
-              subjectId:
-                discussionMessage
-                  .geometryId,
-              targets,
-            },
-          );
+          try {
+            const targets =
+              await discussionInboxService
+                .notificationTargets(
+                  request.adminUser,
+                  {
+                    subjectType:
+                      'geometry',
+                    subjectId:
+                      discussionMessage
+                        .geometryId,
+                    message:
+                      discussionMessage
+                        .message,
+                  },
+                );
+  
+            publishDiscussionNotifications(
+              notificationEvents,
+              {
+                permission:
+                  'geometry-editor',
+                actor:
+                  request.adminUser,
+                subjectType:
+                  'geometry',
+                subjectId:
+                  discussionMessage
+                    .geometryId,
+                targets,
+              },
+            );
+          } catch (error) {
+            console.warn(
+              'geometry discussion notification delivery failed',
+              error,
+            );
+          }
         }
 
         response
