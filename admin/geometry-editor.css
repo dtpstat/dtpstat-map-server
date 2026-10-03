@@ -986,6 +986,61 @@
 }
 
 
+.geometry-editor-city-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.geometry-editor-city-picker > input {
+  width: 100%;
+}
+
+.geometry-editor-city-options {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + .25rem);
+  left: 0;
+  right: 0;
+  max-height: min(22rem, 48vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: .3rem;
+  border: 1px solid #38515a;
+  border-radius: 8px;
+  background: #0b1417;
+  box-shadow: 0 .9rem 2.4rem rgb(0 0 0 / 48%);
+}
+
+.geometry-editor-city-options[hidden] {
+  display: none;
+}
+
+.geometry-editor-city-option {
+  width: 100%;
+  min-height: 0;
+  padding: .45rem .55rem;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  font-size: .7rem;
+  font-weight: 600;
+}
+
+.geometry-editor-city-option:hover,
+.geometry-editor-city-option[aria-selected="true"] {
+  background: #173035;
+}
+
+.geometry-editor-city-empty {
+  margin: 0;
+  padding: .55rem;
+  color: var(--muted);
+  font-size: .7rem;
+}
+
 .geometry-editor-city-filter {
   margin: -.15rem 0 0;
   font-size: .7rem;

@@ -39,6 +39,8 @@ if (section) {
     adminSession.user;
 
   const citySelect = document.querySelector('#geometry-editor-city');
+  const citySearch = document.querySelector('#geometry-editor-city-search');
+  const cityOptionsHost = document.querySelector('#geometry-editor-city-options');
   const cityWithGeometries =
     document.querySelector(
       '#geometry-editor-city-with-geometries',
@@ -6269,6 +6271,137 @@ if (section) {
     return state.lineTypesPromise;
   }
 
+  function selectedCityLabel() {
+    return citySelect
+      .selectedOptions[0]
+      ?.textContent ?? '';
+  }
+
+  function closeCityPicker({
+    restore = true,
+  } = {}) {
+    if (!citySearch || !cityOptionsHost) return;
+    cityOptionsHost.hidden = true;
+    citySearch.setAttribute(
+      'aria-expanded',
+      'false',
+    );
+    if (restore) {
+      citySearch.value =
+        selectedCityLabel();
+    }
+  }
+
+  function renderCityPicker(
+    query = '',
+  ) {
+    if (!citySearch || !cityOptionsHost) return;
+    const normalized =
+      query
+        .trim()
+        .toLocaleLowerCase(
+          'ru-RU',
+        );
+    const options =
+      Array.from(
+        citySelect.options,
+      ).filter(
+        (option) =>
+          !normalized ||
+          option.textContent
+            ?.toLocaleLowerCase(
+              'ru-RU',
+            )
+            .includes(
+              normalized,
+            ),
+      );
+
+    cityOptionsHost
+      .replaceChildren();
+
+    if (!options.length) {
+      const empty =
+        document.createElement(
+          'p',
+        );
+      empty.className =
+        'geometry-editor-city-empty';
+      empty.textContent =
+        'Города не найдены';
+      cityOptionsHost.append(
+        empty,
+      );
+    } else {
+      for (const option of options) {
+        const button =
+          document.createElement(
+            'button',
+          );
+        button.type =
+          'button';
+        button.className =
+          'geometry-editor-city-option';
+        button.setAttribute(
+          'role',
+          'option',
+        );
+        button.setAttribute(
+          'aria-selected',
+          String(
+            option.value ===
+              citySelect.value,
+          ),
+        );
+        button.dataset.value =
+          option.value;
+        button.textContent =
+          option.textContent;
+        button.addEventListener(
+          'mousedown',
+          (event) => {
+            event.preventDefault();
+          },
+        );
+        button.addEventListener(
+          'click',
+          () => {
+            const changed =
+              citySelect.value !==
+              option.value;
+            citySelect.value =
+              option.value;
+            citySearch.value =
+              option.textContent;
+            closeCityPicker({
+              restore: false,
+            });
+            if (changed) {
+              citySelect.dispatchEvent(
+                new Event(
+                  'change',
+                  {
+                    bubbles: true,
+                  },
+                ),
+              );
+            }
+          },
+        );
+        cityOptionsHost.append(
+          button,
+        );
+      }
+    }
+
+    cityOptionsHost.hidden =
+      false;
+    citySearch.setAttribute(
+      'aria-expanded',
+      'true',
+    );
+  }
+
   function renderCityOptions(
     preferredValue =
       citySelect.value,
@@ -6343,6 +6476,16 @@ if (section) {
 
     citySelect.value =
       nextValue;
+    if (citySearch) {
+      citySearch.value =
+        selectedCityLabel();
+      if (
+        cityOptionsHost &&
+        !cityOptionsHost.hidden
+      ) {
+        renderCityPicker();
+      }
+    }
     return nextValue;
   }
 
@@ -9835,7 +9978,71 @@ if (section) {
   newLineButton.addEventListener('click', () => void startDrawing('line'));
   newPolygonButton.addEventListener('click', () => void startDrawing('polygon'));
 
+  citySearch?.addEventListener(
+    'focus',
+    () => {
+      citySearch.select();
+      renderCityPicker();
+    },
+  );
+
+  citySearch?.addEventListener(
+    'click',
+    () => {
+      renderCityPicker();
+    },
+  );
+
+  citySearch?.addEventListener(
+    'input',
+    () => {
+      renderCityPicker(
+        citySearch.value,
+      );
+    },
+  );
+
+  citySearch?.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeCityPicker();
+        citySearch.blur();
+        return;
+      }
+
+      if (event.key !== 'Enter') {
+        return;
+      }
+
+      const first =
+        cityOptionsHost
+          ?.querySelector(
+            '.geometry-editor-city-option',
+          );
+      if (!first) return;
+      event.preventDefault();
+      first.click();
+    },
+  );
+
+  citySearch?.addEventListener(
+    'blur',
+    () => {
+      window.setTimeout(
+        () =>
+          closeCityPicker(),
+        0,
+      );
+    },
+  );
+
   citySelect.addEventListener('change', () => {
+    if (citySearch) {
+      citySearch.value =
+        selectedCityLabel();
+    }
     state.selectedSet.clear();
     state.bulkSelecting =
       false;

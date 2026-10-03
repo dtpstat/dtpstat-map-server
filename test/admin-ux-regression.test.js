@@ -210,6 +210,21 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
     security,
     /security-user-blocked-filter[\s\S]*aria-pressed/u,
   );
+  const geometryHtml = await read('admin/index.html');
+  const geometryEditor = await read('admin/geometry-editor.js');
+  const geometryCss = await read('admin/geometry-editor.css');
+  assert.match(
+    geometryHtml,
+    /geometry-editor-city-search[\s\S]*role="combobox"[\s\S]*geometry-editor-city-options/u,
+  );
+  assert.match(
+    geometryEditor,
+    /function renderCityPicker\([\s\S]*includes\([\s\S]*citySelect\.dispatchEvent/u,
+  );
+  assert.match(
+    geometryCss,
+    /\.geometry-editor-city-options[\s\S]*overflow-y:\s*auto/u,
+  );
   assert.match(
     security,
     /userCurrentlyBlocked[\s\S]*security-user-row-lock/u,

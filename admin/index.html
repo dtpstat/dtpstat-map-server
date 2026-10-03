@@ -533,7 +533,24 @@
                        aria-label="Геометрии выбранного города">
                 <div class="geometry-editor-list-controls">
                   <label>Город
-                    <select id="geometry-editor-city"></select>
+                    <div class="geometry-editor-city-picker">
+                      <input id="geometry-editor-city-search"
+                             type="search"
+                             autocomplete="off"
+                             role="combobox"
+                             aria-autocomplete="list"
+                             aria-expanded="false"
+                             aria-controls="geometry-editor-city-options"
+                             placeholder="Начните вводить город…">
+                      <select id="geometry-editor-city"
+                              tabindex="-1"
+                              aria-hidden="true"
+                              hidden></select>
+                      <div id="geometry-editor-city-options"
+                           class="geometry-editor-city-options"
+                           role="listbox"
+                           hidden></div>
+                    </div>
                   </label>
                   <label class="check geometry-editor-city-filter">
                     <input id="geometry-editor-city-with-geometries"
