@@ -15,10 +15,10 @@ POST /api/admin/settings/import
 
 ```text
 _dtpstat.kind = project-settings
-_dtpstat.schemaVersion = 9
+_dtpstat.schemaVersion = 11
 ```
 
-Import принимает `v1…v9`.
+Import принимает `v1…v11`.
 
 Ключевые изменения:
 
@@ -28,7 +28,11 @@ Import принимает `v1…v9`.
 - `v6` — `projectSettings.publicDownloadName`;
 - `v7` — `largeCityPopulationThreshold` и `largeCityAreaKm2Threshold`;
 - `v8` — password policy в `securitySettings`;
-- `v9` — per-user/global HTTP request rate limits.
+- `v9` — per-user/global HTTP request rate limits;
+- `v10` — `showPointGeometries`, `showLineGeometries`,
+  `showPolygonGeometries`;
+- `v11` — `showGeometryTimeline`, `historyStartDate` и
+  `historySpeeds`.
 
 Legacy packages нормализуются к текущей модели.
 
@@ -44,6 +48,12 @@ Legacy packages нормализуются к текущей модели.
 - `themePreset`;
 - `showLineLabels`;
 - `showLinePopups`;
+- `showPointGeometries`;
+- `showLineGeometries`;
+- `showPolygonGeometries`;
+- `showGeometryTimeline`;
+- `historyStartDate`;
+- `historySpeeds`;
 - `publicDownloadName`;
 - `largeCityPopulationThreshold`;
 - `largeCityAreaKm2Threshold`;
@@ -117,7 +127,18 @@ ipLockoutSeconds
 sessionIdleSeconds
 sessionAbsoluteSeconds
 auditRetentionDays
+requestRateLimitUserPerMinute
+requestRateLimitGlobalPerMinute
+passwordMinLength
+passwordMaxLength
+passwordRequireLowercase
+passwordRequireUppercase
+passwordRequireDigit
+passwordRequireSpecial
 ```
+
+Metrics bearer token/hash и `MFA_REQUIRED` не переносятся: это
+deployment-local security state.
 
 ## Что не переносится
 
@@ -240,13 +261,13 @@ Import:
 
 Post-commit snapshot refresh не может физически откатить уже committed DB transaction; API должен сообщать post-processing failure отдельно.
 
-## Пример v9
+## Пример v11
 
 ```json
 {
   "_dtpstat": {
     "kind": "project-settings",
-    "schemaVersion": 9,
+    "schemaVersion": 11,
     "exportedAt": "2026-09-08T03:00:00.000Z"
   },
   "projectSettings": {
@@ -258,6 +279,20 @@ Post-commit snapshot refresh не может физически откатить
     "themePreset": "retro",
     "showLineLabels": false,
     "showLinePopups": true,
+    "showPointGeometries": true,
+    "showLineGeometries": true,
+    "showPolygonGeometries": true,
+    "showGeometryTimeline": true,
+    "historyStartDate": "1950-01-01",
+    "historySpeeds": [
+      {
+        "name": "1x",
+        "stepUnit": "month",
+        "intervalSeconds": 1,
+        "isActive": true,
+        "isDefault": true
+      }
+    ],
     "publicDownloadName": "tram-lines",
     "largeCityPopulationThreshold": 400000,
     "largeCityAreaKm2Threshold": 250,

@@ -6,8 +6,8 @@ deployment templates.
 
 ## Prometheus scrape
 
-Enable Prometheus access in admin → «Пользователи и безопасность» → «Защита»
-→ «Prometheus metrics», generate a bearer token and configure the target:
+Enable Prometheus access in admin → **Безопасность → Метрики и тайминги**,
+generate/rotate the bearer token there and configure the target:
 
 ```yaml
 scrape_configs:

@@ -103,6 +103,27 @@ Lease row короткоживущая и удаляется/заменяетс�
 `GENERATION` защищает от silent resume после force takeover/reacquisition;
 отдельный индекс по `USER_ID` сейчас не нужен для hot path.
 
+## POINT_TYPES
+
+```text
+PRIMARY KEY (ID)
+UNIQUE LOWER(BTRIM(NAME))
+```
+
+Point geometry lookup дополнительно использует partial
+`CITY_GEOMETRIES (POINT_TYPE_ID, ID) WHERE POINT_TYPE_ID IS NOT NULL`.
+Zoom range и icon metadata не являются отдельными search predicates.
+
+## GEOMETRY_HISTORY_SPEEDS
+
+```text
+PRIMARY KEY (ID)
+UNIQUE ((IS_DEFAULT)) WHERE IS_DEFAULT
+```
+
+Набор профилей небольшой и читается целиком; отдельный index на `SORT_ORDER`
+для текущего access path не нужен.
+
 ## LINE_TYPES
 
 ```text
@@ -122,7 +143,9 @@ PRIMARY KEY (ID)
 CHECK (ID = 1)
 ```
 
-Здесь находятся project metadata, analytics, theme, line labels/popups, Mapbox token, city marker и `PUBLIC_DOWNLOAD_NAME`.
+Здесь находятся project metadata, analytics, theme, line labels/popups,
+public Point/Line/Polygon visibility, geometry timeline/start date, Mapbox
+token, city marker и `PUBLIC_DOWNLOAD_NAME`.
 
 Все поля читаются по `ID=1`; дополнительные indexes бессмысленны.
 
@@ -224,6 +247,36 @@ partial (EXPIRES_AT) WHERE EXPIRES_AT IS NOT NULL
 
 Они соответствуют реальным server-side filters audit UI.
 
+## ADMIN_DISCUSSION_MESSAGES
+
+```text
+PRIMARY KEY (ID)
+UNIQUE (ID, SUBJECT_TYPE, SUBJECT_ID)
+(SUBJECT_TYPE, SUBJECT_ID, ID)
+(AUTHOR_USER_ID, ID)
+```
+
+Thread lookup выполняется по subject type/id и возрастающему message id.
+
+## ADMIN_DISCUSSION_READ_STATE
+
+```text
+PRIMARY KEY (SUBJECT_TYPE, SUBJECT_ID, USER_ID)
+(USER_ID, SUBJECT_TYPE, SUBJECT_ID)
+```
+
+Это покрывает thread read-position и user-centric unread inbox.
+
+## ADMIN_IP_ALLOWLIST
+
+```text
+PRIMARY KEY (ID)
+UNIQUE (NETWORK)
+GiST (NETWORK inet_ops)
+```
+
+GiST используется для IPv4/IPv6 membership/containment checks по CIDR.
+
 ## ADMIN_TASK_SUCCESSES
 
 ```text
@@ -244,26 +297,32 @@ Temporary indexes не должны превращаться в permanent schema
 
 ## Миграции, важные для текущего audit
 
+Ключевые index/access-path изменения распределены по текущей истории:
+
 ```text
-V015__index_audit.sql
-V016__admin_security_and_line_labels.sql
-V017__protect_bootstrap_admin.sql
-V018__admin_sessions_roles_profile_and_ip_security.sql
-V023__merge_osm_relation_city_parts.sql
-V024__multi_column_report_ranking.sql
-V025__public_download_name.sql
-V026__dynamic_public_download_links.sql
+V015                  base index audit
+V016-V018             admin users/sessions/security
+V024                  multi-column ranking
+V033                  vertical REPORT_CONFIG
+V045                  spatial-derived geometry links
+V046                  geometry edit leases
+V047-V048             request-security/rate-limit state
+V050                  POINT_TYPES + geometry point-type index
+V054-V056             metrics/MFA policy state
+V058/V062-V064        discussions + read state
+V061                  geometry history speed profiles
+V065                  admin IP allowlist + CIDR GiST
 ```
 
-`V019…V022` и `V025…V026` добавляют/меняют singleton/configuration fields и не требуют новых indexes.
-
-Следующее schema/index изменение должно оформляться migration **V027+**.
+Текущий migration tail — **V065**; следующее schema/index изменение оформляется
+новой migration **V066+**. Опубликованные migrations не переписываются.
 
 ## Итог
 
 ```text
 CITY_BOUNDARIES      GiST GEOM/BOUNDS + OSM provenance identity
-CITY_GEOMETRIES      GiST GEOM + (CITY_ID, LINE_TYPE_ID)
+CITY_GEOMETRIES      GiST GEOM + (CITY_ID, LINE_TYPE_ID) + POINT_TYPE_ID
+POINT_TYPES           normalized NAME + point-type geometry lookup
 LINE_TYPES           normalized unique NAME
 CITY_REPORT_VALUES   PK CITY_ID + RANK
 ADMIN_USERS          normalized USERNAME + bootstrap invariant
@@ -271,6 +330,8 @@ ADMIN_SESSIONS       TOKEN_HASH + user/expiry
 ADMIN_LOGIN_IP_STATE PK IP + partial lock expiry
 ADMIN_BLOCKED_IPS    IP history + partial expiration
 ADMIN_AUDIT_LOG      newest-first + filter-specific indexes
+ADMIN_DISCUSSIONS     subject thread + per-user read state
+ADMIN_IP_ALLOWLIST    CIDR unique + GiST membership
 ```
 
 Остальные поля либо singleton/low-cardinality, либо не являются текущими predicates. Индексы «на всякий случай» не добавляются.

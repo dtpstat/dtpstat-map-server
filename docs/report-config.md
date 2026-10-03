@@ -373,12 +373,12 @@ GeoJSON использует то же base name с расширением `.geo
 Текущий project-settings package format:
 
 ```text
-schemaVersion 9
+schemaVersion 11
 ```
 
 Для report config существенен v5, который добавил `rank.sort`; v6 добавил
-`projectSettings.publicDownloadName`. V7-v9 расширяют другие части package
-(project/security settings) и не меняют report-config semantics.
+`projectSettings.publicDownloadName`. V7-v11 расширяют другие части package
+(project/security/map settings) и не меняют report-config semantics.
 
 Legacy single-rank packages остаются импортируемыми.
 

@@ -430,35 +430,31 @@ IMPORT_API_MAX_STREAM_JSON_ITEMS=5000000
 старые `30m`. Для действительно streaming/chunked upload также необходимо,
 чтобы reverse proxy не буферизовал request body целиком собственной политикой.
 
-Пример raw gzip:
+Protected admin import endpoints используют session-only authentication; HTTP Basic
+не поддерживается. Scripted client сначала создаёт DB-backed session через
+`POST /api/admin/login`, сохраняет cookie и затем соблюдает тот же
+API-version/Origin contract, что browser admin.
+
+Условный пример streaming raw gzip после получения session cookie в
+`cookies.txt` и актуального API version:
 
 ```bash
-AUTH="$ADMIN_USERNAME:$ADMIN_PASSWORD"
-
 gzip -c cities.geojson | curl --fail-with-body \
-  --user "$AUTH" \
+  -b cookies.txt \
   -X POST \
+  -H 'Origin: https://target.example' \
+  -H 'X-DTPStat-API-Version: <current-version>' \
   -H 'Content-Type: application/geo+json' \
   -H 'Content-Encoding: gzip' \
   --data-binary @- \
   https://target.example/api/admin/import/cities
 ```
 
-Пример готового ZIP:
-
-```bash
-curl --fail-with-body \
-  --user "$AUTH" \
-  -X POST \
-  -H 'Content-Type: application/zip' \
-  --data-binary @cities.zip \
-  https://target.example/api/admin/import/cities
-```
-
-То же API принимает ZIP из pipe/stdin: upstream ZIP producer пишет archive
+Для готового ZIP используется тот же session/version/origin набор заголовков,
+но `Content-Type: application/zip`. Upstream ZIP producer может писать archive
 bytes в stdout, а `curl --data-binary @-` передаёт их без промежуточного
-JSON-файла на стороне сервера. Имя единственной data entry может быть
-`stdin`; расширение `.json` не требуется.
+распакованного JSON-файла. Имя единственной data entry может быть `stdin`;
+расширение `.json` не требуется.
 
 После полного приёма transport stream сервер отвечает `202` и запускает
 admin task. Полный transport body не держится в heap; spool нужен для проверки
@@ -467,8 +463,17 @@ ZIP central directory/ZIP64 metadata перед транзакционным ч�
 DB/PostGIS ошибка или отмена задачи переводят task в `failed/cancelled`;
 такие ошибки делают `ROLLBACK` целиком. Ошибки отдельных записей population
 import являются best-effort warnings: проблемные записи не попадают в staging,
-а валидная часть той же транзакции коммитится. Временный spool удаляется после завершения task, а orphan
-spools после process crash чистятся при следующем startup (старше 24 часов).
+а валидная часть той же транзакции коммитится. Временный spool удаляется после
+завершения task, а orphan spools после process crash чистятся при следующем
+startup (старше 24 часов).
+
+# Authentication for scripted transfer
+
+Все `/api/admin/*` transfer endpoints session-only. Bootstrap
+`IMPORT_API_USERNAME/IMPORT_API_PASSWORD` не являются HTTP Basic
+credentials после создания DB-backed administrator. CLI automation должно
+создать обычную admin session, хранить cookie как secret и соблюдать Origin,
+API-version и CSRF contract.
 
 # Single-task guard
 

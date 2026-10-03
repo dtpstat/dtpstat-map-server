@@ -148,8 +148,20 @@ HTTP_PORT=3002
 | `V047` | admin request rate-limit settings |
 | `V048` | persistent request-incident/IP lockout state |
 | `V049` | spatial relink fix для territories без непустой descendant geometry |
+| `V050` | point types, icon metadata и optional Point category |
+| `V051…V053` | PostGIS-compatible spatial relink hardening |
+| `V054` | DB-backed Prometheus settings/token hash |
+| `V055…V056` | TOTP MFA и optional mandatory-MFA policy |
+| `V057` | geometry zoom/date visibility metadata |
+| `V058` | geometry discussions |
+| `V059` | public Point/Line/Polygon visibility toggles |
+| `V060` | point-type zoom range |
+| `V061` | geometry history start date и playback speed profiles |
+| `V062…V064` | discussion read state и generic geometry/OSM subjects |
+| `V065` | admin IPv4/IPv6 CIDR allowlist |
 
-Следующая migration: **V050+**. Уже опубликованные migrations не редактируются задним числом.
+Текущий migration tail: **V065**. Следующая migration: **V066+**.
+Уже опубликованные migrations не редактируются задним числом.
 
 История хранится в:
 

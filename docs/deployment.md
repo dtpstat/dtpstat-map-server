@@ -207,9 +207,14 @@ V055__admin_mfa.sql
 - `V052` — bypass overlay для полностью покрытой geometry, устраняющий PostGIS 3.5/3.6 расхождение `ST_Intersects`/empty `ST_Intersection`;
 - `V053` — zero-score short-circuit для parent candidate, полностью покрытого active descendants, без ненадёжного `ST_Difference`;
 - `V054` — DB-backed Prometheus enable flag и SHA-256 bearer-token hash с одноразовым ENV bootstrap;
-- `V055` — TOTP MFA encrypted-secret state, recovery-code hashes и одноразовые login challenges.
+- `V055` — TOTP MFA encrypted-secret state, recovery-code hashes и одноразовые login challenges;
+- `V056` — optional mandatory-MFA policy;
+- `V057…V061` — geometry visibility/timeline, public type toggles, point-type zoom и history speed profiles;
+- `V062…V064` — persistent discussion read state и generic geometry/OSM subjects;
+- `V065` — administrator IPv4/IPv6 CIDR allowlist.
 
-Следующая migration: **V056+**. Опубликованные migration files не изменяются задним числом.
+Текущий migration tail: **V065**. Следующая migration — **V066+**.
+Опубликованные migration files не изменяются задним числом.
 
 Startup автоматически применяет pending migrations через отдельный
 `DATABASE_MIGRATION_ROLE` под PostgreSQL advisory lock, затем повторно сверяет
@@ -286,8 +291,7 @@ WebSocket headers нужны для `/api/admin/ws`.
 ### Prometheus metrics
 
 Начиная с `V054`, authoritative metrics settings хранятся в
-`ADMIN_SECURITY_SETTINGS` и меняются в admin → «Пользователи и безопасность»
-→ «Защита». Bearer token хранится только как SHA-256 hash; plaintext
+`ADMIN_SECURITY_SETTINGS` и меняются в admin → **Безопасность → Метрики и тайминги**. Bearer token хранится только как SHA-256 hash; plaintext
 показывается один раз при генерации/ротации.
 
 `METRICS_ENABLED` и `METRICS_BEARER_TOKEN` теперь только одноразовый
@@ -326,11 +330,11 @@ Application default:
 IMPORT_API_MAX_BODY_BYTES=26214400
 ```
 
-Для nginx удобно:
-
-```nginx
-client_max_body_size 30m;
-```
+Для обычных небольших admin JSON forms 30 MiB достаточно, но portable
+streaming imports имеют отдельный `IMPORT_API_MAX_STREAM_UPLOAD_BYTES`.
+`client_max_body_size` должен быть не меньше production transport limit.
+Для действительно streaming/chunked upload также отключите request buffering
+на соответствующем import location, если proxy иначе буферизует body целиком.
 
 Иначе proxy может вернуть `413 Request Entity Too Large` раньше Node.
 
@@ -458,6 +462,8 @@ DB-backed `PROJECT_SETTINGS` включает:
 - analytics IDs;
 - theme;
 - line labels/popups;
+- public Point/Line/Polygon visibility toggles;
+- geometry history enable/start date/playback speeds;
 - public Mapbox token;
 - custom city marker;
 - public download base name;
@@ -480,12 +486,13 @@ Current format:
 
 ```text
 kind = project-settings
-schemaVersion = 9
+schemaVersion = 11
 ```
 
-Import принимает v1-v9. V5 добавляет `rank.sort`, V6 — `publicDownloadName`,
+Import принимает v1-v11. V5 добавляет `rank.sort`, V6 — `publicDownloadName`,
 V7 — large-city population/area thresholds, V8 — password policy,
-V9 — per-user/global HTTP request rate limits.
+V9 — per-user/global HTTP request rate limits, V10 — public geometry-type
+visibility, V11 — geometry history mode/start date/playback speeds.
 
 После import report values и public snapshots перестраиваются на target data.
 
