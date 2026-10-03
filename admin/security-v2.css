@@ -801,34 +801,36 @@ body.security-modal-open { overflow: hidden; }
 .security-ip-allowlist-form {
   display: grid;
   grid-template-columns:
-    minmax(10rem, 1fr)
-    minmax(10rem, 1fr);
-  gap: .55rem;
+    minmax(11rem, 13rem)
+    minmax(9rem, 1fr)
+    auto;
+  gap: .45rem .55rem;
   align-items: end;
-  margin-top: .55rem;
+  margin-top: .5rem;
 }
 
-.security-ip-allowlist-form button {
-  grid-column: 1 / -1;
-  width: fit-content;
-  min-width: 8rem;
-}
-
-.security-ip-allowlist-preview {
-  min-height: 1.1rem;
-  margin: .4rem 0 0;
-  color: #bfe9e3;
-  font-variant-numeric: tabular-nums;
+.security-ip-allowlist-form label {
+  min-width: 0;
 }
 
 .security-ip-allowlist-form input {
+  width: 100%;
   min-height: 2.15rem;
   padding: .34rem .45rem;
   font-size: .72rem;
 }
 
 .security-ip-allowlist-form button {
+  width: auto;
+  min-width: 7rem;
   white-space: nowrap;
+}
+
+.security-ip-allowlist-preview {
+  min-height: 1.1rem;
+  margin: .35rem 0 0;
+  color: #bfe9e3;
+  font-variant-numeric: tabular-nums;
 }
 
 .security-block-summary-heading {
