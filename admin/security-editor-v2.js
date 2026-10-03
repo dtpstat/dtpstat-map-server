@@ -2046,6 +2046,17 @@ if (
       }
     });
 
+  const systemIpAllowlist = [
+    {
+      id: 'system-loopback-ipv4',
+      network:
+        '127.0.0.1/24',
+      reason:
+        'Системный loopback',
+      system: true,
+    },
+  ];
+
   let activeIpBlocks = [];
   let activeIpAllowlist = [];
   let ipBlockSort = {
@@ -2777,59 +2788,109 @@ if (
       );
     if (!body) return;
 
+    const entries = [
+      ...systemIpAllowlist,
+      ...activeIpAllowlist,
+    ];
+
     const rows =
-      activeIpAllowlist.map(
+      entries.map(
         (entry) => {
           const row =
             document.createElement(
               'tr',
             );
 
-          for (
-            const value of [
-              entry.network,
-              entry.reason,
-            ]
-          ) {
-            const cell =
-              document.createElement(
-                'td',
-              );
-            cell.textContent =
-              value || '—';
-            row.append(
-              cell,
+          if (entry.system) {
+            row.classList.add(
+              'is-system',
             );
           }
 
+          const networkCell =
+            document.createElement(
+              'td',
+            );
+          networkCell.textContent =
+            entry.network;
+
+          if (entry.system) {
+            const badge =
+              document.createElement(
+                'span',
+              );
+            badge.className =
+              'security-ip-allowlist-system-badge';
+            badge.textContent =
+              'Системный';
+            networkCell.append(
+              ' ',
+              badge,
+            );
+          }
+
+          const reasonCell =
+            document.createElement(
+              'td',
+            );
+          reasonCell.textContent =
+            entry.reason ||
+            '—';
+
           row.append(
-            actionCell(
-              'Удалить',
-              async () => {
-                try {
-                  await api(
-                    '/api/admin/security/ip-allowlist/' +
-                    encodeURIComponent(
-                      entry.id,
-                    ),
-                    {
-                      method:
-                        'DELETE',
-                    },
-                  );
-                  await loadIpAllowlist();
-                } catch (error) {
-                  setMessage(
-                    document.querySelector(
-                      '#security-ip-allowlist-message',
-                    ),
-                    error.message,
-                    'error',
-                  );
-                }
-              },
-            ),
+            networkCell,
+            reasonCell,
           );
+
+          if (entry.system) {
+            const action =
+              document.createElement(
+                'td',
+              );
+            const label =
+              document.createElement(
+                'span',
+              );
+            label.className =
+              'security-ip-allowlist-system-action';
+            label.textContent =
+              'Не удаляется';
+            action.append(
+              label,
+            );
+            row.append(
+              action,
+            );
+          } else {
+            row.append(
+              actionCell(
+                'Удалить',
+                async () => {
+                  try {
+                    await api(
+                      '/api/admin/security/ip-allowlist/' +
+                      encodeURIComponent(
+                        entry.id,
+                      ),
+                      {
+                        method:
+                          'DELETE',
+                      },
+                    );
+                    await loadIpAllowlist();
+                  } catch (error) {
+                    setMessage(
+                      document.querySelector(
+                        '#security-ip-allowlist-message',
+                      ),
+                      error.message,
+                      'error',
+                    );
+                  }
+                },
+              ),
+            );
+          }
 
           return row;
         },
@@ -2842,8 +2903,11 @@ if (
       document.querySelector(
         '#security-ip-allowlist-message',
       ),
-      'White-list сетей: ' +
-      rows.length,
+      'White-list: ' +
+      systemIpAllowlist.length +
+      ' системный, ' +
+      activeIpAllowlist.length +
+      ' пользовательских.',
     );
   }
 
