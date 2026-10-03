@@ -170,6 +170,14 @@ test('interface settings expose point type CRUD and safe icon controls', async (
   );
   assert.match(
     editor,
+    /point-type-row-details[\s\S]*document\.createElement\([\s\S]*'summary'/u,
+  );
+  assert.match(
+    editor,
+    /querySelectorAll\([\s\S]*\.point-type-row-details\[open\][\s\S]*sibling\.open/u,
+  );
+  assert.match(
+    editor,
     /adminConfirm/u,
   );
   assert.doesNotMatch(
@@ -200,6 +208,14 @@ test('interface settings expose point type CRUD and safe icon controls', async (
   assert.match(
     styles,
     /\.point-type-settings-grid/u,
+  );
+  assert.match(
+    styles,
+    /\.point-type-summary/u,
+  );
+  assert.match(
+    styles,
+    /\.point-type-row-body/u,
   );
   assert.match(
     styles,
