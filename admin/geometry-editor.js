@@ -977,7 +977,7 @@ if (section) {
   async function loadDiscussionUnread() {
     const payload =
       await api(
-        '/api/admin/geometry-editor/discussions/unread',
+        '/api/admin/geometry-editor/discussions/state',
       );
 
     const items =
