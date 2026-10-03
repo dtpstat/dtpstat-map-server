@@ -6,6 +6,7 @@ import {
   isLoopbackAdminIp,
   normalizeAdminDurationSeconds,
   normalizeAdminIp,
+  normalizeAdminNetwork,
   normalizeAdminReason,
   normalizeAdminSecuritySettings,
 } from './policy.js';
@@ -102,6 +103,18 @@ export function createSecurityAdministrationService(
       );
     }
 
+    const allowlistMatch =
+      await repository
+        .findIpAllowlistMatch(
+          ipAddress,
+        );
+
+    if (allowlistMatch) {
+      throw new AdminSecurityValidationError(
+        'This IP address is protected by the allowlist',
+      );
+    }
+
     const durationSeconds =
       normalizeAdminDurationSeconds(
         payload.durationSeconds,
@@ -132,6 +145,46 @@ export function createSecurityAdministrationService(
             Number.MAX_SAFE_INTEGER,
           ),
     });
+  }
+
+  async function createIpAllowlistEntry(
+    payload,
+    actor,
+  ) {
+    if (
+      !payload ||
+      typeof payload !== 'object' ||
+      Array.isArray(payload)
+    ) {
+      throw new AdminSecurityValidationError(
+        'Request body must be a JSON object',
+      );
+    }
+
+    const network =
+      normalizeAdminNetwork(
+        payload.network,
+      );
+
+    const entry =
+      await repository
+        .createIpAllowlistEntry({
+          network,
+          createdBy:
+            actor?.id ??
+            null,
+          reason:
+            normalizeAdminReason(
+              payload.reason,
+            ),
+        });
+
+    await repository
+      .clearIpSecurityForNetwork(
+        entry.network,
+      );
+
+    return entry;
   }
 
   async function saveSecuritySettings(payload) {
@@ -295,5 +348,15 @@ export function createSecurityAdministrationService(
 
     deleteIpBlock: (blockId) =>
       repository.deleteIpBlock(blockId),
+
+    listIpAllowlist: () =>
+      repository.listIpAllowlist(),
+
+    createIpAllowlistEntry,
+
+    deleteIpAllowlistEntry: (entryId) =>
+      repository.deleteIpAllowlistEntry(
+        entryId,
+      ),
   };
 }
