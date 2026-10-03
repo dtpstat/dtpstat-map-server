@@ -46,7 +46,7 @@ if (typeof document !== 'undefined') {
           'details',
         );
       row.className =
-        'line-type-row';
+        'line-type-row admin-config-block';
       row.dataset.geometryCount =
         String(
           lineType.geometryCount ??
@@ -58,7 +58,7 @@ if (typeof document !== 'undefined') {
           'summary',
         );
       summary.className =
-        'line-type-summary';
+        'line-type-summary admin-config-summary';
 
       const summaryTitle =
         document.createElement(
