@@ -255,6 +255,133 @@ function handleNotificationControl(
   }
 }
 
+function discussionRefreshDetail(
+  message,
+) {
+  if (
+    message?.type ===
+      'data-change'
+  ) {
+    const change =
+      message.change ??
+      {};
+    const resource =
+      change.resource;
+
+    if (
+      ![
+        'geometry-discussions',
+        'osm-boundary-discussions',
+        'discussion-inbox',
+      ].includes(
+        resource,
+      )
+    ) {
+      return null;
+    }
+
+    const source =
+      change.source ??
+      {};
+    const subjectType =
+      resource ===
+        'geometry-discussions'
+        ? 'geometry'
+        : resource ===
+            'osm-boundary-discussions'
+          ? 'osm-boundary'
+          : source.subjectType ??
+            null;
+    const subjectId =
+      Number(
+        source.geometryId ??
+        source.boundaryId ??
+        source.subjectId ??
+        change.entityIds?.[0],
+      );
+
+    return {
+      subjectType,
+      subjectId:
+        Number.isSafeInteger(
+          subjectId,
+        ) &&
+        subjectId > 0
+          ? subjectId
+          : null,
+      action:
+        change.action ??
+        'updated',
+      originClientId:
+        change.originClientId ??
+        null,
+      source:
+        'data-change',
+    };
+  }
+
+  if (
+    message?.type ===
+      'notification' &&
+    message.notification
+      ?.source?.kind ===
+      'discussion-thread'
+  ) {
+    const rawId =
+      String(
+        message.notification
+          .source.id ??
+        '',
+      );
+    const separator =
+      rawId.indexOf(':');
+
+    if (separator <= 0) {
+      return null;
+    }
+
+    const subjectType =
+      rawId.slice(
+        0,
+        separator,
+      );
+    const subjectId =
+      Number(
+        rawId.slice(
+          separator + 1,
+        ),
+      );
+
+    if (
+      ![
+        'geometry',
+        'osm-boundary',
+      ].includes(
+        subjectType,
+      ) ||
+      !Number.isSafeInteger(
+        subjectId,
+      ) ||
+      subjectId <= 0
+    ) {
+      return null;
+    }
+
+    return {
+      subjectType,
+      subjectId,
+      action:
+        'message-created',
+      originClientId:
+        null,
+      source:
+        'notification',
+    };
+  }
+
+  return null;
+}
+
 function emit(message) {
   if (
     message?.type ===
@@ -306,6 +433,22 @@ function emit(message) {
       },
     ),
   );
+
+  const discussionRefresh =
+    discussionRefreshDetail(
+      message,
+    );
+  if (discussionRefresh) {
+    window.dispatchEvent(
+      new CustomEvent(
+        'dtpstat:discussion-unread-refresh',
+        {
+          detail:
+            discussionRefresh,
+        },
+      ),
+    );
+  }
 
   for (const listener of listeners) {
     try {
