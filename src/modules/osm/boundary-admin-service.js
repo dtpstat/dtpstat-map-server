@@ -268,6 +268,33 @@ export function createOsmBoundaryAdminService(
                 row.boundaryId,
               unreadCount:
                 row.unreadCount,
+            }),
+          ),
+      };
+    },
+
+    async listDiscussionState(
+      actor,
+    ) {
+      const userId =
+        normalizeDiscussionId(
+          actor?.id,
+          'userId',
+        );
+      const rows =
+        await discussionStorage
+          .threadStates(
+            userId,
+          );
+
+      return {
+        items:
+          rows.map(
+            (row) => ({
+              boundaryId:
+                row.boundaryId,
+              unreadCount:
+                row.unreadCount,
               messageCount:
                 row.messageCount,
             }),
