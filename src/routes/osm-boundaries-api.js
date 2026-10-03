@@ -35,6 +35,8 @@ export function createOsmBoundariesRouter({
   osmConfig,
   afterBoundaryChange,
   realtimeEvents,
+  notificationEvents = null,
+  discussionInboxService = null,
 }) {
   const router = Router();
 
@@ -64,6 +66,8 @@ export function createOsmBoundariesRouter({
       jsonBody,
       afterBoundaryChange,
       realtimeEvents,
+      notificationEvents,
+      discussionInboxService,
     },
   );
 
