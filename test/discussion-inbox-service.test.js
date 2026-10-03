@@ -261,7 +261,7 @@ test('discussion notification targets parse unique mentions and honor subject pe
 });
 
 
-test('discussion notifications separate participants from accented mentions', () => {
+test('discussion notifications are emitted only for explicit mentions', () => {
   const events = [];
   const result =
     publishDiscussionNotifications(
@@ -310,31 +310,21 @@ test('discussion notifications separate participants from accented mentions', ()
   assert.deepEqual(
     result,
     {
-      participantCount: 2,
+      participantCount: 0,
       mentionCount: 2,
     },
   );
   assert.equal(
     events.length,
-    2,
+    1,
   );
 
-  const ordinary =
-    events.find(
-      (event) =>
-        event.code ===
-        'discussion-message',
-    );
   const mention =
-    events.find(
-      (event) =>
-        event.code ===
-        'discussion-mention',
-    );
+    events[0];
 
-  assert.deepEqual(
-    ordinary.audience.userIds,
-    [2, 4],
+  assert.equal(
+    mention.code,
+    'discussion-mention',
   );
   assert.deepEqual(
     mention.audience.userIds,
@@ -353,9 +343,43 @@ test('discussion notifications separate participants from accented mentions', ()
     mention.message,
     /упомянул вас/u,
   );
-  assert.ok(
-    mention.timeoutMs >
-      ordinary.timeoutMs,
+});
+
+test('ordinary discussion messages skip notification target lookup', async () => {
+  let called = false;
+  const service =
+    createDiscussionInboxService({
+      async notificationTargets() {
+        called = true;
+        return {};
+      },
+    });
+
+  assert.deepEqual(
+    await service
+      .notificationTargets(
+        {
+          id: 7,
+          canEditGeometries:
+            true,
+        },
+        {
+          subjectType:
+            'geometry',
+          subjectId: 10,
+          message:
+            'Обычное сообщение без упоминания',
+        },
+      ),
+    {
+      subject: null,
+      participantUserIds: [],
+      mentionedUsers: [],
+    },
+  );
+  assert.equal(
+    called,
+    false,
   );
 });
 
