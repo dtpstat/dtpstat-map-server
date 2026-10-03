@@ -448,7 +448,7 @@ if (typeof document !== 'undefined') {
           : 'Выберите OSM-объект';
     }
 
-    async function loadDiscussionUnread() {
+    async function loadDiscussionState() {
       const payload =
         await api(
           '/api/admin/osm-boundaries/discussions/state',
@@ -1977,7 +1977,7 @@ if (typeof document !== 'undefined') {
     window.addEventListener(
       'dtpstat:discussion-read-all',
       () => {
-        void loadDiscussionUnread()
+        void loadDiscussionState()
           .catch(
             (error) =>
               console.warn(
@@ -1990,7 +1990,7 @@ if (typeof document !== 'undefined') {
 
     window.addEventListener('dtpstat:osm-boundary-editor-open', () => {
       void Promise.all([
-        loadDiscussionUnread(),
+        loadDiscussionState(),
         load(),
       ]);
       window.setTimeout(() => state.map?.resize(), 0);
@@ -2054,7 +2054,7 @@ if (typeof document !== 'undefined') {
     window.addEventListener('dtpstat:osm-boundaries-reloaded', () => void load());
     refreshDraftControls();
     void Promise.all([
-      loadDiscussionUnread(),
+      loadDiscussionState(),
       load({ keepSelection: false }),
     ]);
   }
