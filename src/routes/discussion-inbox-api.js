@@ -39,6 +39,65 @@ export function createDiscussionInboxRouter({
     },
   );
 
+  router.get(
+    '/admin/profile/discussions/mentions',
+    adminAuth.requireProfile,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        const subjectType =
+          String(
+            request.query
+              ?.subjectType ??
+            '',
+          );
+        const query =
+          String(
+            request.query?.q ??
+            '',
+          );
+
+        if (
+          ![
+            'geometry',
+            'osm-boundary',
+          ].includes(
+            subjectType,
+          )
+        ) {
+          response
+            .status(400)
+            .json({
+              error:
+                'subjectType must be geometry or osm-boundary',
+            });
+          return;
+        }
+
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json(
+            await discussionInboxService
+              .mentionSuggestions(
+                request.adminUser,
+                {
+                  subjectType,
+                  query,
+                },
+              ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   router.post(
     '/admin/profile/discussions/read-all',
     adminAuth.requireProfile,
