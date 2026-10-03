@@ -90,9 +90,25 @@ function publishRealtimeNotification(
     );
   }
 
+  const dataChangeResource =
+    message?.type ===
+      'data-change'
+      ? message.change
+        ?.resource
+      : null;
+  const dedicatedNotificationResource =
+    [
+      'geometry-discussions',
+      'osm-boundary-discussions',
+      'discussion-inbox',
+    ].includes(
+      dataChangeResource,
+    );
+
   if (
     message?.type ===
       'data-change' &&
+    !dedicatedNotificationResource &&
     message.change
       ?.originClientId !==
       realtimeClientId() &&
