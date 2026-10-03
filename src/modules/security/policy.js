@@ -1,3 +1,5 @@
+import { isIP } from 'node:net';
+
 export const DEFAULT_ADMIN_PASSWORD_POLICY = Object.freeze({
   passwordMinLength: 12,
   passwordMaxLength: 1024,
@@ -465,6 +467,95 @@ export function normalizeAdminIp(value) {
       ? text.slice(7)
       : text
   ).slice(0, 128);
+}
+
+export function normalizeAdminNetwork(value) {
+  const text =
+    typeof value === 'string'
+      ? value.trim()
+      : '';
+
+  if (!text) {
+    throw new AdminSecurityValidationError(
+      'network is required',
+    );
+  }
+
+  const [
+    rawAddress,
+    rawPrefix,
+    ...extra
+  ] =
+    text.split('/');
+
+  if (extra.length > 0) {
+    throw new AdminSecurityValidationError(
+      'network must be an IP address or CIDR',
+    );
+  }
+
+  const address =
+    normalizeAdminIp(
+      rawAddress,
+    );
+  const version =
+    isIP(
+      address ?? '',
+    );
+
+  if (!version) {
+    throw new AdminSecurityValidationError(
+      'network must be a valid IPv4 or IPv6 address',
+    );
+  }
+
+  if (
+    rawPrefix ===
+    undefined
+  ) {
+    return (
+      address +
+      (
+        version === 4
+          ? '/32'
+          : '/128'
+      )
+    );
+  }
+
+  if (
+    !/^\d{1,3}$/u.test(
+      rawPrefix,
+    )
+  ) {
+    throw new AdminSecurityValidationError(
+      'CIDR prefix is invalid',
+    );
+  }
+
+  const prefix =
+    Number(
+      rawPrefix,
+    );
+  const maximum =
+    version === 4
+      ? 32
+      : 128;
+
+  if (
+    prefix < 0 ||
+    prefix > maximum
+  ) {
+    throw new AdminSecurityValidationError(
+      'CIDR prefix is out of range',
+    );
+  }
+
+  return (
+    address +
+    '/' +
+    prefix
+  );
 }
 
 export function isLoopbackAdminIp(value) {
