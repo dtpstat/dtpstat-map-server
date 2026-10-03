@@ -172,6 +172,18 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
   );
   assert.match(
     security,
+    /systemIpAllowlist[\s\S]*127\.0\.0\.1\/24[\s\S]*Системный loopback/u,
+  );
+  assert.match(
+    security,
+    /security-ip-allowlist-system-badge[\s\S]*Не удаляется/u,
+  );
+  assert.match(
+    securityCss,
+    /\.security-ip-allowlist-system-badge/u,
+  );
+  assert.match(
+    security,
     /left\.append\([\s\S]*allowlist/u,
   );
   assert.match(
