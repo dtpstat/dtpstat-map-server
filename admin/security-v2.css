@@ -278,10 +278,15 @@ button.danger { background: #51211f; border-color: #8e3a36; color: #ffd0cc; }
   border: 1px solid var(--line);
   border-radius: 10px;
 }
-.security-audit-table { width: 100%; min-width: 68rem; border-collapse: collapse; font-size: .69rem; white-space: nowrap; }
+.security-audit-table {
+  width: 100%;
+  min-width: 58rem;
+  border-collapse: collapse;
+  font-size: .69rem;
+  white-space: nowrap;
+}
 .security-audit-table th,.security-audit-table td { padding: .38rem .48rem; border-bottom: 1px solid var(--line); vertical-align: middle; text-align: left; }
 .security-audit-table th { position: sticky; top: 0; z-index: 2; background: #0d171a; color: var(--muted); }
-.security-audit-actions { display: flex; gap: .3rem; }
 .security-audit-user { display: inline-flex; align-items: center; gap: .45rem; }
 .security-audit-avatar {
   width: 1.55rem;
@@ -298,7 +303,10 @@ button.danger { background: #51211f; border-color: #8e3a36; color: #ffd0cc; }
   font-weight: 800;
 }
 .security-audit-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.security-audit-details-open { white-space: nowrap; }
+.security-audit-details-open {
+  padding: .22rem .36rem;
+  white-space: nowrap;
+}
 
 body.security-modal-open { overflow: hidden; }
 .security-audit-detail-overlay {
