@@ -41,61 +41,253 @@ if (typeof document !== 'undefined') {
     }
 
     function addRow(lineType) {
-      const row = document.createElement('div');
-      row.className = 'line-type-row';
-      row.dataset.geometryCount = String(lineType.geometryCount ?? 0);
+      const row =
+        document.createElement(
+          'details',
+        );
+      row.className =
+        'line-type-row';
+      row.dataset.geometryCount =
+        String(
+          lineType.geometryCount ??
+          0,
+        );
 
-      const codeLabel = readOnlyField('CODE', 'code', String(lineType.code));
-      const nameLabel = readOnlyField('NAME из импорта', 'name', lineType.name);
+      const summary =
+        document.createElement(
+          'summary',
+        );
+      summary.className =
+        'line-type-summary';
 
-      const titleLabel = document.createElement('label');
-      titleLabel.textContent = 'TITLE в легенде';
-      const titleInput = document.createElement('input');
-      titleInput.name = 'title';
-      titleInput.required = true;
-      titleInput.maxLength = 120;
-      titleInput.value = lineType.title ?? lineType.name;
-      titleLabel.append(titleInput);
+      const summaryTitle =
+        document.createElement(
+          'strong',
+        );
+      summaryTitle.textContent =
+        lineType.title ??
+        lineType.name;
 
-      const colorLabel = document.createElement('label');
-      colorLabel.textContent = 'Цвет';
-      const colorInput = document.createElement('input');
-      colorInput.name = 'color';
-      colorInput.type = 'color';
-      colorInput.value = lineType.color ?? '#045b69';
-      colorLabel.append(colorInput);
+      const summaryMeta =
+        document.createElement(
+          'span',
+        );
+      summaryMeta.className =
+        'line-type-summary-meta';
+      summaryMeta.textContent =
+        lineType.name +
+        ' · CODE ' +
+        lineType.code +
+        ' · геометрий: ' +
+        Number(
+          lineType.geometryCount ??
+          0,
+        );
 
-      const styleLabel = document.createElement('label');
-      styleLabel.textContent = 'Стиль';
-      const styleSelect = document.createElement('select');
-      styleSelect.name = 'style';
-      for (const [value, label] of [
-        ['solid', 'Сплошная'],
-        ['dashed', 'Штриховая'],
-        ['dotted', 'Точечная'],
-      ]) {
-        const option = document.createElement('option');
-        option.value = value;
-        option.textContent = label;
-        option.selected = (lineType.style ?? 'solid') === value;
-        styleSelect.append(option);
+      summary.append(
+        summaryTitle,
+        summaryMeta,
+      );
+
+      const body =
+        document.createElement(
+          'div',
+        );
+      body.className =
+        'line-type-row-body';
+
+      const codeLabel =
+        readOnlyField(
+          'CODE',
+          'code',
+          String(
+            lineType.code,
+          ),
+        );
+      const nameLabel =
+        readOnlyField(
+          'NAME из импорта',
+          'name',
+          lineType.name,
+        );
+
+      const titleLabel =
+        document.createElement(
+          'label',
+        );
+      titleLabel.textContent =
+        'TITLE в легенде';
+      const titleInput =
+        document.createElement(
+          'input',
+        );
+      titleInput.name =
+        'title';
+      titleInput.required =
+        true;
+      titleInput.maxLength =
+        120;
+      titleInput.value =
+        lineType.title ??
+        lineType.name;
+      titleLabel.append(
+        titleInput,
+      );
+
+      const colorLabel =
+        document.createElement(
+          'label',
+        );
+      colorLabel.textContent =
+        'Цвет';
+      const colorInput =
+        document.createElement(
+          'input',
+        );
+      colorInput.name =
+        'color';
+      colorInput.type =
+        'color';
+      colorInput.value =
+        lineType.color ??
+        '#045b69';
+      colorLabel.append(
+        colorInput,
+      );
+
+      const styleLabel =
+        document.createElement(
+          'label',
+        );
+      styleLabel.textContent =
+        'Стиль';
+      const styleSelect =
+        document.createElement(
+          'select',
+        );
+      styleSelect.name =
+        'style';
+      for (
+        const [
+          value,
+          label,
+        ] of [
+          [
+            'solid',
+            'Сплошная',
+          ],
+          [
+            'dashed',
+            'Штриховая',
+          ],
+          [
+            'dotted',
+            'Точечная',
+          ],
+        ]
+      ) {
+        const option =
+          document.createElement(
+            'option',
+          );
+        option.value =
+          value;
+        option.textContent =
+          label;
+        option.selected =
+          (
+            lineType.style ??
+            'solid'
+          ) === value;
+        styleSelect.append(
+          option,
+        );
       }
-      styleLabel.append(styleSelect);
+      styleLabel.append(
+        styleSelect,
+      );
 
-      const widthLabel = document.createElement('label');
-      widthLabel.textContent = 'Толщина';
-      const widthInput = document.createElement('input');
-      widthInput.name = 'width';
-      widthInput.type = 'number';
-      widthInput.min = '0.5';
-      widthInput.max = '32';
-      widthInput.step = '0.5';
-      widthInput.required = true;
-      widthInput.value = String(lineType.width ?? 4);
-      widthLabel.append(widthInput);
+      const widthLabel =
+        document.createElement(
+          'label',
+        );
+      widthLabel.textContent =
+        'Толщина';
+      const widthInput =
+        document.createElement(
+          'input',
+        );
+      widthInput.name =
+        'width';
+      widthInput.type =
+        'number';
+      widthInput.min =
+        '0.5';
+      widthInput.max =
+        '32';
+      widthInput.step =
+        '0.5';
+      widthInput.required =
+        true;
+      widthInput.value =
+        String(
+          lineType.width ??
+          4,
+        );
+      widthLabel.append(
+        widthInput,
+      );
 
-      row.append(codeLabel, nameLabel, titleLabel, colorLabel, styleLabel, widthLabel);
-      table.append(row);
+      body.append(
+        codeLabel,
+        nameLabel,
+        titleLabel,
+        colorLabel,
+        styleLabel,
+        widthLabel,
+      );
+      row.append(
+        summary,
+        body,
+      );
+
+      row.addEventListener(
+        'toggle',
+        () => {
+          if (!row.open) {
+            return;
+          }
+
+          for (
+            const sibling of
+            table.querySelectorAll(
+              '.line-type-row[open]',
+            )
+          ) {
+            if (
+              sibling !==
+              row
+            ) {
+              sibling.open =
+                false;
+            }
+          }
+        },
+      );
+
+      titleInput.addEventListener(
+        'input',
+        () => {
+          summaryTitle.textContent =
+            titleInput.value
+              .trim() ||
+            lineType.name;
+        },
+      );
+
+      table.append(
+        row,
+      );
     }
 
     function readRows() {
