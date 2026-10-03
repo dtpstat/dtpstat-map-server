@@ -331,7 +331,8 @@
 }
 
 #project-settings-form textarea[name="footerHtml"] {
-  min-height: 20rem;
+  min-height: 12rem;
+  height: min(32vh, 18rem);
   resize: vertical;
 }
 
@@ -468,4 +469,24 @@
   [data-admin-layout-block="map-actions"]
   .task-action {
   margin-top: 0;
+}
+
+
+/* Project/map cards are independent natural-height blocks; one panel owns scrolling. */
+[data-interface-panel="map"]
+  .project-settings-section {
+  overflow: clip;
+}
+
+[data-interface-panel="map"]
+  > .admin-layout-grid {
+  column-gap: .8rem;
+  row-gap: .8rem;
+}
+
+[data-interface-panel="map"]
+  [data-admin-layout-block="map-history"],
+[data-interface-panel="map"]
+  [data-admin-layout-block="map-city-marker"] {
+  align-self: start;
 }
