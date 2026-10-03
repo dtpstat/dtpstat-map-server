@@ -69,6 +69,10 @@ test('admin action feedback renders the shared typed notification pool', async (
   );
   assert.match(
     feedback,
+    /aria-selected[\s\S]*MutationObserver/u,
+  );
+  assert.match(
+    feedback,
     /discussion-mention[\s\S]*is-mention/u,
   );
   assert.match(
