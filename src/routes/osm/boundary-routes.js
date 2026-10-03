@@ -192,6 +192,40 @@ export function registerOsmBoundaryRoutes(
   );
 
   router.get(
+    '/admin/osm-boundaries/discussions/state',
+    adminAuth.requireOsmEditor,
+    async (
+      request,
+      response,
+      next,
+    ) => {
+      try {
+        response
+          .set(
+            'Cache-Control',
+            'no-store',
+          )
+          .json(
+            await boundaryRepository
+              .listDiscussionState(
+                request.adminUser,
+              ),
+          );
+      } catch (error) {
+        if (
+          validationError(
+            response,
+            error,
+          )
+        ) {
+          return;
+        }
+        next(error);
+      }
+    },
+  );
+
+  router.get(
     '/admin/osm-boundaries/:boundaryId/discussion',
     adminAuth.requireOsmEditor,
     async (
