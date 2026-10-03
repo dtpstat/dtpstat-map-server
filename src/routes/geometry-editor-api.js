@@ -563,18 +563,20 @@ export function createGeometryEditorRouter({
                 .geometryId,
             ),
           ],
-          geometryId:
-            Number(
-              request.params
-                .geometryId,
-            ),
-          readerUserId:
-            request.adminUser?.id ??
-            null,
-          lastReadMessageId:
-            readState
-              .lastReadMessageId ??
-            null,
+          source: {
+            geometryId:
+              Number(
+                request.params
+                  .geometryId,
+              ),
+            readerUserId:
+              request.adminUser?.id ??
+              null,
+            lastReadMessageId:
+              readState
+                .lastReadMessageId ??
+              null,
+          },
           message:
             'Сообщения обсуждения прочитаны.',
         });
@@ -661,10 +663,12 @@ export function createGeometryEditorRouter({
             discussionMessage
               .geometryId,
           ],
-          geometryId:
-            discussionMessage
-              .geometryId,
-          discussionMessage,
+          source: {
+            geometryId:
+              discussionMessage
+                .geometryId,
+            discussionMessage,
+          },
           message:
             'Новое сообщение в обсуждении геометрии.',
         });
