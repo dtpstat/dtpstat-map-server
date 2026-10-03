@@ -301,6 +301,7 @@ function discussionRefreshDetail(
       );
 
     return {
+      resource,
       subjectType,
       subjectId:
         Number.isSafeInteger(
@@ -368,6 +369,11 @@ function discussionRefreshDetail(
     }
 
     return {
+      resource:
+        subjectType ===
+          'geometry'
+          ? 'geometry-discussions'
+          : 'osm-boundary-discussions',
       subjectType,
       subjectId,
       action:
