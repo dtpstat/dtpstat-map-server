@@ -1952,6 +1952,14 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
   );
   assert.match(
     script,
+    /dtpstat:discussion-unread-refresh[\s\S]*subjectType !==[\s\S]*'geometry'[\s\S]*loadDiscussionState\(\)/u,
+  );
+  assert.match(
+    script,
+    /detail\.source ===[\s\S]*'notification'[\s\S]*discussionIsOpenFor[\s\S]*loadDiscussion\(/u,
+  );
+  assert.match(
+    script,
     /function markDiscussionRead\(/u,
   );
   assert.match(
