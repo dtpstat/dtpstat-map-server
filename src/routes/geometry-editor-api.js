@@ -13,6 +13,9 @@ import {
   GeometryEditorValidationError,
   normalizeGeometryId,
 } from '../modules/geometry/editor-policy.js';
+import {
+  publishDiscussionNotifications,
+} from '../modules/discussions/notifications.js';
 
 function validationError(
   response,
@@ -185,6 +188,8 @@ export function createGeometryEditorRouter({
     async () =>
       undefined,
   realtimeEvents,
+  notificationEvents = null,
+  discussionInboxService = null,
 }) {
   const router =
     Router();
@@ -663,6 +668,43 @@ export function createGeometryEditorRouter({
           message:
             'Новое сообщение в обсуждении геометрии.',
         });
+
+        if (
+          discussionInboxService
+            ?.notificationTargets
+        ) {
+          const targets =
+            await discussionInboxService
+              .notificationTargets(
+                request.adminUser,
+                {
+                  subjectType:
+                    'geometry',
+                  subjectId:
+                    discussionMessage
+                      .geometryId,
+                  message:
+                    discussionMessage
+                      .message,
+                },
+              );
+
+          publishDiscussionNotifications(
+            notificationEvents,
+            {
+              permission:
+                'geometry-editor',
+              actor:
+                request.adminUser,
+              subjectType:
+                'geometry',
+              subjectId:
+                discussionMessage
+                  .geometryId,
+              targets,
+            },
+          );
+        }
 
         response
           .status(201)
