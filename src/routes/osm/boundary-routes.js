@@ -434,7 +434,7 @@ export function registerOsmBoundaryRoutes(
                       message.message,
                   },
                 );
-  
+
             publishDiscussionNotifications(
               notificationEvents,
               {
