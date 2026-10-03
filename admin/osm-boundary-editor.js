@@ -451,7 +451,7 @@ if (typeof document !== 'undefined') {
     async function loadDiscussionUnread() {
       const payload =
         await api(
-          '/api/admin/osm-boundaries/discussions/unread',
+          '/api/admin/osm-boundaries/discussions/state',
         );
 
       const items =
