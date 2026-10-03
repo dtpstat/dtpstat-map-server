@@ -816,3 +816,41 @@ body.admin-dialog-open { overflow: hidden; }
     position: static;
   }
 }
+
+
+@media (min-width: 1051px) and (min-height: 800px) {
+  .portable-kml-transfer
+    #line-kml-transfer-form {
+    display: grid;
+    grid-template-columns:
+      minmax(0, 1fr)
+      auto;
+    gap: .55rem;
+    align-items: end;
+  }
+
+  .portable-kml-transfer
+    #line-kml-transfer-form
+    .form-fields {
+    overflow: visible;
+  }
+
+  .portable-kml-transfer
+    #line-kml-transfer-form
+    button[type="submit"] {
+    width: auto;
+    min-width: 13rem;
+    margin: 0;
+  }
+
+  #operation-kml-external
+    .portable-kml-transfer {
+    padding-block: .65rem;
+  }
+
+  #operation-kml-external
+    .portable-kml-transfer
+    .mode-heading {
+    margin-bottom: .5rem;
+  }
+}
