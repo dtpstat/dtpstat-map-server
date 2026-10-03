@@ -10,6 +10,9 @@ import {
   DiscussionValidationError,
   normalizeDiscussionId,
 } from '../../modules/discussions/policy.js';
+import {
+  publishDiscussionNotifications,
+} from '../../modules/discussions/notifications.js';
 
 function object(value) {
   return (
@@ -67,6 +70,8 @@ export function registerOsmBoundaryRoutes(
     jsonBody,
     afterBoundaryChange,
     realtimeEvents,
+    notificationEvents = null,
+    discussionInboxService = null,
   },
 ) {
   const audit = (operation) =>
@@ -370,6 +375,40 @@ export function registerOsmBoundaryRoutes(
           discussionMessage:
             message,
         });
+
+        if (
+          discussionInboxService
+            ?.notificationTargets
+        ) {
+          const targets =
+            await discussionInboxService
+              .notificationTargets(
+                request.adminUser,
+                {
+                  subjectType:
+                    'osm-boundary',
+                  subjectId:
+                    message.boundaryId,
+                  message:
+                    message.message,
+                },
+              );
+
+          publishDiscussionNotifications(
+            notificationEvents,
+            {
+              permission:
+                'osm-editor',
+              actor:
+                request.adminUser,
+              subjectType:
+                'osm-boundary',
+              subjectId:
+                message.boundaryId,
+              targets,
+            },
+          );
+        }
 
         response
           .status(201)
