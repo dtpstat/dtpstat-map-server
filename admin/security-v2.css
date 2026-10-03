@@ -754,9 +754,9 @@ body.security-modal-open { overflow: hidden; }
 }
 
 .security-block-policy fieldset input[type="number"] {
-  width: 7ch;
-  min-width: 7ch;
-  max-width: 7ch;
+  width: 14ch;
+  min-width: 14ch;
+  max-width: 14ch;
   font-variant-numeric: tabular-nums;
 }
 
@@ -801,12 +801,24 @@ body.security-modal-open { overflow: hidden; }
 .security-ip-allowlist-form {
   display: grid;
   grid-template-columns:
-    minmax(12rem, .7fr)
-    minmax(12rem, 1fr)
-    auto;
+    minmax(10rem, 1fr)
+    minmax(10rem, 1fr);
   gap: .55rem;
   align-items: end;
   margin-top: .55rem;
+}
+
+.security-ip-allowlist-form button {
+  grid-column: 1 / -1;
+  width: fit-content;
+  min-width: 8rem;
+}
+
+.security-ip-allowlist-preview {
+  min-height: 1.1rem;
+  margin: .4rem 0 0;
+  color: #bfe9e3;
+  font-variant-numeric: tabular-nums;
 }
 
 .security-ip-allowlist-form input {
@@ -917,7 +929,7 @@ body.security-modal-open { overflow: hidden; }
   }
 
   .security-block-policy fieldset input[type="number"] {
-    width: 7ch;
+    width: 14ch;
   }
 
   .security-block-summary-heading {
