@@ -230,6 +230,14 @@ test('selected admin tabs are session-scoped and never stored in cookies', async
   );
   assert.match(
     security,
+    /127\.0\.0\.1\/24/u,
+  );
+  assert.match(
+    security,
+    /Не удаляется/u,
+  );
+  assert.match(
+    security,
     /parseIpNetwork[\s\S]*updateIpAllowlistPreview/u,
   );
   assert.match(
