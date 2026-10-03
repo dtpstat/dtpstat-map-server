@@ -181,6 +181,27 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
   );
   assert.match(
     inbox,
+    /admin-messages-read-all/u,
+  );
+  assert.match(
+    inbox,
+    /\/api\/admin\/profile\/discussions\/read-all/u,
+  );
+  assert.match(
+    inbox,
+    /dtpstat:discussion-inbox-open/u,
+  );
+  assert.match(
+    inbox,
+    /pendingOpenKey/u,
+  );
+  assert.match(
+    inbox,
+    /classList\.toggle\([\s\S]*'has-unread'/u,
+  );
+
+  assert.match(
+    inbox,
     /readByOthersCount/u,
   );
   assert.match(
@@ -301,6 +322,15 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
     styles,
     /\.admin-messages-unread/u,
   );
+  assert.match(
+    styles,
+    /\.profile-discussion-row\.has-unread/u,
+  );
+  assert.match(
+    styles,
+    /\.admin-messages-read-all/u,
+  );
+
   assert.match(
     styles,
     /\.profile-discussion-message\.is-own/u,
