@@ -324,21 +324,9 @@ export function createDiscussionStorage(
     async mentionSuggestions(
       subjectType,
       query,
+      userId,
       limit = 8,
     ) {
-      const permissionColumn =
-        subjectType ===
-        'geometry'
-          ? 'can_edit_geometries'
-          : subjectType ===
-            'osm-boundary'
-            ? 'can_edit_osm'
-            : null;
-
-      if (!permissionColumn) {
-        return [];
-      }
-
       const result =
         await database.query(
           `SELECT
@@ -348,15 +336,25 @@ export function createDiscussionStorage(
            FROM admin_users
            WHERE (
                is_superuser = TRUE
-               OR ${permissionColumn} = TRUE
+               OR (
+                 $1::text = 'geometry'
+                 AND can_edit_geometries = TRUE
+               )
+               OR (
+                 $1::text = 'osm-boundary'
+                 AND can_edit_osm = TRUE
+               )
              )
+             AND id <> $2::bigint
              AND is_blocked = FALSE
-             AND LOWER(username) LIKE LOWER($1::text) || '%'
+             AND LOWER(username) LIKE LOWER($3::text) || '%'
            ORDER BY
              LOWER(username),
              id
-           LIMIT $2::integer`,
+           LIMIT $4::integer`,
           [
+            subjectType,
+            userId,
             query,
             limit,
           ],
