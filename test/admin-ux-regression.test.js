@@ -313,6 +313,7 @@ test('desktop admin layout minimizes nested scrolling and exposes compact empty 
   const [
     adminCss,
     projectCss,
+    project,
     profile,
     profileCss,
     security,
@@ -325,6 +326,9 @@ test('desktop admin layout minimizes nested scrolling and exposes compact empty 
       ),
       read(
         'admin/project-settings.css',
+      ),
+      read(
+        'admin/project-settings-editor.js',
       ),
       read(
         'admin/profile-editor.js',
