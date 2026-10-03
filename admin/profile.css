@@ -41,6 +41,24 @@
   scrollbar-gutter: stable;
 }
 
+.profile-session-pagination {
+  flex: 0 0 auto;
+  margin-top: .5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .55rem;
+  color: var(--muted);
+  font-size: .68rem;
+}
+
+.profile-session-pagination button {
+  width: 2rem;
+  min-width: 2rem;
+  min-height: 1.8rem;
+  padding: .2rem .35rem;
+}
+
 .profile-panel {
   min-width: 0;
   height: 100%;
