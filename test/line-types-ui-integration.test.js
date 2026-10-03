@@ -129,8 +129,8 @@ test('admin line type editor keeps CODE and NAME read-only and edits TITLE/style
   assert.match(editor, /CODE генерируется базой автоматически/);
   assert.match(editor, /NAME приходит из импорта/);
   assert.match(editor, /TITLE — редактируемая подпись легенды/);
-  assert.match(editor, /readOnlyField\('CODE', 'code'/);
-  assert.match(editor, /readOnlyField\('NAME из импорта', 'name'/);
+  assert.match(editor, /readOnlyField\([\s\S]*'CODE',[\s\S]*'code'/);
+  assert.match(editor, /readOnlyField\([\s\S]*'NAME из импорта',[\s\S]*'name'/);
   assert.match(editor, /titleInput\.name = 'title'/);
   assert.match(editor, /code: Number\(/);
   assert.doesNotMatch(editor, /Добавить тип/);
@@ -141,6 +141,18 @@ test('admin line type editor keeps CODE and NAME read-only and edits TITLE/style
   assert.match(editor, /\['solid', 'Сплошная'\]/);
   assert.match(editor, /widthInput\.min = '0\.5'/);
   assert.match(editor, /fetch\('\/api\/admin\/line-types'/);
+  assert.match(
+    editor,
+    /document\.createElement\([\s\S]*'details'[\s\S]*line-type-summary/u,
+  );
+  assert.match(
+    editor,
+    /querySelectorAll\([\s\S]*\.line-type-row\[open\][\s\S]*sibling\.open/u,
+  );
+  assert.match(
+    styles,
+    /\.line-type-row-body/u,
+  );
   const styles = await source('admin/line-types.css');
   assert.match(
     styles,
