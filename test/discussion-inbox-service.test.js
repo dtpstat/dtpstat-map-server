@@ -3,6 +3,9 @@ import test from 'node:test';
 import {
   createDiscussionInboxService,
 } from '../src/modules/discussions/inbox-service.js';
+import {
+  publishDiscussionNotifications,
+} from '../src/modules/discussions/notifications.js';
 
 test('discussion inbox filters subjects by current admin capabilities and sums unread', async () => {
   const calls = [];
@@ -254,5 +257,104 @@ test('discussion notification targets parse unique mentions and honor subject pe
   assert.equal(
     calls.length,
     1,
+  );
+});
+
+
+test('discussion notifications separate participants from accented mentions', () => {
+  const events = [];
+  const result =
+    publishDiscussionNotifications(
+      {
+        publish(event) {
+          events.push(event);
+          return event;
+        },
+      },
+      {
+        permission:
+          'geometry-editor',
+        actor: {
+          id: 7,
+          username:
+            'operator',
+          displayName:
+            'Оператор',
+        },
+        subjectType:
+          'geometry',
+        subjectId: 862,
+        targets: {
+          subject: {
+            title:
+              'Крымская',
+          },
+          participantUserIds:
+            [2, 3, 4],
+          mentionedUsers: [
+            {
+              userId: 3,
+              username:
+                'alex',
+            },
+            {
+              userId: 5,
+              username:
+                'user5',
+            },
+          ],
+        },
+      },
+    );
+
+  assert.deepEqual(
+    result,
+    {
+      participantCount: 2,
+      mentionCount: 2,
+    },
+  );
+  assert.equal(
+    events.length,
+    2,
+  );
+
+  const ordinary =
+    events.find(
+      (event) =>
+        event.code ===
+        'discussion-message',
+    );
+  const mention =
+    events.find(
+      (event) =>
+        event.code ===
+        'discussion-mention',
+    );
+
+  assert.deepEqual(
+    ordinary.audience.userIds,
+    [2, 4],
+  );
+  assert.deepEqual(
+    mention.audience.userIds,
+    [3, 5],
+  );
+  assert.deepEqual(
+    mention.source,
+    {
+      kind:
+        'discussion-thread',
+      id:
+        'geometry:862',
+    },
+  );
+  assert.match(
+    mention.message,
+    /упомянул вас/u,
+  );
+  assert.ok(
+    mention.timeoutMs >
+      ordinary.timeoutMs,
   );
 });
