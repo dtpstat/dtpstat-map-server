@@ -117,6 +117,15 @@ export function createSecurityAuthService(
       return null;
     }
 
+    if (
+      await repository
+        .findIpAllowlistMatch(
+          ip,
+        )
+    ) {
+      return null;
+    }
+
     const state = await repository.recordFailedIp(
       ip,
       new Date().toISOString(),
@@ -170,6 +179,21 @@ export function createSecurityAuthService(
           ip &&
           isLoopbackAdminIp(ip),
         ),
+      };
+    }
+
+    const allowlistMatch =
+      await repository
+        .findIpAllowlistMatch(
+          ip,
+        );
+    if (allowlistMatch) {
+      return {
+        locked: false,
+        retryAfterSeconds: 0,
+        allowlisted: true,
+        allowlist:
+          allowlistMatch,
       };
     }
 
