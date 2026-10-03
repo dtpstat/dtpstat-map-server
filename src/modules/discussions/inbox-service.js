@@ -310,14 +310,28 @@ export function createDiscussionInboxService(
         };
       }
 
+      const mentionLogins =
+        discussionMentionLogins(
+          message,
+        );
+
+      if (
+        mentionLogins.length ===
+        0
+      ) {
+        return {
+          subject: null,
+          participantUserIds: [],
+          mentionedUsers: [],
+        };
+      }
+
       return storage
         .notificationTargets(
           subjectType,
           Number(subjectId),
           userId,
-          discussionMentionLogins(
-            message,
-          ),
+          mentionLogins,
         );
     },
   };
