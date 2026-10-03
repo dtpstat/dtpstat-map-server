@@ -156,7 +156,7 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
   );
   assert.match(
     securityCss,
-    /\.security-block-policy fieldset input\[type="number"\][\s\S]*width:\s*7ch/u,
+    /\.security-block-policy fieldset input\[type="number"\][\s\S]*width:\s*14ch/u,
   );
   assert.match(
     securityCss,
@@ -169,6 +169,22 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
   assert.match(
     security,
     /security-ip-allowlist-form[\s\S]*192\.168\.0\.0\/24/u,
+  );
+  assert.match(
+    security,
+    /left\.append\([\s\S]*allowlist/u,
+  );
+  assert.match(
+    security,
+    /security-ip-allowlist-preview/u,
+  );
+  assert.match(
+    security,
+    /function parseIpNetwork\([\s\S]*function ipMatchesNetwork\([\s\S]*activeIpBlocks\.filter/u,
+  );
+  assert.match(
+    security,
+    /Диапазон:[\s\S]*активных ручных блокировок будет снято/u,
   );
   assert.match(
     security,
