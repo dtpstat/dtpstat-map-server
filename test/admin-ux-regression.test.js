@@ -280,3 +280,132 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
   assert.match(profileCss, /\.profile-session \.danger/);
   assert.doesNotMatch(profileCss, /\.profile-confirm-overlay/);
 });
+
+
+test('desktop admin layout minimizes nested scrolling and exposes compact empty states', async () => {
+  const [
+    adminCss,
+    projectCss,
+    profile,
+    profileCss,
+    security,
+    securityCss,
+    messagesCss,
+  ] =
+    await Promise.all([
+      read(
+        'admin/admin.css',
+      ),
+      read(
+        'admin/project-settings.css',
+      ),
+      read(
+        'admin/profile-editor.js',
+      ),
+      read(
+        'admin/profile.css',
+      ),
+      read(
+        'admin/security-editor-v2.js',
+      ),
+      read(
+        'admin/security-v2.css',
+      ),
+      read(
+        'admin/discussion-inbox.css',
+      ),
+    ]);
+
+  assert.match(
+    adminCss,
+    /body\s*\{[\s\S]*height:\s*100dvh[\s\S]*grid-template-rows:[\s\S]*minmax\(0, 1fr\)[\s\S]*overflow:\s*hidden/u,
+  );
+  assert.match(
+    adminCss,
+    /\.admin-layout\s*\{[\s\S]*height:\s*100%[\s\S]*min-height:\s*0/u,
+  );
+  assert.match(
+    adminCss,
+    /@media \(max-width: 1050px\)[\s\S]*body[\s\S]*overflow:\s*auto/u,
+  );
+  assert.match(
+    adminCss,
+    /\.portable-kml-transfer[\s\S]*#line-kml-transfer-form[\s\S]*grid-template-columns:[\s\S]*auto/u,
+  );
+
+  assert.match(
+    projectCss,
+    /\[data-interface-panel="map"\][\s\S]*overflow-y:\s*auto/u,
+  );
+  assert.match(
+    projectCss,
+    /admin-layout-tab-grid[\s\S]*grid-auto-rows:\s*max-content/u,
+  );
+  assert.match(
+    projectCss,
+    /map-actions[\s\S]*grid-column:\s*1 \/ -1/u,
+  );
+
+  assert.match(
+    profile,
+    /profile-tabs[\s\S]*Профиль[\s\S]*Пароль и MFA[\s\S]*Сессии/u,
+  );
+  assert.match(
+    profile,
+    /selectProfileTab/u,
+  );
+  assert.match(
+    profileCss,
+    /\.profile-tabs[\s\S]*repeat\(3/u,
+  );
+  assert.match(
+    profileCss,
+    /#profile-sessions[\s\S]*overflow-y:\s*auto/u,
+  );
+
+  assert.doesNotMatch(
+    security,
+    /Блок\. учётку|Блок\. IP/u,
+  );
+  assert.match(
+    security,
+    /security-ip-block-pagination/u,
+  );
+  assert.match(
+    security,
+    /IP_BLOCK_PAGE_SIZE = 12/u,
+  );
+  assert.match(
+    security,
+    /pageItems =[\s\S]*\.slice\(/u,
+  );
+  assert.match(
+    securityCss,
+    /\.security-blocks-column-ip[\s\S]*minmax\(0, 1fr\)/u,
+  );
+  assert.match(
+    securityCss,
+    /\.security-ip-block-pagination/u,
+  );
+  assert.match(
+    securityCss,
+    /\.security-detail-fields[\s\S]*grid-template-columns:[\s\S]*3/u,
+  );
+  assert.match(
+    securityCss,
+    /\.security-role-grid[\s\S]*repeat\(3/u,
+  );
+  assert.match(
+    security,
+    /validateEmail[\s\S]*typeMismatch[\s\S]*Формат корректен/u,
+  );
+
+  assert.match(
+    messagesCss,
+    /\.profile-discussion-thread > \.empty-state[\s\S]*font-size:\s*1rem[\s\S]*text-align:\s*center/u,
+  );
+  assert.match(
+    messagesCss,
+    /\.admin-messages-section \.settings-card[\s\S]*height:\s*100%/u,
+  );
+});
