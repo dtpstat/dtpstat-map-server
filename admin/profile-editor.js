@@ -394,6 +394,15 @@ if (
           <button type="button" class="danger" id="profile-revoke-others">Завершить остальные</button>
         </div>
         <div id="profile-sessions"></div>
+        <div class="profile-session-pagination">
+          <button type="button"
+                  class="secondary"
+                  id="profile-sessions-prev">←</button>
+          <span id="profile-sessions-page">1 / 1</span>
+          <button type="button"
+                  class="secondary"
+                  id="profile-sessions-next">→</button>
+        </div>
         <p id="profile-sessions-message" class="profile-message" role="status"></p>
       </section>
   `;
@@ -410,8 +419,11 @@ if (
   const mfaRecoveryForm = profileRoot.querySelector('#profile-mfa-recovery-form');
   const mfaDisableForm = profileRoot.querySelector('#profile-mfa-disable-form');
   const accountDirty = trackDirtyForm(accountForm, { label: 'Профиль' });
+  const PROFILE_SESSION_PAGE_SIZE = 8;
   let currentSessionId = null;
   let currentUser = null;
+  let activeSessions = [];
+  let sessionPage = 0;
   let passwordPolicy = null;
   let mfaStatus = null;
 
@@ -748,16 +760,136 @@ if (
     return card;
   }
 
+  function renderSessions() {
+    const pageCount =
+      Math.max(
+        1,
+        Math.ceil(
+          activeSessions.length /
+          PROFILE_SESSION_PAGE_SIZE,
+        ),
+      );
+
+    sessionPage =
+      Math.min(
+        sessionPage,
+        pageCount - 1,
+      );
+
+    const start =
+      sessionPage *
+      PROFILE_SESSION_PAGE_SIZE;
+    const pageItems =
+      activeSessions.slice(
+        start,
+        start +
+        PROFILE_SESSION_PAGE_SIZE,
+      );
+
+    sessionsHost.replaceChildren(
+      ...pageItems.map(
+        sessionCard,
+      ),
+    );
+
+    const page =
+      profileRoot.querySelector(
+        '#profile-sessions-page',
+      );
+    const previous =
+      profileRoot.querySelector(
+        '#profile-sessions-prev',
+      );
+    const next =
+      profileRoot.querySelector(
+        '#profile-sessions-next',
+      );
+
+    if (page) {
+      page.textContent =
+        String(
+          sessionPage + 1,
+        ) +
+        ' / ' +
+        String(
+          pageCount,
+        );
+    }
+    if (previous) {
+      previous.disabled =
+        sessionPage === 0;
+    }
+    if (next) {
+      next.disabled =
+        sessionPage >=
+        pageCount - 1;
+    }
+
+    const shownFrom =
+      activeSessions.length
+        ? start + 1
+        : 0;
+    const shownTo =
+      activeSessions.length
+        ? start +
+          pageItems.length
+        : 0;
+
+    message(
+      sessionsMessage,
+      'Активных сессий: ' +
+      activeSessions.length +
+      ' · показано ' +
+      shownFrom +
+      '–' +
+      shownTo,
+    );
+  }
+
   async function loadSessions() {
     try {
-      const payload = await api('/api/admin/profile/sessions');
-      currentSessionId = payload.currentSessionId;
-      sessionsHost.replaceChildren(...payload.sessions.map(sessionCard));
-      message(sessionsMessage, `Активных сессий: ${payload.sessions.length}`);
+      const payload =
+        await api(
+          '/api/admin/profile/sessions',
+        );
+      currentSessionId =
+        payload.currentSessionId;
+      activeSessions =
+        payload.sessions ??
+        [];
+      renderSessions();
     } catch (error) {
-      message(sessionsMessage, error.message, 'error');
+      message(
+        sessionsMessage,
+        error.message,
+        'error',
+      );
     }
   }
+
+  profileRoot.querySelector(
+    '#profile-sessions-prev',
+  )?.addEventListener(
+    'click',
+    () => {
+      sessionPage =
+        Math.max(
+          0,
+          sessionPage - 1,
+        );
+      renderSessions();
+    },
+  );
+
+  profileRoot.querySelector(
+    '#profile-sessions-next',
+  )?.addEventListener(
+    'click',
+    () => {
+      sessionPage += 1;
+      renderSessions();
+    },
+  );
 
   accountForm.addEventListener('submit', async (event) => {
     event.preventDefault();
