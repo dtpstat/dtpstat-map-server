@@ -420,34 +420,41 @@ export function registerOsmBoundaryRoutes(
           discussionInboxService
             ?.notificationTargets
         ) {
-          const targets =
-            await discussionInboxService
-              .notificationTargets(
-                request.adminUser,
-                {
-                  subjectType:
-                    'osm-boundary',
-                  subjectId:
-                    message.boundaryId,
-                  message:
-                    message.message,
-                },
-              );
-
-          publishDiscussionNotifications(
-            notificationEvents,
-            {
-              permission:
-                'osm-editor',
-              actor:
-                request.adminUser,
-              subjectType:
-                'osm-boundary',
-              subjectId:
-                message.boundaryId,
-              targets,
-            },
-          );
+          try {
+            const targets =
+              await discussionInboxService
+                .notificationTargets(
+                  request.adminUser,
+                  {
+                    subjectType:
+                      'osm-boundary',
+                    subjectId:
+                      message.boundaryId,
+                    message:
+                      message.message,
+                  },
+                );
+  
+            publishDiscussionNotifications(
+              notificationEvents,
+              {
+                permission:
+                  'osm-editor',
+                actor:
+                  request.adminUser,
+                subjectType:
+                  'osm-boundary',
+                subjectId:
+                  message.boundaryId,
+                targets,
+              },
+            );
+          } catch (error) {
+            console.warn(
+              'OSM discussion notification delivery failed',
+              error,
+            );
+          }
         }
 
         response
