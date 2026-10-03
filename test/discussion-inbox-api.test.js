@@ -13,6 +13,7 @@ async function withServer(
   callback,
 ) {
   const calls = [];
+  const realtime = [];
   const app = express();
 
   const adminAuth = {
@@ -58,6 +59,20 @@ async function withServer(
         totalUnread: 2,
       };
     },
+    async markAllRead(user) {
+      calls.push({
+        readAllUser:
+          user,
+      });
+      return {
+        items: [{
+          subjectType:
+            'geometry',
+          subjectId: 10,
+          lastReadMessageId: 5,
+        }],
+      };
+    },
   };
 
   app.use(
@@ -65,6 +80,11 @@ async function withServer(
     createDiscussionInboxRouter({
       discussionInboxService,
       adminAuth,
+      realtimeEvents: {
+        publish(event) {
+          realtime.push(event);
+        },
+      },
     }),
   );
 
@@ -88,6 +108,7 @@ async function withServer(
       'http://127.0.0.1:' +
         address.port,
       calls,
+      realtime,
     );
   } finally {
     await new Promise(
@@ -162,6 +183,82 @@ test('profile discussion inbox requires profile auth and returns no-store read m
       );
       assert.equal(
         calls[0].id,
+        7,
+      );
+    },
+  );
+});
+
+
+test('read-all marks all accessible discussion threads and publishes refresh state', async () => {
+  await withServer(
+    async (
+      baseUrl,
+      calls,
+      realtime,
+    ) => {
+      const denied =
+        await fetch(
+          baseUrl +
+            '/api/admin/profile/discussions/read-all',
+          {
+            method: 'POST',
+          },
+        );
+      assert.equal(
+        denied.status,
+        401,
+      );
+
+      const response =
+        await fetch(
+          baseUrl +
+            '/api/admin/profile/discussions/read-all',
+          {
+            method: 'POST',
+            headers: {
+              Cookie:
+                cookie,
+            },
+          },
+        );
+
+      assert.equal(
+        response.status,
+        200,
+      );
+      assert.equal(
+        response.headers.get(
+          'cache-control',
+        ),
+        'no-store',
+      );
+      assert.equal(
+        (
+          await response.json()
+        ).items[0]
+          .lastReadMessageId,
+        5,
+      );
+      assert.equal(
+        calls.at(-1)
+          .readAllUser.id,
+        7,
+      );
+      assert.equal(
+        realtime.at(-1)
+          .resource,
+        'discussion-inbox',
+      );
+      assert.equal(
+        realtime.at(-1)
+          .action,
+        'read-all',
+      );
+      assert.equal(
+        realtime.at(-1)
+          .source
+          .readerUserId,
         7,
       );
     },
