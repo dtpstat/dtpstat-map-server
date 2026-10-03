@@ -65,6 +65,11 @@ if (section) {
   const saveAll = document.querySelector('#geometry-editor-save-all');
   const discardAll = document.querySelector('#geometry-editor-discard-all');
   const form = document.querySelector('#geometry-editor-form');
+  const detailsPanel =
+    form?.closest(
+      '.geometry-editor-details',
+    ) ??
+    null;
   const title = document.querySelector('#geometry-editor-selected-title');
   const lineFields = document.querySelector('#geometry-line-fields');
   const pointFields = document.querySelector('#geometry-point-fields');
@@ -4162,6 +4167,9 @@ if (section) {
         activeLease.clientId === realtimeClientId(),
       );
 
+    discussionOpenButton.hidden =
+      !item?.id ||
+      localItem;
     discussionOpenButton.disabled =
       !item?.id ||
       localItem ||
@@ -4252,6 +4260,12 @@ if (section) {
         ? 'Серверная версия изменилась после создания локального черновика.'
         : '';
     }
+
+    detailsPanel?.classList
+      .toggle(
+        'is-empty',
+        !draft,
+      );
 
     if (!draft) {
       title.textContent = 'Выберите геометрию';
