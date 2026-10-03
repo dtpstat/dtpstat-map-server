@@ -348,7 +348,7 @@ test('desktop admin layout minimizes nested scrolling and exposes compact empty 
 
   assert.match(
     profile,
-    /profile-tabs[\s\S]*Профиль[\s\S]*Пароль и MFA[\s\S]*Сессии/u,
+    /profile-tabs[\s\S]*Профиль и безопасность[\s\S]*Активные сессии/u,
   );
   assert.match(
     profile,
@@ -356,7 +356,7 @@ test('desktop admin layout minimizes nested scrolling and exposes compact empty 
   );
   assert.match(
     profileCss,
-    /\.profile-tabs[\s\S]*repeat\(3/u,
+    /\.profile-tabs[\s\S]*repeat\(2/u,
   );
   assert.match(
     profileCss,
@@ -375,9 +375,9 @@ test('desktop admin layout minimizes nested scrolling and exposes compact empty 
     /\.profile-session-pagination/u,
   );
 
-  assert.doesNotMatch(
+  assert.match(
     security,
-    /Блок\. учётку|Блок\. IP/u,
+    /Блок\. учётку[\s\S]*Блок\. IP/u,
   );
   assert.match(
     security,
@@ -419,5 +419,45 @@ test('desktop admin layout minimizes nested scrolling and exposes compact empty 
   assert.match(
     messagesCss,
     /\.admin-messages-section \.settings-card[\s\S]*height:\s*100%/u,
+  );
+  const [
+    report,
+    reportCss,
+    lineTypes,
+    pointTypes,
+  ] =
+    await Promise.all([
+      read(
+        'admin/report-config-editor.js',
+      ),
+      read(
+        'admin/report-config.css',
+      ),
+      read(
+        'admin/line-types-editor.js',
+      ),
+      read(
+        'admin/point-types-editor.js',
+      ),
+    ]);
+  assert.match(
+    report,
+    /report-formatting-box admin-config-block[\s\S]*report-formatting-summary admin-config-summary/u,
+  );
+  assert.match(
+    report,
+    /Условное форматирование[\s\S]*нет настроек[\s\S]*правил/u,
+  );
+  assert.match(
+    reportCss,
+    /\.report-formatting-summary[\s\S]*\.report-formatting-status\.is-active/u,
+  );
+  assert.match(
+    lineTypes,
+    /line-type-row admin-config-block[\s\S]*line-type-summary admin-config-summary/u,
+  );
+  assert.match(
+    pointTypes,
+    /point-type-row-details admin-config-block[\s\S]*point-type-summary admin-config-summary/u,
   );
 });
