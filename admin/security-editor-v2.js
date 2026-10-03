@@ -1728,56 +1728,7 @@ if (
     }, 1200);
   }
 
-  async function quickBlockUser(entry) {
-    if (!canManageUsers || !entry.userId) return;
-    const target = userById.get(entry.userId);
-    if (target?.isBootstrap) {
-      await adminAlert({
-        title: 'Блокировка недоступна',
-        message: 'Bootstrap-администратор не может быть заблокирован вручную.',
-      });
-      return;
-    }
-    const confirmed = await adminConfirm({
-      title: 'Заблокировать учётную запись?',
-      message: `${entry.username ?? `user #${entry.userId}`} будет заблокирован на 1 час.`,
-      confirmLabel: 'Заблокировать',
-      cancelLabel: 'Отмена',
-      destructive: true,
-    });
-    if (!confirmed) return;
-    await api(`/api/admin/security/users/${entry.userId}/block`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        durationSeconds: 3600,
-        reason: `Быстрая реакция из аудита #${entry.id}`,
-      }),
-    });
-    if (canManageUsers) await loadUsers(selectedUserId);
-  }
 
-  async function quickBlockIp(entry) {
-    if (!canManageSecurity || !entry.ipAddress) return;
-    const confirmed = await adminConfirm({
-      title: 'Заблокировать IP?',
-      message: `IP ${entry.ipAddress} будет заблокирован на 1 час.`,
-      confirmLabel: 'Заблокировать IP',
-      cancelLabel: 'Отмена',
-      destructive: true,
-    });
-    if (!confirmed) return;
-    await api('/api/admin/security/ip-blocks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ipAddress: entry.ipAddress,
-        durationSeconds: 3600,
-        reason: `Быстрая реакция из аудита #${entry.id}`,
-        sourceAuditId: entry.id,
-      }),
-    });
-  }
 
   function auditRow(entry) {
     const row = document.createElement('tr');
