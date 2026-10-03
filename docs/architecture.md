@@ -167,6 +167,42 @@ toast storage/rendering.
 Только действительно domain-neutral код размещается в `src/shared`.
 Если helper знает о project/OSM/lines/security semantics, он не shared.
 
+## Admin UI architecture
+
+Админка использует schema-driven layout вместо независимой ручной композиции
+каждого экрана:
+
+- `admin/admin-layout-schema.js` задаёт разделы, tabs, blocks, span и
+  capabilities (`fill`, `scroll`, `sticky`);
+- `admin/admin-layout.js` создаёт общий DOM-каркас и применяет capabilities;
+- `admin/admin-layout.css` задаёт 12-column grid и container-query behavior;
+- feature-specific JS наполняет только свои host nodes и владеет domain UX;
+- состояние tabs сохраняется через общий tab-state helper.
+
+Обычный block имеет natural height. `height: 100%` разрешён только для
+явного `fill`, чтобы один пустой/короткий block не растягивал соседей и не
+создавал лишние nested scrollbars.
+
+### Visual component reuse
+
+Одинаковая визуальная/UX семантика должна иметь один общий primitive или
+композиционный helper. Нельзя создавать по одному почти идентичному
+`.user-card`, `.ip-card`, `.geometry-card` только потому, что данные разные.
+В первую очередь переиспользуются:
+
+- section/block shell и heading/actions;
+- tabs;
+- table + table scroll owner + paging;
+- filter/search bars;
+- form field groups и validation states;
+- badges/status markers;
+- empty/loading/error states;
+- dialogs/action bars.
+
+При этом семантически разные workflows не объединяются искусственно: общий
+primitive может быть один, а feature composition и behavior остаются у
+domain-specific editor.
+
 ## Перенос ownership
 
 При переносе существующего кода обязательна последовательность:

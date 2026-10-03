@@ -256,9 +256,24 @@ IS_SUPERUSER
 
 Web UI и защищённый admin API используют только HttpOnly session cookie; online HTTP Basic удалён.
 
+Админка построена на общей layout-схеме: разделы, tabs и визуальные blocks
+создаются из `admin/admin-layout-schema.js` через `admin/admin-layout.js`.
+Основные разделы: управление данными, геометрии, OSM, настройка интерфейса,
+пользователи/аудит, безопасность, сообщения и профиль. Раздел
+**Безопасность** внутри себя разделён на **Защита**, **Метрики и тайминги** и
+**Блокировки**.
+
+Geometry editor использует VIEW/EDIT model, edit leases, versioned local
+workspace, atomic sync, topology preview operations `union/cut/split`,
+координатный редактор, обсуждения и realtime. Редактируемые другими
+пользователями геометрии помечаются в списке и на карте; выбор города имеет
+поиск по содержимому списка.
+
 Длительные mutating data operations выполняются через process-local single-task manager. Один экземпляр Node не должен блокировать задачи другого экземпляра/БД.
 
-Подробнее: [docs/admin-security.md](docs/admin-security.md).
+Подробнее: [docs/admin-security.md](docs/admin-security.md),
+[docs/geometry-editor.md](docs/geometry-editor.md) и
+[docs/admin-ui.md](docs/admin-ui.md).
 
 ## Настройки проекта
 
@@ -271,6 +286,9 @@ Web UI и защищённый admin API используют только HttpO
 - `THEME_PRESET`;
 - `SHOW_LINE_LABELS`;
 - `SHOW_LINE_POPUPS`;
+- `SHOW_POINT_GEOMETRIES` / `SHOW_LINE_GEOMETRIES` / `SHOW_POLYGON_GEOMETRIES`;
+- `SHOW_GEOMETRY_TIMELINE`;
+- `HISTORY_START_DATE` и набор playback-speed profiles;
 - Mapbox public token;
 - custom city marker;
 - `PUBLIC_DOWNLOAD_NAME`.
@@ -366,9 +384,14 @@ GET  /api/admin/settings/export
 POST /api/admin/settings/import
 ```
 
-Текущий package: `project-settings`, **schemaVersion 9**.
+Текущий package: `project-settings`, **schemaVersion 11**.
 
-Импорт принимает `v1…v9` и нормализует legacy fields. V5 добавил `rank.sort`, V6 — `publicDownloadName`, V7 — пороги разделения больших/малых городов, V8 — password policy, V9 — per-user/global HTTP request rate limits.
+Импорт принимает `v1…v11` и нормализует legacy fields. V5 добавил
+`rank.sort`, V6 — `publicDownloadName`, V7 — пороги разделения
+больших/малых городов, V8 — password policy, V9 — per-user/global HTTP
+request rate limits, V10 — public visibility типов геометрий, V11 — режим
+истории карты (`showGeometryTimeline`, `historyStartDate`,
+`historySpeeds`).
 
 Переносятся project settings, line types, report config, security policy и public Mapbox token. Не переносятся users/password hashes/sessions/audit, source data, `.env`, TLS/DB secrets и custom city marker binary.
 
@@ -452,6 +475,8 @@ PostGIS ожидается уже установленным в основной
 
 ## Документация
 
+- [docs/README.md](docs/README.md) — карта всей документации и текущие version anchors;
+- [admin-ui.md](docs/admin-ui.md) — общая admin layout/component architecture;
 - [deployment.md](docs/deployment.md) — экземпляры, migrations, nginx/PM2;
 - [admin-security.md](docs/admin-security.md) — auth/roles/sessions/audit/IP security;
 - [data-transfer.md](docs/data-transfer.md) — cities/lines/populations;
@@ -459,7 +484,9 @@ PostGIS ожидается уже установленным в основной
 - [report-config.md](docs/report-config.md) — metrics/table/CSV/ranking;
 - [project-settings-transfer.md](docs/project-settings-transfer.md) — перенос конфигурации;
 - [database-indexes.md](docs/database-indexes.md) — актуальные indexes/access paths;
-- [geometry-editor.md](docs/geometry-editor.md) — модель геометрий, spatial links, edit leases, local workspace и concurrency.
+- [geometry-editor.md](docs/geometry-editor.md) — модель геометрий, spatial links, edit leases, local workspace и concurrency;
+- [admin-discussions.md](docs/admin-discussions.md) — общие обсуждения geometry/OSM и inbox;
+- [monitoring.md](docs/monitoring.md) — Prometheus/fail2ban deployment templates.
 
 
 ### Viewport performance profile

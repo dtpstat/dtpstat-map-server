@@ -55,7 +55,10 @@ Subject-specific API дополнительно защищены соответ�
 - unread count по треду;
 - общий `totalUnread`.
 
-UI расположен в разделе **Профиль → Сообщения**.
+Общий inbox расположен в верхнем разделе админки **Сообщения**. В geometry
+editor кнопка thread закреплена в правом верхнем углу карточки выбранной
+геометрии; unread badge не зависит от положения scroll. OSM editor использует
+тот же discussion domain и transport.
 
 Inbox позволяет:
 
@@ -99,3 +102,18 @@ discussion inbox, загружают avatar через `adminAvatarObjectUrl()`:
 4. локальный `blob:` object URL для image/background.
 
 Server-side API version guard для avatar routes не ослабляется.
+
+
+## UI state
+
+Discussion UI не дублирует notification/toast pool:
+
+- envelope/thread marker означает наличие человеческого обсуждения;
+- unread badge считается из persistent read state;
+- открытие thread обновляет read position;
+- общий раздел **Сообщения** агрегирует geometry и OSM subjects;
+- переход к subject восстанавливает нужный editor context, если объект ещё
+  существует и permission остаётся доступным.
+
+В avatar rendering используется общий guarded fetch helper
+`adminAvatarObjectUrl()`; прямой protected `<img src>` не используется.

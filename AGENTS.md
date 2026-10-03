@@ -72,3 +72,29 @@ npm run test:integration
 Do not weaken architecture tests to make an invalid dependency pass. Change
 the ownership/dependency instead, unless the architecture itself is being
 deliberately revised together with `docs/architecture.md` and the guards.
+
+
+## Documentation synchronization
+
+Documentation is part of the implementation contract. When behavior, public
+configuration, migrations, admin navigation, transfer schemas, security policy,
+or deployment semantics change, update the owning document in the same logical
+change. Keep these anchors synchronized with source:
+
+- migration tail in `db/migrations`;
+- project-settings transfer version in
+  `src/modules/project/settings-transfer-policy.js`;
+- scripts/Node requirements in `package.json`;
+- admin layout/navigation in `admin/admin-layout-schema.js`;
+- security capabilities in the DB policy and HTTP guards.
+
+Do not preserve stale examples for compatibility. In particular, protected
+online admin APIs are session-only and documentation must not reintroduce HTTP
+Basic examples.
+
+## Branch workflow
+
+Feature work is performed on a feature branch. Do not rewrite `main`, do not
+force-push shared branches, and prefer small logical commits. Before considering
+a change complete, verify the remote branch points at the intended commit and
+run the required checks locally.

@@ -158,13 +158,20 @@ V046 edit leases
 V049 empty-descendant spatial resolver fix
 V050 point types and Point category metadata
 V057 zoom/date visibility metadata and public geometry timeline
+V058 geometry discussions
+V059 public point/line/polygon visibility toggles
+V060 per-point-type zoom range
+V061 history start date and playback speed profiles
+V062 per-user geometry discussion read state
+V063 generic admin discussion subjects
+V064 portable discussion read-state FK
+V065 admin IP allowlist
 ```
 
-## Future backlog
+## Реализованный UX и operation baseline
 
-Ниже зафиксированы следующие связанные этапы развития editor. Это backlog, а
-не контракт уже реализованного поведения; пункты должны вводиться небольшими
-отдельными изменениями с regression tests.
+Ниже зафиксирован текущий реализованный baseline editor. Это уже часть
+контракта поведения и regression coverage, а не future backlog.
 
 ### Карта и режимы редактирования
 
@@ -182,6 +189,13 @@ V057 zoom/date visibility metadata and public geometry timeline
 - [x] перенос всей geometry отдельным drag-mode, не конфликтующим с vertex drag;
   один gesture создаёт одну undo-history запись, а cross-tab draft update
   откладывается до завершения drag;
+- [x] выбор города — searchable combobox: при раскрытии показывает весь список,
+  а ввод фильтрует варианты по содержимому без отдельного server request;
+- [x] lease виден не только на карте: строка редактируемой геометрии в левом
+  списке получает отдельный marker и подпись «редактируете вы» либо
+  «редактирует: <имя>», не скрывая selected-state;
+- [x] кнопка обсуждения закреплена в правом верхнем углу карточки выбранной
+  геометрии и сохраняет unread badge независимо от scroll формы;
 - [x] coordinate editor в отдельном плавающем окне: таблица WGS84
   longitude/latitude, выбор line/ring для Multi*/Polygon, добавление/удаление
   строк и multi-row paste;
@@ -362,3 +376,21 @@ test/geometry-editor-policy.test.js
 test/geometry-draft.test.js
 test/geometry-suspended-ownership.test.js
 ```
+
+
+## Acceptance baseline
+
+Перед закрытием изменений geometry editor вручную проверяются как минимум:
+
+1. VIEW существующей geometry без неявного входа в edit;
+2. lease текущего client и lease другого пользователя;
+3. superuser takeover и инвалидирование старого token;
+4. локальное сохранение, reload/resume и atomic «Синхронизировать»;
+5. create/update/delete drafts, undo/redo и очистка local workspace;
+6. union, polygon cut и line/polygon split для server/local combinations;
+7. coordinate editor и WGS84 validation;
+8. zoom/date visibility, point type и public visibility;
+9. discussion unread/read state и переход из общего inbox;
+10. realtime refresh при изменении lease/permissions/session.
+
+Для DB/PostGIS изменений дополнительно запускается `npm run test:integration`.

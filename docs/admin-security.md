@@ -10,7 +10,9 @@ V017__protect_bootstrap_admin.sql
 V018__admin_sessions_roles_profile_and_ip_security.sql
 ```
 
-Последующие `V019…V026` расширяют project/report configuration и используют ту же admin/security infrastructure, но не меняют основную модель аутентификации.
+Последующие migrations расширяют ту же security infrastructure. Текущий
+security-related tail включает V047/V048 request-security state, V054 metrics,
+V055/V056 MFA и mandatory-MFA policy, а V065 добавляет управляемый IP allowlist.
 
 ## Аутентификация
 
@@ -106,6 +108,25 @@ Plaintext password, session token и Authorization header не должны по
 
 `ADMIN_SESSIONS` содержит user id, token hash, timestamps, IP и User-Agent.
 
+## Admin security UI
+
+Раздел **Безопасность** использует три внутренние вкладки:
+
+- **Защита** — password policy и mandatory MFA;
+- **Метрики и тайминги** — Prometheus enable/token, session lifetime,
+  audit retention и HTTP rate limits;
+- **Блокировки** — account/IP lockout policy, ручная IP-блокировка,
+  список активных blocked IP и IP/CIDR allowlist.
+
+Табличные списки имеют собственную bounded scroll-area и paging; страница
+админки не должна получать второй скрытый scroll только из-за длинного audit
+или block list. Настройки остаются одной security policy form, даже когда
+визуально разнесены по вкладкам.
+
+Раздел **Пользователи и аудит** остаётся отдельным: Users и Audit доступны
+только по соответствующим capabilities. Audit table поддерживает server-side
+filters, paging, CSV export и отдельное detail-dialog представление JSON.
+
 ## Account anti-bruteforce
 
 Policy в `ADMIN_SECURITY_SETTINGS`:
@@ -146,11 +167,16 @@ configured, authoritative `request.ip` is used before socket
 `remoteAddress`, so an nginx connection from `127.0.0.1` does not exempt
 an external client.
 
-## Manual blocks
+## Manual blocks and IP allowlist
 
 Account manual block fields находятся в `ADMIN_USERS`.
 
 `ADMIN_BLOCKED_IPS` хранит manual IP blocks с optional expiration, reason/admin и audit linkage.
+
+Начиная с `V065`, `ADMIN_IP_ALLOWLIST` хранит доверенные IPv4/IPv6
+addresses/CIDR. Совпавший IP исключается из manual/automatic IP lockout.
+Loopback остаётся системным исключением независимо от таблицы. Allowlist
+управляется во вкладке **Безопасность → Блокировки**, изменения audit-ятся.
 
 ## Session/audit and HTTP request policy
 
@@ -405,10 +431,12 @@ npm run admin:unblock -- --ip 203.0.113.10
 - [project-settings-transfer.md](project-settings-transfer.md)
 - [geometry-editor.md](geometry-editor.md)
 
-Последняя специализированная security migration — `V056__admin_mfa_policy.sql`. Общая последовательность schema уже включает `V063__admin_discussion_subjects.sql`; следующий новый DB schema change должен использовать следующий свободный номер после текущего migration tail.
+Текущий migration tail — `V065__admin_ip_allowlist.sql`. Следующее новое DB
+schema change должно использовать следующий свободный номер после V065; уже
+опубликованные migrations задним числом не изменяются.
 
 
-## Future security backlog
+## Optional deployment integrations
 
 Уже реализовано:
 
