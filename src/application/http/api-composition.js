@@ -94,6 +94,7 @@ export function installApplicationApiRoutes(
       createDiscussionInboxRouter({
         discussionInboxService,
         adminAuth,
+        realtimeEvents,
       }),
     );
   }
@@ -162,6 +163,8 @@ export function installApplicationApiRoutes(
             refreshOsmBoundaryDerived
               ?.(),
         realtimeEvents,
+        notificationEvents,
+        discussionInboxService,
       }),
     );
   }
@@ -171,6 +174,7 @@ export function installApplicationApiRoutes(
       '/api',
       createGeometryEditorRouter({
         geometryEditorService,
+        discussionInboxService,
         ...commonAdmin,
         afterRecalculate:
           async () =>
