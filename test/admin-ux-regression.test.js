@@ -152,11 +152,23 @@ test('user and profile UX expose avatars password policy and non-blocking sessio
   );
   assert.match(
     securityCss,
-    /\.security-block-table[\s\S]*min-width:\s*48rem/u,
+    /\.security-blocks-layout[\s\S]*grid-template-columns:[\s\S]*\.72fr[\s\S]*1\.28fr/u,
   );
   assert.match(
     securityCss,
-    /@container admin-layout-block \(max-width: 48rem\)[\s\S]*\.security-block-policy fieldset[\s\S]*\.security-block-summary-heading/u,
+    /\.security-block-policy fieldset input\[type="number"\][\s\S]*width:\s*7ch/u,
+  );
+  assert.match(
+    securityCss,
+    /@container admin-layout-block \(max-width: 66rem\)[\s\S]*\.security-blocks-layout[\s\S]*grid-template-columns:\s*1fr/u,
+  );
+  assert.match(
+    security,
+    /security-ip-block-search[\s\S]*data-ip-block-sort="ip"[\s\S]*data-ip-block-sort="remaining"/u,
+  );
+  assert.match(
+    security,
+    /security-ip-allowlist-form[\s\S]*192\.168\.0\.0\/24/u,
   );
   assert.match(securityCss, /\.security-audit-filter-panel/);
   assert.match(securityCss, /\.security-audit-filter[\s\S]*grid-template-columns:\s*repeat\(4/);
