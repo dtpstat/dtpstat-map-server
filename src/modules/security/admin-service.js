@@ -104,10 +104,13 @@ export function createSecurityAdministrationService(
     }
 
     const allowlistMatch =
-      await repository
-        .findIpAllowlistMatch(
-          ipAddress,
-        );
+      repository
+        .findIpAllowlistMatch
+        ? await repository
+            .findIpAllowlistMatch(
+              ipAddress,
+            )
+        : null;
 
     if (allowlistMatch) {
       throw new AdminSecurityValidationError(
