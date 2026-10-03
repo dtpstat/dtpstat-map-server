@@ -762,8 +762,27 @@ body.security-modal-open { overflow: hidden; }
 
 .security-blocks-column {
   min-width: 0;
+  min-height: 0;
   display: grid;
   gap: .8rem;
+}
+
+.security-blocks-column-ip {
+  grid-template-rows:
+    auto
+    minmax(0, 1fr);
+}
+
+.security-ip-blocks-panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.security-ip-blocks-panel
+  .security-block-table-wrap {
+  min-height: 8rem;
+  flex: 1 1 auto;
 }
 
 .security-block-policy,
@@ -903,7 +922,25 @@ body.security-modal-open { overflow: hidden; }
 }
 
 .security-ip-block-table {
+  width: 100%;
   min-width: 32rem;
+}
+
+.security-ip-block-pagination {
+  margin-top: .45rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .55rem;
+  color: var(--muted);
+  font-size: .68rem;
+}
+
+.security-ip-block-pagination button {
+  width: 2rem;
+  min-width: 2rem;
+  min-height: 1.8rem;
+  padding: .2rem .35rem;
 }
 
 .security-ip-allowlist-table {
