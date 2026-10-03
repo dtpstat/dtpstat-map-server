@@ -322,6 +322,24 @@ if (
       ) ??
       null;
 
+    const readAllButton =
+      document.createElement(
+        'button',
+      );
+    readAllButton.type =
+      'button';
+    readAllButton.className =
+      'secondary admin-messages-read-all';
+    readAllButton.textContent =
+      'Прочитать всё';
+    readAllButton.disabled =
+      true;
+    totalHost?.insertAdjacentElement(
+      'afterend',
+      readAllButton,
+    );
+
+
     if (
       messagesTab &&
       !messagesBadge
@@ -347,6 +365,7 @@ if (
       loadingThread: false,
       threadRequestSequence: 0,
       readObserver: null,
+      pendingOpenKey: null,
       refreshTimer: null,
     };
 
@@ -366,6 +385,43 @@ if (
           keyFor(item) ===
           state.selectedKey,
       ) ?? null;
+    }
+
+    function selectInboxItem(
+      item,
+    ) {
+      if (!item) return;
+      state.selectedKey =
+        keyFor(item);
+      renderInbox();
+      void loadThread(
+        item,
+      );
+    }
+
+    function openPendingThread() {
+      if (!state.pendingOpenKey) {
+        return false;
+      }
+
+      const item =
+        state.items.find(
+          (candidate) =>
+            keyFor(candidate) ===
+            state.pendingOpenKey,
+        ) ??
+        null;
+
+      if (!item) {
+        return false;
+      }
+
+      state.pendingOpenKey =
+        null;
+      selectInboxItem(
+        item,
+      );
+      return true;
     }
 
     function setStatus(
@@ -406,6 +462,9 @@ if (
         messagesBadge.hidden =
           total <= 0;
       }
+
+      readAllButton.disabled =
+        total <= 0;
     }
 
     function renderInbox() {
@@ -438,6 +497,13 @@ if (
               'button';
             button.className =
               'profile-discussion-row';
+            button.classList.toggle(
+              'has-unread',
+              Number(
+                item.unreadCount ??
+                0,
+              ) > 0,
+            );
             button.dataset
               .discussionKey =
               keyFor(item);
@@ -547,14 +613,10 @@ if (
 
             button.addEventListener(
               'click',
-              () => {
-                state.selectedKey =
-                  keyFor(item);
-                renderInbox();
-                void loadThread(
+              () =>
+                selectInboxItem(
                   item,
-                );
-              },
+                ),
             );
 
             return button;
@@ -1336,6 +1398,12 @@ if (
 
         renderInbox();
 
+        if (
+          openPendingThread()
+        ) {
+          return;
+        }
+
         const selected =
           selectedItem();
 
@@ -1371,16 +1439,39 @@ if (
         change?.resource ===
           'geometry-discussions' ||
         change?.resource ===
-          'osm-boundary-discussions';
+          'osm-boundary-discussions' ||
+        change?.resource ===
+          'discussion-inbox';
 
       if (!relevant) return;
+
+      const readerUserId =
+        change?.readerUserId ??
+        change?.source
+          ?.readerUserId ??
+        null;
 
       if (
         change?.action ===
           'read' &&
         Number(
-          change.readerUserId,
+          readerUserId,
         ) ===
+        Number(
+          currentUser.id,
+        )
+      ) {
+        return;
+      }
+
+      if (
+        change?.resource ===
+          'discussion-inbox' &&
+        change?.action ===
+          'read-all' &&
+        Number(
+          readerUserId,
+        ) !==
         Number(
           currentUser.id,
         )
@@ -1421,6 +1512,92 @@ if (
       {
         replaySnapshot:
           false,
+      },
+    );
+
+    readAllButton.addEventListener(
+      'click',
+      async () => {
+        if (
+          readAllButton.disabled
+        ) {
+          return;
+        }
+
+        readAllButton.disabled =
+          true;
+        try {
+          await api(
+            '/api/admin/profile/discussions/read-all',
+            {
+              method: 'POST',
+              headers:
+                realtimeMutationHeaders(),
+            },
+          );
+          await loadInbox({
+            keepSelection:
+              true,
+          });
+          window.dispatchEvent(
+            new CustomEvent(
+              'dtpstat:discussion-read-all',
+            ),
+          );
+        } catch (error) {
+          setStatus(
+            error.message,
+            'error',
+          );
+        }
+      },
+    );
+
+    window.addEventListener(
+      'dtpstat:discussion-inbox-open',
+      (event) => {
+        const subjectType =
+          String(
+            event.detail
+              ?.subjectType ??
+            '',
+          );
+        const subjectId =
+          Number(
+            event.detail
+              ?.subjectId,
+          );
+
+        if (
+          ![
+            'geometry',
+            'osm-boundary',
+          ].includes(
+            subjectType,
+          ) ||
+          !Number.isSafeInteger(
+            subjectId,
+          ) ||
+          subjectId <= 0
+        ) {
+          return;
+        }
+
+        state.pendingOpenKey =
+          subjectType +
+          ':' +
+          subjectId;
+
+        if (
+          openPendingThread()
+        ) {
+          return;
+        }
+
+        void loadInbox({
+          keepSelection:
+            true,
+        });
       },
     );
 
