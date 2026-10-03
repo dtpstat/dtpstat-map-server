@@ -345,14 +345,14 @@ if (
           'details',
         );
       details.className =
-        'point-type-row-details';
+        'point-type-row-details admin-config-block';
 
       const summary =
         document.createElement(
           'summary',
         );
       summary.className =
-        'point-type-summary';
+        'point-type-summary admin-config-summary';
 
       const summaryTitle =
         document.createElement(
