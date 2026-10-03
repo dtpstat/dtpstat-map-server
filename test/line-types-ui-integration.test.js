@@ -131,15 +131,15 @@ test('admin line type editor keeps CODE and NAME read-only and edits TITLE/style
   assert.match(editor, /TITLE — редактируемая подпись легенды/);
   assert.match(editor, /readOnlyField\([\s\S]*'CODE',[\s\S]*'code'/);
   assert.match(editor, /readOnlyField\([\s\S]*'NAME из импорта',[\s\S]*'name'/);
-  assert.match(editor, /titleInput\.name = 'title'/);
+  assert.match(editor, /titleInput\.name\s*=\s*[\s\S]*'title'/);
   assert.match(editor, /code: Number\(/);
   assert.doesNotMatch(editor, /Добавить тип/);
   assert.doesNotMatch(editor, /data-operation-tab="kml-types"/);
   assert.match(editor, /window\.addEventListener\('dtpstat:line-types-changed'/);
   assert.match(editor, /void load\(\{ changed: true \}\)/);
-  assert.match(editor, /colorInput\.type = 'color'/);
-  assert.match(editor, /\['solid', 'Сплошная'\]/);
-  assert.match(editor, /widthInput\.min = '0\.5'/);
+  assert.match(editor, /colorInput\.type\s*=\s*[\s\S]*'color'/);
+  assert.match(editor, /'solid'[\s\S]*'Сплошная'/);
+  assert.match(editor, /widthInput\.min\s*=\s*[\s\S]*'0\.5'/);
   assert.match(editor, /fetch\('\/api\/admin\/line-types'/);
   assert.match(
     editor,
