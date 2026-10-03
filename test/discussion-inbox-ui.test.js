@@ -145,6 +145,10 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
   );
   assert.match(
     inbox,
+    /dtpstat:discussion-unread-refresh[\s\S]*scheduleRefresh[\s\S]*event\.detail/u,
+  );
+  assert.match(
+    inbox,
     /event\?\.type ===[\s\S]*'data-change'[\s\S]*event\.change/u,
   );
   assert.match(
