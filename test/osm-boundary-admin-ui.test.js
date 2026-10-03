@@ -310,3 +310,27 @@ test('OSM editor keeps optimistic drafts locally and bulk-saves them over realti
   assert.match(draftStore, /localStorage/);
   assert.match(draftStore, /setPersistent/);
 });
+
+
+test('OSM discussion supports mention highlighting and autocomplete', async () => {
+  const script =
+    await fs.readFile(
+      path.join(
+        root,
+        'admin/osm-boundary-editor.js',
+      ),
+      'utf8',
+    );
+  assert.match(
+    script,
+    /createMentionAutocomplete/u,
+  );
+  assert.match(
+    script,
+    /renderMentionText/u,
+  );
+  assert.match(
+    script,
+    /'osm-boundary'/u,
+  );
+});
