@@ -242,7 +242,7 @@ test('dedicated discussion inbox unifies geometry and OSM threads with realtime 
   );
   assert.match(
     inbox,
-    /change\?\.action ===[\s\S]*'read'[\s\S]*change\.readerUserId[\s\S]*currentUser\.id/u,
+    /change\?\.action ===[\s\S]*'read'[\s\S]*readerUserId[\s\S]*currentUser\.id/u,
   );
   assert.doesNotMatch(
     inbox,
