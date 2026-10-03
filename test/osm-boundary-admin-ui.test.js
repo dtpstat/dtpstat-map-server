@@ -355,3 +355,44 @@ test('OSM discussion refreshes unread badges from realtime and notifications', a
     /loadDiscussionState\(\)[\s\S]*OSM discussion unread refresh failed/u,
   );
 });
+
+
+test('OSM editor centers empty details and resets map to world view', async () => {
+  const [
+    editor,
+    styles,
+  ] =
+    await Promise.all([
+      read(
+        'admin/osm-boundary-editor.js',
+      ),
+      read(
+        'admin/osm-boundary-editor.css',
+      ),
+    ]);
+
+  assert.match(
+    editor,
+    /detailsPanel\?\.classList[\s\S]*'is-empty'[\s\S]*!item/u,
+  );
+  assert.match(
+    editor,
+    /discussionOpen\.hidden =[\s\S]*!item/u,
+  );
+  assert.match(
+    editor,
+    /async function showEmptyMap\([\s\S]*zoom:\s*3/u,
+  );
+  assert.match(
+    editor,
+    /updateDiscussionControl\(null\)[\s\S]*showEmptyMap\(\)/u,
+  );
+  assert.match(
+    styles,
+    /\.osm-boundary-details\.is-empty[\s\S]*place-items:\s*center/u,
+  );
+  assert.match(
+    styles,
+    /\.osm-boundary-primary-actions[\s\S]*geometry-discussion-open[\s\S]*2\.25rem/u,
+  );
+});
