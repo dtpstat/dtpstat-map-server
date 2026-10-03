@@ -617,52 +617,184 @@ if (
     canManageSecurity &&
     securityIpHost
   ) {
-    const summary =
+    const layout =
+      document.createElement(
+        'div',
+      );
+    layout.className =
+      'security-blocks-layout';
+
+    const left =
+      document.createElement(
+        'div',
+      );
+    left.className =
+      'security-blocks-column security-blocks-column-settings';
+
+    const right =
+      document.createElement(
+        'div',
+      );
+    right.className =
+      'security-blocks-column security-blocks-column-ip';
+
+    const policy =
+      securityIpHost.querySelector(
+        '.security-block-policy',
+      );
+    const manualIp =
+      securityIpHost.querySelector(
+        '.security-ip-panel',
+      );
+
+    if (policy) {
+      left.append(policy);
+    }
+
+    if (canManageUsers) {
+      const userBlocks =
+        document.createElement(
+          'section',
+        );
+      userBlocks.className =
+        'security-user-blocks-panel';
+      userBlocks.innerHTML = `
+        <h3>Заблокированные пользователи</h3>
+        <div class="security-block-table-wrap">
+          <table class="security-block-table security-user-block-table">
+            <thead>
+              <tr>
+                <th>Пользователь</th>
+                <th>До</th>
+                <th>Причина</th>
+                <th>Действие</th>
+              </tr>
+            </thead>
+            <tbody id="security-user-blocks-body"></tbody>
+          </table>
+        </div>
+        <p id="security-user-blocks-message"
+           class="security-message"
+           role="status"></p>
+      `;
+      left.append(
+        userBlocks,
+      );
+    }
+
+    if (manualIp) {
+      right.append(
+        manualIp,
+      );
+    }
+
+    const ipBlocks =
       document.createElement(
         'section',
       );
-    summary.className =
-      'security-block-summary';
-    summary.innerHTML = `
+    ipBlocks.className =
+      'security-ip-blocks-panel';
+    ipBlocks.innerHTML = `
       <div class="security-block-summary-heading">
         <div>
-          <h3>Текущие блокировки</h3>
-          <p class="security-info">
-            Активные блокировки пользователей и IP в одной таблице.
-          </p>
+          <h3>Заблокированные IP</h3>
+          <p class="security-info">Активные ручные IP-блокировки.</p>
         </div>
         <label>
-          Фильтр
-          <input id="security-block-filter"
+          Поиск по IP
+          <input id="security-ip-block-search"
                  type="search"
-                 placeholder="USER, IP, причина…">
+                 placeholder="203.0.113…">
         </label>
       </div>
-      <p id="security-block-role-note"
-         class="security-info"
-         ${canManageUsers ? 'hidden' : ''}>
-        USER-блокировки доступны только роли управления пользователями.
-      </p>
       <div class="security-block-table-wrap">
-        <table class="security-block-table">
+        <table class="security-block-table security-ip-block-table">
           <thead>
             <tr>
-              <th>Тип</th>
-              <th>Объект</th>
-              <th>До</th>
+              <th>
+                <button type="button"
+                        class="security-table-sort"
+                        data-ip-block-sort="ip">
+                  IP
+                </button>
+              </th>
+              <th>
+                <button type="button"
+                        class="security-table-sort"
+                        data-ip-block-sort="remaining">
+                  Осталось
+                </button>
+              </th>
               <th>Причина</th>
               <th>Действие</th>
             </tr>
           </thead>
-          <tbody id="security-blocks-body"></tbody>
+          <tbody id="security-ip-blocks-body"></tbody>
         </table>
       </div>
-      <p id="security-blocks-message"
+      <p id="security-ip-blocks-message"
          class="security-message"
          role="status"></p>
     `;
-    securityIpHost.append(
-      summary,
+    right.append(
+      ipBlocks,
+    );
+
+    const allowlist =
+      document.createElement(
+        'section',
+      );
+    allowlist.className =
+      'security-ip-allowlist-panel';
+    allowlist.innerHTML = `
+      <h3>White-list IP</h3>
+      <p class="security-info">
+        Одиночный IP или CIDR-маска. Совпавшие адреса исключаются из ручных и автоматических IP lockout.
+      </p>
+      <form id="security-ip-allowlist-form"
+            class="security-ip-allowlist-form">
+        <label>
+          IP / CIDR
+          <input name="network"
+                 type="text"
+                 required
+                 maxlength="128"
+                 placeholder="192.168.0.0/24">
+        </label>
+        <label>
+          Причина
+          <input name="reason"
+                 type="text"
+                 maxlength="500">
+        </label>
+        <button type="submit">Добавить</button>
+      </form>
+      <div class="security-block-table-wrap">
+        <table class="security-block-table security-ip-allowlist-table">
+          <thead>
+            <tr>
+              <th>IP / CIDR</th>
+              <th>Причина</th>
+              <th>Действие</th>
+            </tr>
+          </thead>
+          <tbody id="security-ip-allowlist-body"></tbody>
+        </table>
+      </div>
+      <p id="security-ip-allowlist-message"
+         class="security-message"
+         role="status"></p>
+    `;
+    right.append(
+      allowlist,
+    );
+
+    layout.append(
+      left,
+      right,
+    );
+    securityIpHost.replaceChildren(
+      layout,
     );
   }
 
