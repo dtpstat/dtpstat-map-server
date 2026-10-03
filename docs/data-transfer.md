@@ -19,7 +19,7 @@ GET  /api/admin/settings/export
 POST /api/admin/settings/import
 ```
 
-Текущий settings format: `schemaVersion 9`.
+Текущий settings format: `schemaVersion 11`.
 
 Подробнее: [project-settings-transfer.md](project-settings-transfer.md).
 

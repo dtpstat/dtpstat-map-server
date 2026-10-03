@@ -240,9 +240,11 @@ IMPORT_API_MAX_STREAM_ITEM_BYTES=134217728
 ```
 
 `client_max_body_size` reverse proxy должен учитывать именно
-`IMPORT_API_MAX_STREAM_UPLOAD_BYTES`. ZIP поддерживается в строгом single-file
-ZIP32 режиме (одна entry без directories; Store/Deflate; CRC32; без encryption
-и ZIP64). Orphan spool-файлы старше 24 часов удаляются при startup.
+`IMPORT_API_MAX_STREAM_UPLOAD_BYTES`. ZIP поддерживается в строгом single-data-entry режиме: directory entries
+игнорируются, после них должна остаться ровно одна ordinary entry. Поддержаны
+Store/Deflate, classic ZIP и ZIP64, включая streamed data descriptors; encryption
+и multi-volume archives не поддерживаются. Orphan spool-файлы старше 24 часов
+удаляются при startup.
 
 ## Production за nginx
 
