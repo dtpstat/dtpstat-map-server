@@ -1007,6 +1007,25 @@ export const API_REQUEST_CONTRACTS =
     ),
     c(
       'GET',
+      '/admin/security/ip-allowlist',
+    ),
+    c(
+      'POST',
+      '/admin/security/ip-allowlist',
+      {
+        body: 'json-object',
+        bodyKeys: [
+          'network',
+          'reason',
+        ],
+      },
+    ),
+    c(
+      'DELETE',
+      '/admin/security/ip-allowlist/:entryId',
+    ),
+    c(
+      'GET',
       '/admin/security/ip-blocks',
     ),
     c(
