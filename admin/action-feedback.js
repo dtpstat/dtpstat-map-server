@@ -147,6 +147,35 @@ function renderNotification(
       : 'status',
   );
 
+  const discussionSource =
+    notification.source?.kind ===
+      'discussion-thread'
+      ? String(
+        notification.source.id ??
+        '',
+      )
+      : '';
+
+  if (discussionSource) {
+    toast.classList.add(
+      'is-actionable',
+    );
+    if (
+      notification.code ===
+      'discussion-mention'
+    ) {
+      toast.classList.add(
+        'is-mention',
+      );
+    }
+    toast.tabIndex = 0;
+    toast.setAttribute(
+      'aria-label',
+      notification.message +
+        ' Открыть обсуждение.',
+    );
+  }
+
   const content =
     document.createElement(
       'span',
@@ -176,6 +205,96 @@ function renderNotification(
       ),
   );
   toast.append(close);
+
+  if (discussionSource) {
+    const openDiscussion =
+      () => {
+        const separator =
+          discussionSource.indexOf(
+            ':',
+          );
+        if (separator < 1) {
+          return;
+        }
+
+        const subjectType =
+          discussionSource.slice(
+            0,
+            separator,
+          );
+        const subjectId =
+          Number(
+            discussionSource.slice(
+              separator + 1,
+            ),
+          );
+        if (
+          !Number.isSafeInteger(
+            subjectId,
+          ) ||
+          subjectId <= 0
+        ) {
+          return;
+        }
+
+        const messagesTab =
+          document.querySelector(
+            '[data-admin-section-tab="messages"]',
+          );
+        if (
+          !messagesTab ||
+          messagesTab.hidden
+        ) {
+          return;
+        }
+
+        messagesTab.click();
+        queueMicrotask(
+          () =>
+            window.dispatchEvent(
+              new CustomEvent(
+                'dtpstat:discussion-inbox-open',
+                {
+                  detail: {
+                    subjectType,
+                    subjectId,
+                  },
+                },
+              ),
+            ),
+        );
+        dismissAdminNotification(
+          notification.id,
+        );
+      };
+
+    toast.addEventListener(
+      'click',
+      (event) => {
+        if (
+          event.target.closest(
+            '.admin-feedback-close',
+          )
+        ) {
+          return;
+        }
+        openDiscussion();
+      },
+    );
+    toast.addEventListener(
+      'keydown',
+      (event) => {
+        if (
+          event.key !== 'Enter' &&
+          event.key !== ' '
+        ) {
+          return;
+        }
+        event.preventDefault();
+        openDiscussion();
+      },
+    );
+  }
 
   host.append(toast);
 
