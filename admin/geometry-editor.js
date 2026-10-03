@@ -16,6 +16,10 @@ import {
 } from './geometry-coordinate-model.js';
 import { publishDerivedDataChange } from './derived-data-events.js';
 import {
+  createMentionAutocomplete,
+  renderMentionText,
+} from './discussion-mentions.js';
+import {
   pointTypeIconOffset,
   pointTypeImageId,
   syncPointTypeImages,
@@ -634,6 +638,23 @@ if (section) {
       throw error;
     }
     return payload;
+  }
+
+  async function loadMentionUsers(
+    subjectType,
+    query,
+  ) {
+    const params =
+      new URLSearchParams({
+        subjectType,
+        q: query,
+      });
+    const payload =
+      await api(
+        '/api/admin/profile/discussions/mentions?' +
+        params.toString(),
+      );
+    return payload.users ?? [];
   }
 
   function clone(value) {
@@ -1317,8 +1338,10 @@ if (section) {
             document.createElement('p');
           text.className =
             'geometry-discussion-message-text';
-          text.textContent =
-            entry.message;
+          renderMentionText(
+            text,
+            entry.message,
+          );
 
           meta.append(
             author,
@@ -9599,9 +9622,26 @@ if (section) {
     resizeDiscussionInput,
   );
 
+  if (discussionInput) {
+    createMentionAutocomplete({
+      input:
+        discussionInput,
+      subjectType:
+        'geometry',
+      loadUsers:
+        loadMentionUsers,
+    });
+  }
+
   discussionInput?.addEventListener(
     'keydown',
     (event) => {
+      if (
+        event.defaultPrevented
+      ) {
+        return;
+      }
+
       if (
         event.key === 'Enter' &&
         !event.shiftKey &&
