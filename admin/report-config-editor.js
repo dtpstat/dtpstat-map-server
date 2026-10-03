@@ -521,8 +521,75 @@ if (form) {
   function renderMetrics() {
     metricsHost.replaceChildren();
     state.config.metrics.forEach((metric, metricIndex) => {
-      const card = document.createElement('article');
-      card.className = 'report-metric-card';
+      const card =
+        document.createElement(
+          'details',
+        );
+      card.className =
+        'report-metric-card';
+
+      const summary =
+        document.createElement(
+          'summary',
+        );
+      summary.className =
+        'report-metric-summary';
+
+      const summaryTitle =
+        document.createElement(
+          'strong',
+        );
+      summaryTitle.textContent =
+        metric.name;
+
+      const summaryKey =
+        document.createElement(
+          'code',
+        );
+      summaryKey.textContent =
+        metric.key;
+
+      summary.append(
+        summaryTitle,
+        summaryKey,
+      );
+
+      const body =
+        document.createElement(
+          'div',
+        );
+      body.className =
+        'report-metric-body';
+
+      card.append(
+        summary,
+        body,
+      );
+
+      card.addEventListener(
+        'toggle',
+        () => {
+          if (!card.open) {
+            return;
+          }
+
+          for (
+            const sibling of
+            metricsHost.querySelectorAll(
+              '.report-metric-card[open]',
+            )
+          ) {
+            if (
+              sibling !==
+              card
+            ) {
+              sibling.open =
+                false;
+            }
+          }
+        },
+      );
+
       const header = document.createElement('div');
       header.className = 'report-card-heading';
       const title = document.createElement('div');
@@ -576,8 +643,16 @@ if (form) {
       if (dependencyTarget) remove.title = 'Сначала уберите ссылки на эту метрику из других метрик';
       metricActions.append(upMetric, downMetric, remove);
       header.append(title, metricActions);
-      card.append(header);
+      body.append(header);
 
+      name.addEventListener(
+        'input',
+        () => {
+          summaryTitle.textContent =
+            name.value.trim() ||
+            metric.name;
+        },
+      );
       name.addEventListener('change', () => {
         metric.name = name.value.trim() || metric.name;
         renderAll();
@@ -596,7 +671,7 @@ if (form) {
         (value) => { metric.source = value; },
         { allowConstant: false, currentMetricKey: metric.key },
       );
-      card.append(source);
+      body.append(source);
 
       const operationsHeading = document.createElement('div');
       operationsHeading.className = 'report-subheading';
@@ -607,12 +682,12 @@ if (form) {
       addOperation.className = 'secondary report-small-button';
       addOperation.textContent = 'Добавить операцию';
       operationsHeading.append(operationsTitle, addOperation);
-      card.append(operationsHeading);
+      body.append(operationsHeading);
 
       const priorityHelp = document.createElement('p');
       priorityHelp.className = 'report-priority-help';
       priorityHelp.textContent = 'Больший уровень выполняется раньше. Одинаковый — слева направо. Порядок строк является частью формулы. Ссылки, создающие очевидный цикл, скрываются.';
-      card.append(priorityHelp);
+      body.append(priorityHelp);
 
       addOperation.addEventListener('click', () => {
         metric.operations.push({
@@ -710,7 +785,7 @@ if (form) {
         empty.textContent = 'Без дополнительных арифметических операций.';
         operations.append(empty);
       }
-      card.append(operations);
+      body.append(operations);
 
       const preview = expressionPreview(metric);
       const previewBox = document.createElement('section');
@@ -724,7 +799,7 @@ if (form) {
       const rpn = document.createElement('code');
       rpn.textContent = preview.rpn;
       previewBox.append(previewTitle, infix, rpnLabel, rpn);
-      card.append(previewBox);
+      body.append(previewBox);
       metricsHost.append(card);
     });
   }
