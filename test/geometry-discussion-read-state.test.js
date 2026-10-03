@@ -130,6 +130,56 @@ test('geometry discussion storage excludes own messages from unread and exposes 
   );
 });
 
+test('geometry discussion thread state distinguishes existing and unread messages', async () => {
+  const calls = [];
+  const storage =
+    createGeometryDiscussionStorage({
+      async query(
+        text,
+        values = [],
+      ) {
+        calls.push({
+          text,
+          values,
+        });
+        return {
+          rows: [{
+            subjectType:
+              'geometry',
+            subjectId: 9,
+            messageCount: 4,
+            unreadCount: 2,
+          }],
+        };
+      },
+    });
+
+  assert.deepEqual(
+    await storage
+      .threadStates(77),
+    [{
+      geometryId: 9,
+      unreadCount: 2,
+      messageCount: 4,
+    }],
+  );
+  assert.match(
+    calls[0].text,
+    /COUNT\(\*\)::integer AS "messageCount"/u,
+  );
+  assert.match(
+    calls[0].text,
+    /COUNT\(\*\) FILTER \([\s\S]*AS "unreadCount"/u,
+  );
+  assert.deepEqual(
+    calls[0].values,
+    [
+      77,
+      ['geometry'],
+    ],
+  );
+});
+
 test('geometry discussion read marker advances atomically to a message from the same geometry', async () => {
   const calls = [];
   const client = {
