@@ -321,6 +321,50 @@ export function createDiscussionStorage(
       return result.rows;
     },
 
+    async mentionSuggestions(
+      subjectType,
+      query,
+      limit = 8,
+    ) {
+      const permissionColumn =
+        subjectType ===
+        'geometry'
+          ? 'can_edit_geometries'
+          : subjectType ===
+            'osm-boundary'
+            ? 'can_edit_osm'
+            : null;
+
+      if (!permissionColumn) {
+        return [];
+      }
+
+      const result =
+        await database.query(
+          `SELECT
+             id::integer AS "userId",
+             username,
+             display_name AS "displayName"
+           FROM admin_users
+           WHERE (
+               is_superuser = TRUE
+               OR ${permissionColumn} = TRUE
+             )
+             AND is_blocked = FALSE
+             AND LOWER(username) LIKE LOWER($1::text) || '%'
+           ORDER BY
+             LOWER(username),
+             id
+           LIMIT $2::integer`,
+          [
+            query,
+            limit,
+          ],
+        );
+
+      return result.rows;
+    },
+
     async notificationTargets(
       subjectType,
       subjectId,
