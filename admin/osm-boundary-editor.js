@@ -3,6 +3,10 @@ import { adminConfirm } from './admin-dialog.js';
 import { createDraftStore } from './draft-store.js';
 import { publishDerivedDataChange } from './derived-data-events.js';
 import {
+  createMentionAutocomplete,
+  renderMentionText,
+} from './discussion-mentions.js';
+import {
   realtimeClientId,
   realtimeMutationHeaders,
   subscribeAdminRealtime,
@@ -292,6 +296,23 @@ if (typeof document !== 'undefined') {
         throw error;
       }
       return payload;
+    }
+
+    async function loadMentionUsers(
+      subjectType,
+      query,
+    ) {
+      const params =
+        new URLSearchParams({
+          subjectType,
+          q: query,
+        });
+      const payload =
+        await api(
+          '/api/admin/profile/discussions/mentions?' +
+          params.toString(),
+        );
+      return payload.users ?? [];
     }
 
     function discussionTime(value) {
@@ -630,8 +651,10 @@ if (typeof document !== 'undefined') {
                 );
               text.className =
                 'geometry-discussion-message-text';
-              text.textContent =
-                entry.message;
+              renderMentionText(
+                text,
+                entry.message,
+              );
 
               meta.append(
                 author,
@@ -1955,9 +1978,26 @@ if (typeof document !== 'undefined') {
       },
     );
 
+    if (discussionInput) {
+      createMentionAutocomplete({
+        input:
+          discussionInput,
+        subjectType:
+          'osm-boundary',
+        loadUsers:
+          loadMentionUsers,
+      });
+    }
+
     discussionInput?.addEventListener(
       'keydown',
       (event) => {
+        if (
+          event.defaultPrevented
+        ) {
+          return;
+        }
+
         if (
           event.key === 'Enter' &&
           !event.shiftKey &&
