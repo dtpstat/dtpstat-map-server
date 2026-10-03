@@ -804,6 +804,9 @@ if (form) {
     });
   }
 
+  const openFormatColumns =
+    new WeakSet();
+
   function defaultFormatRule() {
     return {
       min: null,
@@ -819,23 +822,122 @@ if (form) {
 
   function renderFormatRules(host, column) {
     if (!Array.isArray(column.formatRules)) column.formatRules = [];
-    const box = document.createElement('section');
-    box.className = 'report-formatting-box';
-    const heading = document.createElement('div');
-    heading.className = 'report-subheading';
-    const title = document.createElement('strong');
-    title.textContent = 'Условное форматирование';
-    const add = document.createElement('button');
+    const box =
+      document.createElement(
+        'details',
+      );
+    box.className =
+      'report-formatting-box';
+    box.open =
+      openFormatColumns.has(
+        column,
+      );
+
+    const summary =
+      document.createElement(
+        'summary',
+      );
+    summary.className =
+      'report-formatting-summary';
+
+    const title =
+      document.createElement(
+        column.formatRules.length
+          ? 'strong'
+          : 'span',
+      );
+    title.textContent =
+      'Условное форматирование';
+
+    const status =
+      document.createElement(
+        'span',
+      );
+    status.className =
+      'report-formatting-status' +
+      (
+        column.formatRules.length
+          ? ' is-active'
+          : ''
+      );
+    status.textContent =
+      column.formatRules.length
+        ? (
+            column.formatRules.length +
+            ' правил'
+          )
+        : 'нет настроек';
+
+    summary.append(
+      title,
+      status,
+    );
+    box.append(
+      summary,
+    );
+
+    box.addEventListener(
+      'toggle',
+      () => {
+        if (box.open) {
+          openFormatColumns.add(
+            column,
+          );
+        } else {
+          openFormatColumns.delete(
+            column,
+          );
+        }
+      },
+    );
+
+    const heading =
+      document.createElement(
+        'div',
+      );
+    heading.className =
+      'report-subheading';
+    const rangesTitle =
+      document.createElement(
+        'strong',
+      );
+    rangesTitle.textContent =
+      'Диапазоны';
+    const add =
+      document.createElement(
+        'button',
+      );
     add.type = 'button';
-    add.className = 'secondary report-small-button';
-    add.textContent = 'Добавить диапазон';
-    add.disabled = column.formatRules.length >= (state.catalog.maxFormatRules ?? 8);
-    add.addEventListener('click', () => {
-      column.formatRules.push(defaultFormatRule());
-      renderAll();
-    });
-    heading.append(title, add);
-    box.append(heading);
+    add.className =
+      'secondary report-small-button';
+    add.textContent =
+      'Добавить диапазон';
+    add.disabled =
+      column.formatRules.length >=
+      (
+        state.catalog
+          .maxFormatRules ??
+        8
+      );
+    add.addEventListener(
+      'click',
+      () => {
+        column.formatRules.push(
+          defaultFormatRule(),
+        );
+        openFormatColumns.add(
+          column,
+        );
+        renderAll();
+      },
+    );
+    heading.append(
+      rangesTitle,
+      add,
+    );
+    box.append(
+      heading,
+    );
 
     const help = document.createElement('p');
     help.className = 'report-format-help';
