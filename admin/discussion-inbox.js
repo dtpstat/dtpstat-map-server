@@ -1558,6 +1558,15 @@ if (
       },
     );
 
+    window.addEventListener(
+      'dtpstat:discussion-unread-refresh',
+      (event) => {
+        scheduleRefresh(
+          event.detail,
+        );
+      },
+    );
+
     readAllButton.addEventListener(
       'click',
       async () => {
