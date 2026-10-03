@@ -427,6 +427,82 @@ export function createAdminAccessControlRepository(database) {
       return result.rows;
     },
 
+    async createIpAllowlistEntry(
+      entry,
+    ) {
+      const result =
+        await database.query(
+          `INSERT INTO admin_ip_allowlist(
+             network,
+             created_by,
+             reason
+           )
+           VALUES(
+             $1::cidr,
+             $2::bigint,
+             $3::text
+           )
+           ON CONFLICT(network)
+           DO UPDATE SET
+             created_at = NOW(),
+             created_by =
+               EXCLUDED.created_by,
+             reason =
+               EXCLUDED.reason
+           RETURNING
+             id::integer AS id,
+             network::text AS network,
+             created_at AS "createdAt",
+             created_by::integer AS "createdBy",
+             reason`,
+          [
+            entry.network,
+            entry.createdBy,
+            entry.reason,
+          ],
+        );
+      return result.rows[0];
+    },
+
+    async deleteIpAllowlistEntry(
+      entryId,
+    ) {
+      const result =
+        await database.query(
+          `DELETE FROM admin_ip_allowlist
+           WHERE id = $1::bigint
+           RETURNING id`,
+          [entryId],
+        );
+      return (
+        result.rowCount ??
+        result.rows.length
+      ) > 0;
+    },
+
+    async clearIpSecurityForNetwork(
+      network,
+    ) {
+      await database.query(
+        `UPDATE admin_login_ip_state
+         SET
+           failed_login_count = 0,
+           failure_window_started_at = NULL,
+           locked_until = NULL,
+           request_incident_count = 0,
+           request_incident_window_started_at = NULL,
+           request_locked_until = NULL,
+           updated_at = NOW()
+         WHERE ip_address <<= $1::cidr`,
+        [network],
+      );
+      await database.query(
+        `DELETE FROM admin_blocked_ips
+         WHERE ip_address <<= $1::cidr`,
+        [network],
+      );
+    },
+
     async isIpBlocked(ipAddress) {
       if (!ipAddress) return null;
       const result = await database.query(
