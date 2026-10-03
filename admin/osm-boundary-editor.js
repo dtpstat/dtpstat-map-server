@@ -103,6 +103,8 @@ if (typeof document !== 'undefined') {
       discussionRequestSequence: 0,
       discussionUnreadByBoundary:
         new Map(),
+      discussionMessageCountByBoundary:
+        new Map(),
     };
 
     const field = (name) => form.elements.namedItem(name);
@@ -409,19 +411,40 @@ if (typeof document !== 'undefined') {
             0,
           )
           : 0;
+      const messageCount =
+        item
+          ? Number(
+            state
+              .discussionMessageCountByBoundary
+              .get(item.id) ??
+            0,
+          )
+          : 0;
 
       if (discussionUnread) {
         discussionUnread.textContent =
-          String(count);
+          count > 99
+            ? '99+'
+            : String(count);
         discussionUnread.hidden =
           count <= 0;
       }
 
+      discussionOpen.classList.toggle(
+        'has-thread',
+        messageCount > 0,
+      );
+      discussionOpen.classList.toggle(
+        'has-unread',
+        count > 0,
+      );
       discussionOpen.title =
         item
           ? count > 0
             ? `Обсуждение OSM-объекта · непрочитанных: ${count}`
-            : 'Открыть обсуждение OSM-объекта'
+            : messageCount > 0
+              ? 'Открыть обсуждение OSM-объекта · есть сообщения'
+              : 'Открыть обсуждение OSM-объекта · сообщений ещё нет'
           : 'Выберите OSM-объект';
     }
 
@@ -431,22 +454,64 @@ if (typeof document !== 'undefined') {
           '/api/admin/osm-boundaries/discussions/unread',
         );
 
+      const items =
+        (
+          payload?.items ??
+          []
+        )
+          .filter(
+            (item) =>
+              Number.isSafeInteger(
+                Number(
+                  item.boundaryId,
+                ),
+              ),
+          );
+
       state.discussionUnreadByBoundary =
         new Map(
-          (
-            payload?.items ??
-            []
-          ).map(
-            (item) => [
-              Number(
-                item.boundaryId,
-              ),
-              Number(
-                item.unreadCount ??
-                0,
-              ),
-            ],
-          ),
+          items
+            .filter(
+              (item) =>
+                Number(
+                  item.unreadCount ??
+                  0,
+                ) > 0,
+            )
+            .map(
+              (item) => [
+                Number(
+                  item.boundaryId,
+                ),
+                Number(
+                  item.unreadCount ??
+                    0,
+                ),
+              ],
+            ),
+        );
+      state
+        .discussionMessageCountByBoundary =
+        new Map(
+          items
+            .filter(
+              (item) =>
+                Number(
+                  item.messageCount ??
+                  0,
+                ) > 0,
+            )
+            .map(
+              (item) => [
+                Number(
+                  item.boundaryId,
+                ),
+                Number(
+                  item.messageCount ??
+                    0,
+                ),
+              ],
+            ),
         );
 
       updateDiscussionControl(
@@ -708,6 +773,17 @@ if (typeof document !== 'undefined') {
         state.discussionMessages =
           payload?.messages ??
           [];
+        state
+          .discussionMessageCountByBoundary
+          .set(
+            id,
+            state
+              .discussionMessages
+              .length,
+          );
+        updateDiscussionControl(
+          item,
+        );
 
         const latest =
           state.discussionMessages
@@ -722,9 +798,13 @@ if (typeof document !== 'undefined') {
         } else {
           state
             .discussionUnreadByBoundary
-            .set(
+            .delete(
               id,
-              0,
+            );
+          state
+            .discussionMessageCountByBoundary
+            .delete(
+              id,
             );
           updateDiscussionControl(
             item,
@@ -789,6 +869,29 @@ if (typeof document !== 'undefined') {
             .push(
               payload.message,
             );
+          const boundaryId =
+            Number(
+              state
+                .discussionBoundaryId,
+            );
+          state
+            .discussionMessageCountByBoundary
+            .set(
+              boundaryId,
+              Number(
+                state
+                  .discussionMessageCountByBoundary
+                  .get(boundaryId) ??
+                0,
+              ) + 1,
+            );
+          updateDiscussionControl(
+            state.boundaries.find(
+              (item) =>
+                item.id ===
+                state.selectedId,
+            ) ?? null,
+          );
         }
 
         discussionInput.value = '';
@@ -1675,11 +1778,21 @@ if (typeof document !== 'undefined') {
           return;
         }
 
+        const discussionSource =
+          change.source ??
+          {};
+        const incoming =
+          change
+            .discussionMessage ??
+          discussionSource
+            .discussionMessage ??
+          null;
         const boundaryId =
           Number(
-            change
-              .discussionMessage
+            incoming
               ?.boundaryId ??
+            discussionSource
+              .boundaryId ??
             change.entityIds?.[0],
           );
 
@@ -1698,7 +1811,9 @@ if (typeof document !== 'undefined') {
         ) {
           if (
             Number(
-              change.readerUserId,
+              change.readerUserId ??
+              discussionSource
+                .readerUserId,
             ) ===
             Number(
               currentUser?.id,
@@ -1731,6 +1846,20 @@ if (typeof document !== 'undefined') {
           }
 
           return;
+        }
+
+        if (incoming) {
+          state
+            .discussionMessageCountByBoundary
+            .set(
+              boundaryId,
+              Number(
+                state
+                  .discussionMessageCountByBoundary
+                  .get(boundaryId) ??
+                0,
+              ) + 1,
+            );
         }
 
         if (
@@ -1845,6 +1974,20 @@ if (typeof document !== 'undefined') {
     disableBranch?.addEventListener('click', () => void setBranchActive(false));
     searchInput.addEventListener('input', () => renderTree());
     refreshButton.addEventListener('click', () => void load());
+    window.addEventListener(
+      'dtpstat:discussion-read-all',
+      () => {
+        void loadDiscussionUnread()
+          .catch(
+            (error) =>
+              console.warn(
+                'OSM discussion state refresh failed',
+                error,
+              ),
+          );
+      },
+    );
+
     window.addEventListener('dtpstat:osm-boundary-editor-open', () => {
       void Promise.all([
         loadDiscussionUnread(),
