@@ -1918,6 +1918,23 @@ test('geometry editor discussion uses compact messenger UI with unread realtime 
   );
   assert.match(
     script,
+    /createMentionAutocomplete/u,
+  );
+  assert.match(
+    script,
+    /renderMentionText/u,
+  );
+  assert.match(
+    script,
+    /subjectType:[\s\S]*'geometry'[\s\S]*loadUsers:[\s\S]*loadMentionUsers/u,
+  );
+  assert.match(
+    script,
+    /event\.defaultPrevented/u,
+  );
+
+  assert.match(
+    script,
     /classList\.toggle\([\s\S]*'has-thread'[\s\S]*messageCount > 0/u,
   );
   assert.match(
