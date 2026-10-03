@@ -1005,6 +1005,10 @@ if (
     }
     const protectedUser = user.isBootstrap || user.isSuperuser;
     const isSelf = user.id === currentUser.id;
+    const blocked =
+      userCurrentlyBlocked(
+        user,
+      );
     detail.innerHTML = `
       <div class="security-user-detail-heading">
         <div><h3>${user.displayName || user.username}</h3><p>@${user.username}</p></div>
@@ -1013,7 +1017,7 @@ if (
           ${user.isSuperuser ? '<span>SUPERUSER</span>' : ''}
           ${user.mustChangePassword ? '<span class="is-warning">TEMP PASSWORD</span>' : ''}
           ${user.mfaEnabled ? '<span>MFA</span>' : ''}
-          ${user.isBlocked ? '<span class="is-danger">BLOCKED</span>' : ''}
+          ${blocked ? '<span class="is-danger">BLOCKED</span>' : ''}
         </div>
       </div>
       <form id="security-user-detail-form" class="security-detail-form">
@@ -1049,12 +1053,12 @@ if (
           ${currentUser.isSuperuser && user.mfaEnabled && !isSelf
             ? '<button type="button" class="danger" id="security-user-mfa-reset">Сбросить MFA</button>'
             : ''}
-          ${user.isBlocked
+          ${blocked
             ? '<button type="button" id="security-user-unblock">Разблокировать</button>'
             : `<button type="button" class="secondary" id="security-user-block" ${protectedUser || isSelf ? 'disabled' : ''}>Заблокировать</button>`}
           <button type="button" class="danger" id="security-user-delete" ${user.isBootstrap || isSelf ? 'disabled' : ''}>Удалить</button>
         </div>
-        ${!user.isBlocked && !protectedUser && !isSelf ? `
+        ${!blocked && !protectedUser && !isSelf ? `
           <form id="security-user-block-form" class="security-inline-block-form" hidden>
             <label>Срок <select name="durationSeconds">${durationOptions()}</select></label>
             <label>Причина <input name="reason" maxlength="500"></label>
