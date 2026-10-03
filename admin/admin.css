@@ -914,3 +914,52 @@ body.admin-dialog-open { overflow: hidden; }
     margin-bottom: .5rem;
   }
 }
+
+
+/* 1920×1080 desktop target: keep task actions in-view without page scrolling. */
+@media (min-width: 1051px) and (min-height: 800px) {
+  [data-admin-section-panel="data"] .task-panel {
+    padding: .65rem;
+  }
+
+  [data-admin-section-panel="data"] .panel-description {
+    margin-bottom: .45rem;
+  }
+
+  [data-admin-section-panel="data"] .operation-tabs {
+    margin-bottom: .45rem;
+  }
+
+  [data-admin-section-panel="data"] .transfer-mode {
+    padding: .58rem;
+  }
+
+  [data-admin-section-panel="data"] .mode-heading,
+  [data-admin-section-panel="data"] .last-success {
+    margin-bottom: .5rem;
+  }
+
+  [data-admin-section-panel="data"] .form-fields {
+    gap: .45rem;
+  }
+
+  [data-admin-section-panel="data"] .osm-config-group {
+    padding: .5rem .55rem;
+    gap: .4rem;
+  }
+
+  [data-admin-section-panel="data"] .osm-settings-actions {
+    margin-top: .5rem;
+    display: grid;
+    grid-template-columns:
+      auto
+      auto
+      minmax(10rem, 1fr);
+    gap: .45rem;
+  }
+
+  [data-admin-section-panel="data"] .osm-settings-actions
+    .task-action {
+    margin-top: 0;
+  }
+}
