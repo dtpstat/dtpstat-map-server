@@ -1642,6 +1642,8 @@ export function createGeometryEditorService(
                 row.geometryId,
               unreadCount:
                 row.unreadCount,
+              messageCount:
+                row.messageCount,
             }),
           ),
       };
