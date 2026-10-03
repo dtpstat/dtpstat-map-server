@@ -340,6 +340,90 @@ if (
       row.dataset.pointTypeId =
         String(pointType.id);
 
+      const details =
+        document.createElement(
+          'details',
+        );
+      details.className =
+        'point-type-row-details';
+
+      const summary =
+        document.createElement(
+          'summary',
+        );
+      summary.className =
+        'point-type-summary';
+
+      const summaryTitle =
+        document.createElement(
+          'strong',
+        );
+      summaryTitle.textContent =
+        pointType.name;
+
+      const summaryMeta =
+        document.createElement(
+          'span',
+        );
+      summaryMeta.className =
+        'point-type-summary-meta';
+      summaryMeta.textContent =
+        'Геометрий: ' +
+        Number(
+          pointType.geometryCount ??
+          0,
+        ) +
+        (
+          pointType.isActive ===
+          false
+            ? ' · выключен'
+            : ' · активен'
+        );
+
+      summary.append(
+        summaryTitle,
+        summaryMeta,
+      );
+
+      const detailsBody =
+        document.createElement(
+          'div',
+        );
+      detailsBody.className =
+        'point-type-row-body';
+
+      details.append(
+        summary,
+        detailsBody,
+      );
+      row.append(
+        details,
+      );
+
+      details.addEventListener(
+        'toggle',
+        () => {
+          if (!details.open) {
+            return;
+          }
+
+          for (
+            const sibling of
+            table.querySelectorAll(
+              '.point-type-row-details[open]',
+            )
+          ) {
+            if (
+              sibling !==
+              details
+            ) {
+              sibling.open =
+                false;
+            }
+          }
+        },
+      );
+
       const previewColumn =
         document.createElement(
           'div',
@@ -691,10 +775,19 @@ if (
         actions,
       );
 
-      row.append(
+      detailsBody.append(
         previewColumn,
         settings,
         iconControls,
+      );
+
+      name.addEventListener(
+        'input',
+        () => {
+          summaryTitle.textContent =
+            name.value.trim() ||
+            pointType.name;
+        },
       );
 
       const dirtyState =
