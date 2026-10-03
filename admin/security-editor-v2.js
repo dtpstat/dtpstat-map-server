@@ -726,6 +726,19 @@ if (
           <tbody id="security-ip-blocks-body"></tbody>
         </table>
       </div>
+      <div class="security-ip-block-pagination">
+        <button type="button"
+                class="secondary"
+                id="security-ip-block-prev">
+          ←
+        </button>
+        <span id="security-ip-block-page">1 / 1</span>
+        <button type="button"
+                class="secondary"
+                id="security-ip-block-next">
+          →
+        </button>
+      </div>
       <p id="security-ip-blocks-message"
          class="security-message"
          role="status"></p>
@@ -2047,8 +2060,10 @@ if (
     },
   ];
 
+  const IP_BLOCK_PAGE_SIZE = 12;
   let activeIpBlocks = [];
   let activeIpAllowlist = [];
+  let ipBlockPage = 0;
   let ipBlockSort = {
     key: 'ip',
     direction: 'asc',
@@ -2238,79 +2253,160 @@ if (
       );
     if (!body) return;
 
+    const blocks =
+      sortedIpBlocks();
+    const pageCount =
+      Math.max(
+        1,
+        Math.ceil(
+          blocks.length /
+          IP_BLOCK_PAGE_SIZE,
+        ),
+      );
+
+    ipBlockPage =
+      Math.min(
+        ipBlockPage,
+        pageCount - 1,
+      );
+
+    const pageStart =
+      ipBlockPage *
+      IP_BLOCK_PAGE_SIZE;
+    const pageItems =
+      blocks.slice(
+        pageStart,
+        pageStart +
+        IP_BLOCK_PAGE_SIZE,
+      );
+
     const rows =
-      sortedIpBlocks()
-        .map(
-          (block) => {
-            const row =
-              document.createElement(
-                'tr',
-              );
-
-            for (
-              const value of [
-                block.ipAddress,
-                formatRemaining(
-                  block,
-                ),
-                block.reason,
-              ]
-            ) {
-              const cell =
-                document.createElement(
-                  'td',
-                );
-              cell.textContent =
-                value || '—';
-              row.append(
-                cell,
-              );
-            }
-
-            row.append(
-              actionCell(
-                'Разблокировать',
-                async () => {
-                  try {
-                    await api(
-                      '/api/admin/security/ip-blocks/' +
-                      encodeURIComponent(
-                        block.id,
-                      ),
-                      {
-                        method:
-                          'DELETE',
-                      },
-                    );
-                    await loadIpBlocks();
-                  } catch (error) {
-                    setMessage(
-                      document.querySelector(
-                        '#security-ip-blocks-message',
-                      ),
-                      error.message,
-                      'error',
-                    );
-                  }
-                },
-              ),
+      pageItems.map(
+        (block) => {
+          const row =
+            document.createElement(
+              'tr',
             );
 
-            return row;
-          },
-        );
+          for (
+            const value of [
+              block.ipAddress,
+              formatRemaining(
+                block,
+              ),
+              block.reason,
+            ]
+          ) {
+            const cell =
+              document.createElement(
+                'td',
+              );
+            cell.textContent =
+              value || '—';
+            row.append(
+              cell,
+            );
+          }
+
+          row.append(
+            actionCell(
+              'Разблокировать',
+              async () => {
+                try {
+                  await api(
+                    '/api/admin/security/ip-blocks/' +
+                    encodeURIComponent(
+                      block.id,
+                    ),
+                    {
+                      method:
+                        'DELETE',
+                    },
+                  );
+                  await loadIpBlocks();
+                } catch (error) {
+                  setMessage(
+                    document.querySelector(
+                      '#security-ip-blocks-message',
+                    ),
+                    error.message,
+                    'error',
+                  );
+                }
+              },
+            ),
+          );
+
+          return row;
+        },
+      );
 
     body.replaceChildren(
       ...rows,
     );
+
+    const page =
+      document.querySelector(
+        '#security-ip-block-page',
+      );
+    const previous =
+      document.querySelector(
+        '#security-ip-block-prev',
+      );
+    const next =
+      document.querySelector(
+        '#security-ip-block-next',
+      );
+
+    if (page) {
+      page.textContent =
+        String(
+          ipBlockPage + 1,
+        ) +
+        ' / ' +
+        String(
+          pageCount,
+        );
+    }
+    if (previous) {
+      previous.disabled =
+        ipBlockPage === 0;
+    }
+    if (next) {
+      next.disabled =
+        ipBlockPage >=
+        pageCount - 1;
+    }
+
+    const shownFrom =
+      blocks.length
+        ? pageStart + 1
+        : 0;
+    const shownTo =
+      blocks.length
+        ? pageStart +
+          pageItems.length
+        : 0;
+
     setMessage(
       document.querySelector(
         '#security-ip-blocks-message',
       ),
-      'Показано IP-блокировок: ' +
-      rows.length +
+      'Показано ' +
+      shownFrom +
+      '–' +
+      shownTo +
       ' из ' +
-      activeIpBlocks.length,
+      blocks.length +
+      (
+        blocks.length !==
+        activeIpBlocks.length
+          ? (
+              ' · всего активных: ' +
+              activeIpBlocks.length
+            )
+          : ''
+      ),
     );
     updateIpAllowlistPreview();
 
@@ -2960,7 +3056,34 @@ if (
     '#security-ip-block-search',
   )?.addEventListener(
     'input',
-    renderIpBlocks,
+    () => {
+      ipBlockPage = 0;
+      renderIpBlocks();
+    },
+  );
+
+  document.querySelector(
+    '#security-ip-block-prev',
+  )?.addEventListener(
+    'click',
+    () => {
+      ipBlockPage =
+        Math.max(
+          0,
+          ipBlockPage - 1,
+        );
+      renderIpBlocks();
+    },
+  );
+
+  document.querySelector(
+    '#security-ip-block-next',
+  )?.addEventListener(
+    'click',
+    () => {
+      ipBlockPage += 1;
+      renderIpBlocks();
+    },
   );
 
   for (
@@ -2992,6 +3115,7 @@ if (
               'asc',
           };
         }
+        ipBlockPage = 0;
         renderIpBlocks();
       },
     );
