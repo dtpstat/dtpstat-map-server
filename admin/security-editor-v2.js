@@ -225,8 +225,8 @@ if (
                       id="security-user-blocked-filter"
                       aria-pressed="false"
                       title="Показать только заблокированных пользователей">
-                <span aria-hidden="true">🔒</span>
-                Заблокированные
+                <span class="security-toggle-indicator" aria-hidden="true"></span>
+                <span class="security-toggle-label">Заблокированные</span>
               </button>
               <button type="button" id="security-user-add">Добавить</button>
             </div>
@@ -271,7 +271,9 @@ if (
           <table class="security-audit-table">
             <thead><tr>
               <th>Время</th><th>Пользователь</th><th>IP</th><th>Событие</th>
-              <th>Операция</th><th>Статус</th><th>мс</th><th>Детали</th>
+              <th>Операция</th><th>Статус</th><th>мс</th>
+              ${canManageUsers || canManageSecurity ? '<th>Реакция</th>' : ''}
+              <th>Детали</th>
             </tr></thead>
             <tbody id="security-audit-body"></tbody>
           </table>
@@ -1490,27 +1492,51 @@ if (
     }
   }
 
+  function renderBlockedUserFilterState() {
+    const button =
+      document.querySelector(
+        '#security-user-blocked-filter',
+      );
+    if (!button) return;
+
+    button.setAttribute(
+      'aria-pressed',
+      String(
+        showBlockedUsersOnly,
+      ),
+    );
+    button.classList.toggle(
+      'is-active',
+      showBlockedUsersOnly,
+    );
+    button.dataset.state =
+      showBlockedUsersOnly
+        ? 'on'
+        : 'off';
+
+    const label =
+      button.querySelector(
+        '.security-toggle-label',
+      );
+    if (label) {
+      label.textContent =
+        showBlockedUsersOnly
+          ? 'Только заблокированные'
+          : 'Заблокированные';
+    }
+  }
+
   document.querySelector('#security-user-search')?.addEventListener('input', renderUsersList);
   document.querySelector('#security-user-blocked-filter')?.addEventListener(
     'click',
     (event) => {
       showBlockedUsersOnly =
         !showBlockedUsersOnly;
-      event.currentTarget
-        .setAttribute(
-          'aria-pressed',
-          String(
-            showBlockedUsersOnly,
-          ),
-        );
-      event.currentTarget
-        .classList.toggle(
-          'is-active',
-          showBlockedUsersOnly,
-        );
+      renderBlockedUserFilterState();
       renderUsersList();
     },
   );
+  renderBlockedUserFilterState();
   document.querySelector('#security-user-add')?.addEventListener('click', renderNewUser);
 
   function auditQuery({ exportMode = false } = {}) {
@@ -1743,6 +1769,126 @@ if (
 
 
 
+  async function quickBlockAuditUser(
+    entry,
+  ) {
+    if (
+      !canManageUsers ||
+      !entry.userId
+    ) {
+      return;
+    }
+
+    const target =
+      userById.get(
+        entry.userId,
+      );
+    if (
+      target?.isBootstrap ||
+      target?.isSuperuser ||
+      String(entry.userId) ===
+        String(currentUser?.id ?? '')
+    ) {
+      return;
+    }
+
+    const confirmed =
+      await adminConfirm({
+        title:
+          'Заблокировать учётную запись?',
+        message:
+          (entry.username ??
+            ('user #' +
+              entry.userId)) +
+          ' будет заблокирован на 1 час.',
+        confirmLabel:
+          'Заблокировать',
+        cancelLabel:
+          'Отмена',
+        destructive: true,
+      });
+    if (!confirmed) return;
+
+    await api(
+      '/api/admin/security/users/' +
+      encodeURIComponent(
+        entry.userId,
+      ) +
+      '/block',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type':
+            'application/json',
+        },
+        body:
+          JSON.stringify({
+            durationSeconds:
+              3600,
+            reason:
+              'Быстрая реакция из аудита #' +
+              entry.id,
+          }),
+      },
+    );
+
+    await loadUsers(
+      selectedUserId,
+    );
+  }
+
+  async function quickBlockAuditIp(
+    entry,
+  ) {
+    if (
+      !canManageSecurity ||
+      !entry.ipAddress
+    ) {
+      return;
+    }
+
+    const confirmed =
+      await adminConfirm({
+        title:
+          'Заблокировать IP?',
+        message:
+          'IP ' +
+          entry.ipAddress +
+          ' будет заблокирован на 1 час.',
+        confirmLabel:
+          'Заблокировать IP',
+        cancelLabel:
+          'Отмена',
+        destructive: true,
+      });
+    if (!confirmed) return;
+
+    await api(
+      '/api/admin/security/ip-blocks',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type':
+            'application/json',
+        },
+        body:
+          JSON.stringify({
+            ipAddress:
+              entry.ipAddress,
+            durationSeconds:
+              3600,
+            reason:
+              'Быстрая реакция из аудита #' +
+              entry.id,
+            sourceAuditId:
+              entry.id,
+          }),
+      },
+    );
+
+    await loadIpBlocks();
+  }
+
   function auditRow(entry) {
     const row = document.createElement('tr');
 
@@ -1760,6 +1906,119 @@ if (
       const cell = document.createElement('td');
       cell.textContent = String(value);
       row.append(cell);
+    }
+
+    if (
+      canManageUsers ||
+      canManageSecurity
+    ) {
+      const actions =
+        document.createElement(
+          'td',
+        );
+      actions.className =
+        'security-audit-actions';
+
+      const target =
+        entry.userId
+          ? userById.get(
+              entry.userId,
+            )
+          : null;
+      const canBlockUser =
+        canManageUsers &&
+        entry.userId &&
+        !target?.isBootstrap &&
+        !target?.isSuperuser &&
+        String(entry.userId) !==
+          String(
+            currentUser?.id ??
+            '',
+          );
+
+      if (canBlockUser) {
+        const blockUser =
+          document.createElement(
+            'button',
+          );
+        blockUser.type =
+          'button';
+        blockUser.className =
+          'secondary mini-button';
+        blockUser.textContent =
+          'Блок. учётку';
+        blockUser.addEventListener(
+          'click',
+          () =>
+            void quickBlockAuditUser(
+              entry,
+            )
+              .then(
+                loadAudit,
+              )
+              .catch(
+                (error) =>
+                  setMessage(
+                    document.querySelector(
+                      '#security-audit-message',
+                    ),
+                    error.message,
+                    'error',
+                  ),
+              ),
+        );
+        actions.append(
+          blockUser,
+        );
+      }
+
+      if (
+        canManageSecurity &&
+        entry.ipAddress
+      ) {
+        const blockIp =
+          document.createElement(
+            'button',
+          );
+        blockIp.type =
+          'button';
+        blockIp.className =
+          'secondary mini-button';
+        blockIp.textContent =
+          'Блок. IP';
+        blockIp.addEventListener(
+          'click',
+          () =>
+            void quickBlockAuditIp(
+              entry,
+            )
+              .then(
+                loadAudit,
+              )
+              .catch(
+                (error) =>
+                  setMessage(
+                    document.querySelector(
+                      '#security-audit-message',
+                    ),
+                    error.message,
+                    'error',
+                  ),
+              ),
+        );
+        actions.append(
+          blockIp,
+        );
+      }
+
+      if (!actions.childElementCount) {
+        actions.textContent =
+          '—';
+      }
+
+      row.append(
+        actions,
+      );
     }
 
     const detailsCell = document.createElement('td');
