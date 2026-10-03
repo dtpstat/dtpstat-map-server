@@ -721,7 +721,7 @@ export function createGeometryEditorRouter({
                         .message,
                   },
                 );
-  
+
             publishDiscussionNotifications(
               notificationEvents,
               {
