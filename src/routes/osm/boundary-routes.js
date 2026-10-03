@@ -281,14 +281,16 @@ export function registerOsmBoundaryRoutes(
             realtimeClientId(
               request,
             ),
-          boundaryId:
-            read.boundaryId,
-          readerUserId:
-            request.adminUser?.id ??
-            null,
-          lastReadMessageId:
-            read.lastReadMessageId ??
-            null,
+          source: {
+            boundaryId:
+              read.boundaryId,
+            readerUserId:
+              request.adminUser?.id ??
+              null,
+            lastReadMessageId:
+              read.lastReadMessageId ??
+              null,
+          },
           message:
             'Сообщения обсуждения OSM-объекта прочитаны.',
         });
@@ -372,8 +374,12 @@ export function registerOsmBoundaryRoutes(
             ),
           message:
             'Новое сообщение в обсуждении OSM-объекта.',
-          discussionMessage:
-            message,
+          source: {
+            boundaryId:
+              message.boundaryId,
+            discussionMessage:
+              message,
+          },
         });
 
         if (
