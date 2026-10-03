@@ -253,25 +253,143 @@ export function createDiscussionStorage(
           `SELECT
              message.subject_type AS "subjectType",
              message.subject_id::integer AS "subjectId",
-             COUNT(*)::integer AS "unreadCount"
+             COUNT(*)::integer AS "messageCount",
+             COUNT(*) FILTER (
+               WHERE
+                 message.author_user_id IS DISTINCT FROM $1::bigint
+                 AND (
+                   read_state.last_read_message_id IS NULL
+                   OR message.id > read_state.last_read_message_id
+                 )
+             )::integer AS "unreadCount"
            FROM admin_discussion_messages AS message
            LEFT JOIN admin_discussion_read_state AS read_state
              ON read_state.subject_type = message.subject_type
             AND read_state.subject_id = message.subject_id
             AND read_state.user_id = $1::bigint
            WHERE message.deleted_at IS NULL
-             AND message.author_user_id IS DISTINCT FROM $1::bigint
              AND message.subject_type = ANY($2::text[])
-             AND (
-               read_state.last_read_message_id IS NULL
-               OR message.id > read_state.last_read_message_id
-             )
            GROUP BY
              message.subject_type,
              message.subject_id
            ORDER BY
              message.subject_type,
              message.subject_id`,
+          [
+            userId,
+            subjectTypes,
+          ],
+        );
+
+      return result.rows;
+    },
+
+    async notificationTargets(
+      subjectType,
+      subjectId,
+      authorUserId,
+      mentionLogins = [],
+    ) {
+      const [
+        subject,
+        participants,
+        mentionedUsers,
+      ] =
+        await Promise.all([
+          this.getSubject(
+            subjectType,
+            subjectId,
+          ),
+          database.query(
+            `SELECT DISTINCT
+               message.author_user_id::integer AS "userId"
+             FROM admin_discussion_messages AS message
+             WHERE message.subject_type = $1::text
+               AND message.subject_id = $2::bigint
+               AND message.deleted_at IS NULL
+               AND message.author_user_id IS NOT NULL
+               AND message.author_user_id <> $3::bigint
+             ORDER BY "userId"`,
+            [
+              subjectType,
+              subjectId,
+              authorUserId,
+            ],
+          ),
+          mentionLogins.length
+            ? database.query(
+              `SELECT
+                 id::integer AS "userId",
+                 username
+               FROM admin_users
+               WHERE LOWER(username) = ANY($1::text[])
+                 AND id <> $2::bigint
+               ORDER BY id`,
+              [
+                mentionLogins,
+                authorUserId,
+              ],
+            )
+            : Promise.resolve({
+              rows: [],
+            }),
+        ]);
+
+      return {
+        subject,
+        participantUserIds:
+          participants.rows.map(
+            (row) => row.userId,
+          ),
+        mentionedUsers:
+          mentionedUsers.rows,
+      };
+    },
+
+    async markAllRead(
+      userId,
+      subjectTypes,
+    ) {
+      const result =
+        await database.query(
+          `INSERT INTO admin_discussion_read_state (
+             subject_type,
+             subject_id,
+             user_id,
+             last_read_message_id,
+             updated_at
+           )
+           SELECT
+             message.subject_type,
+             message.subject_id,
+             $1::bigint,
+             MAX(message.id),
+             NOW()
+           FROM admin_discussion_messages AS message
+           WHERE message.deleted_at IS NULL
+             AND message.subject_type = ANY($2::text[])
+           GROUP BY
+             message.subject_type,
+             message.subject_id
+           ON CONFLICT (
+             subject_type,
+             subject_id,
+             user_id
+           )
+           DO UPDATE SET
+             last_read_message_id =
+               GREATEST(
+                 COALESCE(
+                   admin_discussion_read_state.last_read_message_id,
+                   0
+                 ),
+                 EXCLUDED.last_read_message_id
+               ),
+             updated_at = NOW()
+           RETURNING
+             subject_type AS "subjectType",
+             subject_id::integer AS "subjectId",
+             last_read_message_id::integer AS "lastReadMessageId"`,
           [
             userId,
             subjectTypes,
