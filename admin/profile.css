@@ -1,3 +1,46 @@
+.profile-tabs {
+  margin: .35rem 0 .75rem;
+  padding: .3rem;
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: .4rem;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0c1417;
+}
+
+.profile-tabs button {
+  min-width: 0;
+  padding: .55rem .65rem;
+  border: 1px solid transparent;
+  color: var(--muted);
+  background: transparent;
+  font-size: .74rem;
+}
+
+.profile-tabs button[aria-selected="true"] {
+  border-color: #37756f;
+  color: var(--text);
+  background: var(--accent-dark);
+}
+
+.profile-sessions-panel {
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+#profile-sessions {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
 .profile-panel {
   min-width: 0;
   height: 100%;
@@ -133,4 +176,11 @@
   white-space: pre-wrap;
   user-select: all;
   font-size: .8rem;
+}
+
+
+@container admin-layout-block (max-width: 42rem) {
+  .profile-tabs {
+    grid-template-columns: 1fr;
+  }
 }
